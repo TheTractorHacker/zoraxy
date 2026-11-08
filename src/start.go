@@ -21,6 +21,7 @@ import (
 	"imuslab.com/zoraxy/mod/auth"
 	"imuslab.com/zoraxy/mod/auth/sso/forward"
 	"imuslab.com/zoraxy/mod/auth/sso/zorxauth"
+	"imuslab.com/zoraxy/mod/cluster"
 	"imuslab.com/zoraxy/mod/database"
 	"imuslab.com/zoraxy/mod/database/dbinc"
 	"imuslab.com/zoraxy/mod/dockerux"
@@ -170,7 +171,7 @@ func startupSequence() {
 
 	//Create a load balancer
 	loadBalancer = loadbalance.NewLoadBalancer(&loadbalance.Options{
-		SystemUUID: nodeUUID,
+		SystemUUID: clusterMgr.KeyMaterial(nodeUUID, cluster.PurposeStickySession),
 		Geodb:      geodbStore,
 		Logger:     SystemWideLogger,
 	})

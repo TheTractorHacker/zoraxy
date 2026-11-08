@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"imuslab.com/zoraxy/mod/auth"
+	"imuslab.com/zoraxy/mod/cluster"
 	"imuslab.com/zoraxy/mod/dynamicproxy"
 	"imuslab.com/zoraxy/mod/dynamicproxy/captcha"
 	"imuslab.com/zoraxy/mod/dynamicproxy/loadbalance"
@@ -306,6 +307,8 @@ func ReverseProxyInit() {
 
 	dprouter, err := dynamicproxy.NewDynamicProxy(dynamicproxy.RouterOption{
 		HostUUID:           nodeUUID,
+		SessionSecret:      clusterMgr.KeyMaterial(nodeUUID, cluster.PurposeCaptchaSession),
+		Health:             clusterMgr.Health(),
 		HostVersion:        SYSTEM_VERSION,
 		Port:               inboundPort,
 		UseTls:             useTls,

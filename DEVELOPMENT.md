@@ -353,3 +353,187 @@ Step-by-step setup (forward auth and OIDC) is in [docs/authentik.md](docs/authen
 (`oidc.go` discovery/JWKS/ID token, `session.go`, `claims.go`). Tests use fake outpost / OIDC servers
 (`authentik_test.go`, `fakeidp_test.go`, `oidc_test.go`); run them with
 `go test -race ./mod/auth/...`.
+
+## High availability
+
+Everything lives in `src/mod/cluster` plus glue in `src/cluster.go`. All of it is inert by default: with no cluster
+secret and role `standalone` nothing is exposed, no files are created and every key is derived exactly as before.
+
+### What a cluster shares
+
+| Thing | Shared across nodes? | How |
+|---|---|---|
+| CAPTCHA session cookie | yes | signing key derived from the cluster secret (HKDF, purpose `captcha-session`) |
+| Load balancer sticky cookie | yes | cookie store key derived from the cluster secret (purpose `lb-sticky-session`) |
+| Proxy rules, redirects, access rules, stream proxies, path rules, trusted proxies, ACME settings | primary to followers | signed + encrypted snapshot, pull model |
+| Certificates (`conf/certs`) | only if "sync certificates" is on | same snapshot |
+| Admin CSRF key, admin login session, admin account, `sys.uuid`, admin HTTPS cert, updater state, logs | never | node local |
+| ZorxAuth (SSO portal) sessions | no | stored per node in the database (random IDs, not a signed cookie). Put the SSO portal behind sticky routing, or users sign in again after a failover. OAuth2/OIDC cookies hold the provider token and work on every node |
+
+Without a cluster secret the key input stays the node UUID (`cluster.KeyMaterial` returns it unchanged), so a
+standalone node is byte-identical to before. Existing sessions are invalidated once when a secret is first set.
+
+### Setting it up
+
+1. Generate a secret on one node (Cluster / HA page, or `zoraxy -cluster_gen_secret`) and give the same value to every
+   node (page, `-cluster_secret`, or `conf/cluster.json`). Restart every node once so session keys switch.
+2. Pick the primary: role **Primary**. On each other node: role **Follower**, primary admin URL
+   (`https://primary:8000`), and optionally the primary's admin certificate SHA-256 fingerprint (pinning, for the
+   self-signed `-webui_tls=auto` certificate; the fingerprint is printed in the primary's startup log).
+3. Edit configuration on the primary only. Followers pull every 60 s (+0..20% jitter, configurable 10 to 3600 s).
+   "Sync now" on the follower page triggers it immediately.
+
+`conf/cluster.json` (mode 0600, node local, never synced):
+`{"role":"standalone|primary|follower","secret":"...","primaryUrl":"","primaryFingerprint":"","syncIntervalSeconds":60,"syncCerts":false,"healthDisabled":false,"healthAllow":[]}`
+
+Flags: `-cluster_secret`, `-cluster_gen_secret`, `-cluster_allow_local_edits`, `-health_port`.
+
+### Health endpoint
+
+`GET /.zoraxy/health` on the proxy listeners (HTTP, HTTPS, HTTP/3, secondary ports), answered before host routing,
+so any `Host` header works. Only that exact path is intercepted (`/.zoraxy/captcha/verify` and ACME paths are
+untouched). Returns `200 {"status":"ok","version","uptimeSeconds","proxyRunning":true,"activeEndpoints":N}` or `503`
+with `proxyRunning:false` when the router is stopped. No secrets. Optional allow-list of IPs/CIDRs on the Cluster page
+(matched against the TCP peer, never `X-Forwarded-For`; default allow all). `-health_port=:8081` serves the same path
+on a separate tiny listener, reachable even when the proxy is stopped (then it answers 503).
+
+### Config sync design
+
+- **Transport.** `GET /api/cluster/snapshot?have=<version>` and `POST /api/cluster/heartbeat` on the admin port,
+  mounted outside the admin session and CSRF layers. They answer `404` unless the node role is `primary`.
+  Authentication is a bearer token `zxc1:<unix>:<node>:<nonce>:<hmac>` where the HMAC (key derived from the secret) covers
+  method, path, timestamp, node id and a random nonce: bound to one request, valid for +-60 s, single use (replay
+  cache), compared in constant time. 30 requests/minute per client IP, valid or not.
+- **Snapshot.** JSON envelope `{version, createdAt, node, nonce, data, sig}`; `data` is AES-256-GCM(gzip(payload)) and
+  `sig` is HMAC-SHA256 over the header and ciphertext (separate HKDF keys). The files are an allow-list:
+  `conf/proxy/*.config`, `redirect`, `access`, `streamproxy`, `rules`, `trusted_proxies.json`, `acme_conf.json` and
+  optionally `certs`. Anything else (`sys.uuid`, admin accounts, `conf/webui`, updater state, `cluster.json`, logs,
+  database) cannot be included. Followers re-validate every path.
+- **Versioning.** The version only moves when the content hash changes: `max(previous+1, now in ms)`, persisted in
+  `conf/.cluster/primary.json`. Followers refuse a lower version than the one applied ("Force sync" overrides, for a
+  rebuilt primary).
+- **Apply.** The follower verifies, validates (JSON plus the real schemas: `validateClusterPayload`), stages into
+  `conf/.cluster/staging-*`, swaps each root with renames keeping the old one in `conf/.cluster/backup-*` (last 3 kept),
+  then restarts itself (`syscall.Exec`, same binary and arguments) because Zoraxy has no in-place reload of every
+  module. It only restarts when content actually changed. A failed apply or reload is rolled back. If the restarted
+  process dies before it has been up for 20 s and is started again (systemd / container restart policy), the boot guard
+  restores the backup and remembers the snapshot as rejected until the primary changes it. Run followers under a
+  supervisor.
+- **Conflict policy: primary wins.** On a follower, writes to synced objects through the admin API are refused with 403
+  unless `-cluster_allow_local_edits` (then they are overwritten by the next primary change). Node local settings
+  (listen port, TLS toggles, timeouts, start/stop) stay editable.
+- **Not synced (known gaps).** Settings stored in the database (inbound port, TLS mode, SSO provider settings,
+  ZorxAuth users, redirect regex/case flags, geo-IP, plugins), the Docker/uptime/statistics state and static web server
+  content. Set those on every node or use `/api/conf/export` with the database option.
+- **Security.** The cluster secret is as sensitive as the admin password: whoever holds it can read the whole synced
+  configuration (including captcha keys, basic-auth hashes and, with cert sync, private keys) and can forge visitor
+  sessions. Prefer HTTPS for the admin port (`-webui_tls`) and pin the fingerprint, even though the snapshot is already
+  encrypted and signed. Keep node clocks within a few seconds (NTP): the token window is 60 s.
+
+### ACME in a cluster
+
+Two safe approaches:
+1. **Single issuer.** Make the primary the only node that runs ACME, turn on "sync certificates". Followers receive the
+   certificates (renewals included) and their copy of `acme_conf.json` has automatic renewal switched off, so only the
+   primary talks to the CA. HTTP-01 works if the CA can reach the primary; otherwise use DNS-01 on the primary.
+2. **DNS-01 on every node.** No certificate sync; each node obtains its own certificate with a DNS challenge, so it does
+   not matter which node the VIP points at. Mind the CA rate limits (N nodes means N certificates per name).
+
+HTTP-01 on a VIP-fronted pair only works on the node that currently owns the VIP, which is why 1 or 2 is needed.
+
+### Active/passive with keepalived (VRRP)
+
+Two nodes, `192.0.2.11` (node-a) and `192.0.2.12` (node-b), VIP `192.0.2.10`, interface `eth0`.
+
+```
+# /etc/keepalived/keepalived.conf on node-a (node-b: state BACKUP, priority 100, swap unicast addresses)
+global_defs {
+    enable_script_security
+    script_user keepalived_script
+}
+
+vrrp_script chk_zoraxy {
+    script "/usr/bin/curl -fsS --max-time 2 http://127.0.0.1/.zoraxy/health -H 'Host: health.local' -o /dev/null"
+    interval 2
+    timeout 3
+    fall 2
+    rise 2
+}
+
+vrrp_instance VI_ZORAXY {
+    state MASTER
+    interface eth0
+    virtual_router_id 51
+    priority 150
+    advert_int 1
+    unicast_src_ip 192.0.2.11
+    unicast_peer {
+        192.0.2.12
+    }
+    authentication {
+        auth_type PASS
+        auth_pass change-me-8ch
+    }
+    virtual_ipaddress {
+        192.0.2.10/24
+    }
+    track_script {
+        chk_zoraxy
+    }
+}
+```
+
+Use `https://127.0.0.1/.zoraxy/health` with `-k` if the node only listens with TLS (the health path answers before
+certificate/host selection; with `-k` the default certificate is fine). If port 80 is disabled use `-health_port`.
+Zoraxy listens on all addresses, so it needs no special binding for the VIP. Create the `keepalived_script` user
+(`useradd -r -s /sbin/nologin keepalived_script`) or drop the `script_user` lines.
+
+With a shared cluster secret a visitor's CAPTCHA session and sticky cookie survive the failover. Without config sync
+the standby must hold an identical configuration (sync, or keep it by hand).
+
+### Active/active behind nginx or HAProxy
+
+```
+# HAProxy
+frontend fe_https
+    bind :443
+    mode tcp
+    default_backend be_zoraxy
+backend be_zoraxy
+    mode tcp
+    balance roundrobin
+    option httpchk GET /.zoraxy/health
+    http-check expect status 200
+    server zx1 192.0.2.11:443 check port 443 check-ssl verify none inter 2s fall 2 rise 2 send-proxy-v2
+    server zx2 192.0.2.12:443 check port 443 check-ssl verify none inter 2s fall 2 rise 2 send-proxy-v2
+```
+
+```
+# nginx (stream module, TCP pass-through; TLS terminates on the Zoraxy nodes)
+stream {
+    upstream zoraxy { server 192.0.2.11:443 max_fails=2 fail_timeout=5s; server 192.0.2.12:443 max_fails=2 fail_timeout=5s; }
+    server { listen 443; proxy_pass zoraxy; proxy_protocol on; }
+}
+```
+
+`send-proxy-v2` / `proxy_protocol on` need Zoraxy's "PROXY protocol" setting enabled so the real client IP survives; drop
+both if you do not need it. Active health checks in nginx open source are passive only (`max_fails`); use HAProxy or
+nginx Plus for `/.zoraxy/health` probing. Because CAPTCHA and sticky cookies are keyed from the cluster secret, any node
+accepts them, so no stickiness is required at this layer.
+
+### Failover test checklist
+
+1. `curl -i http://<node>/.zoraxy/health` returns 200 on both nodes and the JSON has `proxyRunning:true`.
+2. Same cluster secret fingerprint on both Cluster pages; both show no pending restart.
+3. Change a proxy rule on the primary; within one interval the follower shows the new snapshot version, restarts
+   once, and the primary's node list shows it as current.
+4. Solve a CAPTCHA (or get a sticky cookie) through node A, then send the same cookie to node B directly: accepted
+   without a new challenge.
+5. Stop Zoraxy on the VIP owner (`systemctl stop zoraxy`): the VIP moves within `fall * interval` seconds and traffic
+   resumes; `curl` the VIP in a loop to measure the gap.
+6. Start it again: the VIP returns only if the node has higher priority (use `nopreempt` to avoid flapping).
+7. Break the follower's network to the primary: sync status shows an error, the follower keeps serving its last
+   applied configuration.
+8. Stop the proxy service from the UI on the VIP owner: health returns 503 and keepalived fails over.
+9. Edit a synced object on the follower: refused with 403 (primary wins).
+10. Wrong secret on a follower: sync error "primary rejected the request", no files changed.

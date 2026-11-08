@@ -18,6 +18,7 @@ import (
 
 	"imuslab.com/zoraxy/mod/auth/sso/oauth2"
 	"imuslab.com/zoraxy/mod/auth/sso/zorxauth"
+	"imuslab.com/zoraxy/mod/cluster"
 
 	"imuslab.com/zoraxy/mod/access"
 	"imuslab.com/zoraxy/mod/auth/sso/forward"
@@ -71,16 +72,18 @@ func (p TlsCipherProfile) IsValid() bool {
 /* Router Object Options */
 type RouterOption struct {
 	/* Basic Settings */
-	HostUUID           string           //The UUID of Zoraxy, use for heading mod
-	HostVersion        string           //The version of Zoraxy, use for heading mod
-	Port               int              //Incoming port
-	UseTls             bool             //Use TLS to serve incoming requsts
-	MinTLSVersion      uint16           //Minimum TLS version
-	TlsCipherProfile   TlsCipherProfile //TLS cipher profile (see TlsCipherProfile enum and tlscipherprofile.go)
-	NoCache            bool             //Force set Cache-Control: no-store
-	ListenOnPort80     bool             //Enable port 80 http listener
-	ForceHttpsRedirect bool             //Force redirection of http to https endpoint
-	UseProxyProtocol   bool             //Enable PROXY protocol v1/v2 support for TLS listener
+	HostUUID           string                  //The UUID of Zoraxy, use for heading mod
+	HostVersion        string                  //The version of Zoraxy, use for heading mod
+	SessionSecret      string                  //Key input for the CAPTCHA session signing. Empty = HostUUID (cluster deployments pass a key derived from the cluster secret)
+	Health             *cluster.HealthEndpoint //Optional /.zoraxy/health endpoint, served on the proxy listeners before host routing
+	Port               int                     //Incoming port
+	UseTls             bool                    //Use TLS to serve incoming requsts
+	MinTLSVersion      uint16                  //Minimum TLS version
+	TlsCipherProfile   TlsCipherProfile        //TLS cipher profile (see TlsCipherProfile enum and tlscipherprofile.go)
+	NoCache            bool                    //Force set Cache-Control: no-store
+	ListenOnPort80     bool                    //Enable port 80 http listener
+	ForceHttpsRedirect bool                    //Force redirection of http to https endpoint
+	UseProxyProtocol   bool                    //Enable PROXY protocol v1/v2 support for TLS listener
 
 	/* Routing Service Managers */
 	TlsManager           *tlscert.Manager           //TLS manager for serving SAN certificates

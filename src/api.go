@@ -459,6 +459,7 @@ func initAPIs(targetMux *http.ServeMux) {
 	RegisterMDNSAPIs(authRouter)
 	RegisterNetworkUtilsAPIs(authRouter)
 	RegisterUpdaterAPIs(authRouter)
+	RegisterClusterAPIs(authRouter)
 	RegisterACMEAndAutoRenewerAPIs(authRouter)
 	RegisterStaticWebServerAPIs(authRouter)
 	RegisterPluginAPIs(authRouter)
