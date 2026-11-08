@@ -153,9 +153,11 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if w.Dialer == nil {
 		if w.Options.SkipTLSValidation {
 			//Disable TLS secure check if target allow skip verification
-			bypassDialer := websocket.DefaultDialer
+			//Work on a copy: websocket.DefaultDialer is a shared pointer and mutating it would switch off
+			//certificate verification for every other WebSocket upstream in the process (and race).
+			bypassDialer := *websocket.DefaultDialer
 			bypassDialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-			dialer = bypassDialer
+			dialer = &bypassDialer
 		} else {
 			//Just use the default dialer come with gorilla websocket
 			dialer = DefaultDialer

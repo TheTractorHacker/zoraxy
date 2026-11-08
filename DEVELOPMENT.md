@@ -1345,3 +1345,11 @@ polling pauses while the tab or the browser tab is hidden), Coverage (rules with
 `/api/proxy/bulk` `set_waf`), Policy, Profiles (presets Log only / Standard / Strict / Paranoid fill the form), Exclusions (structured
 list with search, add and remove), Rules reference. First run state offers "Enable in detection-only mode for all rules". Policy changes
 re-read the stored policy before writing so a stale tab cannot overwrite them. No new server endpoints.
+## Closure verification notes (branch fix/closure-bugs)
+
+* `docs/triage/closure-bugs.md|json` list, per fork issue, the test or audit that backs the verdict and the reply text to post.
+* Targeted UI regression scenarios (mocked API, headless Chromium): `PY=$HOME/ui-test-tools/py.sh tools/ui-smoke/regress.sh` (default port 28784). Scenarios: Docker picker with null lists (#954), multi-domain certificate request (#611), updater early-access label (#969).
+* Forward auth behind a TLS-terminating tunnel (Cloudflare Tunnel): add the tunnel source address to Trusted Proxies; the auth subrequest then carries the tunnel's `X-Forwarded-Proto` and `CF-Connecting-IP` (`forward.AuthRouterOptions.IsTrustedProxy`).
+* Host names are compared in punycode (`utils.NormalizeHostname`): use it for any new place that compares or stores a domain.
+* Upstreams with "Skip Verification" use `utils.InsecureUpstreamTLSConfig` (legacy TLS versions and RSA suites allowed) for IPMI-class devices.
+* Soak the forward-auth module for leaks: `ZORAXY_LEAK_SECONDS=300 go test ./mod/auth/sso/forward -run Leak -v`.

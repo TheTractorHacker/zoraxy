@@ -16,6 +16,7 @@ import (
 
 	"imuslab.com/zoraxy/mod/dynamicproxy/domainsniff"
 	"imuslab.com/zoraxy/mod/dynamicproxy/permissionpolicy"
+	"imuslab.com/zoraxy/mod/utils"
 )
 
 // Tunnel settings for generic HTTP protocol upgrades, see upgrade.go
@@ -164,7 +165,12 @@ func NewDynamicProxyCore(target *url.URL, prepender string, dpcOptions *DpcoreOp
 		}
 		cfg := &tls.Config{ServerName: serverName}
 		if dpcOptions.IgnoreTLSVerification {
+			// Verification is off for this upstream: also allow the legacy TLS versions and RSA key exchange
+			// suites that appliances (IPMI, old NAS) still use (upstream #971)
+			legacy := utils.InsecureUpstreamTLSConfig("")
 			cfg.InsecureSkipVerify = true
+			cfg.MinVersion = legacy.MinVersion
+			cfg.CipherSuites = legacy.CipherSuites
 		}
 		// A ServerName that is an IP literal is dropped from the TLS ClientHello
 		// by Go (crypto/tls hostnameInSNI, per RFC 6066), leaving the handshake
@@ -346,7 +352,7 @@ func newBaseTransport(opts *DpcoreOptions) *http.Transport {
 	}
 
 	if opts.IgnoreTLSVerification {
-		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		tr.TLSClientConfig = utils.InsecureUpstreamTLSConfig("")
 	}
 
 	return tr

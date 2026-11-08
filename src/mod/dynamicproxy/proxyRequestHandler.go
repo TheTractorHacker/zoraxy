@@ -16,6 +16,7 @@ import (
 	"imuslab.com/zoraxy/mod/dynamicproxy/loadbalance"
 	"imuslab.com/zoraxy/mod/dynamicproxy/rewrite"
 	"imuslab.com/zoraxy/mod/statistic"
+	"imuslab.com/zoraxy/mod/utils"
 	"imuslab.com/zoraxy/mod/websocketproxy"
 )
 
@@ -37,7 +38,7 @@ func (router *Router) getTargetProxyEndpointFromRequestURI(requestURI string) *P
 // Get the proxy endpoint from hostname, which might includes checking of wildcard certificates
 func (router *Router) GetProxyEndpointFromHostname(hostname string) *ProxyEndpoint {
 	var targetSubdomainEndpoint *ProxyEndpoint = nil
-	hostname = strings.ToLower(hostname)
+	hostname = utils.NormalizeHostname(hostname) //browsers send punycode, rules may be saved as unicode (upstream #458)
 	ep, ok := router.ProxyEndpoints.Load(hostname)
 	if ok {
 		//Exact hit
@@ -56,7 +57,7 @@ func (router *Router) GetProxyEndpointFromHostname(hostname string) *ProxyEndpoi
 			return true
 		}
 
-		match, err := filepath.Match(ep.RootOrMatchingDomain, hostname)
+		match, err := filepath.Match(utils.NormalizeHostname(ep.RootOrMatchingDomain), hostname)
 		if err != nil {
 			//Bad pattern. Skip this rule
 			return true
@@ -71,7 +72,7 @@ func (router *Router) GetProxyEndpointFromHostname(hostname string) *ProxyEndpoi
 		//Wildcard not match. Check for alias
 		if len(ep.MatchingDomainAlias) > 0 {
 			for _, aliasDomain := range ep.MatchingDomainAlias {
-				match, err := filepath.Match(aliasDomain, hostname)
+				match, err := filepath.Match(utils.NormalizeHostname(aliasDomain), hostname)
 				if err != nil {
 					//Bad pattern. Skip this alias
 					continue

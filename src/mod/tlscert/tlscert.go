@@ -264,6 +264,15 @@ func (m *Manager) GetCert(helloInfo *tls.ClientHelloInfo) (*tls.Certificate, err
 
 // GetCertificateByHostname returns the certificate and private key for a given hostname
 func (m *Manager) GetCertificateByHostname(hostname string) (string, string, error) {
+	//SNI always carries the punycode form of an internationalised name (upstream #458)
+	hostname = utils.NormalizeHostname(hostname)
+	//Legacy certificate files may have been stored under the Unicode spelling the user typed
+	if uni := utils.DisplayHostname(hostname); uni != hostname &&
+		!utils.FileExists(filepath.Join(m.CertStore, hostname+".pem")) &&
+		utils.FileExists(filepath.Join(m.CertStore, uni+".pem")) &&
+		utils.FileExists(filepath.Join(m.CertStore, uni+".key")) {
+		hostname = uni
+	}
 	//Check if the domain corrisponding cert exists
 	pubKey := "./tmp/localhost.pem"
 	priKey := "./tmp/localhost.key"

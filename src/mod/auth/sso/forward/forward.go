@@ -66,6 +66,14 @@ type AuthRouterOptions struct {
 	// proxy outposts select the application by Host, so this must be on for Authentik.
 	PreserveHost bool
 
+	// IsTrustedProxy reports whether an address (the TCP peer) is a trusted reverse proxy / CDN /
+	// tunnel (e.g. Cloudflare). When it returns true, the auth subrequest carries the scheme from
+	// the peer's X-Forwarded-Proto and the client address from its client-IP headers instead of
+	// the plain-HTTP hop to Zoraxy. nil means "never trust", which keeps the old behaviour.
+	// Without this an auth server behind a TLS terminator (Cloudflare Tunnel) builds http:// redirect URLs
+	// and sees the tunnel address as the client (upstream #698, #1032).
+	IsTrustedProxy func(ip string) bool
+
 	Logger   *logger.Logger
 	Database *database.Database
 }
@@ -326,6 +334,8 @@ func (ar *AuthRouter) HandleAuthProviderRouting(w http.ResponseWriter, r *http.R
 	} else {
 		rSetXForwardedHeaders(r, req)
 	}
+
+	ar.applyTrustedForwarding(r, req)
 
 	if ar.options.RequestIncludeBody {
 		if err = rCopyBody(r, req); err != nil {
