@@ -394,6 +394,7 @@ type ProxyEndpoint struct {
 	peerSet       []netip.Prefix      `json:"-"` //Compiled allowed peer set
 	peerSetErr    error               `json:"-"`
 	Tags          []string            // Tags for the proxy endpoint
+	Ops           *OpsConfig          `json:",omitempty"` //Error pages, static responses, CORS, bandwidth limit (ops_config.go)
 }
 
 /*

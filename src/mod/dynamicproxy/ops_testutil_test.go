@@ -1,6 +1,7 @@
 package dynamicproxy
 
 import (
+	"encoding/json"
 	"net/http/httptest"
 	"testing"
 
@@ -21,6 +22,15 @@ func newOpsTestRouter(t *testing.T, upstream string) (*Router, *ProxyEndpoint) {
 	}
 	router.ProxyEndpoints.Store("app.example.com", sep)
 	return router, sep
+}
+
+func mustJSON(t *testing.T, v interface{}) string {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }
 
 func serveOps(router *Router, method, target string, hdr map[string]string) *httptest.ResponseRecorder {

@@ -340,6 +340,7 @@ func (router *Router) handleNonTLSRequest(w http.ResponseWriter, r *http.Request
 		domainOnly = strings.Split(r.Host, ":")[0]
 	}
 	w = router.pluginWrapResponse(w, r, sep) //plugin response stage, no-op without response plugins
+	w = router.opsBegin(w, r, sep)           //request vars + CORS / error page / bandwidth wrapper
 	if proxyHandler.runEndpointChain(w, r, sep, domainOnly) {
 		return
 	}
@@ -364,6 +365,7 @@ func (router *Router) handleNonTLSRequest(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	armOps(r)
 	selectedUpstream, err := router.loadBalancer.SelectUpstream(w, r, sep.ActiveOrigins, router.newSelectOptions(r, sep))
 	if err != nil {
 		serveProxyRequestError(w, 404, router, ErrorTemplateHostError)
