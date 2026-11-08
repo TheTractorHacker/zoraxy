@@ -40,6 +40,10 @@ func GetDnsChallengeProviderByName(dnsProvider string, dnsCredentials string, pp
 		}
 	}
 
+	if dnsProvider == "plesk" {
+		return newPleskProvider(dnsCredentialsMap, userDefinedPropagationTimeout, userDefinedPollingInterval)
+	}
+
 	providerConfigStructure, err := acmedns.GetProviderConfigStructure(dnsProvider)
 	if err != nil {
 		return nil, err
