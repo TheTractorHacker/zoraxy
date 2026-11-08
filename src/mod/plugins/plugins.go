@@ -46,6 +46,7 @@ func NewPluginManager(options *ManagerOptions) *Manager {
 
 	//Create database table
 	options.Database.NewTable("plugins")
+	options.Database.NewTable(hookDBTable)
 
 	thisManager := &Manager{
 		LoadedPlugins:      make(map[string]*Plugin),
@@ -112,6 +113,7 @@ func (m *Manager) ReloadPluginFromDisk() {
 
 			thisPlugin.RootDir = filepath.ToSlash(pluginPath)
 			thisPlugin.staticRouteProxy = make(map[string]*dpcore.ReverseProxy)
+			m.loadHookAdminSettings(thisPlugin)
 			m.loadedPluginsMutex.Lock()
 			m.LoadedPlugins[thisPlugin.Spec.ID] = thisPlugin
 			m.loadedPluginsMutex.Unlock()
@@ -145,6 +147,7 @@ func (m *Manager) LoadPluginsFromDisk() error {
 			}
 			thisPlugin.RootDir = filepath.ToSlash(pluginPath)
 			thisPlugin.staticRouteProxy = make(map[string]*dpcore.ReverseProxy)
+			m.loadHookAdminSettings(thisPlugin)
 			m.loadedPluginsMutex.Lock()
 			m.LoadedPlugins[thisPlugin.Spec.ID] = thisPlugin
 			m.loadedPluginsMutex.Unlock()
@@ -316,17 +319,22 @@ func (p *Plugin) HandleStaticRoute(w http.ResponseWriter, r *http.Request, longe
 	}
 	r.URL, _ = url.Parse(rewrittenURL)
 
+	upstreamHeaders := [][]string{
+		{"X-Zoraxy-Capture", longestPrefix},
+		{"X-Zoraxy-URI", originalRequestURI},
+		{"X-Zoraxy-RequestID", requestID(r)},
+	}
+	if tok := p.invokeToken(); tok != "" {
+		upstreamHeaders = append(upstreamHeaders, []string{"X-Zoraxy-Plugin-Token", tok})
+	}
 	targetRouter.ServeHTTP(w, r, &dpcore.ResponseRewriteRuleSet{
-		UseTLS:       false,
-		OriginalHost: r.Host,
-		ProxyDomain:  "127.0.0.1:" + strconv.Itoa(p.AssignedPort),
-		NoCache:      true,
-		PathPrefix:   longestPrefix,
-		AllowUpgrade: true,
-		UpstreamHeaders: [][]string{
-			{"X-Zoraxy-Capture", longestPrefix},
-			{"X-Zoraxy-URI", originalRequestURI},
-		},
+		UseTLS:          false,
+		OriginalHost:    r.Host,
+		ProxyDomain:     "127.0.0.1:" + strconv.Itoa(p.AssignedPort),
+		NoCache:         true,
+		PathPrefix:      longestPrefix,
+		AllowUpgrade:    true,
+		UpstreamHeaders: upstreamHeaders,
 	})
 
 }

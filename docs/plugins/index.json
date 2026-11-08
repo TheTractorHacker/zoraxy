@@ -69,6 +69,11 @@
           "filename": "2. Architecture/6. Compile a Plugin.md",
           "title": "Compile a Plugin",
           "type": "file"
+        },
+        {
+          "filename": "2. Architecture/7. Request and Response Hooks.md",
+          "title": "Request and Response Hooks",
+          "type": "file"
         }
       ]
     },

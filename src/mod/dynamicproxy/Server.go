@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	zoraxyPlugin "imuslab.com/zoraxy/mod/plugins/zoraxy_plugin"
 )
 
 /*
@@ -50,6 +52,7 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sep := h.Parent.GetProxyEndpointFromHostname(domainOnly)
 	if sep != nil && !sep.Disabled {
 		//Matching proxy rule found. Run the shared pre-proxy chain
+		w = h.Parent.pluginWrapResponse(w, r, sep) //plugin response stage, no-op without response plugins
 		if h.runEndpointChain(w, r, sep, domainOnly) {
 			return
 		}
@@ -252,7 +255,7 @@ runEndpointChain is the single pre-proxy protection chain for a matched proxy
 endpoint, shared by the TLS handler (ServeHTTP) and the non-TLS handlers
 (port 80 bypass and secondary listening ports) so the two can never drift apart.
 
-Order: access (blacklist / whitelist) -> exploit detection -> rate limit
+Order: access (blacklist / whitelist) -> plugin pre_auth -> WAF -> exploit detection -> rate limit
 -> captcha -> auth (basic / SSO) -> plugin routing.
 
 Returns true if the request has been fully handled (blocked or answered).
@@ -266,6 +269,11 @@ func (h *ProxyHandler) runEndpointChain(w http.ResponseWriter, r *http.Request, 
 	}
 	if h.handleAccessRouting(ruleID, w, r, sep) {
 		//Request handled by subroute
+		return true
+	}
+
+	/* Plugin pre_auth stage: bot filters etc, before WAF / captcha / auth */
+	if h.Parent.routePluginStage(w, r, sep, zoraxyPlugin.HookStagePreAuth) {
 		return true
 	}
 
@@ -322,8 +330,5 @@ func (router *Router) routePlugin(w http.ResponseWriter, r *http.Request, sep *P
 		//Test seam, a real plugin.Manager needs running plugin processes
 		return router.pluginRouteHook(w, r, sep)
 	}
-	if router.Option.PluginManager != nil {
-		return router.Option.PluginManager.HandleRoute(w, r, sep.Tags, router.GetClientIPForEndpoint(r, sep))
-	}
-	return false
+	return router.routePluginStage(w, r, sep, zoraxyPlugin.HookStagePostAuth)
 }

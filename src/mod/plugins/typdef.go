@@ -29,6 +29,7 @@ type Plugin struct {
 	dynamicRouteProxy *dpcore.ReverseProxy            //The reverse proxy for the dynamic route
 	process           *exec.Cmd                       //The process of the plugin
 	SupportHotRebuild bool                            //Whether the plugin source code exists in the plugin folder tree
+	hook              hookRuntime                     //Hook / filter runtime state (admin settings, circuit breaker, invoke token)
 }
 
 type ManagerOptions struct {
@@ -73,4 +74,6 @@ type Manager struct {
 	pluginCheckMutex   sync.RWMutex //Mutex for the plugin hash
 	pluginReloadTicker *time.Ticker //Ticker for the plugin reload
 	pluginReloadStop   chan bool    //Channel to stop the plugin reload ticker
+
+	hookCfg hookTunables //Circuit breaker tunables, zero value = defaults
 }

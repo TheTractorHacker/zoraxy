@@ -40,6 +40,10 @@ func (m *Manager) LoadPluginSpec(pluginPath string) (*Plugin, error) {
 		return nil, err
 	}
 
+	for _, warn := range sanitizeHookSpec(pluginSpec) {
+		m.logf(nil, "plugin "+pluginSpec.ID+": "+warn, nil)
+	}
+
 	return &Plugin{
 		RootDir:           pluginPath,
 		Spec:              pluginSpec,

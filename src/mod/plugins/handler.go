@@ -164,7 +164,11 @@ func (m *Manager) HandleListPlugins(w http.ResponseWriter, r *http.Request) {
 		return plugins[i].Spec.Name < plugins[j].Spec.Name
 	})
 
-	js, err := json.Marshal(plugins)
+	views := make([]pluginView, 0, len(plugins))
+	for _, p := range plugins {
+		views = append(views, viewOf(p))
+	}
+	js, err := json.Marshal(views)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -186,7 +190,7 @@ func (m *Manager) HandlePluginInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	js, err := json.Marshal(plugin)
+	js, err := json.Marshal(viewOf(plugin))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

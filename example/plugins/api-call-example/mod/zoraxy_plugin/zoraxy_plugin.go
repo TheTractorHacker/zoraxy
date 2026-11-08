@@ -107,6 +107,14 @@ type IntroSpect struct {
 
 	/* API Access Control */
 	PermittedAPIEndpoints []PermittedAPIEndpoint `json:"permitted_api_endpoints"` //List of API endpoints this plugin can access, and a description of why the plugin needs to access this endpoint
+
+	/*
+		Request / Response Hooks (optional, since hooks API version 1)
+
+		Lets the plugin act as a middleware / WAF style filter. Omit (nil) for a legacy
+		plugin, see hooks.go for details. Old Zoraxy versions ignore this field.
+	*/
+	Hooks *HookSettings `json:"hooks,omitempty"`
 }
 
 /*
@@ -135,10 +143,11 @@ by the supplied values like starting a web server at given port
 that listens to 127.0.0.1:port
 */
 type ConfigureSpec struct {
-	Port         int                  `json:"port"`                  //Port to listen
-	RuntimeConst RuntimeConstantValue `json:"runtime_const"`         //Runtime constant values
-	APIKey       string               `json:"api_key,omitempty"`     //API key for accessing Zoraxy APIs, if the plugin has permitted endpoints
-	ZoraxyPort   int                  `json:"zoraxy_port,omitempty"` //The port that Zoraxy is running on, used for making API calls to Zoraxy
+	Port         int                  `json:"port"`                   //Port to listen
+	RuntimeConst RuntimeConstantValue `json:"runtime_const"`          //Runtime constant values
+	APIKey       string               `json:"api_key,omitempty"`      //API key for accessing Zoraxy APIs, if the plugin has permitted endpoints
+	ZoraxyPort   int                  `json:"zoraxy_port,omitempty"`  //The port that Zoraxy is running on, used for making API calls to Zoraxy
+	InvokeToken  string               `json:"invoke_token,omitempty"` //Secret that Zoraxy sends in the X-Zoraxy-Plugin-Token header on every call it makes to the plugin (filter / sniff). Use VerifyInvokeToken to check it
 	//To be expanded
 }
 

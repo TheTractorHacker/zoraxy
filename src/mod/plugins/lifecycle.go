@@ -44,6 +44,13 @@ func (m *Manager) StartPlugin(pluginID string) error {
 		RuntimeConst: *m.Options.SystemConst,
 	}
 
+	//Secret that proves to the plugin that a call comes from Zoraxy (filter / sniff / capture)
+	invokeToken, err := thisPlugin.generateInvokeToken()
+	if err != nil {
+		return err
+	}
+	pluginConfiguration.InvokeToken = invokeToken
+
 	// Generate API key if the plugin has permitted endpoints
 	if len(thisPlugin.Spec.PermittedAPIEndpoints) > 0 {
 		apiKey, err := m.Options.APIKeyManager.GenerateAPIKey(thisPlugin.Spec.ID, thisPlugin.Spec.PermittedAPIEndpoints)

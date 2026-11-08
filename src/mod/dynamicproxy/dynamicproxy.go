@@ -417,6 +417,7 @@ func (router *Router) handleNonTLSRequest(w http.ResponseWriter, r *http.Request
 	if strings.Contains(r.Host, ":") {
 		domainOnly = strings.Split(r.Host, ":")[0]
 	}
+	w = router.pluginWrapResponse(w, r, sep) //plugin response stage, no-op without response plugins
 	if proxyHandler.runEndpointChain(w, r, sep, domainOnly) {
 		return
 	}
