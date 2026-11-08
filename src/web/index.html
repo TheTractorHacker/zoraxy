@@ -183,6 +183,9 @@
                             <a class="item" tag="utils" tab_group="others">
                                 <i class="simplistic paperclip icon"></i> Utilities
                             </a>
+                            <a class="item" tag="cluster" tab_group="others">
+                                <i class="simplistic server icon"></i> Cluster / HA
+                            </a>
                             <a class="item" tag="updater" tab_group="others">
                                 <i class="simplistic download icon"></i> Update
                             </a>
@@ -207,6 +210,7 @@
                 </div>
             </div>
             <div class="contentWindow">
+                <div id="clusterFollowerBanner" class="ui warning message" style="display:none; margin:0.5em 1em 0;"><i class="lock icon"></i> This node is a cluster follower: proxy rules, redirects, access rules, stream proxies and ACME settings are managed by the primary and read-only here. <a href="#" onclick="$('[tag=cluster]').first().click(); return false;">Cluster / HA</a></div>
                 <!-- Quick Start -->
                 <div id="qstart" class="functiontab" target="quickstart.html"></div>
 
@@ -274,6 +278,9 @@
 
                 <!-- Utilities -->
                 <div id="utils" class="functiontab" target="utils.html"></div>
+
+                <!-- Cluster / HA -->
+                <div id="cluster" class="functiontab" target="cluster.html"></div>
 
                 <!-- Updater -->
                 <div id="updater" class="functiontab" target="updater.html"></div>
@@ -898,6 +905,14 @@
                     $container.html('<div class="recent-empty-hint">No recent items</div>');
                 }
             }
+        </script>
+        <script>
+            //Cluster follower banner (synced objects are read-only on a follower)
+            $(document).ready(function(){
+                $.ajax({url: "./api/cluster/status", method: "GET", success: function(s){
+                    if (s && s.readOnly) $("#clusterFollowerBanner").show();
+                }});
+            });
         </script>
     </body>
 </html>

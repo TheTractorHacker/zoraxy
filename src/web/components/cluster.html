@@ -1,0 +1,244 @@
+<div class="standardContainer" id="clusterPage">
+    <div class="ui basic segment">
+        <h2>Cluster / HA</h2>
+        <p>Run two or more Zoraxy nodes behind a virtual IP or an external load balancer. A <b>shared cluster secret</b> makes
+            visitor sessions (CAPTCHA, load balancer stickiness) valid on every node. A <b>primary</b> can push its proxy
+            configuration to <b>followers</b>, which pull a signed, encrypted snapshot. Standalone nodes (the default) are unaffected.</p>
+    </div>
+    <div class="ui divider"></div>
+
+    <div id="clMsg" class="ui small message" style="display:none;"></div>
+
+    <!-- Role -->
+    <div class="ui basic segment">
+        <h3>Role</h3>
+        <div class="ui form">
+            <div class="inline fields">
+                <div class="field"><div class="ui radio checkbox"><input type="radio" name="clRole" value="standalone"><label>Standalone</label></div></div>
+                <div class="field"><div class="ui radio checkbox"><input type="radio" name="clRole" value="primary"><label>Primary</label></div></div>
+                <div class="field"><div class="ui radio checkbox"><input type="radio" name="clRole" value="follower"><label>Follower</label></div></div>
+            </div>
+            <div id="clFollowerFields" style="display:none;">
+                <div class="field">
+                    <label>Primary admin URL</label>
+                    <input type="text" id="clPrimaryUrl" placeholder="https://10.0.0.1:8000">
+                    <small style="color:grey;">Use HTTPS if possible. The snapshot is encrypted and signed either way.</small>
+                </div>
+                <div class="field">
+                    <label>Primary certificate fingerprint (optional, SHA-256)</label>
+                    <input type="text" id="clPrimaryFp" placeholder="pin the primary's self-signed admin certificate">
+                </div>
+                <div class="field">
+                    <label>Sync interval (seconds, 10 - 3600)</label>
+                    <input type="number" id="clInterval" min="10" max="3600" value="60">
+                </div>
+            </div>
+            <div id="clPrimaryFields" style="display:none;">
+                <div class="field">
+                    <div class="ui toggle checkbox"><input type="checkbox" id="clSyncCerts"><label>Sync certificates (private keys are sent to followers; the primary should be the only ACME issuer)</label></div>
+                </div>
+            </div>
+            <button class="ui basic primary button" id="clSaveBtn"><i class="save icon"></i> Save</button>
+        </div>
+        <div id="clReadOnly" class="ui small warning message" style="display:none; margin-top:1em;">
+            This node is a follower. Proxy rules, redirects, access rules, stream proxies, path rules, trusted proxies and ACME
+            settings are managed by the primary and read-only here. Other changes made here are overwritten by the next primary change
+            (primary wins). Start with <code>-cluster_allow_local_edits</code> to lift the restriction.
+        </div>
+    </div>
+
+    <!-- Secret -->
+    <div class="ui basic segment">
+        <h3>Cluster secret</h3>
+        <p>Every node of a cluster needs the same secret (min. 32 characters). It is stored in <code>conf/cluster.json</code>
+            (mode 0600) and never displayed again after it was generated. Changing it requires a restart of every node to take
+            effect for session cookies.</p>
+        <div>Status: <b id="clSecretState">-</b> <span id="clSecretFp" style="color:grey;"></span></div>
+        <div id="clRestart" class="ui small warning message" style="display:none;">Restart Zoraxy to switch session cookies to the new secret.</div>
+        <div style="margin-top:0.8em;">
+            <button class="ui basic button" id="clGenBtn"><i class="key icon"></i> Generate new secret</button>
+            <div class="ui action input" style="margin-left:0.5em;">
+                <input type="password" id="clSecretIn" placeholder="or paste the secret of the other nodes" autocomplete="off" style="min-width:20em;">
+                <button class="ui basic button" id="clSetSecretBtn">Set</button>
+            </div>
+        </div>
+        <div id="clShowOnce" class="ui positive message" style="display:none; margin-top:1em;">
+            <div class="header">Copy this secret now. It will not be shown again.</div>
+            <p><code id="clSecretOnce" style="word-break:break-all; user-select:all;"></code></p>
+            <button class="ui mini basic button" id="clCopyBtn"><i class="copy icon"></i> Copy</button>
+            <button class="ui mini basic button" id="clHideBtn">I have saved it</button>
+        </div>
+    </div>
+
+    <!-- Sync status -->
+    <div class="ui basic segment" id="clStatusWrap" style="display:none;">
+        <h3>Sync status</h3>
+        <table class="ui unstackable basic celled table">
+            <tbody id="clStatusBody"></tbody>
+        </table>
+        <button class="ui basic button" id="clSyncBtn"><i class="sync icon"></i> Sync now</button>
+        <button class="ui basic button" id="clForceBtn" title="Accept an older snapshot version, for example after the primary was rebuilt">Force sync</button>
+    </div>
+
+    <!-- Nodes (primary) -->
+    <div class="ui basic segment" id="clNodesWrap" style="display:none;">
+        <h3>Followers seen by this primary</h3>
+        <div style="color:grey;">Current snapshot version: <b id="clSnapVer">-</b></div>
+        <table class="ui unstackable basic celled table">
+            <thead><tr><th>Node</th><th>Address</th><th>Version</th><th>Applied snapshot</th><th>Last seen</th><th>Last error</th></tr></thead>
+            <tbody id="clNodes"><tr><td colspan="6">No followers have reported in yet</td></tr></tbody>
+        </table>
+    </div>
+
+    <!-- Health -->
+    <div class="ui basic segment">
+        <h3>Health endpoint</h3>
+        <p>For external load balancers and keepalived scripts. Served on the proxy listeners (HTTP and HTTPS) before host routing:
+            <code id="clHealthUrl"></code><br>
+            Returns 200 with <code>{status, version, uptimeSeconds, proxyRunning, activeEndpoints}</code>, or 503 if the proxy is not running.
+            It exposes no secrets. Use <code>-health_port</code> for a separate listener.</p>
+        <div class="ui form">
+            <div class="field">
+                <label>Allowed clients (comma or newline separated IPs/CIDRs, empty = everyone)</label>
+                <textarea id="clHealthAllow" rows="2" placeholder="10.0.0.0/24, 192.168.1.5"></textarea>
+            </div>
+            <div class="field"><div class="ui toggle checkbox"><input type="checkbox" id="clHealthOff"><label>Disable the health endpoint</label></div></div>
+            <button class="ui basic button" id="clHealthSave">Save health settings</button>
+        </div>
+    </div>
+    <br><br>
+</div>
+
+<script>
+(function(){
+    let st = null, timer = null, dirty = false;
+    function esc(s){ return $("<div>").text(s == null ? "" : String(s)).html(); }
+    function errText(xhr){
+        if (xhr && xhr.responseJSON && xhr.responseJSON.error) return xhr.responseJSON.error;
+        return (xhr && xhr.statusText) || "request failed";
+    }
+    function ts(u){ return u ? new Date(u * 1000).toLocaleString() : "-"; }
+    function msg(text, bad){
+        $("#clMsg").removeClass("positive negative").addClass(bad ? "negative" : "positive").text(text).show();
+        setTimeout(function(){ $("#clMsg").fadeOut(); }, 6000);
+    }
+    function fail(xhr){ msg(errText(xhr), true); }
+    // API errors come back as 200 + {error}, see utils.SendErrorResponse style
+    function post(url, data, ok){
+        $.cjax({method: "POST", url: url, data: data, success: function(d){
+            if (d && d.error) { msg(d.error, true); return; }
+            ok && ok(d);
+        }, error: fail});
+    }
+    function role(){ return $("input[name=clRole]:checked").val(); }
+    function showRoleFields(){
+        $("#clFollowerFields").toggle(role() == "follower");
+        $("#clPrimaryFields").toggle(role() == "primary");
+    }
+
+    function render(s){
+        st = s;
+        if (!dirty) {
+        $("input[name=clRole][value=" + s.role + "]").prop("checked", true);
+        showRoleFields();
+        $("#clPrimaryUrl").val(s.primaryUrl || "");
+        $("#clPrimaryFp").val(s.primaryFingerprint || "");
+        $("#clInterval").val(s.syncInterval);
+        $("#clSyncCerts").prop("checked", !!s.syncCerts);
+        }
+        if (!dirty) $("#clHealthAllow").val((s.healthAllow || []).join(", "));
+        if (!dirty) $("#clHealthOff").prop("checked", !!s.healthDisabled);
+        $("#clHealthUrl").text(location.protocol + "//<proxy-host>" + s.healthPath);
+        $("#clSecretState").text(s.secretSet ? "set" : "not set");
+        $("#clSecretFp").text(s.secretSet ? "(fingerprint " + s.secretFingerprint + ")" : "");
+        $("#clRestart").toggle(!!s.restartRequired);
+        $("#clReadOnly").toggle(!!s.readOnly);
+        if (s.secretFromFlag) { $("#clGenBtn, #clSetSecretBtn, #clSecretIn").prop("disabled", true); $("#clSecretFp").append(" - set by -cluster_secret"); }
+
+        $("#clStatusWrap").toggle(s.role == "follower");
+        if (s.role == "follower" && s.follower) {
+            let f = s.follower;
+            $("#clStatusBody").html(
+                "<tr><td>Last result</td><td>" + esc(f.lastResult || "never synced") + "</td></tr>" +
+                "<tr><td>Applied snapshot version</td><td>" + esc(f.appliedVersion || "-") + "</td></tr>" +
+                "<tr><td>Applied at</td><td>" + ts(f.appliedAt) + "</td></tr>" +
+                "<tr><td>Last attempt</td><td>" + ts(f.lastAttemptAt) + "</td></tr>" +
+                "<tr><td>Last success</td><td>" + ts(f.lastSuccessAt) + "</td></tr>" +
+                "<tr><td>Last error</td><td style='color:" + (f.lastError ? "#c00" : "grey") + "'>" + esc(f.lastError || "none") + "</td></tr>");
+        }
+        $("#clNodesWrap").toggle(s.role == "primary");
+        if (s.role == "primary") {
+            $("#clSnapVer").text(s.snapshotVersion || "-");
+            let rows = "";
+            (s.nodes || []).forEach(function(n){
+                let behind = s.snapshotVersion && n.appliedVersion != s.snapshotVersion;
+                rows += "<tr><td>" + esc(n.name || n.id) + "<div style='color:grey;font-size:0.85em;'>" + esc(n.id) + "</div></td><td>" + esc(n.addr) +
+                    "</td><td>" + esc(n.version) + "</td><td>" + esc(n.appliedVersion || "-") +
+                    (behind ? " <i class='yellow exclamation triangle icon' title='behind the primary'></i>" : " <i class='green check icon'></i>") +
+                    "</td><td>" + ts(n.lastSeen) + "</td><td>" + esc(n.lastError) + "</td></tr>";
+            });
+            $("#clNodes").html(rows || "<tr><td colspan='6'>No followers have reported in yet</td></tr>");
+        }
+    }
+
+    function load(){
+        $.ajax({url: "./api/cluster/status", method: "GET", success: render, error: fail});
+    }
+
+    $("input[name=clRole]").on("change", showRoleFields);
+    $("#clusterPage input, #clusterPage textarea").on("input change", function(){ dirty = true; });
+
+    $("#clSaveBtn").on("click", function(){
+        let data = {role: role()};
+        if (role() == "follower") {
+            data.primaryUrl = $("#clPrimaryUrl").val();
+            data.primaryFingerprint = $("#clPrimaryFp").val();
+            data.syncInterval = $("#clInterval").val();
+        }
+        if (role() == "primary") data.syncCerts = $("#clSyncCerts").is(":checked");
+        post("./api/cluster/config", data, function(){ dirty = false; msg("Saved"); load(); });
+    });
+
+    $("#clGenBtn").on("click", function(){
+        if (st && st.secretSet && !confirm("Replace the current cluster secret? Every other node must be given the new one.")) return;
+        post("./api/cluster/generateSecret", {}, function(d){
+            $("#clSecretOnce").text(d.secret);
+            $("#clShowOnce").show();
+            load();
+        });
+    });
+    $("#clCopyBtn").on("click", function(){
+        let t = $("#clSecretOnce").text();
+        if (navigator.clipboard) navigator.clipboard.writeText(t).then(function(){ msg("Copied"); }, function(){ msg("Select and copy manually", true); });
+        else msg("Select and copy manually", true);
+    });
+    $("#clHideBtn").on("click", function(){ $("#clSecretOnce").text(""); $("#clShowOnce").hide(); });
+    $("#clSetSecretBtn").on("click", function(){
+        let v = $("#clSecretIn").val();
+        if (!v) return;
+        post("./api/cluster/config", {secret: v}, function(){ $("#clSecretIn").val(""); dirty = false; msg("Secret saved"); load(); });
+    });
+
+    function syncNow(force){
+        $("#clSyncBtn, #clForceBtn").addClass("loading disabled");
+        $.cjax({method: "POST", url: "./api/cluster/syncNow", data: {force: force ? "true" : "false"}, success: function(d){
+            if (d && d.error) msg(d.error, true); else msg("Sync finished: " + (d.lastResult || "ok"));
+        }, error: fail, complete: function(){ $("#clSyncBtn, #clForceBtn").removeClass("loading disabled"); load(); }});
+    }
+    $("#clSyncBtn").on("click", function(){ syncNow(false); });
+    $("#clForceBtn").on("click", function(){
+        if (confirm("Accept the primary's snapshot even if its version is older than the one applied here?")) syncNow(true);
+    });
+
+    $("#clHealthSave").on("click", function(){
+        post("./api/cluster/config", {healthAllow: $("#clHealthAllow").val(), healthDisabled: $("#clHealthOff").is(":checked")},
+            function(){ dirty = false; msg("Health settings saved"); load(); });
+    });
+
+    load();
+    timer = setInterval(function(){
+        if (!document.getElementById("clSaveBtn")) { clearInterval(timer); return; }
+        if ($("#cluster").is(":visible")) load();
+    }, 15000);
+})();
+</script>

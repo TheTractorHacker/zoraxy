@@ -99,7 +99,7 @@ func (router *Router) startH3Listener(tlsConfig *tls.Config) (*http3.Server, err
 
 	srv := &http3.Server{
 		Addr:      ":" + port,
-		Handler:   router.mux,
+		Handler:   router.withHealth(router.mux),
 		TLSConfig: h3TLSConfig,
 		//Explicitly disable 0-RTT: quic-go enables Allow0RTT by default when no
 		//QUICConfig is set. Early data is replayable and http3 does not expose an
@@ -145,7 +145,7 @@ func NewDynamicProxy(option RouterOption) (*Router, error) {
 		routingRules:        []*RoutingRule{},
 		loadBalancer:        option.LoadBalancer,
 		rateLimitCounter:    RequestCountPerIpTable{},
-		captchaSessionStore: captcha.NewSessionStoreWithSecret(option.HostUUID),
+		captchaSessionStore: captcha.NewSessionStoreWithSecret(sessionSecretFor(&option)),
 		secondaryServers:    make(map[string]*http.Server),
 		secondaryStopChans:  make(map[string]chan bool),
 	}
@@ -234,7 +234,7 @@ func (router *Router) StartProxyService() error {
 	if router.Option.UseTls {
 		router.server = &http.Server{
 			Addr:      ":" + strconv.Itoa(router.Option.Port),
-			Handler:   router.mux,
+			Handler:   router.withHealth(router.mux),
 			TLSConfig: config,
 			// ReadHeaderTimeout bounds the slowloris window without affecting
 			// long-lived bodies (uploads, SSE, streaming). IdleTimeout reaps
@@ -256,6 +256,9 @@ func (router *Router) StartProxyService() error {
 			httpServer := &http.Server{
 				Addr: ":80",
 				Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if router.ServeHealth(w, r) {
+						return
+					}
 					//Check if the domain requesting allow non TLS mode
 					domainOnly := r.Host
 					if strings.Contains(r.Host, ":") {
@@ -383,7 +386,7 @@ func (router *Router) StartProxyService() error {
 		}
 		router.server = &http.Server{
 			Addr:    ":" + strconv.Itoa(router.Option.Port),
-			Handler: router.mux,
+			Handler: router.withHealth(router.mux),
 			// See TLS branch above for rationale.
 			ReadHeaderTimeout: time.Duration(router.Option.ReadHeaderTimeout) * time.Second,
 			WriteTimeout:      time.Duration(router.Option.WriteTimeout) * time.Second,
@@ -544,6 +547,9 @@ func (router *Router) startSecondaryListeners() {
 		secondaryServer := &http.Server{
 			Addr: addr,
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if router.ServeHealth(w, r) {
+					return
+				}
 				// Extract domain from request
 				domainOnly := r.Host
 				if strings.Contains(r.Host, ":") {

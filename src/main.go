@@ -45,6 +45,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/csrf"
 	"imuslab.com/zoraxy/mod/auth"
+	"imuslab.com/zoraxy/mod/cluster"
 	"imuslab.com/zoraxy/mod/geodb"
 	"imuslab.com/zoraxy/mod/update"
 	"imuslab.com/zoraxy/mod/updater"
@@ -58,6 +59,9 @@ func SetupCloseHandler() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
 		<-c
+		if clusterMgr != nil {
+			clusterMgr.MarkHealthy() //a deliberate stop is not a failed start
+		}
 		ShutdownSeq()
 		os.Exit(0)
 	}()
@@ -117,6 +121,15 @@ func main() {
 		fmt.Println(SYSTEM_NAME + " - Version " + SYSTEM_VERSION)
 		os.Exit(0)
 	}
+	if *clusterGenSecret {
+		s, err := cluster.GenerateSecret()
+		if err != nil {
+			fmt.Println("Unable to generate secret:", err)
+			os.Exit(1)
+		}
+		fmt.Println(s)
+		os.Exit(0)
+	}
 	if *geoDbUpdate {
 		geodb.DownloadGeoDBUpdate(CONF_GEODB_PATH)
 		os.Exit(0)
@@ -163,6 +176,9 @@ func main() {
 	}
 	nodeUUID = string(uuidBytes)
 
+	//Cluster / HA settings (inert unless a cluster secret is configured)
+	initCluster()
+
 	//Create a new webmin mux, plugin mux and csrf middleware layer
 	webminPanelMux = http.NewServeMux()
 	pluginAPIMux := http.NewServeMux()
@@ -197,8 +213,11 @@ func main() {
 
 	// Create a entry mux to accept all management interface requests
 	entryMux := http.NewServeMux()
-	entryMux.Handle("/plugin/", pluginAPIMux)            //For plugins API access
-	entryMux.Handle("/", csrfMiddleware(webminPanelMux)) //For webmin UI access, require csrf token
+	entryMux.Handle("/plugin/", pluginAPIMux)                                        //For plugins API access
+	entryMux.Handle("/", clusterMgr.GuardLocalEdits(csrfMiddleware(webminPanelMux))) //For webmin UI access, require csrf token
+	//Cluster sync endpoints authenticate with an HMAC bearer token (404 unless role=primary)
+	entryMux.Handle(cluster.SnapshotPath, clusterMgr.SyncHandler())
+	entryMux.Handle(cluster.HeartbeatPath, clusterMgr.SyncHandler())
 
 	// Start the reverse proxy server in go routine
 	go func() {
@@ -211,6 +230,7 @@ func main() {
 
 	//Start the finalize sequences
 	finalSequence()
+	startCluster()
 
 	var adminHandler http.Handler = entryMux
 	if webUICert != nil {

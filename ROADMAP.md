@@ -57,11 +57,14 @@ Status: ✅ done · 🔧 in progress · 📋 planned
 - Inspiration: HAProxy, Envoy, Traefik, Caddy (Apache-2.0), nginx.
 
 ## 6. High availability
-- 📋 Stateless or shared session state (CAPTCHA, sticky sessions, SSO) so any node can serve any request.
-- 📋 Cluster config sync: one primary pushes proxy/access/cert config to followers (signed, versioned),
-  with conflict-free apply and rollback. Config export/import already exists as a starting point.
-- 📋 Certificate sync / single ACME issuer across nodes.
-- 📋 Virtual IP failover guide (keepalived/VRRP) and a `/health` endpoint for external load balancers.
+- ✅ Shared session state (#81): optional cluster secret (`-cluster_secret` / `conf/cluster.json`) keys the CAPTCHA and
+  sticky-session cookies with HKDF so any node accepts them; unset = unchanged. 📋 ZorxAuth (SSO portal) sessions are
+  still per node (database backed random IDs).
+- ✅ Cluster config sync (#81): primary exposes a signed, encrypted, versioned snapshot; followers poll, apply atomically
+  with backup, rollback and a boot guard; primary wins (follower edits refused). Cluster / HA page with node list.
+  📋 Database-stored settings (inbound port, SSO provider config, ZorxAuth users) are not synced yet.
+- ✅ Certificate sync with a single ACME issuer (#81): optional, primary only (followers get renewal switched off).
+- ✅ Virtual IP failover guide (keepalived/VRRP, HAProxy/nginx) and `GET /.zoraxy/health` (+ `-health_port`) (#81).
 
 ## 7. WAF
 - 📋 Request inspection layer after access rules (insertion point: `Server.go` after `handleAccessRouting`,
