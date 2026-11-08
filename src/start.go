@@ -137,6 +137,7 @@ func startupSequence() {
 		http.Redirect(w, r, "/login.html", http.StatusTemporaryRedirect)
 	})
 
+	authAgent.SetAuditFile(CONF_FOLDER + "/auth_audit.log")
 	authAgent.LoginGuard = abuseLoginGuard
 	authAgent.OnLoginFailure = abuseLoginFailed
 

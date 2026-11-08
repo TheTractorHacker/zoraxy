@@ -1,0 +1,76 @@
+<h3>Admin accounts</h3>
+<p>Create additional accounts for the admin panel. <b>admin</b> accounts can change everything; <b>viewer</b> accounts are
+    read-only (every change is refused, and configuration export, account management and the web terminal are closed).
+    Changing a password, disabling, renaming or deleting an account ends its sessions. The last enabled admin cannot be
+    removed, disabled or demoted. Forgot everything? Start Zoraxy once with <code>-reset_ac</code>.</p>
+<div id="usrMsg" class="ui negative message" style="display:none"></div>
+<div style="overflow-x:auto">
+    <table class="ui unstackable celled table">
+        <thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="usrRows"><tr><td colspan="4">Loading...</td></tr></tbody>
+    </table>
+</div>
+<h4>Add account</h4>
+<div class="ui form">
+    <div class="four fields">
+        <div class="field"><input type="text" id="usrNewName" placeholder="username" autocomplete="off"></div>
+        <div class="field"><input type="password" id="usrNewPw" placeholder="password (8+ characters)" autocomplete="new-password"></div>
+        <div class="field">
+            <select id="usrNewRole" class="ui dropdown"><option value="viewer">viewer (read-only)</option><option value="admin">admin</option></select>
+        </div>
+        <div class="field"><button class="ui basic green button" id="usrAdd"><i class="plus icon"></i> Add</button></div>
+    </div>
+</div>
+<div class="ui divider"></div>
+<h4>Audit log (recent)</h4>
+<div style="overflow-x:auto">
+    <table class="ui unstackable very basic compact table">
+        <thead><tr><th>Time</th><th>User</th><th>Event</th><th>Target</th><th>From</th><th>Detail</th></tr></thead>
+        <tbody id="usrAudit"></tbody>
+    </table>
+</div>
+<script>
+(function () {
+    function esc(s) { return $("<div>").text(s == null ? "" : String(s)).html(); }
+    function err(m) { $("#usrMsg").text(m).show(); }
+    function load() {
+        $.get("/api/users/list", function (r) {
+            $("#usrMsg").hide();
+            var h = "";
+            (r.Users || []).forEach(function (u) {
+                var n = esc(u.Username);
+                h += "<tr><td>" + n + "</td><td>" + esc(u.Role) + "</td><td>" + (u.Disabled ? "disabled" : "active") + "</td><td>" +
+                    '<button class="ui mini basic button usrA" data-a="setPassword" data-u="' + n + '">Set password</button> ' +
+                    '<button class="ui mini basic button usrA" data-a="rename" data-u="' + n + '">Rename</button> ' +
+                    '<button class="ui mini basic button usrA" data-a="setRole" data-r="' + (u.Role === "admin" ? "viewer" : "admin") + '" data-u="' + n + '">Make ' + (u.Role === "admin" ? "viewer" : "admin") + "</button> " +
+                    '<button class="ui mini basic button usrA" data-a="' + (u.Disabled ? "enable" : "disable") + '" data-u="' + n + '">' + (u.Disabled ? "Enable" : "Disable") + "</button> " +
+                    '<button class="ui mini basic red button usrA" data-a="delete" data-u="' + n + '">Delete</button></td></tr>';
+            });
+            $("#usrRows").html(h);
+            var a = "";
+            (r.Audit || []).forEach(function (e) {
+                a += "<tr><td>" + esc(new Date(e.Time * 1000).toLocaleString()) + "</td><td>" + esc(e.Actor) + "</td><td>" + esc(e.Event) + "</td><td>" + esc(e.Target) + "</td><td>" + esc(e.IP) + "</td><td>" + esc(e.Detail) + "</td></tr>";
+            });
+            $("#usrAudit").html(a);
+        }).fail(function (x) { err(x.status === 403 ? "Admin role required." : "Unable to load accounts."); $("#usrRows").html(""); });
+    }
+    function act(data) {
+        $.cjax({ type: "POST", url: "/api/users/action", data: data, success: function (d) {
+            if (d && d.error) { err(d.error); } else { load(); }
+        }, error: function (x) { err(x.status === 403 ? "Admin role required." : "Request failed."); } });
+    }
+    $("#usrAdd").on("click", function () {
+        act({ action: "create", username: $("#usrNewName").val(), password: $("#usrNewPw").val(), role: $("#usrNewRole").val() });
+        $("#usrNewPw").val("");
+    });
+    $("#usrRows").on("click", ".usrA", function () {
+        var a = $(this).attr("data-a"), u = $(this).attr("data-u"), d = { action: a, username: u };
+        if (a === "delete" && !confirm("Delete account " + u + "?")) { return; }
+        if (a === "setPassword") { d.password = prompt("New password for " + u + " (8+ characters)"); if (!d.password) { return; } }
+        if (a === "rename") { d.newUsername = prompt("New username for " + u); if (!d.newUsername) { return; } }
+        if (a === "setRole") { d.role = $(this).attr("data-r"); }
+        act(d);
+    });
+    load();
+})();
+</script>
