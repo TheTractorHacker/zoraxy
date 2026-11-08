@@ -79,8 +79,8 @@
             var rows = "";
             (c.AllKinds || []).forEach(function (k) {
                 var d = c.Detectors[k] || {};
-                rows += '<tr data-k="' + esc(k) + '"><td><input type="checkbox" class="dEn"' + (d.Enabled ? " checked" : "") + '></td><td>' + esc(KINDS[k] || k) +
-                    '</td><td><input type="number" class="dTh" min="1" value="' + esc(d.Threshold) + '" style="width:6em"></td><td><input type="number" class="dWin" min="1" value="' + esc(d.WindowSec) + '" style="width:7em"></td></tr>';
+                rows += '<tr data-k="' + esc(k) + '"><td><input type="checkbox" class="dEn" aria-label="Enable detector ' + esc(KINDS[k] || k) + '"' + (d.Enabled ? " checked" : "") + '></td><td>' + esc(KINDS[k] || k) +
+                    '</td><td><input type="number" class="dTh" aria-label="Threshold" min="1" value="' + esc(d.Threshold) + '" style="width:6em"></td><td><input type="number" class="dWin" aria-label="Window in seconds" min="1" value="' + esc(d.WindowSec) + '" style="width:7em"></td></tr>';
             });
             $("#abDetectors").html(rows);
             $("#abTokenState").html(c.RemoteTokenSet ? "A token is set." : "No token set (remote API disabled).");

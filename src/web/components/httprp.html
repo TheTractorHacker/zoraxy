@@ -657,6 +657,7 @@
                                     <small style="opacity:0.7;">Leave empty to protect all paths on this endpoint. One prefix per line, comma or semicolon is also supported.</small>
                                 </div>
                                 <button class="ui basic compact small button editCaptchaExceptionsBtn" style="margin-top: 0.8em;"><i class="ui yellow shield alternate icon"></i> CAPTCHA Exceptions</button>
+                                <button class="ui basic compact small button openCaptchaPageBtn" style="margin-top: 0.8em;"><i class="paint brush icon"></i> Customise bot-check page</button> <!-- feat/ui-audit-captcha-waf -->
                                 <!-- Google reCAPTCHA specific settings -->
                                 <div class="googleRecaptchaSettings" style="margin-top: 0.8em; display: none;">
                                     <label>reCAPTCHA Version</label>
@@ -2443,6 +2444,12 @@
 
         editor.find(".editCaptchaExceptionsBtn").off("click").on("click", function(){
             editCaptchaExceptions(uuid);
+        });
+
+        editor.find(".openCaptchaPageBtn").off("click").on("click", function(){ // feat/ui-audit-captcha-waf
+            closeHttpRuleEditor();
+            if (window.captchaPageOpen){ captchaPageOpen(uuid); }
+            else { openTabById("captcha"); }
         });
 
         editor.find(".editPathRulesBtn").off("click").on("click", function(){

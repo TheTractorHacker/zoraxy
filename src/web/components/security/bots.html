@@ -13,7 +13,7 @@
     <div class="inline field"><label>Action for a fake bot</label> <select id="brFakeAct" class="ui dropdown"></select></div>
     <div class="inline field"><label>Requests without a User-Agent</label> <select id="brEmpty" class="ui dropdown"><option value="">allow</option></select></div>
     <h4>Custom rules (first match wins, before the managed lists)</h4>
-    <div style="overflow-x:auto"><table class="ui very basic unstackable table"><thead><tr><th>Name</th><th>Type</th><th>Pattern</th><th>Case insens.</th><th>Action</th><th></th></tr></thead><tbody id="brCustom"></tbody></table></div>
+    <div style="overflow-x:auto"><table class="ui very basic unstackable table"><thead><tr><th>Name</th><th>Type</th><th>Pattern</th><th>Case insens.</th><th>Action</th><th></th></tr></thead><tbody id="brCustom"></tbody><tfoot class="brEmptyFoot"><tr><td colspan="6"><small style="opacity:.75">No custom rules yet. Add one to block or challenge a specific User-Agent.</small></td></tr></tfoot><style>#brCustom:has(tr) + .brEmptyFoot{display:none}</style></table></div>
     <button class="ui mini basic button" id="brAddRule"><i class="plus icon"></i> Add rule</button>
     <p><small>Substring rules ignore case. Regular expressions use the safe RE2 syntax (no backreferences / lookaround), max 200 characters.</small></p>
     <div class="ui divider"></div>
@@ -43,7 +43,7 @@
             $("#brEnabled").prop("checked", c.Enabled); $("#brVerify").prop("checked", c.VerifyBots);
             $("#brCats").html(d.Categories.map(function (k) {
                 var cc = (c.Categories || {})[k.ID] || { Enabled: false, Action: "block" };
-                return '<tr data-id="' + esc(k.ID) + '"><td><input type="checkbox" class="ce"' + (cc.Enabled ? " checked" : "") + '></td><td>' + esc(k.Title) + " (" + k.Count + ")</td><td>" + actSel("ca", cc.Action) + "</td></tr>";
+                return '<tr data-id="' + esc(k.ID) + '"><td><input type="checkbox" class="ce" aria-label="Enable list ' + esc(k.Title) + '"' + (cc.Enabled ? " checked" : "") + '></td><td>' + esc(k.Title) + " (" + k.Count + ")</td><td>" + actSel("ca", cc.Action) + "</td></tr>";
             }).join(""));
             $("#brGood").html(d.GoodBots.map(function (n) {
                 return '<div class="ui checkbox" style="margin-right:1em"><input type="checkbox" class="gb" value="' + esc(n) + '"' + ((c.AllowedBots || []).indexOf(n) >= 0 ? " checked" : "") + "><label>" + esc(n) + "</label></div>";
@@ -53,7 +53,7 @@
             $("#brCustom").html((c.Custom || []).map(customRow).join(""));
             $("#brPolicies").html(Object.keys(d.Policies || {}).sort().map(function (n) {
                 var p = d.Policies[n];
-                return '<tr><td>' + esc(n) + '</td><td><select class="brPol" data-ep="' + esc(n) + '"><option value=""' + (p === "" ? " selected" : "") + '>follow global</option><option value="on"' + (p === "on" ? " selected" : "") + '>on</option><option value="off"' + (p === "off" ? " selected" : "") + ">off</option></select></td></tr>";
+                return '<tr><td>' + esc(n) + '</td><td><select class="brPol" aria-label="Bot rules for ' + esc(n) + '" data-ep="' + esc(n) + '"><option value=""' + (p === "" ? " selected" : "") + '>follow global</option><option value="on"' + (p === "on" ? " selected" : "") + '>on</option><option value="off"' + (p === "off" ? " selected" : "") + ">off</option></select></td></tr>";
             }).join("") || "<tr><td>No proxy rules.</td></tr>");
         });
     }

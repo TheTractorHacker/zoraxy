@@ -1152,3 +1152,19 @@ a:focus-visible,
         white-space: normal;
     }
 }
+
+/* ===== feat/ui-audit-captcha-waf: contrast and layout fixes found by tools/ui-audit ===== */
+/* dropdown placeholder text was #bfbfbf on white (1.7:1) */
+body:not(.darkTheme) .ui.dropdown:not(.button) > .default.text,
+body:not(.darkTheme) .ui.default.dropdown:not(.button) > .text { color: #6b6b6b; }
+/* white text on the stock green / orange needs a darker fill to reach 4.5:1 */
+.ui.green.button:not(.basic), .ui.green.buttons .button:not(.basic), .ui.green.label:not(.basic) { background-color: #178232 !important; }
+.ui.green.button:not(.basic):hover, .ui.green.buttons .button:not(.basic):hover { background-color: #126a28; }
+.ui.orange.label:not(.basic), .ui.orange.button:not(.basic) { background-color: #b8500a !important; }
+body:not(.darkTheme) .ui.basic.green.button, body:not(.darkTheme) .ui.basic.green.buttons .button { color: #178232 !important; box-shadow: 0 0 0 1px #178232 inset !important; }
+body:not(.darkTheme) .ui.card .meta, body:not(.darkTheme) .ui.cards > .card .meta { color: rgba(0,0,0,.62); }
+/* table rows of the "negative" / "warning" kind keep readable text in dark mode */
+body.darkTheme .ui.table tr.negative, body.darkTheme .ui.table td.negative { background: #4a1f1f !important; color: #ffd6d6 !important; }
+body.darkTheme .ui.table tr.warning, body.darkTheme .ui.table td.warning { background: #4a3d12 !important; color: #ffe9a8 !important; }
+/* button groups may wrap on a phone (access rule options) */
+#aoOrderBtns { display: inline-flex; flex-wrap: wrap; }

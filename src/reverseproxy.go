@@ -201,11 +201,15 @@ func HandleCaptchaPreview(w http.ResponseWriter, r *http.Request) {
 	if domain == "" || len(domain) > 253 {
 		domain = "example.com"
 	}
+	if useDef, _ := utils.PostBool(r, "applyDefault"); useDef {
+		cfg = captcha.ApplyDefaultBranding(cfg) // show what visitors of a rule with this config would see
+	}
 	captcha.RenderPreview(w, r, cfg, kind, domain)
 }
 
 // Add user customizable reverse proxy
 func ReverseProxyInit() {
+	loadCaptchaDefaultBranding()
 	/*
 		Load Reverse Proxy Ingress Settings
 	*/

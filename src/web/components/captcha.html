@@ -1,0 +1,698 @@
+<style>
+    /* CAPTCHA / Bot check page */
+    #captchaPage .cpGrid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 1.2em; align-items: start; }
+    #captchaPage .cpPreviewCol { position: sticky; top: 0.6em; }
+    @media (max-width: 1100px) { #captchaPage .cpGrid { grid-template-columns: minmax(0, 1fr); } #captchaPage .cpPreviewCol { position: static; } }
+    #captchaPage .cpFrameWrap { background: repeating-conic-gradient(#8881 0% 25%, transparent 0% 50%) 0 0 / 16px 16px; border: 1px solid rgba(128,128,128,.35); border-radius: 6px; padding: 0; text-align: center; overflow: hidden; }
+    #captchaPage .cpFrameWrap iframe { border: 0; width: 100%; height: 560px; background: #fff; display: block; margin: 0 auto; transition: width .15s; }
+    #captchaPage .cpFrameWrap.mobile iframe { width: 390px; max-width: 100%; }
+    body.darkTheme #captchaPage .ui.basic.buttons .button:not(.active) { color: #e6e6e6 !important; }
+    #captchaPage .ui.basic.buttons .button.active { background: #1e6fb8 !important; color: #fff !important; }
+    #captchaPage #cpPageBtns { display: inline-flex; flex-wrap: wrap; }
+    #captchaPage .cpHelp { opacity: .75; font-size: .9em; }
+    #captchaPage .cpFieldGroup { margin-bottom: 1em; }
+    #captchaPage code.cpvar { cursor: pointer; }
+    #captchaPage .cpTag { display: inline-block; padding: 0 .55em; border-radius: 3px; font-size: .85em; line-height: 1.7; background: rgba(128,128,128,.18); }
+    #captchaPage .cpTag.on { background: #21ba4533; color: #1a8a34; }
+    body.darkTheme #captchaPage .cpTag.on { color: #5fdc7e; }
+    #captchaPage .cpTag.off { background: rgba(128,128,128,.18); }
+    #captchaPage .cpTag.warn { background: #fbbd0833; color: #8a6500; }
+    body.darkTheme #captchaPage .cpTag.warn { color: #f5cd4b; }
+    #captchaPage .cpDirty { display: none; }
+    #captchaPage.dirty .cpDirty { display: inline-block; }
+    #captchaPage table td { vertical-align: middle; }
+    #captchaPage .cpSwatch { display: inline-block; width: 1em; height: 1em; border-radius: 3px; border: 1px solid rgba(128,128,128,.5); vertical-align: -0.15em; margin-right: .3em; }
+    #captchaPage .cpSticky { position: sticky; bottom: 0; z-index: 5; padding: .7em 0; background: var(--cp-bg, #fff); border-top: 1px solid rgba(128,128,128,.3); }
+    body.darkTheme #captchaPage .cpSticky { --cp-bg: #1b1c1d; }
+</style>
+<div class="standardContainer" id="captchaPage">
+    <div class="ui basic segment">
+        <h2><i class="shield alternate icon"></i> CAPTCHA / Bot check</h2>
+        <p>Make visitors prove they are human before they reach a proxy rule. Pick a provider (Cloudflare Turnstile, Google reCAPTCHA or the
+            self-hosted Altcha), then customise how the challenge, failure and blocked pages look. The challenge also backs the
+            <b>Challenge</b> action of the Security Center bot rules and the country challenge. Previews use the provider's public test
+            keys and verify nothing.</p>
+    </div>
+
+    <!-- ===== Overview ===== -->
+    <div id="cpOverview">
+        <div class="ui basic segment" style="padding-top:0">
+            <div class="ui stackable grid">
+                <div class="eight wide column">
+                    <div class="ui small icon fluid input"><input type="text" id="cpFilter" placeholder="Filter rules by name or provider" aria-label="Filter proxy rules"><i class="search icon"></i></div>
+                </div>
+                <div class="eight wide column" style="text-align:right">
+                    <button class="ui small basic button" id="cpGlobalBtn"><i class="paint brush icon"></i> Global default branding</button>
+                    <button class="ui small basic icon button" id="cpRefreshBtn" title="Reload" aria-label="Reload"><i class="sync alternate icon"></i></button>
+                </div>
+            </div>
+            <div style="overflow-x:auto; margin-top: 1em;">
+                <table class="ui celled unstackable table" id="cpTable">
+                    <thead><tr><th style="width:1%">Actions</th><th>Proxy rule</th><th>CAPTCHA</th><th>Provider</th><th>Session</th><th>Page branding</th></tr></thead>
+                    <tbody id="cpRows"><tr><td colspan="6"><div class="ui active centered inline loader"></div></td></tr></tbody>
+                </table>
+            </div>
+            <div class="cpHelp" id="cpGlobalNote"></div>
+        </div>
+        <div class="ui basic segment">
+            <h4><i class="flask icon"></i> Testing with the providers' published test keys</h4>
+            <div style="overflow-x:auto">
+                <table class="ui very basic compact unstackable table">
+                    <thead><tr><th>Provider</th><th>Site key</th><th>Secret key</th><th>Result</th></tr></thead>
+                    <tbody>
+                        <tr><td>Turnstile</td><td><code>1x00000000000000000000AA</code></td><td><code>1x0000000000000000000000000000000AA</code></td><td>always passes</td></tr>
+                        <tr><td>Turnstile</td><td><code>2x00000000000000000000AB</code></td><td><code>2x0000000000000000000000000000000AA</code></td><td>always blocks</td></tr>
+                        <tr><td>Turnstile</td><td><code>3x00000000000000000000FF</code></td><td><code>1x0000000000000000000000000000000AA</code></td><td>forces an interactive challenge</td></tr>
+                        <tr><td>reCAPTCHA v2</td><td><code>6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI</code></td><td><code>6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe</code></td><td>always passes (shows a warning banner)</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="cpHelp">Use them on a throw-away rule to see the real flow end to end; never in production, they accept every bot. Altcha needs no external account: the secret key is
+                your HMAC key and the site key is unused. The editor has a <b>Use test keys</b> button that fills them in.</p>
+        </div>
+    </div>
+
+    <!-- ===== Editor ===== -->
+    <div id="cpEditor" style="display:none">
+        <div class="ui basic segment" style="padding-top:0">
+            <button class="ui small basic button" id="cpBack"><i class="arrow left icon"></i> All rules</button>
+            <span style="font-size:1.25em; margin-left:.6em;"><b id="cpTitle"></b></span>
+            <span class="cpDirty ui small orange label" style="margin-left:.6em">unsaved changes</span>
+        </div>
+        <div class="cpGrid">
+            <div class="cpFormCol">
+                <div class="ui form" id="cpForm">
+                    <!-- rule only: enable + provider -->
+                    <div class="ui segment cpRuleOnly">
+                        <h4 class="ui header">1. Challenge</h4>
+                        <div class="field">
+                            <div class="ui toggle checkbox" id="cpEnableBox"><input type="checkbox" id="cpEnable"><label>Require a CAPTCHA before visitors reach this rule</label></div>
+                            <div class="cpHelp" style="margin-top:.3em">Turning this off removes the saved CAPTCHA settings of the rule (keys, branding, exceptions).</div>
+                        </div>
+                        <div class="field">
+                            <label>Provider</label>
+                            <select id="cpProvider" class="ui fluid dropdown">
+                                <option value="0">Cloudflare Turnstile</option>
+                                <option value="1">Google reCAPTCHA</option>
+                                <option value="2">Altcha (self-hosted)</option>
+                            </select>
+                        </div>
+                        <div class="field cpKeyField"><label>Site key (public)</label>
+                            <input type="text" id="cpSiteKey" autocomplete="off" spellcheck="false" placeholder="Site key"></div>
+                        <div class="field"><label id="cpSecretLabel">Secret key</label>
+                            <div class="ui action input">
+                                <input type="password" id="cpSecretKey" autocomplete="new-password" spellcheck="false" placeholder="Secret key">
+                                <button type="button" class="ui icon button" id="cpRevealSecret" title="Show / hide the secret key" aria-label="Show or hide the secret key"><i class="eye icon"></i></button>
+                            </div>
+                            <div class="cpHelp" id="cpSecretHelp"></div>
+                        </div>
+                        <div class="cpProviderRecaptcha" style="display:none">
+                            <div class="two fields">
+                                <div class="field"><label>reCAPTCHA version</label>
+                                    <select id="cpRecaptchaVersion" class="ui fluid dropdown"><option value="v2">v2 (checkbox)</option><option value="v3">v3 (invisible score)</option></select></div>
+                                <div class="field cpV3Only"><label>Minimum score (0.0 - 1.0)</label>
+                                    <input type="number" id="cpRecaptchaScore" min="0" max="1" step="0.1" value="0.5"></div>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <button type="button" class="ui mini basic button" id="cpTestKeys"><i class="flask icon"></i> Use the provider's test keys</button>
+                            <span class="cpHelp">Fills the published test keys (pass-all). Replace them before going live.</span>
+                        </div>
+                    </div>
+
+                    <div class="ui segment cpRuleOnly">
+                        <h4 class="ui header">2. Session and scope</h4>
+                        <div class="field">
+                            <label>How long a solved challenge is valid</label>
+                            <div class="fields" style="margin-bottom:0">
+                                <div class="six wide field"><input type="number" id="cpSessNum" min="1" value="1"></div>
+                                <div class="six wide field"><select id="cpSessUnit" class="ui fluid dropdown"><option value="60">minutes</option><option value="3600" selected>hours</option><option value="86400">days</option></select></div>
+                            </div>
+                            <div class="cpHelp" id="cpSessHuman">Between 1 minute and 30 days.</div>
+                        </div>
+                        <div class="field">
+                            <label>Protected path prefixes (optional)</label>
+                            <textarea id="cpPaths" rows="2" placeholder="/login&#10;/api"></textarea>
+                            <div class="cpHelp">Leave empty to protect every path. One prefix per line.</div>
+                        </div>
+                        <div class="field">
+                            <button type="button" class="ui small basic button" id="cpExceptions"><i class="clipboard check icon"></i> Exceptions (paths and networks that skip the check)</button>
+                        </div>
+                    </div>
+
+                    <div class="ui segment">
+                        <h4 class="ui header"><span class="cpNumText">3.</span> Texts</h4>
+                        <div class="cpGlobalOnly cpHelp" style="display:none; margin-bottom:.8em">Fields left empty here fall back to the built-in text. A rule that sets a field keeps its own value; everything else inherits this default.</div>
+                        <div class="field"><label>Page title</label><input type="text" data-cp="captchaTitle" maxlength="120" placeholder="Just a moment..."></div>
+                        <div class="field"><label>Heading</label><input type="text" data-cp="captchaHeading" maxlength="200" placeholder="(the host name)"></div>
+                        <div class="field"><label>Message</label><input type="text" data-cp="captchaMessage" maxlength="500" placeholder="Verify you are human by completing the action below."></div>
+                        <div class="field"><label>Notice under the widget</label><input type="text" data-cp="captchaNotice" maxlength="500" placeholder="{domain} needs to review the security of your connection before proceeding."></div>
+                        <div class="cpHelp">Use <code>{domain}</code> for the requested host name. All text is HTML-escaped.</div>
+                        <div class="two fields" style="margin-top:.8em">
+                            <div class="field"><label>"Verifying" text</label><input type="text" data-cp="captchaVerifyingText" maxlength="200" placeholder="Verifying..."></div>
+                            <div class="field"><label>"Success" text</label><input type="text" data-cp="captchaSuccessText" maxlength="200" placeholder="Verification successful! Redirecting..."></div>
+                        </div>
+                        <div class="two fields">
+                            <div class="field"><label>"Failed" text</label><input type="text" data-cp="captchaFailedText" maxlength="200" placeholder="Verification failed. Please try again."></div>
+                            <div class="field"><label>"Error" text</label><input type="text" data-cp="captchaErrorText" maxlength="200" placeholder="An error occurred. Please try again."></div>
+                        </div>
+                        <div class="field"><label>Retry button text</label><input type="text" data-cp="captchaRetryText" maxlength="200" placeholder="Try again"></div>
+                        <div class="ui divider"></div>
+                        <b>"Blocked" page</b> <span class="cpHelp">shown by the exploit / crawler action when no CAPTCHA can be shown</span>
+                        <div class="field" style="margin-top:.5em"><label>Title</label><input type="text" data-cp="captchaBlockedTitle" maxlength="120" placeholder="Access blocked"></div>
+                        <div class="field"><label>Heading</label><input type="text" data-cp="captchaBlockedHeading" maxlength="200" placeholder="Access blocked"></div>
+                        <div class="field"><label>Message</label><input type="text" data-cp="captchaBlockedMessage" maxlength="500" placeholder="Your request was blocked by the security rules of this site."></div>
+                    </div>
+
+                    <div class="ui segment">
+                        <h4 class="ui header"><span class="cpNumText">4.</span> Look</h4>
+                        <div class="field"><label>Logo</label>
+                            <input type="text" class="cqLogo" data-cp="captchaLogo" placeholder="https://example.com/logo.png or upload an image below">
+                            <div style="margin-top:.4em"><input type="file" class="cqLogoFile" accept="image/png,image/jpeg,image/gif,image/webp" aria-label="Upload a logo image"></div>
+                            <div class="cpHelp cqLogoInfo"></div>
+                            <a class="cqLogoClear" style="cursor:pointer; display:none">remove logo</a>
+                        </div>
+                        <div class="three fields">
+                            <div class="field"><label>Accent colour</label><input type="color" class="cqAccent" value="#2c7cb0"><input type="hidden" data-cp="captchaAccent"></div>
+                            <div class="field"><label>Background colour</label><input type="color" class="cqBackground" value="#ffffff"><input type="hidden" data-cp="captchaBackground"></div>
+                            <div class="field"><label>Theme</label>
+                                <select data-cp="captchaTheme" class="ui fluid dropdown"><option value="">Auto (follow browser)</option><option value="light">Light</option><option value="dark">Dark</option></select></div>
+                        </div>
+                        <div class="cpHelp"><a class="cqResetColors" style="cursor:pointer">reset colours to default</a></div>
+                        <div class="field" style="margin-top:.8em"><div class="ui checkbox"><input type="checkbox" data-cp="captchaHideFooter"><label>Hide the "Performance &amp; security by Zoraxy" footer</label></div></div>
+                    </div>
+
+                    <div class="ui segment cpRuleOnly cpTurnstileSeg">
+                        <h4 class="ui header">5. Cloudflare Turnstile options</h4>
+                        <div class="two fields">
+                            <div class="field"><label>Widget mode</label>
+                                <select data-cp="turnstileMode" class="ui fluid dropdown"><option value="">Managed (default)</option><option value="managed">Managed</option><option value="non-interactive">Non-interactive</option><option value="invisible">Invisible</option></select></div>
+                            <div class="field"><label>Appearance</label>
+                                <select data-cp="turnstileAppearance" class="ui fluid dropdown"><option value="">Always (default)</option><option value="always">Always</option><option value="execute">Execute (after the page starts it)</option><option value="interaction-only">Interaction only</option></select></div>
+                        </div>
+                        <div class="cpHelp">The widget mode must match the widget type of your site key in the Cloudflare dashboard.</div>
+                        <div class="two fields" style="margin-top:.6em">
+                            <div class="field"><label>Widget theme</label>
+                                <select data-cp="turnstileTheme" class="ui fluid dropdown"><option value="">Auto (default)</option><option value="light">Light</option><option value="dark">Dark</option></select></div>
+                            <div class="field"><label>Widget size</label>
+                                <select data-cp="turnstileSize" class="ui fluid dropdown"><option value="">Normal (default)</option><option value="flexible">Flexible</option><option value="compact">Compact</option></select></div>
+                        </div>
+                        <div class="two fields">
+                            <div class="field"><label>Action (optional)</label><input type="text" data-cp="turnstileAction" maxlength="32" placeholder="login"></div>
+                            <div class="field"><label>cData (optional)</label><input type="text" data-cp="turnstileCData" maxlength="255" placeholder="my-endpoint"></div>
+                        </div>
+                        <div class="cpHelp">When set, the siteverify answer must carry the same action / cData, otherwise the token is rejected. Letters, digits, - and _ only.</div>
+                    </div>
+
+                    <div class="ui segment cpRuleOnly cpRecaptchaSeg" style="display:none">
+                        <h4 class="ui header">5. Google reCAPTCHA options</h4>
+                        <div class="field cpV2Only"><div class="ui checkbox"><input type="checkbox" data-cp="captchaRecaptchaInvisible"><label>v2: invisible badge instead of the checkbox (the site key must be an invisible-type key)</label></div></div>
+                        <div class="field cpV3Only"><label>v3 action name</label><input type="text" data-cp="captchaRecaptchaAction" maxlength="32" placeholder="access"></div>
+                    </div>
+
+                    <div class="ui segment">
+                        <h4 class="ui header"><span class="cpNumText">6.</span> Advanced</h4>
+                        <div class="field cpRuleOnly"><div class="ui checkbox"><input type="checkbox" data-cp="captchaVerifyHostname"><label>Reject tokens whose siteverify hostname differs from the requested host</label></div></div>
+                        <div class="field">
+                            <label>Custom HTML template (optional)</label>
+                            <textarea data-cp="captchaCustomTemplate" rows="10" style="font-family: monospace; resize: vertical;" placeholder="Leave empty to use the built-in page."></textarea>
+                            <div class="cpHelp">A Go <code>html/template</code> (max 64 KiB), checked when you save. Put <code>nonce="{{.Nonce}}"</code> on inline scripts and styles, and include <code>{{template "zx_widget" .}}</code> and <code>{{template "zx_runtime" .}}</code>.</div>
+                        </div>
+                        <button type="button" class="ui basic small button cqLoadExample"><i class="magic icon"></i> Insert starter template</button>
+                        <button type="button" class="ui basic small button" id="cpToggleVars"><i class="list icon"></i> Variable reference</button>
+                        <div id="cpVars" style="display:none; margin-top:.8em; overflow-x:auto">
+                            <table class="ui very basic compact unstackable table">
+                                <thead><tr><th>Variable</th><th>Meaning</th></tr></thead>
+                                <tbody>
+                                    <tr><td><code>{{.Domain}}</code></td><td>requested host name</td></tr>
+                                    <tr><td><code>{{.Title}}</code> <code>{{.Heading}}</code> <code>{{.Message}}</code> <code>{{.Notice}}</code></td><td>texts above, defaults applied, <code>{domain}</code> expanded</td></tr>
+                                    <tr><td><code>{{.Strings.Verifying}}</code> <code>.Success</code> <code>.Failed</code> <code>.Error</code> <code>.Retry</code></td><td>status texts</td></tr>
+                                    <tr><td><code>{{.LogoURL}}</code></td><td>validated logo URL (empty when none)</td></tr>
+                                    <tr><td><code>{{.Accent}}</code> <code>{{.Background}}</code> <code>{{.Theme}}</code></td><td>colours and theme (<code>auto</code>, <code>light</code>, <code>dark</code>)</td></tr>
+                                    <tr><td><code>{{.ShowFooter}}</code> <code>{{.Provider}}</code> <code>{{.Page}}</code> <code>{{.SiteKey}}</code> <code>{{.RetryURL}}</code></td><td>footer switch, provider id, page kind, public site key, retry link (failed page)</td></tr>
+                                    <tr><td><code>{{.Nonce}}</code></td><td>per-response CSP nonce, required on inline <code>&lt;script&gt;</code> / <code>&lt;style&gt;</code></td></tr>
+                                    <tr><td><code>{{template "zx_css" .}}</code> <code>"zx_widget"</code> <code>"zx_footer"</code> <code>"zx_runtime"</code></td><td>built-in stylesheet, widget container, footer, client script</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="cpSticky">
+                    <button class="ui green button" id="cpSave"><i class="save icon"></i> Save</button>
+                    <button class="ui basic button" id="cpDiscard">Discard changes</button>
+                    <span class="cpHelp" id="cpSaveHint"></span>
+                </div>
+            </div>
+
+            <div class="cpPreviewCol">
+                <div class="ui segment" style="padding-bottom: .8em">
+                    <h4 class="ui header" style="margin-bottom:.5em"><i class="eye icon"></i> Live preview</h4>
+                    <div class="ui small basic buttons" id="cpPageBtns">
+                        <button type="button" class="ui active button" data-page="challenge">Challenge</button>
+                        <button type="button" class="ui button" data-page="failed">Verification failed</button>
+                        <button type="button" class="ui button" data-page="blocked">Blocked</button>
+                    </div>
+                    <div class="ui small basic buttons" id="cpWidthBtns" style="float:right">
+                        <button type="button" class="ui active icon button" data-w="desktop" title="Desktop width" aria-label="Desktop width"><i class="desktop icon"></i></button>
+                        <button type="button" class="ui icon button" data-w="mobile" title="Phone width" aria-label="Phone width"><i class="mobile alternate icon"></i></button>
+                    </div>
+                    <div class="cpFrameWrap" id="cpFrameWrap" style="margin-top:.8em">
+                        <iframe name="cpPreviewFrame" id="cpPreviewFrame" title="CAPTCHA page preview"></iframe>
+                    </div>
+                    <div class="cpHelp" style="margin-top:.4em">Updates as you type. Uses the provider's test site key; nothing is verified.</div>
+                    <form id="cpPreviewForm" method="POST" action="/api/proxy/captcha/preview" target="cpPreviewFrame" style="display:none"></form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ui modal" id="cpExcModal">
+        <div class="header">CAPTCHA exceptions</div>
+        <div class="content" style="padding:0"><iframe id="cpExcFrame" title="CAPTCHA exceptions" style="width:100%; height:65vh; border:0"></iframe></div>
+        <div class="actions"><div class="ui cancel button">Close</div></div>
+    </div>
+</div>
+
+<script>
+(function () {
+    "use strict";
+    var PAGE = $("#captchaPage");
+    var PROVIDERS = { 0: "Cloudflare Turnstile", 1: "Google reCAPTCHA", 2: "Altcha" };
+    var TEST_KEYS = {
+        0: { site: "1x00000000000000000000AA", secret: "1x0000000000000000000000000000000AA" },
+        1: { site: "6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI", secret: "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe" },
+        2: { site: "", secret: "" }
+    };
+    var STARTER = `<!DOCTYPE html>
+<html lang="en" data-theme="{{.Theme}}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{.Title}}</title>
+<style nonce="{{.Nonce}}">
+  {{template "zx_css" .}}
+  .card { max-width: 32rem; margin: 6rem auto; padding: 2rem; text-align: center; }
+</style>
+</head>
+<body>
+  <div class="card">
+    {{if .LogoURL}}<img class="logo" src="{{.LogoURL}}" alt="" style="margin:0 auto 1rem">{{end}}
+    <h1>{{.Heading}}</h1>
+    <p>{{.Message}}</p>
+    {{template "zx_widget" .}}
+  </div>
+  {{template "zx_footer" .}}
+  {{template "zx_runtime" .}}
+</body>
+</html>
+`;
+    var rules = [];
+    var globalBranding = null;
+    var target = null;       // {kind:"rule", ep:"host", cfg:{}, enabled:bool} | {kind:"global"}
+    var dirty = false;
+    var previewPage = "challenge";
+    var previewTimer = null;
+    var previewStale = {};
+
+    function esc(s) { return $("<div>").text(s == null ? "" : String(s)).html(); }
+    function toast(m, ok) { if (window.msgbox) { msgbox(m, ok !== false); } }
+    function csrf() { var m = document.getElementsByTagName("meta")["zoraxy.csrf.Token"]; return m ? m.getAttribute("content") : ""; }
+
+    function humanSeconds(s) {
+        s = parseInt(s, 10) || 0;
+        if (s % 86400 === 0) { return (s / 86400) + (s === 86400 ? " day" : " days"); }
+        if (s % 3600 === 0) { return (s / 3600) + (s === 3600 ? " hour" : " hours"); }
+        if (s % 60 === 0) { return (s / 60) + (s === 60 ? " minute" : " minutes"); }
+        return s + " seconds";
+    }
+    function brandingCustomised(cfg) {
+        var b = cfg && cfg.Branding;
+        if (!b) { return false; }
+        for (var k in b) { if (b[k]) { return true; } }
+        return false;
+    }
+
+    /* ---------------- overview ---------------- */
+    function loadOverview() {
+        $("#cpRows").html('<tr><td colspan="6"><div class="ui active centered inline loader"></div></td></tr>');
+        $.getJSON("/api/proxy/captcha/default", function (d) { globalBranding = (d && typeof d === "object" && !d.error) ? d : null; }).always(function () {
+            $.getJSON("/api/proxy/list?type=host", function (data) {
+                rules = data || [];
+                renderOverview();
+            }).fail(function () {
+                $("#cpRows").html('<tr><td colspan="6"><div class="ui negative message">Unable to load the proxy rules.</div></td></tr>');
+            });
+        });
+    }
+    function renderOverview() {
+        var q = ($("#cpFilter").val() || "").toLowerCase();
+        var list = rules.slice().sort(function (a, b) {
+            var ea = a.RequireCaptcha ? 0 : 1, eb = b.RequireCaptcha ? 0 : 1;
+            if (ea !== eb) { return ea - eb; }
+            return String(a.RootOrMatchingDomain).localeCompare(String(b.RootOrMatchingDomain));
+        });
+        var html = "";
+        var on = 0;
+        list.forEach(function (r) {
+            var cfg = r.CaptchaConfig || null;
+            var prov = cfg ? (PROVIDERS[cfg.Provider || 0] + (cfg.Provider == 1 ? " " + (cfg.RecaptchaVersion || "v2") : "")) : "";
+            if (r.RequireCaptcha) { on++; }
+            var name = r.RootOrMatchingDomain;
+            if (q && (name + " " + prov).toLowerCase().indexOf(q) < 0) { return; }
+            var brand = brandingCustomised(cfg);
+            var brandCell = brand ? '<span class="cpTag on">customised</span>' : (globalBranding ? '<span class="cpTag">global default</span>' : '<span class="cpTag off">stock</span>');
+            if (brand && cfg.Branding.AccentColor) { brandCell = '<span class="cpSwatch" style="background:' + esc(cfg.Branding.AccentColor) + '"></span>' + brandCell; }
+            var keyless = cfg && r.RequireCaptcha && (cfg.Provider == 2 ? !cfg.SecretKey : (!cfg.SiteKey || !cfg.SecretKey));
+            html += '<tr data-ep="' + esc(name) + '">' +
+                '<td style="white-space:nowrap">' +
+                (r.RequireCaptcha
+                    ? '<button class="ui mini primary button cpEdit"><i class="paint brush icon"></i> Customise</button>'
+                    : '<button class="ui mini basic button cpEdit" data-enable="1"><i class="plus icon"></i> Set up</button>') +
+                '</td>' +
+                '<td><b>' + esc(name) + '</b></td>' +
+                '<td>' + (r.RequireCaptcha ? '<span class="cpTag on">enabled</span>' : '<span class="cpTag off">off</span>') + (keyless ? ' <span class="cpTag warn" title="Site or secret key missing">keys missing</span>' : '') + '</td>' +
+                '<td>' + (prov ? esc(prov) : '<span class="cpHelp">-</span>') + '</td>' +
+                '<td>' + (cfg && r.RequireCaptcha ? esc(humanSeconds(cfg.SessionDuration || 3600)) : '<span class="cpHelp">-</span>') + '</td>' +
+                '<td>' + brandCell + '</td>' +
+                '</tr>';
+        });
+        if (!html) {
+            html = '<tr><td colspan="6" style="text-align:center; padding:2em" class="cpHelp">' +
+                (rules.length ? "No rule matches the filter." : "No proxy rules yet. Create one under Reverse Proxy, then come back to protect it.") + "</td></tr>";
+        }
+        $("#cpRows").html(html);
+        $("#cpGlobalNote").html(on + " of " + rules.length + " proxy rules require a CAPTCHA. " +
+            (globalBranding ? "A global default branding is set: rules inherit every text and look field they leave empty." : "No global default branding is set."));
+    }
+
+    /* ---------------- editor ---------------- */
+    function setDirty(d) {
+        dirty = d;
+        PAGE.toggleClass("dirty", d);
+    }
+    function collectPageFields() {
+        var out = {};
+        $("#cpForm [data-cp]").each(function () {
+            out[$(this).attr("data-cp")] = (this.type === "checkbox") ? this.checked : $(this).val();
+        });
+        return out;
+    }
+    function sessionSeconds() {
+        var n = parseFloat($("#cpSessNum").val()) || 1;
+        var s = Math.round(n * parseInt($("#cpSessUnit").val(), 10));
+        return Math.min(2592000, Math.max(60, s));
+    }
+    function updateSessionHuman() {
+        var raw = Math.round((parseFloat($("#cpSessNum").val()) || 0) * parseInt($("#cpSessUnit").val(), 10));
+        var s = sessionSeconds();
+        $("#cpSessHuman").text("= " + humanSeconds(s) + (raw !== s ? " (limited to the 1 minute - 30 days range)" : ""));
+    }
+    function setSession(sec) {
+        sec = parseInt(sec, 10) || 3600;
+        var unit = 60;
+        if (sec % 86400 === 0) { unit = 86400; } else if (sec % 3600 === 0) { unit = 3600; }
+        $("#cpSessUnit").val(String(unit));
+        $("#cpSessNum").val(sec / unit);
+        updateSessionHuman();
+    }
+    function updateProviderUI() {
+        var p = $("#cpProvider").val();
+        var v = $("#cpRecaptchaVersion").val();
+        var isGlobal = target && target.kind === "global";
+        $(".cpProviderRecaptcha").toggle(p === "1");
+        $(".cpV3Only").toggle(p === "1" && v === "v3");
+        $(".cpV2Only").toggle(p === "1" && v !== "v3");
+        $(".cpTurnstileSeg").toggle(!isGlobal && p === "0");
+        $(".cpRecaptchaSeg").toggle(!isGlobal && p === "1");
+        $(".cpKeyField").toggle(p !== "2");
+        $("#cpSecretLabel").text(p === "2" ? "HMAC key (secret)" : "Secret key (private)");
+        $("#cpSecretHelp").text(p === "2" ? "Altcha runs on this server: any long random string works as HMAC key. No account needed." : "Kept on the server and only used to verify the token with the provider.");
+        $("#cpTestKeys").closest(".field").toggle(p !== "2" || true);
+    }
+    function fillForm(cfg) {
+        cfg = cfg || {};
+        var b = cfg.Branding || {}, t = cfg.Turnstile || {};
+        var values = {
+            captchaTitle: b.Title, captchaHeading: b.Heading, captchaMessage: b.Message, captchaNotice: b.Notice,
+            captchaVerifyingText: b.VerifyingText, captchaSuccessText: b.SuccessText, captchaFailedText: b.FailedText,
+            captchaErrorText: b.ErrorText, captchaRetryText: b.RetryText, captchaBlockedTitle: b.BlockedTitle,
+            captchaBlockedHeading: b.BlockedHeading, captchaBlockedMessage: b.BlockedMessage, captchaLogo: b.LogoURL,
+            captchaAccent: b.AccentColor, captchaBackground: b.BackgroundColor, captchaTheme: b.Theme,
+            captchaCustomTemplate: b.CustomTemplate,
+            turnstileMode: t.Mode, turnstileAppearance: t.Appearance, turnstileTheme: t.Theme, turnstileSize: t.Size,
+            turnstileAction: t.Action, turnstileCData: t.CData, captchaRecaptchaAction: cfg.RecaptchaAction
+        };
+        var checks = { captchaHideFooter: b.HideFooter, captchaRecaptchaInvisible: cfg.RecaptchaInvisible, captchaVerifyHostname: cfg.VerifyHostname };
+        $("#cpForm [data-cp]").each(function () {
+            var key = $(this).attr("data-cp");
+            if (this.type === "checkbox") { this.checked = !!checks[key]; } else { $(this).val(values[key] || ""); }
+        });
+        $(".cqAccent").val(b.AccentColor || "#2c7cb0");
+        $(".cqBackground").val(b.BackgroundColor || "#ffffff");
+        updateLogoInfo();
+    }
+    function updateLogoInfo() {
+        var v = $(".cqLogo").val() || "";
+        $(".cqLogoInfo").text(v.indexOf("data:") === 0 ? "Uploaded image (" + Math.round(v.length * 0.75 / 1024) + " KiB)" :
+            "HTTPS URL, or upload a PNG / JPEG / GIF / WebP image (max 256 KiB, checked by content). SVG is not accepted.");
+        $(".cqLogoClear").toggle(v !== "");
+    }
+    function openEditor(ep, enable) {
+        if (dirty && !window.confirm("Discard the unsaved changes?")) { return; }
+        var ruleObj = null;
+        rules.forEach(function (r) { if (r.RootOrMatchingDomain === ep) { ruleObj = r; } });
+        var isGlobal = ep === null;
+        target = isGlobal ? { kind: "global" } : { kind: "rule", ep: ep };
+        var cfg = isGlobal ? { Branding: globalBranding } : (ruleObj && ruleObj.CaptchaConfig) || {};
+        $("#cpTitle").text(isGlobal ? "Global default branding" : ep);
+        $(".cpRuleOnly").toggle(!isGlobal);
+        $(".cpGlobalOnly").toggle(isGlobal);
+        $(".cpNumText").each(function (i) { $(this).text(isGlobal ? ["1.", "2.", "3."][i] : ["3.", "4.", "6."][i]); });
+        $("#cpEnable").prop("checked", isGlobal ? true : (enable || !!(ruleObj && ruleObj.RequireCaptcha)));
+        $("#cpProvider").val(String(cfg.Provider || 0));
+        $("#cpSiteKey").val(cfg.SiteKey || "");
+        $("#cpSecretKey").val(cfg.SecretKey || "").attr("type", "password");
+        $("#cpRecaptchaVersion").val(cfg.RecaptchaVersion || "v2");
+        $("#cpRecaptchaScore").val(cfg.RecaptchaScore || 0.5);
+        $("#cpPaths").val((cfg.ProtectedPathPrefixes || []).join("\n"));
+        setSession(cfg.SessionDuration || 3600);
+        fillForm(cfg);
+        updateProviderUI();
+        previewStale = {};
+        $("#cpSaveHint").text(isGlobal ? "Applies to every rule on this node, for the fields a rule leaves empty." : "");
+        setDirty(false);
+        $("#cpOverview").hide();
+        $("#cpEditor").show();
+        previewPage = "challenge";
+        $("#cpPageBtns .button").removeClass("active").filter("[data-page=challenge]").addClass("active");
+        refreshPreview(0);
+        $("html,body").scrollTop(0);
+    }
+    function closeEditor() {
+        if (dirty && !window.confirm("Discard the unsaved changes?")) { return; }
+        setDirty(false);
+        target = null;
+        $("#cpEditor").hide();
+        $("#cpOverview").show();
+        loadOverview();
+    }
+
+    /* ---------------- preview ---------------- */
+    function buildFields() {
+        var f = collectPageFields();
+        var isGlobal = target && target.kind === "global";
+        f.captchaProvider = isGlobal ? "0" : $("#cpProvider").val();
+        f.captchaRecaptchaVersion = $("#cpRecaptchaVersion").val();
+        f.domain = isGlobal ? "" : (target && target.ep) || "";
+        f.page = previewPage;
+        f.applyDefault = isGlobal ? "" : "true";
+        return f;
+    }
+    function postPreview() {
+        if (!target) { return; }
+        var form = $("#cpPreviewForm").empty();
+        var f = buildFields();
+        f["gorilla.csrf.Token"] = csrf();
+        Object.keys(f).forEach(function (k) {
+            var v = f[k];
+            if (v === true) { v = "true"; } else if (v === false) { v = ""; }
+            $("<input type='hidden'>").attr("name", k).val(v).appendTo(form);
+        });
+        form[0].submit();
+    }
+    function refreshPreview(delay) {
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(postPreview, delay === undefined ? 450 : delay);
+    }
+
+    /* ---------------- save ---------------- */
+    function save() {
+        if (!target) { return; }
+        var f = collectPageFields();
+        var btn = $("#cpSave").addClass("loading disabled");
+        var done = function () { btn.removeClass("loading disabled"); };
+        if (target.kind === "global") {
+            // only the branding / text fields belong to the default
+            var data = {};
+            Object.keys(f).forEach(function (k) {
+                if (/^captcha(Title|Heading|Message|Notice|VerifyingText|SuccessText|FailedText|ErrorText|RetryText|BlockedTitle|BlockedHeading|BlockedMessage|Logo|Accent|Background|Theme|HideFooter|CustomTemplate)$/.test(k)) { data[k] = f[k]; }
+            });
+            $.cjax({ url: "/api/proxy/captcha/default", method: "POST", data: data, success: function (resp) {
+                done();
+                if (resp && resp.error) { toast(resp.error, false); return; }
+                toast("Global default saved");
+                setDirty(false);
+                $.getJSON("/api/proxy/captcha/default", function (d) { globalBranding = d; });
+            }, error: function () { done(); toast("Request failed", false); } });
+            return;
+        }
+        var enabled = $("#cpEnable").is(":checked");
+        var payload = { rootname: target.ep, captcha: enabled };
+        if (enabled) {
+            Object.assign(payload, f);
+            payload.captchaProvider = $("#cpProvider").val();
+            payload.captchaSiteKey = $("#cpSiteKey").val().trim();
+            payload.captchaSecretKey = $("#cpSecretKey").val().trim();
+            payload.captchaSessionDuration = sessionSeconds();
+            payload.captchaRecaptchaVersion = $("#cpRecaptchaVersion").val();
+            payload.captchaRecaptchaScore = $("#cpRecaptchaScore").val();
+            payload.captchaPathPrefixes = $("#cpPaths").val();
+            if (payload.captchaProvider !== "2" && (!payload.captchaSiteKey || !payload.captchaSecretKey)) {
+                done();
+                toast("Enter the site key and the secret key (or use the test keys) first", false);
+                return;
+            }
+            if (payload.captchaProvider === "2" && !payload.captchaSecretKey) {
+                done();
+                toast("Altcha needs an HMAC key (any long random string)", false);
+                return;
+            }
+        }
+        $.cjax({ url: "/api/proxy/edit", method: "POST", data: payload, success: function (resp) {
+            done();
+            if (resp && resp.error) { toast(resp.error, false); return; }
+            toast(enabled ? "CAPTCHA settings saved" : "CAPTCHA disabled for this rule");
+            setDirty(false);
+            if (typeof listProxyEndpoints === "function") { try { listProxyEndpoints(false); } catch (e) { } }
+            if (!enabled) { closeEditor(); }
+        }, error: function () { done(); toast("Request failed", false); } });
+    }
+
+    /* ---------------- events ---------------- */
+    $("#cpFilter").on("input", renderOverview);
+    $("#cpRefreshBtn").on("click", loadOverview);
+    $("#cpGlobalBtn").on("click", function () { openEditor(null); });
+    $("#cpRows").on("click", ".cpEdit", function () {
+        openEditor($(this).closest("tr").attr("data-ep"), $(this).attr("data-enable") === "1");
+    });
+    $("#cpBack").on("click", closeEditor);
+    $("#cpSave").on("click", save);
+    $("#cpDiscard").on("click", function () {
+        if (!target) { return; }
+        var ep = target.kind === "global" ? null : target.ep;
+        setDirty(false);
+        loadOverview();
+        // reload from the server, then reopen
+        var wait = setInterval(function () {
+            if ($("#cpRows .loader").length === 0) {
+                clearInterval(wait);
+                if (ep === null || rules.some(function (r) { return r.RootOrMatchingDomain === ep; })) { openEditor(ep); } else { closeEditor(); }
+            }
+        }, 100);
+    });
+    $("#cpForm").on("input change", "input, select, textarea", function () {
+        if (!target) { return; }
+        setDirty(true);
+        if (this.id === "cpProvider" || this.id === "cpRecaptchaVersion") { updateProviderUI(); }
+        if (this.id === "cpSessNum" || this.id === "cpSessUnit") { updateSessionHuman(); }
+        refreshPreview();
+    });
+    $(".cqAccent").on("input", function () { $("#cpForm [data-cp=captchaAccent]").val($(this).val()); });
+    $(".cqBackground").on("input", function () { $("#cpForm [data-cp=captchaBackground]").val($(this).val()); });
+    $(".cqResetColors").on("click", function () {
+        $("#cpForm [data-cp=captchaAccent], #cpForm [data-cp=captchaBackground]").val("");
+        $(".cqAccent").val("#2c7cb0");
+        $(".cqBackground").val("#ffffff");
+        setDirty(true);
+        refreshPreview();
+    });
+    $(".cqLogo").on("input", updateLogoInfo);
+    $(".cqLogoClear").on("click", function () {
+        $(".cqLogo").val("").trigger("change");
+        $(".cqLogoFile").val("");
+        updateLogoInfo();
+    });
+    $(".cqLogoFile").on("change", function () {
+        var file = this.files[0];
+        if (!file) { return; }
+        if (file.size > 256 * 1024) { toast("Logo is too large (max 256 KiB)", false); this.value = ""; return; }
+        var reader = new FileReader();
+        reader.onload = function () { $(".cqLogo").val(reader.result).trigger("change"); updateLogoInfo(); };
+        reader.readAsDataURL(file);
+    });
+    $(".cqLoadExample").on("click", function () {
+        var ta = $("#cpForm [data-cp=captchaCustomTemplate]");
+        if (ta.val().trim() !== "" && !window.confirm("Replace the current custom template?")) { return; }
+        ta.val(STARTER).trigger("change");
+    });
+    $("#cpToggleVars").on("click", function () { $("#cpVars").slideToggle(120); });
+    $("#cpRevealSecret").on("click", function () {
+        var i = $("#cpSecretKey");
+        i.attr("type", i.attr("type") === "password" ? "text" : "password");
+    });
+    $("#cpTestKeys").on("click", function () {
+        var p = parseInt($("#cpProvider").val(), 10);
+        if (p === 2) {
+            var rnd = Array.from(crypto.getRandomValues(new Uint8Array(24))).map(function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+            $("#cpSecretKey").val(rnd);
+        } else {
+            $("#cpSiteKey").val(TEST_KEYS[p].site);
+            $("#cpSecretKey").val(TEST_KEYS[p].secret);
+        }
+        setDirty(true);
+        toast(p === 2 ? "Generated a random HMAC key" : "Test keys filled in: they accept every visitor, replace them before going live");
+    });
+    $("#cpExceptions").on("click", function () {
+        if (!target || target.kind !== "rule") { return; }
+        var payload = encodeURIComponent(JSON.stringify({ ept: "host", ep: target.ep }));
+        $("#cpExcFrame").attr("src", "snippet/captchaExceptionEditor.html?t=" + Date.now() + "#" + payload);
+        $("#cpExcModal").modal({ autofocus: false }).modal("show");
+    });
+    $("#cpPageBtns").on("click", ".button", function () {
+        previewPage = $(this).attr("data-page");
+        $("#cpPageBtns .button").removeClass("active");
+        $(this).addClass("active");
+        refreshPreview(0);
+    });
+    $("#cpWidthBtns").on("click", ".button", function () {
+        $("#cpWidthBtns .button").removeClass("active");
+        $(this).addClass("active");
+        $("#cpFrameWrap").toggleClass("mobile", $(this).attr("data-w") === "mobile");
+    });
+    $(window).on("beforeunload", function () { return dirty ? "Unsaved CAPTCHA changes" : undefined; });
+
+    /* ---------------- public entry points ---------------- */
+    // Deep link from the endpoint editor: captchaPageOpen("example.com")
+    window.captchaPageOpen = function (ep) {
+        window.__captchaPageWanted = ep;
+        if (typeof openTabById === "function") { openTabById("captcha"); }
+    };
+    function handleWanted() {
+        var want = window.__captchaPageWanted;
+        window.__captchaPageWanted = undefined;
+        if (want) {
+            $.getJSON("/api/proxy/list?type=host", function (r) {
+                rules = r || [];
+                openEditor(want);
+            });
+        }
+    }
+    if (typeof tabSwitchEventBind !== "undefined") {
+        tabSwitchEventBind["captcha"] = function () {
+            if (!target) { loadOverview(); }
+            handleWanted();
+        };
+    }
+    loadOverview();
+})();
+</script>
