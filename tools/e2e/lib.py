@@ -164,6 +164,8 @@ class Zoraxy:
         else:
             raise Fail("zoraxy admin did not come up:\n" + self.logtail())
         self._session()
+        # ReverseProxyInit starts the listener asynchronously; API calls that restart it must not race that
+        wait_for(lambda: "Dynamic Reverse Proxy service started" in self.logtail(200000), timeout=30, msg="proxy service start")
         if not self.tls:
             self.api("/api/cert/tls", set="false")
         if wait_proxy:
