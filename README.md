@@ -151,6 +151,10 @@ Usage of zoraxy:
         Management web interface listening port (default ":8000")
   -reset_ac
         Reset admin account username and password to default and exit
+  -webui_hsts
+        Send HSTS header on the management web interface when -webui_tls is enabled (off by default, not recommended with self-signed certificates)
+  -webui_tls string
+        HTTPS for the management web interface: off (default, plain HTTP), auto (self-signed certificate generated into <conf>/webui/), custom (use your own <conf>/webui/webui.crt and webui.key) (default "off")
   -sshlb
         Allow loopback web ssh connection (DANGER)
   -tmp string

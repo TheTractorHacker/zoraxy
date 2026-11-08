@@ -10,6 +10,7 @@ package main
 import (
 	"embed"
 	"flag"
+	"net"
 	"net/http"
 	"time"
 
@@ -65,6 +66,8 @@ const (
 var (
 	webUIPort                  = flag.String("port", ":8000", "Management web interface listening port")
 	databaseBackend            = flag.String("db", "auto", "Database backend to use (leveldb, boltdb, auto) Note that fsdb will be used on unsupported platforms like RISCV")
+	webUITLSMode               = flag.String("webui_tls", "off", "HTTPS for the management web interface: off (default, plain HTTP), auto (self-signed certificate generated into <conf>/webui/), custom (use your own <conf>/webui/webui.crt and webui.key)")
+	webUIHSTS                  = flag.Bool("webui_hsts", false, "Send HSTS header on the management web interface when -webui_tls is enabled (off by default, not recommended with self-signed certificates)")
 	noauth                     = flag.Bool("noauth", false, "Disable authentication for management interface")
 	showver                    = flag.Bool("version", false, "Show version of this server")
 	allowSshLoopback           = flag.Bool("sshlb", false, "Allow loopback web ssh connection (DANGER)")
@@ -155,12 +158,13 @@ var (
 	/*
 		Handler Modules
 	*/
-	sysdb          *database.Database              //System database
-	authAgent      *auth.AuthAgent                 //Authentication agent
-	tlsCertManager *tlscert.Manager                //TLS / SSL management
-	redirectTable  *redirection.RuleTable          //Handle special redirection rule sets
-	webminPanelMux *http.ServeMux                  //Server mux for handling webmin panel APIs
-	csrfMiddleware func(http.Handler) http.Handler //CSRF protection middleware
+	sysdb                 *database.Database              //System database
+	authAgent             *auth.AuthAgent                 //Authentication agent
+	tlsCertManager        *tlscert.Manager                //TLS / SSL management
+	redirectTable         *redirection.RuleTable          //Handle special redirection rule sets
+	webminPanelMux        *http.ServeMux                  //Server mux for handling webmin panel APIs
+	webUILoopbackListener net.Listener                    //Loopback-only plain HTTP listener for plugins, only used when web UI TLS is enabled
+	csrfMiddleware        func(http.Handler) http.Handler //CSRF protection middleware
 
 	pathRuleHandler    *pathrule.Handler         //Handle specific path blocking or custom headers
 	geodbStore         *geodb.Store              //GeoIP database, for resolving IP into country code
