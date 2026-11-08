@@ -40,6 +40,7 @@ type Instance struct {
 type RequestInfo struct {
 	Endpoint string // Endpoint identifier for logs and counters
 	ClientIP string // Trusted client IP (as resolved by the router)
+	Source   string // Where the effective config comes from (global, profile:X, custom, endpoint)
 	// OnBlock writes the response for a blocked request. txID is the
 	// transaction ID to show to the user. If nil a plain 403 is written.
 	OnBlock func(w http.ResponseWriter, r *http.Request, txID string)
@@ -114,6 +115,7 @@ func (in *Instance) Inspect(w http.ResponseWriter, r *http.Request, info Request
 			Action:        action,
 			WouldBlock:    wouldBlock,
 			Mode:          in.cfg.Mode,
+			Source:        info.Source,
 			Rules:         hits,
 		}
 		in.events.add(ev)
@@ -242,7 +244,7 @@ func truncate(s string, n int) string {
 	Manager: cache of compiled instances, shared event store
 */
 
-const maxCachedInstances = 8
+const maxCachedInstances = 48
 
 // Manager owns the compiled-instance cache and the event store
 type Manager struct {
@@ -316,6 +318,19 @@ func (m *Manager) Validate(c *Config) error {
 // RecentEvents returns recent events, newest first
 func (m *Manager) RecentEvents(limit int, endpoint string) []Event {
 	return m.events.recent(limit, endpoint)
+}
+
+// QueryEvents returns recent events matching the filter, newest first
+func (m *Manager) QueryEvents(f EventFilter) []Event { return m.events.query(f) }
+
+// Summary aggregates the buffered events newer than since
+func (m *Manager) Summary(since time.Time, top int) Summary { return m.events.summary(since, top) }
+
+// CacheSize returns the number of compiled instances currently cached
+func (m *Manager) CacheSize() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.cache)
 }
 
 // Stats returns a snapshot of the counters

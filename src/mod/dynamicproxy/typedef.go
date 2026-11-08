@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/quic-go/quic-go/http3"
 
@@ -128,9 +129,11 @@ type RouterOption struct {
 /* Router Object */
 type Router struct {
 	Option         *RouterOption
-	ProxyEndpoints *sync.Map      //Map of ProxyEndpoint objects, each ProxyEndpoint object is a routing rule that handle incoming requests
-	Running        bool           //If the router is running
-	Root           *ProxyEndpoint //Root proxy endpoint, default site
+	wafState       atomic.Pointer[waf.State] //Central WAF policy + profiles snapshot
+	wafMu          sync.Mutex                //Serialises ApplyWAFState
+	ProxyEndpoints *sync.Map                 //Map of ProxyEndpoint objects, each ProxyEndpoint object is a routing rule that handle incoming requests
+	Running        bool                      //If the router is running
+	Root           *ProxyEndpoint            //Root proxy endpoint, default site
 
 	/* Internals */
 	mux          http.Handler              //HTTP handler
@@ -345,7 +348,13 @@ type ProxyEndpoint struct {
 	MitigationAction    int  //Action to take when exploit/crawler detected (0=404, 1=403, 2=400, 3=Drop, 4=Delay, 5=Captcha)
 
 	//Web Application Firewall (Coraza + OWASP CRS), nil / mode "off" = disabled
-	WAF *waf.Config `json:",omitempty"`
+	WAF *waf.Config `json:",omitempty"` //Endpoint's own complete config, used when WAFSource is "custom" (or unset on legacy configs)
+
+	//Central WAF: where this endpoint takes its WAF settings from. Unset = "custom" if WAF
+	//is configured (legacy configs behave exactly as before), otherwise "inherit" (global policy).
+	WAFSource  string         `json:",omitempty"` //inherit, off, detection_only, block, profile, custom
+	WAFProfile string         `json:",omitempty"` //Profile name when WAFSource is "profile"
+	WAFExtra   *waf.Overrides `json:",omitempty"` //Additive exclusions / rules (and paranoia override if allowed) for non custom sources
 
 	// Chunked Transfer Encoding
 	DisableChunkedTransferEncoding bool //Disable chunked transfer encoding for this endpoint
@@ -362,10 +371,10 @@ type ProxyEndpoint struct {
 	DefaultSiteValue  string //Fallback routing target, optional
 
 	//Internal Logic Elements
-	parent   *Router            `json:"-"` //Parent router, excluded from JSON
-	detector *exploits.Detector `json:"-"` //Exploit detector instance, excluded from JSON
-	wafInst  *waf.Instance      `json:"-"` //Compiled WAF instance (shared between identical configs), excluded from JSON
-	Tags     []string           // Tags for the proxy endpoint
+	parent   *Router                    `json:"-"` //Parent router, excluded from JSON
+	detector *exploits.Detector         `json:"-"` //Exploit detector instance, excluded from JSON
+	wafRT    atomic.Pointer[wafRuntime] `json:"-"` //Resolved WAF (compiled instance shared between identical configs), excluded from JSON
+	Tags     []string                   // Tags for the proxy endpoint
 }
 
 /*

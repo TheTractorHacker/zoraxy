@@ -374,6 +374,7 @@ func ReverseProxyInit() {
 		Load all conf from files
 
 	*/
+	initWAFCentral() //Central WAF policy + profiles must be known before endpoints are prepared
 	confs, _ := filepath.Glob(CONF_HTTP_PROXY + "/*.config")
 	for _, conf := range confs {
 		err := LoadReverseProxyConfig(conf)
@@ -769,6 +770,11 @@ func ReverseProxyHandleAddEndpoint(w http.ResponseWriter, r *http.Request) {
 			DefaultSiteValue:  dsVal,
 			RequireCaptcha:    requireCaptcha,
 			CaptchaConfig:     captchaConfig,
+		}
+		if oldRoot := dynamicProxyRouter.Root; oldRoot != nil {
+			//The default site form does not edit the WAF, keep its central WAF settings
+			rootRoutingEndpoint.WAF, rootRoutingEndpoint.WAFSource = oldRoot.WAF, oldRoot.WAFSource
+			rootRoutingEndpoint.WAFProfile, rootRoutingEndpoint.WAFExtra = oldRoot.WAFProfile, oldRoot.WAFExtra
 		}
 		preparedRootProxyRoute, err := dynamicProxyRouter.PrepareProxyRoute(&rootRoutingEndpoint)
 		if err != nil {

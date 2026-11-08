@@ -15,6 +15,7 @@ import (
 	"imuslab.com/zoraxy/mod/auth"
 	"imuslab.com/zoraxy/mod/cluster"
 	"imuslab.com/zoraxy/mod/dynamicproxy"
+	"imuslab.com/zoraxy/mod/dynamicproxy/waf"
 )
 
 /*
@@ -74,6 +75,14 @@ func validateClusterPayload(p *cluster.Payload) error {
 		case f.Path == "trusted_proxies.json":
 			var tp []access.TrustedProxy
 			if err := json.Unmarshal(f.Data, &tp); err != nil {
+				return fmt.Errorf("%s: %w", f.Path, err)
+			}
+		case f.Path == "waf_central.json":
+			var wc wafCentralFile
+			if err := json.Unmarshal(f.Data, &wc); err != nil {
+				return fmt.Errorf("%s: %w", f.Path, err)
+			}
+			if _, err := waf.NewState(wc.Policy, wc.Profiles); err != nil {
 				return fmt.Errorf("%s: %w", f.Path, err)
 			}
 		case strings.HasPrefix(f.Path, "proxy/") && strings.HasSuffix(f.Path, ".config"):
