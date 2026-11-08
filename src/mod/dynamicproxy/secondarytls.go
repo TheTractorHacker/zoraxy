@@ -48,6 +48,7 @@ func (router *Router) secondaryTLSConfig() *tls.Config {
 		MinVersion:     minVersion,
 	}
 	ApplyTlsCipherProfile(cfg, router.Option.TlsCipherProfile)
+	router.applyEch(cfg)
 	cfg.GetConfigForClient = router.clientCertGetConfig(cfg)
 	return cfg
 }

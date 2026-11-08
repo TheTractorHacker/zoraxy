@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <!-- Notes: This should be opened in its original path. Per rule Sablier gate (API: /api/proxy/sablier/*) -->
+        <meta charset="utf-8">
+        <meta name="zoraxy.csrf.Token" content="{{.csrfToken}}">
+        <link rel="stylesheet" href="../script/semantic/semantic.min.css">
+        <script src="../script/jquery-3.6.0.min.js"></script>
+        <script src="../script/semantic/semantic.min.js"></script>
+        <script src="../script/utils.js"></script>
+    </head>
+    <body>
+        <link rel="stylesheet" href="../darktheme.css">
+        <script src="../script/darktheme.js"></script>
+        <br>
+        <div class="ui container">
+            <h3 class="ui header">Sablier (scale to zero)</h3>
+            <p>Off until enabled. Before proxying to the upstream, Zoraxy asks a <a href="https://sablierapp.dev" target="_blank" rel="noopener">Sablier</a> server to make sure the container / service is running.
+            While it is starting visitors see Sablier's waiting page (<b>dynamic</b>) or the request is held until the workload is ready (<b>blocking</b>).</p>
+
+            <div class="ui form">
+                <div class="field"><div class="ui toggle checkbox"><input type="checkbox" id="sbEnabled"><label>Enable the Sablier gate for this rule</label></div></div>
+                <div class="field"><label>Sablier server URL</label><input type="text" id="sbUrl" placeholder="http://sablier:10000">
+                    <small>Zoraxy calls <code>/api/strategies/dynamic</code> or <code>/blocking</code> on this server. Link-local / cloud metadata addresses are refused unless allowed below.</small></div>
+                <div class="three fields">
+                    <div class="field"><label>Strategy</label>
+                        <select id="sbStrategy"><option value="dynamic">dynamic (waiting page)</option><option value="blocking">blocking (hold until ready)</option></select></div>
+                    <div class="field"><label>Session duration</label><input type="text" id="sbSession" placeholder="5m"><small>How long the workload stays up after the last request (30s, 5m, 1h).</small></div>
+                    <div class="field"><label>Ready answer cache (seconds)</label><input type="number" id="sbCache" min="-1" max="60" placeholder="3"><small>Avoids asking Sablier for every asset request. -1 = ask every time.</small></div>
+                </div>
+                <div class="two fields">
+                    <div class="field"><label>Names (one per line)</label><textarea id="sbNames" rows="3" placeholder="whoami"></textarea><small>Container or service names, as Sablier knows them.</small></div>
+                    <div class="field"><label>Or a group</label><input type="text" id="sbGroup" placeholder="my-group"><small>Use either names or a group.</small></div>
+                </div>
+                <div class="four fields" id="sbDynamicFields">
+                    <div class="field"><label>Display name</label><input type="text" id="sbDisplay" placeholder="My App"></div>
+                    <div class="field"><label>Theme</label><input type="text" id="sbTheme" placeholder="hacker-terminal"></div>
+                    <div class="field"><label>Refresh frequency</label><input type="text" id="sbRefresh" placeholder="5s"></div>
+                    <div class="field"><label>&nbsp;</label><div class="ui checkbox"><input type="checkbox" id="sbDetails"><label>Show details</label></div></div>
+                </div>
+                <div class="two fields" id="sbBlockingFields">
+                    <div class="field"><label>Blocking timeout</label><input type="text" id="sbBlockTimeout" placeholder="1m"></div>
+                    <div class="field"><label>Request timeout to Sablier (seconds, 0 = automatic)</label><input type="number" id="sbReqTimeout" min="0" max="600"></div>
+                </div>
+                <div class="field"><label>Paths that skip the gate (one prefix per line)</label><textarea id="sbBypass" rows="2" placeholder="/healthz"></textarea>
+                    <small>Health checks and other public paths. Static responses marked public and <code>/.zoraxy/health</code> are answered before this gate anyway. WebSocket upgrades and non-browser clients get a plain <code>503</code> + <code>Retry-After</code> while the workload starts.</small></div>
+                <div class="field"><div class="ui checkbox"><input type="checkbox" id="sbFailOpen"><label>Fail open: proxy the request when Sablier is unreachable (default: answer 503)</label></div></div>
+                <div class="field"><div class="ui checkbox"><input type="checkbox" id="sbMeta"><label>Allow a Sablier URL on link-local / cloud metadata addresses (169.254.0.0/16, fe80::/10 ...)</label></div></div>
+                <button class="ui primary button" onclick="saveSablier();"><i class="save icon"></i> Save</button>
+                <button class="ui basic button" onclick="testSablier();"><i class="plug icon"></i> Check connection</button>
+                <small>"Check connection" requests a real session, so it starts the workload.</small>
+            </div>
+            <div id="sbOut" class="ui message" style="display:none; margin-top:1em;"></div>
+            <br><br>
+        </div>
+
+        <script>
+            let editingEndpoint = {};
+            if (window.location.hash.length > 1) {
+                try { editingEndpoint = JSON.parse(decodeURIComponent(window.location.hash.substr(1))); } catch (ex) { console.log("bad hash", ex); }
+            }
+            $('.ui.checkbox').checkbox();
+            function lines(id) { return $(id).val().split('\n').map(function(x) { return x.trim(); }).filter(function(x) { return x; }); }
+            function toggleStrategy() {
+                let blocking = $('#sbStrategy').val() === 'blocking';
+                $('#sbDynamicFields').toggle(!blocking);
+                $('#sbBlockingFields').toggle(blocking);
+            }
+            $('#sbStrategy').on('change', toggleStrategy);
+            function collect() {
+                let c = {Enabled: $('#sbEnabled').prop('checked'), URL: $('#sbUrl').val().trim(), Strategy: $('#sbStrategy').val(), Names: lines('#sbNames'), Group: $('#sbGroup').val().trim(),
+                         SessionDuration: $('#sbSession').val().trim(), DisplayName: $('#sbDisplay').val(), Theme: $('#sbTheme').val().trim(), RefreshFrequency: $('#sbRefresh').val().trim(),
+                         ShowDetails: $('#sbDetails').prop('checked'), BlockingTimeout: $('#sbBlockTimeout').val().trim(),
+                         ReadyCacheSeconds: parseInt($('#sbCache').val(), 10) || 0, RequestTimeoutSeconds: parseInt($('#sbReqTimeout').val(), 10) || 0,
+                         FailOpen: $('#sbFailOpen').prop('checked'), BypassPaths: lines('#sbBypass'), AllowMetadataAddress: $('#sbMeta').prop('checked')};
+                if ($('#sbCache').val() === '0') { c.ReadyCacheSeconds = 0; }
+                return c;
+            }
+            function saveSablier() {
+                $.cjax({url: '/api/proxy/sablier/set', method: 'POST', data: {ep: editingEndpoint.ep, config: JSON.stringify(collect())},
+                    success: function(resp) {
+                        if (resp && resp.error) { parent.msgbox(resp.error, false, 8000); } else { parent.msgbox("Saved", true); }
+                    }});
+            }
+            function testSablier() {
+                $.cjax({url: '/api/proxy/sablier/test', method: 'POST', data: {config: JSON.stringify(collect())},
+                    success: function(r) {
+                        let box = $('#sbOut').removeClass('green red yellow').show().empty();
+                        if (r && r.error) { box.addClass('red').text(r.error); return; }
+                        if (r.Result === 'ready') { box.addClass('green').text('Ready: the workload is running (' + r.DurationMs + ' ms).'); }
+                        else if (r.Result === 'waiting') { box.addClass('yellow').text('Sablier answered with a waiting page (status ' + r.Status + ', ' + r.ContentType + ', ' + r.BodyBytes + ' bytes): the workload is starting.'); }
+                        else { box.addClass('red').text('Error: ' + r.Message); }
+                        box.append($('<div style="font-family:monospace; font-size:85%; word-break:break-all; margin-top:0.4em;">').text(r.URL));
+                    }});
+            }
+            $.get('/api/proxy/sablier/get?ep=' + encodeURIComponent(editingEndpoint.ep), function(c) {
+                if (c && c.error) { parent.msgbox(c.error, false, 8000); return; }
+                $('#sbEnabled').prop('checked', !!c.Enabled);
+                $('#sbUrl').val(c.URL || '');
+                $('#sbStrategy').val(c.Strategy || 'dynamic');
+                $('#sbSession').val(c.SessionDuration || '');
+                $('#sbCache').val(c.ReadyCacheSeconds || '');
+                $('#sbNames').val((c.Names || []).join('\n'));
+                $('#sbGroup').val(c.Group || '');
+                $('#sbDisplay').val(c.DisplayName || '');
+                $('#sbTheme').val(c.Theme || '');
+                $('#sbRefresh').val(c.RefreshFrequency || '');
+                $('#sbDetails').prop('checked', !!c.ShowDetails);
+                $('#sbBlockTimeout').val(c.BlockingTimeout || '');
+                $('#sbReqTimeout').val(c.RequestTimeoutSeconds || '');
+                $('#sbBypass').val((c.BypassPaths || []).join('\n'));
+                $('#sbFailOpen').prop('checked', !!c.FailOpen);
+                $('#sbMeta').prop('checked', !!c.AllowMetadataAddress);
+                toggleStrategy();
+            });
+            toggleStrategy();
+        </script>
+    </body>
+</html>

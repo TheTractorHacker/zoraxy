@@ -25,6 +25,7 @@ require (
 	github.com/shirou/gopsutil/v4 v4.25.1
 	github.com/stretchr/testify v1.12.1
 	github.com/syndtr/goleveldb v1.0.0
+	github.com/yuin/gopher-lua v1.1.2
 	go.etcd.io/bbolt v1.4.1
 	golang.org/x/net v0.59.0
 	golang.org/x/oauth2 v0.37.0

@@ -227,6 +227,8 @@ func (router *Router) StartProxyService() error {
 	//Apply the TLS cipher profile (default = Go defaults, see tlscipherprofile.go)
 	ApplyTlsCipherProfile(config, router.Option.TlsCipherProfile)
 
+	router.applyEch(config) //Encrypted Client Hello keys (ech_glue.go), kept by the per-SNI clones below
+
 	//Endpoints with client certificates (mTLS) enabled ask for one, selected by SNI name
 	config.GetConfigForClient = router.clientCertGetConfig(config)
 
@@ -325,6 +327,7 @@ func (router *Router) StartProxyService() error {
 // handleNonTLSRequest handles HTTP requests for endpoints that allow plain HTTP access
 // This is the common handler logic used by both port 80 listener and secondary listeners
 func (router *Router) handleNonTLSRequest(w http.ResponseWriter, r *http.Request, sep *ProxyEndpoint) {
+	router.echObserve(r) //secondary TLS listeners carry ECH too (no-op on plain HTTP)
 	proxyHandler := router.mux.(*ProxyHandler)
 	if router.Option.Metrics.Enabled() {
 		var done func()

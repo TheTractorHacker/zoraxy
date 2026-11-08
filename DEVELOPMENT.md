@@ -1491,3 +1491,92 @@ is Status when `show` is false; a fresh install lands on Quick Start. "Show Quic
 Tests: `go test -run 'QuickStart|Upstream' .`; the UI smoke test seeds 36 rules and covers nav structure/icons/collapse/state migration,
 Quick Start dismissal, search, status and tag filters, sorting, shift-click range, bulk preview, Esc, status pill + undo, pagination, the
 phone layout and the whole new rule dialog (validation, connection test, Enter to submit, highlight, quick actions).
+## Platform features (`feat/platform-features`)
+
+Four opt-in features, all off by default: Encrypted Client Hello, Lua script handlers, Sablier (scale-to-zero) integration
+and zrok tunnels. Each keeps its logic in its own package; the shared files only got small hooks.
+
+### Encrypted Client Hello (fork #235 / upstream #1319)
+
+Code: `src/mod/ech` (keys, config serialisation, DNS check), `src/echapi.go` (APIs), `src/mod/dynamicproxy/ech_glue.go`
+(router wiring), `src/web/components/ech.html` (page: Networking > Encrypted Client Hello).
+
+- Server side ECH uses `tls.Config.GetEncryptedClientHelloKeys`, which crypto/tls calls per handshake, so enabling, rotating and
+  retiring keys never needs a listener restart. The callback is installed on the HTTPS listener config *before* the per-SNI
+  `GetConfigForClient` clones (client certificate / mTLS), and `tls.Config.Clone` copies it; ECH is decrypted before
+  `GetConfigForClient` runs, so mTLS and certificate selection see the inner SNI (test: `TestEchKeysSurviveClientCertClones`,
+  `TestHandshakeHidesInnerSNI` with and without the clone). The secondary TLS listeners get the same callback.
+- Keys: DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-128-GCM + ChaCha20-Poly1305, random config id, configurable public name and
+  `maximum_name_length` (default 64). Stored in `conf/ech/ech.json` (dir 0700, file 0600; the private keys are never returned
+  by any API except the admin-only PEM export, which viewers cannot call). `conf/` backups contain them like TLS private keys.
+  Cluster/Fleet snapshots do not carry ECH keys: configure each node (or copy the PEM) on purpose.
+- Rotation: the newest `active` key is the only one advertised in the `ECHConfigList` and the only one sent as retry config;
+  older keys become `retired` (decrypt-only) and are purged after the retain window (default 7 days, keep it above the DNS TTL).
+  Optional automatic rotation every N hours (checked every 10 minutes).
+- Rejections: a client with the wrong/unknown key is answered with the outer certificate for the public name plus the retry
+  configs (`tls.ECHRejectionError.RetryConfigList` on the client); with ECH disabled the server ignores the extension.
+  The public name needs a certificate Zoraxy can serve (an existing wildcard works); the page warns when none matches.
+- DNS: the page shows the base64 list, a copy-ready `HTTPS 1 . alpn=... ech=...` record and a lookup helper
+  (`/api/ech/dnscheck`, HTTPS RR through miekg/dns against the system or a given resolver IP) that compares the published `ech=`
+  with the active list. Automatic publishing through a DNS provider is *not* implemented (needs a record API beyond lego's
+  ACME challenge providers).
+- HTTP/3: the QUIC listener clones the same config; with the pinned quic-go and Go version ECH is accepted over QUIC
+  (`TestQUICECHSupport` fails if that stops being true, then revisit this paragraph).
+- Observability: the page shows counts of TLS requests that arrived through ECH vs. not; `r.TLS.ECHAccepted` is available to code.
+- Not validated here: real browsers (Firefox/Chrome) against a public DNS record; the Go client in the tests is the interop peer.
+
+### Lua script handlers (fork #88 / upstream #367)
+
+Code: `src/mod/luascript` (sandbox, helper libraries, pattern matcher), `src/mod/dynamicproxy/script_handler.go` (per-rule `Script`
+config, request handling, admin test run), `src/scriptapi.go`, `src/web/snippet/scriptEditor.html` (button "Lua Script" in the
+endpoint editor). Off unless a rule has `Script.Enabled`.
+
+Modes: `handler` (the script produces the response, no upstream is contacted) and `hook` (runs before the upstream, may answer through
+`respond()` / `redirect()` / a changed `response` table or let the request continue after `request_header_set/del`). It runs in the shared
+endpoint chain after authentication and static responses, before plugin routing and the upstream. `PathPrefix` limits it to a subtree.
+
+API available to scripts: `request.*` (method, path, query, args, headers (lower case), host, client_ip, rule, request_id, scheme, body in
+handler mode, 64 KiB max), `response.status/headers/body`, `respond`, `redirect`, `request_header_set/del`, `log`, `json`, `base64`, `hex`,
+`url`, `crypto.sha256/hmac_sha256/equals`, `time.now/format`, `kv.get/set/incr/delete` (in memory, per rule, 1000 keys / 1 MiB, optional TTL,
+survives edits of the script, cleared on restart).
+
+**Security review (this is admin-authored code execution in the proxy process).** Threat model: a rule editor (admin) can already run the
+proxy as any upstream they like, but the script must not become a shell, a file reader, a port scanner or an availability weapon.
+
+| Risk | Control | Test |
+|---|---|---|
+| Files, processes, network, env | Only `base`, `table`, `string`, `math` are opened. `os`, `io`, `package`, `debug`, `coroutine`, `require`, `module`, `dofile`, `loadfile`, `load`, `loadstring`, `getfenv`, `setfenv`, `collectgarbage`, `print`, `newproxy` are nil. No Go function that touches the OS is exposed. Precompiled chunks are refused. | `TestNoDangerousGlobals`, `TestEscapeAttempts` (os.execute, io.open, io.popen, require, load/loadstring, dofile, debug, package.loaded, getfenv, string.dump, metatable tricks) |
+| Infinite loops | Context deadline (default 100 ms, max 2 s) checked by the VM on every instruction (this is the instruction limit: it is time based, gopher-lua has no instruction counter). Client disconnect also cancels. A run that ignores the deadline for 750 ms more is abandoned, counted, and scripts are refused if more than 16 such runs exist (should stay 0). | `TestInfiniteLoopTimesOut` (while, tail call, pcall loop, table fill, sort comparator, gsub loop), `TestCancelledParent` |
+| Deep recursion / stack abuse | Call stack 120 frames, Lua registry capped at 40960 slots: recursion and `unpack` of huge ranges fail with a stack overflow error. | `TestDeepRecursion` |
+| Memory bombs | `string.rep` / `string.format` capped at 1 MiB / width 99; `gsub` result 1 MiB; JSON in/out 256 KiB; kv 1 MiB; response body cap (default 256 KiB, max 1 MiB); source 64 KiB. Everything else (concat doubling, table growth) is stopped by the **live heap watchdog**: sampled every 2 ms, cancels the run when the process live heap grew more than 64 MiB since the run started. The sample is process wide, so a heavily loaded proxy can occasionally make an innocent run fail with "memory ceiling" (500); a single concat step can overshoot the ceiling by about 2x before the next sample. | `TestMemoryBombs` |
+| Pattern DoS (`a*a*a*b`) | gopher-lua's matcher is replaced by a step budgeted port of the Lua 5.1 matcher (400k steps, recursion 200, subject 256 KiB, pattern 256 bytes): `string.find/match/gmatch/gsub`. | `TestPatternCatastrophe`, `TestPatterns` |
+| Cross-request leaks | A fresh Lua state per run (no shared globals), a per-script semaphore (default 4 parallel runs, max 32; extra requests wait for the remaining time budget, then 503). Panics are recovered. | `TestConcurrentRunsAreIsolated`, `TestConcurrencyPoolBusy` |
+| Header / response injection | Header names and values validated (no CR/LF/NUL), hop-by-hop and `Content-Length` refused, status 200-599, redirect 3xx only. | `TestResponseValidation`, `TestRespondStopsAndRedirect` |
+| Information disclosure | Failures answer `500 - Script error (request id ...)`; details (line number, message) go to the log only. The source is only served by `/api/proxy/script/get`, which viewer accounts cannot call. | `TestScriptErrorsAreOpaque` |
+
+Residual risk: a native Go function that ignores the context could in theory hold a request goroutine (every exposed native is bounded as
+above). The heap watchdog is a ceiling, not an accountant. Treat script editing like shell access to the proxy host's CPU and memory,
+not like a safe multi-tenant sandbox: do not give untrusted users the admin role.
+
+### Sablier compatibility (fork #120 / upstream #564)
+
+Code: `src/mod/sablier` (config validation, HTTP client, gate with ready cache), `src/mod/dynamicproxy/sablier_gate.go` (request stage),
+`src/sablierapi.go`, `src/web/snippet/sablierEditor.html` (button "Sablier (scale to zero)" in the endpoint editor). Off unless a rule has
+`Sablier.Enabled`. No plugin is needed: this is Sablier's reverse proxy plugin contract implemented natively.
+
+- Per rule: Sablier URL, strategy `dynamic` (`/api/strategies/dynamic`, waiting page, `display_name`, `theme`, `refresh_frequency`,
+  `show_details`) or `blocking` (`/api/strategies/blocking`, `timeout`), `session_duration`, `names` (repeated parameter) or `group`.
+- `X-Sablier-Session-Status: ready` -> the request is proxied. Any other value -> Sablier's body, status and Content-Type are served with
+  `Cache-Control: no-store`. A response without that header (wrong URL, an auth portal in between, a 500) is an *error*, not a waiting page.
+- Position in the chain: after authentication and the Lua stage, right before plugin routing / the upstream. A Lua *handler* replaces the upstream, so
+  it never wakes the workload; public static responses and `/.zoraxy/health` are answered earlier; `BypassPaths` skips the gate per prefix.
+- Cache: a `ready` answer is trusted for 3 s (0-60 s configurable, -1 = ask every time); "not ready" is never cached; concurrent callers share one call
+  to Sablier (no thundering herd) and the shared call has its own deadline (5 s, blocking: timeout + 5 s) so one impatient client cannot cancel it.
+- Fail mode: Sablier unreachable / erroring -> `503` + `Retry-After` (fail closed, default) or proxy anyway (`FailOpen`).
+- WebSocket upgrades and clients that do not accept HTML (JSON APIs) get a plain `503` + `Retry-After` instead of the HTML waiting page; the
+  request has still woken the workload. A ready workload passes upgrades through.
+- SSRF: the URL must be http(s) without credentials/query; link-local (169.254.0.0/16 incl. 169.254.169.254, fe80::/10), `0.0.0.0/8`, multicast
+  and the Alibaba / Oracle / AWS-IPv6 metadata addresses are refused at validation *and* at dial time (after DNS resolution), redirects are not
+  followed, no environment proxy is used. Loopback and private addresses are allowed (Sablier normally runs next to the proxy). `AllowMetadataAddress` opts out.
+- Not validated: against a real Sablier server and real Docker / Swarm / Kubernetes providers. The fake Sablier in the tests follows the documented API
+  (`X-Sablier-Session-Status`, `/api/strategies/{dynamic,blocking}`), so compare the "Check connection" button's URL with your Sablier version's docs.

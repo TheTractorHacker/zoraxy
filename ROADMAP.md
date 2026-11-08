@@ -192,3 +192,12 @@ FriendlyCaptcha, counting SSO redirect failures in the auto-ban, per-user admin 
 - ✅ "New proxy rule" dialog with live upstream test and HTTPS auto-detection; the full form stays as Advanced Rule Form.
 - ✅ Quick Start hides once an instance is set up or dismissed (stored server side), "Show Quick Start again" in Ingress.
 - 📋 Per-rule request count / sparkline in the list (needs a cheap per-host aggregate), editing custom rule templates in the UI, a "create certificate" action that handles wildcard domains through DNS challenge from the dialog.
+## 13. Platform features (`feat/platform-features`)
+- ✅ **Encrypted Client Hello** (fork #235 / upstream #1319): server side ECH with HPKE key generation, rotation (newest key advertised, older keys decrypt-only for a retain
+  window), PEM import / export, per-handshake hot reload through `GetEncryptedClientHelloKeys` (kept by the per-SNI mTLS clones, also on HTTP/3), ECHConfigList + HTTPS record
+  example, DNS HTTPS record check. 📋 Automatic DNS publishing through a provider API; 📋 per-rule hostname selection; 📋 verification against real browsers.
+- ✅ **Lua scripts** (fork #88 / upstream #367): sandboxed per-rule script handler / hook (gopher-lua, step-budgeted patterns, time / heap / size limits, KV, JSON, crypto helpers),
+  admin test run. 📋 Script versions and diff, a shared library of snippets, per-script metrics.
+- ✅ **Sablier** (fork #120 / upstream #564): native dynamic / blocking strategies per rule, ready cache, fail open / closed, SSRF-safe URL. 📋 Verified only against a fake Sablier.
+- ✅ **zrok** (fork #63 / upstream #136): supervised zrok CLI behind `-allow_external_tools` (shares, reserved names on 1.x, private access, backoff, redacted logs).
+  📋 Verified only against a fake zrok binary; 📋 zrok agent mode and a Windows path.

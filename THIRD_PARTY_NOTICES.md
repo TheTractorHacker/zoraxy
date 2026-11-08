@@ -36,3 +36,10 @@ Notes required by the Apache License 2.0 section 4:
 - **github.com/dlclark/regexp2** v1.12.0 - MIT (licence text: its `LICENSE`). A .NET-style backtracking regular expression engine with
   lookahead, lookbehind and backreferences, used only when an admin enables the "advanced regex" mode of the redirect rules
   (`src/mod/dynamicproxy/redirection/advanced.go`). Every match runs under a hard timeout; MIT is compatible with AGPL-3.0.
+
+## Lua script handlers
+
+- **github.com/yuin/gopher-lua** v1.1.2 - MIT, Copyright (c) 2015 Yusuke Inuzuka. Lua 5.1 virtual machine used by the per-rule script
+  handler / hook (`src/mod/luascript`). Licence text: [gopher-lua-MIT.txt](third_party/licenses/gopher-lua-MIT.txt). The Lua pattern
+  matcher in `src/mod/luascript/lpattern.go` is an original Go port of the algorithm in the Lua 5.1 reference implementation
+  (`lstrlib.c`, MIT, Copyright (C) 1994-2012 Lua.org, PUC-Rio) with a step budget added.

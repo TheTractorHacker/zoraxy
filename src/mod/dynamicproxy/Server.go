@@ -33,6 +33,7 @@ import (
 */
 
 func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.Parent.echObserve(r)
 	if h.Parent.Option.Metrics.Enabled() {
 		var done func()
 		w, r, done = h.Parent.metricsBegin(w, r, nil)
@@ -356,6 +357,11 @@ func (h *ProxyHandler) runEndpointChain(w http.ResponseWriter, r *http.Request, 
 
 	//Static responses that sit behind authentication
 	if h.handleStaticResponses(w, r, sep, false) {
+		return true
+	}
+
+	//Lua script handler / hook and Sablier gate (platform_chain.go), both off unless configured on the rule
+	if h.handlePlatformStages(w, r, sep) {
 		return true
 	}
 
