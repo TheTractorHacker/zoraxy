@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -351,6 +352,12 @@ func newBaseTransport(opts *DpcoreOptions) *http.Transport {
 	return tr
 }
 
+// ErrResponseAborted is returned by ProxyHTTP when copying the response body failed after
+// the status line and headers were already sent to the client. The response can no longer be
+// replaced by an error page; the caller must log it and abort the connection with
+// panic(http.ErrAbortHandler) so the client sees a failed transfer, not a "complete" one.
+var ErrResponseAborted = errors.New("response aborted after headers were sent")
+
 func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request, rrr *ResponseRewriteRuleSet) (int, error) {
 	transport := p.Transport
 
@@ -605,7 +612,14 @@ func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request, rrr 
 
 	//Get flush interval in real time and start copying the request
 	flushInterval := p.getFlushInterval(req, res)
-	p.copyResponse(rw, res.Body, flushInterval)
+	if copyErr := p.copyResponse(rw, res.Body, flushInterval); copyErr != nil {
+		// The status line and headers are already on the wire. If the upstream body
+		// broke (or the client went away) ending the response normally would make a
+		// truncated transfer look complete to the client. Report it so the caller can
+		// log the request and then abort the connection (see ErrResponseAborted).
+		res.Body.Close()
+		return res.StatusCode, fmt.Errorf("%w: %v", ErrResponseAborted, copyErr)
+	}
 
 	// close now, instead of defer, to populate res.Trailer
 	res.Body.Close()

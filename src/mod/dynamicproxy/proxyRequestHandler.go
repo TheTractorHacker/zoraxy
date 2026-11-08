@@ -245,6 +245,11 @@ func (h *ProxyHandler) hostRequest(w http.ResponseWriter, r *http.Request, targe
 	//validate the error
 	var dnsError *net.DNSError
 	upstreamHostname := selectedUpstream.OriginIpOrDomain
+	if errors.Is(err, dpcore.ErrResponseAborted) {
+		//Headers are already sent: log what was served, then cut the connection so the client does not see a truncated body as complete
+		h.Parent.logRequest(r, false, statusCode, "host-http", reqHostname, upstreamHostname, target)
+		panic(http.ErrAbortHandler)
+	}
 	if err != nil {
 		if errors.As(err, &dnsError) {
 			serveProxyRequestError(w, 404, h.Parent, ErrorTemplateHostError)
@@ -394,6 +399,10 @@ func (h *ProxyHandler) vdirRequest(w http.ResponseWriter, r *http.Request, targe
 	})
 
 	var dnsError *net.DNSError
+	if errors.Is(err, dpcore.ErrResponseAborted) {
+		h.Parent.logRequest(r, false, statusCode, "vdir-http", reqHostname, target.Domain, target.parent)
+		panic(http.ErrAbortHandler)
+	}
 	if err != nil {
 		if errors.As(err, &dnsError) {
 			serveProxyRequestError(w, 404, h.Parent, ErrorTemplateHostError)
