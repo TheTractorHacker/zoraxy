@@ -42,10 +42,15 @@ Status: ✅ done · 🔧 in progress · 📋 planned
   hostname check of the siteverify response.
 
 ## 4. Authentication
-- 📋 **Authentik**: verify and document both integrations end to end, with presets:
-  forward auth (Authentik proxy outpost, `/outpost.goauthentik.io/auth/nginx`) and OIDC via the OAuth2 provider
-  (discovery URL, PKCE, group/claim to header mapping).
-- 📋 Generic OIDC hardening: discovery, PKCE, token refresh, logout, group-based route policies.
+- 🔧 **Authentik** (#78): forward auth through the proxy outpost (single application and domain level) and OIDC via the
+  OAuth2/OpenID provider, with UI presets and `docs/authentik.md`.
+  - ✅ Forward auth: outpost callback path proxied on the protected host, sign-in redirect with a server built `rd`,
+    Host preservation, `X-authentik-*` wildcard copy and spoofed header stripping, bounded timeouts, fail closed.
+  - ✅ OIDC: discovery by issuer, PKCE S256, state (browser bound) + nonce, ID token validation with cached JWKS,
+    refresh, RP-initiated logout, group allow-list, claim to header mapping, discovery test button.
+  - 📋 Verified only against fake outpost/OIDC servers so far; run the checklist in `docs/authentik.md` against a real Authentik.
+- 🔧 Generic OIDC hardening: ✅ discovery, PKCE, token refresh, logout. 📋 group-based policies per route (the
+  allow-list is currently global to the OAuth2 provider); 📋 stateless/shared sessions (see HA).
 
 ## 5. Load balancing (beyond weighted random)
 - ✅ Algorithms (#79): round robin, smooth weighted round robin, least connections, least response time, IP hash,

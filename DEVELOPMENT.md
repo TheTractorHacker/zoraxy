@@ -172,3 +172,11 @@ checks, no retries, exactly the old behaviour).
   leastconn, power of two choices, ketama ring); no third-party code was copied.
 - Tests: `go test -race ./mod/dynamicproxy/...` (distribution, ring stability, state machines with a fake clock,
   goroutine leak check, retry rules, old-config compatibility).
+
+## Authentik / OIDC SSO
+
+Step-by-step setup (forward auth and OIDC) is in [docs/authentik.md](docs/authentik.md). Code: forward auth in
+`src/mod/auth/sso/forward` (`outpost.go` for the Authentik outpost proxy), OIDC in `src/mod/auth/sso/oauth2`
+(`oidc.go` discovery/JWKS/ID token, `session.go`, `claims.go`). Tests use fake outpost / OIDC servers
+(`authentik_test.go`, `fakeidp_test.go`, `oidc_test.go`); run them with
+`go test -race ./mod/auth/...`.
