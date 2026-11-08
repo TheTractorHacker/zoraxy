@@ -48,6 +48,10 @@ type Config struct {
 	Verbal               bool
 	OfflineCheckInterval int //Check interval for offline targets in seconds (default 30)
 	OfflineCheckTimeout  int //HTTP timeout for offline target checks in seconds (default 10)
+
+	// Observer, when set, is called after every individual health check (any goroutine, may be
+	// concurrent). It feeds the notification centre; it must not block.
+	Observer func(target *Target, rec Record)
 }
 
 type Monitor struct {

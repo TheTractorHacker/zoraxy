@@ -32,7 +32,7 @@ import (
 // only; see mod/updater/api.go.
 func RegisterUpdaterAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/updater/info", updateManager.HandleInfo)
-	authRouter.HandleFunc("/api/updater/check", updateManager.HandleCheck)
+	authRouter.HandleFunc("/api/updater/check", notifyUpdaterCheckWrap(updateManager.HandleCheck))
 	authRouter.HandleFunc("/api/updater/status", updateManager.HandleStatus)
 	authRouter.HandleFunc("/api/updater/history", updateManager.HandleHistory)
 	authRouter.HandleFunc("/api/updater/start", updateManager.HandleStart)
@@ -290,6 +290,8 @@ func RegisterACMEAndAutoRenewerAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/acme/profiles/dns", acmeHandler.HandleDNSProfiles)
 	authRouter.HandleFunc("/api/acme/renewCert", acmeAutoRenewer.HandleRenewCertNow)
 	authRouter.HandleFunc("/api/notify/hooks", notifyManager.HandleHooks)
+	authRouter.HandleFunc("/api/notify/center", notifyManager.HandleCenter)
+	authRouter.HandleFunc("/api/notify/deliveries", notifyManager.HandleDeliveries)
 	/* ACME Wizard */
 	authRouter.HandleFunc("/api/acme/wizard", acmewizard.HandleGuidedStepCheck)
 }
@@ -360,7 +362,7 @@ func RegisterPluginAPIs(authRouter *auth.RouterDef) {
 
 // Register the APIs for Auth functions, due to scoping issue some functions are defined here
 func RegisterAuthAPIs(requireAuth bool, targetMux *http.ServeMux) {
-	targetMux.HandleFunc("/api/auth/login", authAgent.HandleLogin)
+	targetMux.HandleFunc("/api/auth/login", notifyLoginWrap(authAgent.HandleLogin))
 	targetMux.HandleFunc("/api/auth/logout", authAgent.HandleLogout)
 	targetMux.HandleFunc("/api/auth/checkLogin", func(w http.ResponseWriter, r *http.Request) {
 		if requireAuth {

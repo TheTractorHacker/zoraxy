@@ -28,6 +28,10 @@ type Config struct {
 	Command             CommandConfig   `json:"command"`
 	AllowPrivateTargets bool            `json:"allowPrivateTargets"`
 	ExpiryWarnDays      int             `json:"expiryWarnDays"`
+
+	// Notification centre (center.go): channels, delivery rules
+	Channels []ChannelConfig `json:"channels,omitempty"`
+	Rules    *Rules          `json:"rules,omitempty"` // nil = DefaultRules()
 }
 
 // Manager owns the hook configuration and the dispatcher.
@@ -41,6 +45,7 @@ type Manager struct {
 	cfg Config
 
 	Dispatcher *Dispatcher
+	center     *center
 }
 
 // NewManager loads (or starts empty) the config at path. commandsAllowed is the -allow_hook_commands flag.
@@ -58,6 +63,7 @@ func NewManager(path string, commandsAllowed bool, offline func() bool, logf fun
 	}
 	m.Dispatcher = NewDispatcher(m.sinks)
 	m.Dispatcher.Logf = func(f string, a ...any) { m.logf(f, a...) }
+	m.initCenter()
 	return m, nil
 }
 
@@ -65,13 +71,18 @@ func NewManager(path string, commandsAllowed bool, offline func() bool, logf fun
 func (m *Manager) CommandsAllowed() bool { return m.commandsAllowed }
 
 func (m *Manager) sinks() []Sink {
+	return append(m.baseSinks(), m.channelSinks()...)
+}
+
+// baseSinks are the webhooks and the command hook (every delivery is added to the delivery log)
+func (m *Manager) baseSinks() []Sink {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	out := []Sink{}
 	for _, w := range m.cfg.Webhooks {
-		out = append(out, &WebhookSink{Cfg: w, AllowPrivate: m.cfg.AllowPrivateTargets, Offline: m.offline})
+		out = append(out, &loggedSink{inner: &WebhookSink{Cfg: w, AllowPrivate: m.cfg.AllowPrivateTargets, Offline: m.offline}, kind: "webhook", m: m})
 	}
-	out = append(out, &CommandSink{Cfg: m.cfg.Command, Allowed: m.commandsAllowed, Logf: m.logf})
+	out = append(out, &loggedSink{inner: &CommandSink{Cfg: m.cfg.Command, Allowed: m.commandsAllowed, Logf: m.logf}, kind: "command", m: m})
 	return out
 }
 
@@ -112,7 +123,7 @@ func validEvents(list []string) ([]string, error) {
 		if e == "" {
 			continue
 		}
-		ok := false
+		ok := IsKnownEvent(e)
 		for _, k := range AllCertEvents {
 			if k == e {
 				ok = true
@@ -142,6 +153,9 @@ func (m *Manager) SaveWebhook(w WebhookConfig) (string, error) {
 		return "", err
 	}
 	w.Events = ev
+	if err := ValidateTemplate(w.Template); err != nil {
+		return "", err
+	}
 	for i := range m.cfg.Webhooks {
 		if m.cfg.Webhooks[i].ID == w.ID && w.ID != "" {
 			if w.Secret == SecretMask {
@@ -281,6 +295,7 @@ func (m *Manager) HandleHooks(w http.ResponseWriter, r *http.Request) {
 		wh.URL, _ = utils.PostPara(r, "url")
 		wh.Secret, _ = utils.PostPara(r, "secret")
 		wh.Enabled, _ = utils.PostBool(r, "enabled")
+		wh.Template, _ = utils.PostPara(r, "template")
 		id, err := m.SaveWebhook(wh)
 		if err != nil {
 			fail(err)

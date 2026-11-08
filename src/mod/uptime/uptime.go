@@ -121,6 +121,10 @@ func (m *Monitor) pingTargets(timeout time.Duration, targets []*Target, requireO
 				Latency:    latency,
 			}
 
+			if m.Config.Observer != nil {
+				m.Config.Observer(target, thisRecord)
+			}
+
 			// Handle state transitions
 			if !online && targetExistsInList(m.onlineTargets, target.ID) {
 				// Was in online list but check failed -> move to offline list

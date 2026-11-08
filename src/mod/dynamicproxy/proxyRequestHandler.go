@@ -406,6 +406,10 @@ func (router *Router) logRequest(r *http.Request, succ bool, statusCode int, for
 	// to spoof the IP recorded in the log file or the statistics collector.
 	clientIP := router.GetClientIPForEndpoint(r, endpoint)
 
+	if BlockObserver != nil && endpoint != nil && forwardType == "waf-blocked" {
+		BlockObserver(endpoint.RootOrMatchingDomain, forwardType)
+	}
+
 	// Notes: endpoint can be nil if the request has been handled before a host name can be resolved
 	// e.g. Redirection matching rule
 	if endpoint == nil || !endpoint.DisableLogging {

@@ -29,6 +29,9 @@ type WebhookConfig struct {
 	Secret  string   `json:"secret,omitempty"` // optional HMAC-SHA256 key
 	Events  []string `json:"events"`           // empty = all events
 	Enabled bool     `json:"enabled"`
+
+	// Template, when set, renders the request body instead of the default Event JSON (see RenderTemplate)
+	Template string `json:"template,omitempty"`
 }
 
 // Header names of the webhook request
@@ -180,7 +183,13 @@ func (s *WebhookSink) Deliver(ctx context.Context, ev Event) error {
 	if err := ValidateWebhookURL(s.Cfg.URL, s.AllowPrivate); err != nil {
 		return err
 	}
-	body, err := json.Marshal(ev)
+	var body []byte
+	var err error
+	if s.Cfg.Template != "" {
+		body, err = RenderTemplate(s.Cfg.Template, ev)
+	} else {
+		body, err = json.Marshal(ev)
+	}
 	if err != nil {
 		return err
 	}

@@ -419,6 +419,7 @@ func ReverseProxyInit() {
 			OnlineStateNotify: loadBalancer.NotifyHostOnlineState, //Notify the load balancer for online state
 			Logger:            SystemWideLogger,                   //Logger
 			Verbal:            *development_build,                 //Enable verbose logging in dev mode
+			Observer:          uptimeNotifyObserver,               //Debounced up/down notifications, see notifyevents.go
 		})
 
 		SystemWideLogger.Println("Uptime Monitor background service started")
