@@ -54,6 +54,9 @@ func NewAuthRouter(db *database.Database, log *logger.Logger) *AuthRouter {
 	//Load options from database
 	options := AuthRouterOptions{}
 	db.Read(DB_NAME, "options", &options)
+	if options.ConfigFolderPath == LegacyConfigFolder || options.ConfigFolderPath == "" {
+		options.ConfigFolderPath = DefaultConfigFolder
+	}
 
 	authRouter := &AuthRouter{
 		Logger:             log,
