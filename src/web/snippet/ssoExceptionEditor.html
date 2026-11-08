@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <!-- Notes: This should be opened in its original path -->
+        <meta charset="utf-8">
+        <meta name="zoraxy.csrf.Token" content="{{.csrfToken}}">
+        <link rel="stylesheet" href="../script/semantic/semantic.min.css">
+        <script src="../script/jquery-3.6.0.min.js"></script>
+        <script src="../script/semantic/semantic.min.js"></script>
+        <script src="../script/utils.js"></script>
+    </head>
+    <body>
+        <link rel="stylesheet" href="../darktheme.css">
+        <script src="../script/darktheme.js"></script>
+        <br>
+        <div class="ui container">
+            <h3 class="ui header">Forward Auth / OAuth2 - Exception Rules</h3>
+            <p>Skip the <b>Forward Auth</b> or <b>OAuth2</b> login check for specific <b>paths</b> or <b>IP / CIDR</b> ranges of this proxy rule, for example webhooks, health checks or a trusted office network. A request that matches any rule below reaches the upstream without authentication.</p>
+
+            <table class="ui basic very compact unstackable celled table">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Pattern / CIDR</th>
+                        <th>Match</th>
+                        <th>Case</th>
+                        <th>Remove</th>
+                    </tr>
+                </thead>
+                <tbody id="ssoExceptionRulesList">
+                    <tr>
+                        <td colspan="5"><i class="ui green circle check icon"></i> No Exception Rule</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="ui form" style="margin-top: 1em;">
+                <div class="fields">
+                    <div class="field">
+                        <label>Exception Type</label>
+                        <select class="ui fluid dropdown" id="ssoExceptionType">
+                            <option value="path">Path</option>
+                            <option value="ip">IP / CIDR</option>
+                        </select>
+                    </div>
+                    <div class="field" id="ssoPathField">
+                        <label>Path</label>
+                        <input type="text" id="ssoPathPattern" placeholder="/api/webhooks" autocomplete="off">
+                    </div>
+                    <div class="field" id="ssoModeField">
+                        <label>Match</label>
+                        <select class="ui fluid dropdown" id="ssoPathMode">
+                            <option value="prefix">Prefix (whole path segments)</option>
+                            <option value="exact">Exact path</option>
+                            <option value="regex">Regular expression</option>
+                        </select>
+                    </div>
+                    <div class="field" id="ssoCaseField" style="padding-top: 1.6em;">
+                        <div class="ui checkbox">
+                            <input type="checkbox" id="ssoNoCase">
+                            <label>Ignore case</label>
+                        </div>
+                    </div>
+                    <div class="field" id="ssoIPField" style="display: none;">
+                        <label>IP / CIDR</label>
+                        <input type="text" id="ssoIPPattern" placeholder="192.168.1.0/24" autocomplete="off">
+                    </div>
+                </div>
+                <button class="ui basic button" onclick="addSsoExceptionRule();" style="margin-top: 0.6em;">
+                    <i class="yellow add icon"></i> Add Exception Rule
+                </button>
+            </div>
+
+            <div class="ui basic message" style="margin-top: 1.4em;">
+                <h4>How exception rules work</h4>
+                <ul>
+                    <li><b>Prefix:</b> <code>/api/webhooks</code> matches <code>/api/webhooks</code> and everything below it, but not <code>/api/webhooks-old</code>. The root prefix <code>/</code> is refused.</li>
+                    <li><b>Exact:</b> only that one path (a trailing slash is ignored).</li>
+                    <li><b>Regex:</b> a Go regular expression that must match the <b>whole</b> path, e.g. <code>/api/v[0-9]+/public/.*</code>.</li>
+                    <li><b>IP / CIDR:</b> compared with the client address as seen by the access rule of this proxy rule. Proxy headers such as <code>X-Forwarded-For</code> are only used when the connection comes from a <b>trusted proxy</b> (Trusted Proxies list) and the access rule is set to trust them; otherwise only the TCP peer address counts.</li>
+                    <li>Paths are compared case sensitively unless you tick <i>Ignore case</i>. Requests with unusual paths (<code>..</code>, <code>//</code>, encoded slashes or dots, <code>;</code>, <code>\</code>, double encoding) never match a path rule and are sent through the normal login.</li>
+                    <li>Identity headers that the auth provider would normally set (for example <code>X-authentik-*</code> or mapped OAuth2 claims) are removed from requests that skip the login, so the upstream can never see a forged identity.</li>
+                </ul>
+            </div>
+            <br><br>
+        </div>
+
+        <script>
+            let editingEndpoint = {};
+            if (window.location.hash.length > 1) {
+                try {
+                    editingEndpoint = JSON.parse(decodeURIComponent(window.location.hash.substr(1)));
+                } catch (ex) {
+                    console.log("Unable to load endpoint data from hash", ex);
+                }
+            }
+
+            $('#ssoExceptionType').dropdown({
+                onChange: function(value) {
+                    if (value === 'ip') {
+                        $('#ssoPathField, #ssoModeField, #ssoCaseField').hide();
+                        $('#ssoIPField').show();
+                    } else {
+                        $('#ssoPathField, #ssoModeField, #ssoCaseField').show();
+                        $('#ssoIPField').hide();
+                    }
+                }
+            });
+            $('#ssoExceptionType').dropdown('set selected', 'path');
+            $('#ssoPathMode').dropdown();
+
+            function loadSsoExceptionRules() {
+                if (!editingEndpoint.ep) return;
+                $.get('/api/proxy/auth/exceptions/list?ep=' + encodeURIComponent(editingEndpoint.ep), function(data) {
+                    if (data.error != undefined) {
+                        parent.msgbox(data.error, false, 5000);
+                        return;
+                    }
+                    renderSsoExceptionRules(data);
+                });
+            }
+
+            function renderSsoExceptionRules(rules) {
+                let tbody = $('#ssoExceptionRulesList');
+                tbody.empty();
+                if (!rules || rules.length === 0) {
+                    tbody.html('<tr><td colspan="5"><i class="ui green circle check icon"></i> No Exception Rule</td></tr>');
+                    return;
+                }
+                rules.forEach(function(rule) {
+                    let isPath = rule.RuleType === 0;
+                    let pattern = isPath ? rule.PathPattern : rule.CIDR;
+                    let mode = isPath ? (rule.MatchMode || 'prefix') : '<span style="color:#aaa;">N/A</span>';
+                    let nocase = isPath ? (rule.CaseInsensitive ? 'ignored' : 'sensitive') : '<span style="color:#aaa;">N/A</span>';
+                    let btn = $('<button class="ui red basic mini circular icon button"><i class="red times icon"></i></button>');
+                    btn.on('click', function(){ removeSsoExceptionRule(rule); });
+                    let tr = $('<tr></tr>');
+                    tr.append($('<td></td>').text(isPath ? 'Path' : 'IP / CIDR'));
+                    tr.append($('<td></td>').append($('<code></code>').text(pattern)));
+                    tr.append($('<td></td>').html(mode));
+                    tr.append($('<td></td>').html(nocase));
+                    tr.append($('<td></td>').append(btn));
+                    tbody.append(tr);
+                });
+            }
+
+            function addSsoExceptionRule() {
+                let data = { ep: editingEndpoint.ep };
+                if ($('#ssoExceptionType').val() === 'path') {
+                    let pattern = $('#ssoPathPattern').val().trim();
+                    if (!pattern) {
+                        parent.msgbox("Path cannot be empty", false, 5000);
+                        return;
+                    }
+                    data.type = 0;
+                    data.pattern = pattern;
+                    data.mode = $('#ssoPathMode').val();
+                    data.nocase = $('#ssoNoCase').is(':checked');
+                } else {
+                    let cidr = $('#ssoIPPattern').val().trim();
+                    if (!cidr) {
+                        parent.msgbox("IP / CIDR cannot be empty", false, 5000);
+                        return;
+                    }
+                    data.type = 1;
+                    data.cidr = cidr;
+                }
+                $.cjax({
+                    url: '/api/proxy/auth/exceptions/add',
+                    method: 'POST',
+                    data: data,
+                    success: function(resp) {
+                        if (resp.error) {
+                            parent.msgbox(resp.error, false, 6000);
+                        } else {
+                            $('#ssoPathPattern').val('');
+                            $('#ssoIPPattern').val('');
+                            parent.msgbox("Exception rule added", true);
+                            loadSsoExceptionRules();
+                        }
+                    }
+                });
+            }
+
+            function removeSsoExceptionRule(rule) {
+                let data = { ep: editingEndpoint.ep, type: rule.RuleType };
+                if (rule.RuleType === 0) {
+                    data.pattern = rule.PathPattern;
+                    data.mode = rule.MatchMode;
+                    data.nocase = rule.CaseInsensitive;
+                } else {
+                    data.cidr = rule.CIDR;
+                }
+                $.cjax({
+                    url: '/api/proxy/auth/exceptions/delete',
+                    method: 'POST',
+                    data: data,
+                    success: function(resp) {
+                        if (resp.error) {
+                            parent.msgbox(resp.error, false, 5000);
+                        } else {
+                            parent.msgbox("Exception rule removed", true);
+                            loadSsoExceptionRules();
+                        }
+                    }
+                });
+            }
+
+            loadSsoExceptionRules();
+        </script>
+    </body>
+</html>

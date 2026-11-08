@@ -107,6 +107,7 @@ func RegisterHTTPProxyAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/proxy/auth/zorxauth/exceptions/list", ListProxyZorxAuthExceptionRules)
 	authRouter.HandleFunc("/api/proxy/auth/zorxauth/exceptions/add", AddProxyZorxAuthExceptionRule)
 	authRouter.HandleFunc("/api/proxy/auth/zorxauth/exceptions/delete", RemoveProxyZorxAuthExceptionRule)
+	RegisterAuthExceptionAPIs(authRouter)
 }
 
 // Register the APIs for TLS / SSL certificate management functions
@@ -180,6 +181,7 @@ func RegisterAccessRuleAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/access/create", handleCreateAccessRule)
 	authRouter.HandleFunc("/api/access/remove", handleRemoveAccessRule)
 	authRouter.HandleFunc("/api/access/update", handleUpadateAccessRule)
+	RegisterBlocklistImportAPIs(authRouter)
 	/* Blacklist */
 	authRouter.HandleFunc("/api/blacklist/list", handleListBlacklisted)
 	authRouter.HandleFunc("/api/blacklist/country/add", handleCountryBlacklistAdd)
@@ -464,6 +466,7 @@ func initAPIs(targetMux *http.ServeMux) {
 	RegisterNetworkUtilsAPIs(authRouter)
 	RegisterUpdaterAPIs(authRouter)
 	RegisterClusterAPIs(authRouter)
+	RegisterMetricsAPIs(authRouter)
 	RegisterACMEAndAutoRenewerAPIs(authRouter)
 	RegisterStaticWebServerAPIs(authRouter)
 	RegisterPluginAPIs(authRouter)

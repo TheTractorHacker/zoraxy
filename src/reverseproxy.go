@@ -331,6 +331,7 @@ func ReverseProxyInit() {
 		ZorxAuthAgentRouter: zorxAuthRouter,
 		LoadBalancer:        loadBalancer,
 		PluginManager:       pluginManager,
+		Metrics:             metricsRegistry,
 		/* Timeouts */
 		ReadHeaderTimeout: int64(readHeaderTimeout),
 		WriteTimeout:      int64(writeTimeout),

@@ -401,3 +401,21 @@ func (ar *AuthRouter) handle500Error(w http.ResponseWriter, err error, message s
 func (ar *AuthRouter) logOptions() {
 	ar.options.Logger.PrintAndLog(LogTitle, fmt.Sprintf("Forward Authz Options -> Address: %s, Response Headers: %s, Response Client Headers: %s, Request Headers: %s, Request Included Cookies: %s, Request Excluded Cookies: %s, Request Include Body: %t, Use X-Original Headers: %t, Ignored Paths: %s, Outpost URL: %s, Start Redirect: %q, Preserve Host: %t", ar.options.Address, strings.Join(ar.options.ResponseHeaders, ";"), strings.Join(ar.options.ResponseClientHeaders, ";"), strings.Join(ar.options.RequestHeaders, ";"), strings.Join(ar.options.RequestIncludedCookies, ";"), strings.Join(ar.options.RequestExcludedCookies, ";"), ar.options.RequestIncludeBody, ar.options.UseXOriginalHeaders, strings.Join(ar.options.IgnoredPaths, ";"), ar.options.OutpostURL, ar.options.StartRedirect, ar.options.PreserveHost), nil)
 }
+
+// ScrubIdentityHeaders removes every identity header a client could have supplied (the headers the
+// auth server is allowed to set, plus X-authentik-* in Authentik mode). It is used for requests
+// that skip the auth check through an exception rule, so the upstream can never mistake a
+// forged header for an authenticated identity.
+func (ar *AuthRouter) ScrubIdentityHeaders(r *http.Request) {
+	if ar == nil || r == nil {
+		return
+	}
+	if ar.options.OutpostURL != "" {
+		for name := range r.Header {
+			if hasPrefixFold(name, "X-authentik-") {
+				delete(r.Header, name)
+			}
+		}
+	}
+	headerReplaceIncluded(nil, r.Header, ar.options.ResponseHeaders)
+}

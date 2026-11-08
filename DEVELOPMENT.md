@@ -563,3 +563,71 @@ Plugins can act as middleware / WAF style filters. User-facing documentation is 
   on the admin router only (never register it on the plugin REST router). fail_closed needs manifest AND consent.
 - **Tests**: `go test -race ./mod/plugins/... ./mod/dynamicproxy/...`. `mod/plugins/hooks_test.go` uses `httptest` servers as fake
   plugin processes; `mod/dynamicproxy/plugin_hooks_test.go` drives `ProxyHandler.ServeHTTP` end to end.
+
+## Prometheus metrics
+
+Package `src/mod/metrics` (hand-rolled text exposition 0.0.4, no new dependency); glue in `src/metrics.go`;
+request hooks in `src/mod/dynamicproxy/metrics_hook.go`.
+
+* **Off by default.** `-metrics` records metrics and serves them on the admin API `GET /api/metrics` (admin auth, same as every
+  `/api/*` route). `-metrics_port :9090` (implies `-metrics`) additionally serves `GET /metrics` on a separate listener; protect it
+  with a bearer token: `-metrics_token`, env `ZORAXY_METRICS_TOKEN` or `{"token":"..."}` in `<conf>/metrics.json` (the flag is visible
+  in the process list, prefer env/file). A non-loopback listener without a token logs a warning. Disabled = one nil check + atomic load
+  per request; `/api/metrics` answers 503.
+* **Hooks** (all behind `Option.Metrics.Enabled()`): `ProxyHandler.ServeHTTP` and `handleNonTLSRequest` wrap the response writer
+  (Flusher, Hijacker and `Unwrap` are preserved) for status/bytes/duration/in-flight; `handleRateLimit`, `handleAccessRouting` and the
+  CAPTCHA gating count events. Upstream state, WAF counters, certificate expiry, cluster role and build info are pulled at scrape time.
+* **Cardinality:** `endpoint` is the configured rule name (`_default` for the default site), capped at 512 distinct values
+  (overflow folds into `__other__`), event vectors capped at 1024 series, WAF rules limited to the top 200. Paths, hosts from headers
+  and client IPs are never labels.
+* **Series:** `zoraxy_http_requests_total{endpoint,status_class,method}`, `zoraxy_http_request_duration_seconds` (histogram),
+  `zoraxy_http_requests_in_flight`, `zoraxy_http_request_bytes_total`, `zoraxy_http_response_bytes_total`,
+  `zoraxy_upstream_{up,in_flight,ewma_seconds,ejections_total}{endpoint,upstream}`, `zoraxy_waf_{events_total,rule_hits_total,blocked_total}`,
+  `zoraxy_captcha_{challenges,verified,failed}_total`, `zoraxy_ratelimit_rejected_total`, `zoraxy_access_blocked_total`,
+  `zoraxy_tls_certificate_expiry_days{certificate,cn}`, `zoraxy_build_info`, `zoraxy_uptime_seconds`, `zoraxy_cluster_role`,
+  `zoraxy_cluster_snapshot_version`.
+* **Tests:** `go test -race ./mod/metrics ./mod/dynamicproxy -run Metrics`.
+
+## Bulk IP blocklist import
+
+Package `src/mod/access/blocklistimport` (parser, fetcher, source manager + scheduler), additive helpers in
+`src/mod/access/bulk.go` (`BulkEditIPList`: one copy, one swap, one config write instead of one per entry), admin API in
+`src/blocklistimport.go`, UI in `src/web/components/access.html` ("Bulk import" accordion on the IP blacklist and whitelist tabs).
+
+* **Formats:** one entry per line, IPv4 / IPv6 / CIDR. `#` or `;` at line start = comment; text after the address (whitespace, `,`, `;`,
+  `#` separated) is the comment, so the first column of a CSV works. Entries are canonicalised (`10.1.2.3/8` -> `10.0.0.0/8`, `/32` ->
+  host, IPv4-mapped IPv6 -> IPv4). `/0`, `0.0.0.0`, `::`, scope ids and wildcards are rejected (use CIDR). Duplicates (inside the input
+  and against the list) and invalid lines are reported with line numbers; counts are exact, the lists are capped at 500 each.
+  Limits: 1M entries, 4 KiB per line, 32 MiB per upload/download. Comments are stripped of markup (parts of the UI render them raw).
+* **Dry run:** `POST /api/access/import/preview` returns the same report as `/apply` without changing anything.
+* **URL sources:** https only, no credentials in the URL, no proxy. Every connection (also each redirect hop, max 3, https only) is
+  resolved by our own dialer which refuses the target if ANY answer is non-public (loopback, RFC1918, link-local incl. 169.254.169.254,
+  CGNAT, ULA, multicast, NAT64/6to4, IPv4-mapped...) and then dials the validated IP directly (no DNS rebinding window). 30 s total
+  timeout, 32 MiB cap, comments in remote files are ignored.
+* **Scheduled refresh:** sources live in `<conf>/blocklist_sources.json` (id, rule, list, url, interval 15 min - 7 days, state). Entries a
+  source adds carry the comment prefix `[src:<id>] `; a refresh removes only entries carrying exactly that prefix and no longer in the
+  download, adds new ones, and leaves everything else (manual entries, other sources, entries that were added manually first) alone.
+  A download with zero valid entries never wipes a source (`ErrWouldEmpty`); errors keep the old entries and are shown in the UI.
+  Caveat: the tag is a comment convention, an admin typing `[src:<id>]` by hand could make an entry refreshable.
+* **Performance:** 200k entries parse and import in about a second (3 s under -race) (test: `TestLargeImport200k`). Request-time matching is the job of the
+  `mod/access` lookup (`IsIPBlacklisted`); the admin UI renders at most 1000 rows of a list (rest still enforced).
+* **Tests:** `go test -race ./mod/access/... ` (SSRF tests use an httptest TLS server plus a stub resolver / dialer).
+
+## Forward Auth / OAuth2 exception rules
+
+Per proxy rule, `AuthenticationProvider.ExternalAuthExceptionRules []*AuthExceptionRule` (type in `mod/dynamicproxy/typedef.go`, matching and
+validation in `mod/dynamicproxy/authexceptions.go`, API in `src/authexceptions.go`, UI `web/snippet/ssoExceptionEditor.html` opened from the
+"Forward Auth / OAuth2 Exceptions" button of the proxy rule editor). One list serves both providers; ZorxAuth and Basic Auth keep their own
+rule lists and matchers (unchanged). `handleAuthProviderRouting` consults the list before calling the provider.
+
+* Rule = path (`prefix` on segment boundaries, `exact`, or `regex` that must match the whole normalised path; optional ignore-case) or an
+  IP / CIDR. Any matching rule skips the SSO check. `/` as prefix and `/0` CIDRs are refused.
+* **Client IP** is `Router.GetClientIPForEndpoint` (trusted-proxy aware). Unlike the older Basic/ZorxAuth rules there is no per-rule
+  "trust proxy headers" flag: headers are only honoured when the access rule has `TrustProxyHeadersOnly` and the peer is in the trusted
+  proxy list. (Existing Basic/ZorxAuth rules with `UseTrustedProxy=true` still read the raw headers, see the warning in their UI.)
+* **Fail-closed paths:** a path rule only applies to a request target that is already canonical. Dot segments, `//`, anything that decodes
+  into them (`%2e%2e`, `%2f`), `;` path parameters (`/public/..;/admin`), `\`, control characters and a `%` left after one decoding round
+  (double encoding) never match, the normal SSO check runs instead.
+* Requests that skip SSO get the provider's identity headers scrubbed (`ScrubIdentityHeaders` on the forward auth and OAuth2 routers:
+  configured response headers, `X-authentik-*` in Authentik mode, mapped OAuth2 claim headers).
+* Tests: `go test -race ./mod/dynamicproxy -run 'AuthException|CanonicalException|ForwardAuthException|OAuth2Exceptions'`.

@@ -348,6 +348,7 @@
                         <div class="item">CIDR String (e.g. 128.32.0.1/16)</div>
                     </div>
                 </div>
+                <div class="bulkImportContainer" data-list="blacklist"></div>
                 <table class="ui unstackable basic celled table">
                     <thead>
                     <tr>
@@ -684,6 +685,7 @@
                         <div class="item">CIDR String (e.g. 128.32.0.1/16)</div>
                     </div>
                 </div>
+                <div class="bulkImportContainer" data-list="whitelist"></div>
                 <table class="ui unstackable basic celled table">
                     <thead>
                     <tr>
@@ -916,6 +918,12 @@
                 </tr>
                 `);
             } else {
+                let totalBlacklistIp = data.length;
+                if (totalBlacklistIp > BULK_LIST_RENDER_LIMIT) {
+                    //Large (imported) lists: render only the first part, the rest is still enforced
+                    data = data.slice().sort().slice(0, BULK_LIST_RENDER_LIMIT);
+                    $('#blacklistIpTable').append(`<tr><td colspan="2"><i class="info circle icon"></i> Showing ${BULK_LIST_RENDER_LIMIT} of ${totalBlacklistIp} entries. All entries are enforced.</td></tr>`);
+                }
                 $.each(data, function(index, ip) {
                     let icon = "globe icon";
                     if (isLAN(ip)){
@@ -1027,6 +1035,11 @@
                 </tr>
                 `);
             } else {
+                let totalWhitelistIp = data.length;
+                if (totalWhitelistIp > BULK_LIST_RENDER_LIMIT) {
+                    data = data.slice().sort(function(a, b){ return a.IP < b.IP ? -1 : (a.IP > b.IP ? 1 : 0); }).slice(0, BULK_LIST_RENDER_LIMIT);
+                    $('#whitelistIpTable').append(`<tr><td colspan="3"><i class="info circle icon"></i> Showing ${BULK_LIST_RENDER_LIMIT} of ${totalWhitelistIp} entries. All entries are enforced.</td></tr>`);
+                }
                 $.each(data, function(index, ipEntry) {
                     let ip = ipEntry.IP;
                     let icon = "globe icon";
@@ -1677,6 +1690,226 @@
     // Scope to this page's accordion only; .advanceSettings is reused by
     // other webmin components loaded dynamically via ajax.
     $("#accessAdvanceSettings").accordion();
+
+
+    /*
+        Bulk import of IP / CIDR lists (pasted text, uploaded TXT/CSV or an https URL),
+        with dry run report and URL sources with scheduled refresh.
+    */
+    var BULK_LIST_RENDER_LIMIT = 1000;
+
+    function bulkEsc(s){
+        return $("<div>").text(s === undefined || s === null ? "" : String(s)).html();
+    }
+
+    function mountBulkImport(){
+        $(".bulkImportContainer").each(function(){
+            let list = $(this).attr("data-list");
+            let colour = list == "blacklist" ? "red" : "green";
+            $(this).html(`
+            <div class="ui accordion bulkImportAccordion" style="margin-bottom: 1em;">
+                <div class="title"><i class="dropdown icon"></i> Bulk import (paste, TXT / CSV file or URL)</div>
+                <div class="content">
+                    <div class="ui form">
+                        <div class="field">
+                            <label>Paste entries (one IP address or CIDR per line, <code>#</code> or <code>;</code> start a comment)</label>
+                            <textarea rows="5" class="bulkText" placeholder="203.0.113.0/24&#10;198.51.100.7  # scanner&#10;2001:db8::/32"></textarea>
+                        </div>
+                        <div class="two fields">
+                            <div class="field">
+                                <label>Or upload a TXT / CSV file</label>
+                                <input type="file" class="bulkFile" accept=".txt,.csv,.list,.ipset,.netset,text/plain,text/csv">
+                            </div>
+                            <div class="field">
+                                <label>Or download from an https URL (public hosts only)</label>
+                                <input type="text" class="bulkUrl" placeholder="https://example.com/blocklist.txt">
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label>Comment for imported entries (optional)</label>
+                            <input type="text" class="bulkComment" placeholder="e.g. spamhaus drop">
+                        </div>
+                        <button class="ui basic button bulkPreviewBtn"><i class="search icon"></i> Preview (dry run)</button>
+                        <button class="ui basic ${colour} button bulkApplyBtn"><i class="upload icon"></i> Import now</button>
+                        <button class="ui basic button bulkSourceBtn" title="Keep this URL as a source that is refreshed on a schedule. Only the entries it added are replaced; manual entries are never touched."><i class="sync icon"></i> Save URL as scheduled source</button>
+                        <select class="ui compact dropdown bulkInterval" style="margin-left: 0.5em; padding: 0.6em;">
+                            <option value="0">manual refresh</option>
+                            <option value="60">every hour</option>
+                            <option value="360">every 6 hours</option>
+                            <option value="1440" selected>every day</option>
+                            <option value="10080">every week</option>
+                        </select>
+                    </div>
+                    <div class="bulkReport" style="margin-top: 1em;"></div>
+                    <h5 class="ui header">URL sources</h5>
+                    <div class="bulkSources"></div>
+                </div>
+            </div>`);
+        });
+        $(".bulkImportAccordion").accordion({
+            onOpen: function(){ refreshBulkSources(); }
+        });
+        $(".bulkImportContainer").on("click", ".bulkPreviewBtn", function(){ runBulkImport($(this).closest(".bulkImportContainer"), true); });
+        $(".bulkImportContainer").on("click", ".bulkApplyBtn", function(){ runBulkImport($(this).closest(".bulkImportContainer"), false); });
+        $(".bulkImportContainer").on("click", ".bulkSourceBtn", function(){ addBulkSource($(this).closest(".bulkImportContainer")); });
+        $(".bulkImportContainer").on("click", ".bulkSrcRefresh", function(){ bulkSourceAction("refresh", $(this).attr("sid")); });
+        $(".bulkImportContainer").on("click", ".bulkSrcToggle", function(){
+            bulkSourceAction("update", $(this).attr("sid"), {interval: $(this).attr("interval"), enabled: $(this).attr("enabled") == "true" ? "false" : "true"});
+        });
+        $(".bulkImportContainer").on("click", ".bulkSrcRemove", function(){
+            let sid = $(this).attr("sid");
+            let removeEntries = confirm("Also remove the entries this source added? (OK = remove them, Cancel = keep them as manual entries)");
+            bulkSourceAction("remove", sid, {removeEntries: removeEntries ? "true" : "false"});
+        });
+    }
+
+    function renderBulkIssues(title, issues, total){
+        if (!issues || issues.length == 0) return "";
+        let rows = issues.slice(0, 100).map(function(i){
+            return `<tr><td>${bulkEsc(i.line)}</td><td><code>${bulkEsc(i.text)}</code></td><td>${bulkEsc(i.reason)}</td></tr>`;
+        }).join("");
+        let more = total > Math.min(issues.length, 100) ? `<div class="ui tiny message">Showing the first ${Math.min(issues.length, 100)} of ${bulkEsc(total)}</div>` : "";
+        return `<details><summary>${bulkEsc(title)} (${bulkEsc(total)})</summary>
+            <table class="ui very compact small celled table"><thead><tr><th>Line</th><th>Text</th><th>Reason</th></tr></thead><tbody>${rows}</tbody></table>${more}</details>`;
+    }
+
+    function showBulkReport(container, rep, applied){
+        let html = `<div class="ui ${applied ? "positive" : "info"} message">
+            <div class="header">${applied ? "Import finished" : "Dry run (nothing was changed)"}</div>
+            <ul class="ui list">
+                <li><b>${bulkEsc(rep.accepted)}</b> ${applied ? "added" : "would be added"}</li>
+                <li><b>${bulkEsc(rep.alreadyPresent)}</b> already in the list</li>
+                <li><b>${bulkEsc(rep.duplicates)}</b> duplicates inside the input</li>
+                <li><b>${bulkEsc(rep.invalid)}</b> invalid lines (of ${bulkEsc(rep.lines)} lines read)</li>
+                ${rep.removed ? `<li><b>${bulkEsc(rep.removed)}</b> stale entries of this source removed</li>` : ""}
+                <li>List size: ${bulkEsc(rep.listSizeBefore)} &rarr; ${bulkEsc(rep.listSizeAfter)}</li>
+            </ul></div>`;
+        html += renderBulkIssues("Invalid lines", rep.invalidIssues, rep.invalid);
+        html += renderBulkIssues("Duplicates inside the input", rep.duplicateIssues, rep.duplicates);
+        html += renderBulkIssues("Already in the list", rep.presentIssues, rep.alreadyPresent);
+        container.find(".bulkReport").html(html);
+    }
+
+    function bulkFormData(container, list){
+        let fd = new FormData();
+        fd.append("id", currentEditingAccessRule);
+        fd.append("list", list);
+        fd.append("comment", container.find(".bulkComment").val());
+        let url = container.find(".bulkUrl").val().trim();
+        let text = container.find(".bulkText").val();
+        let file = container.find(".bulkFile")[0].files[0];
+        if (url != "") { fd.append("url", url); }
+        else if (text.trim() != "") { fd.append("text", text); }
+        else if (file) { fd.append("file", file); }
+        else { return null; }
+        return fd;
+    }
+
+    function runBulkImport(container, dryRun){
+        let list = container.attr("data-list");
+        let fd = bulkFormData(container, list);
+        if (fd == null){
+            msgbox("Paste some entries, choose a file or enter a URL first", false, 5000);
+            return;
+        }
+        if (!dryRun && !confirm("Import these entries into the " + list + " of this access rule?")) return;
+        container.find("button").addClass("disabled");
+        container.find(".bulkReport").html('<div class="ui active inline loader"></div>');
+        $.cjax({
+            url: dryRun ? "/api/access/import/preview" : "/api/access/import/apply",
+            type: "POST", data: fd, processData: false, contentType: false,
+            success: function(rep){
+                container.find("button").removeClass("disabled");
+                if (rep.error !== undefined){
+                    container.find(".bulkReport").html(`<div class="ui negative message">${bulkEsc(rep.error)}</div>`);
+                    return;
+                }
+                showBulkReport(container, rep, !dryRun);
+                if (!dryRun){
+                    if (list == "blacklist") { initIpBanTable(); } else { initIpWhitelistTable(); }
+                }
+            },
+            error: function(){
+                container.find("button").removeClass("disabled");
+                container.find(".bulkReport").html('<div class="ui negative message">Request failed</div>');
+            }
+        });
+    }
+
+    function addBulkSource(container){
+        let list = container.attr("data-list");
+        let url = container.find(".bulkUrl").val().trim();
+        if (url == ""){
+            msgbox("Enter the https URL of the list first", false, 5000);
+            return;
+        }
+        $.cjax({
+            url: "/api/access/import/source/add",
+            type: "POST",
+            data: {id: currentEditingAccessRule, list: list, url: url, name: container.find(".bulkComment").val() || url,
+                   interval: container.find(".bulkInterval").val(), enabled: container.find(".bulkInterval").val() != "0"},
+            success: function(resp){
+                if (resp.error !== undefined){
+                    msgbox(resp.error, false, 8000);
+                    return;
+                }
+                if (resp.refreshError){
+                    msgbox("Source saved, but the first download failed: " + resp.refreshError, false, 10000);
+                } else if (resp.report){
+                    showBulkReport(container, resp.report, true);
+                }
+                refreshBulkSources();
+                if (list == "blacklist") { initIpBanTable(); } else { initIpWhitelistTable(); }
+            }
+        });
+    }
+
+    function bulkSourceAction(action, sid, extra){
+        $.cjax({
+            url: "/api/access/import/source/" + action,
+            type: "POST",
+            data: Object.assign({sid: sid}, extra || {}),
+            success: function(resp){
+                if (resp.error !== undefined){
+                    msgbox(resp.error, false, 8000);
+                } else if (action == "refresh" || action == "remove"){
+                    initIpBanTable();
+                    initIpWhitelistTable();
+                }
+                refreshBulkSources();
+            }
+        });
+    }
+
+    function refreshBulkSources(){
+        $.get("/api/access/import/sources?id=" + encodeURIComponent(currentEditingAccessRule), function(sources){
+            $(".bulkImportContainer").each(function(){
+                let list = $(this).attr("data-list");
+                let mine = (sources || []).filter(function(s){ return s.list == list; });
+                if (mine.length == 0){
+                    $(this).find(".bulkSources").html('<div class="ui tiny message">No URL sources for this list.</div>');
+                    return;
+                }
+                let rows = mine.map(function(s){
+                    let when = s.lastSuccess ? new Date(s.lastSuccess * 1000).toLocaleString() : "never";
+                    let sched = s.intervalMinutes == 0 ? "manual" : (s.enabled ? "every " + s.intervalMinutes + " min" : "paused");
+                    let err = s.lastError ? `<br><span style="color:#b00;">${bulkEsc(s.lastError)}</span>` : "";
+                    return `<tr>
+                        <td><b>${bulkEsc(s.name)}</b><br><small>${bulkEsc(s.url)}</small>${err}</td>
+                        <td>${bulkEsc(s.entryCount)}</td>
+                        <td>${bulkEsc(sched)}<br><small>last ok: ${bulkEsc(when)}</small></td>
+                        <td>
+                            <button class="ui mini icon basic button bulkSrcRefresh" sid="${bulkEsc(s.id)}" title="Refresh now"><i class="sync icon"></i></button>
+                            ${s.intervalMinutes > 0 ? `<button class="ui mini icon basic button bulkSrcToggle" sid="${bulkEsc(s.id)}" interval="${bulkEsc(s.intervalMinutes)}" enabled="${s.enabled}" title="Pause / resume schedule"><i class="${s.enabled ? "pause" : "play"} icon"></i></button>` : ""}
+                            <button class="ui mini icon basic red button bulkSrcRemove" sid="${bulkEsc(s.id)}" title="Remove source"><i class="trash icon"></i></button>
+                        </td></tr>`;
+                }).join("");
+                $(this).find(".bulkSources").html(`<table class="ui very compact small celled table"><thead><tr><th>Source</th><th>Entries</th><th>Schedule</th><th></th></tr></thead><tbody>${rows}</tbody></table>`);
+            });
+        });
+    }
+
+    mountBulkImport();
 
     //Bind on tab switch events
     tabSwitchEventBind["access"] = function(){

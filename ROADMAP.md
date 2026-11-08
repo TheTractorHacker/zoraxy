@@ -31,6 +31,8 @@ Status: ✅ done · 🔧 in progress · 📋 planned
   SANs for hostname, localhost and local IPs) stored under `conf/webui/`, or a user-supplied cert, or any
   cert managed by Zoraxy/ACME. Plain-HTTP requests on the same port get redirected to HTTPS. Secure cookies
   and HSTS when enabled. Plugins keep a loopback channel so nothing breaks.
+- ✅ Bulk IP blocklist / whitelist import (paste, TXT/CSV upload, https URL with SSRF protection, dry run report,
+  scheduled refresh of URL sources that only replaces the entries it added; upstream #512 / #661).
 - 📋 Admin login hardening: rate limiting / lockout on login, optional TOTP for the admin account.
 
 ## 3. Bot protection and CAPTCHA pages
@@ -49,6 +51,8 @@ Status: ✅ done · 🔧 in progress · 📋 planned
   - ✅ OIDC: discovery by issuer, PKCE S256, state (browser bound) + nonce, ID token validation with cached JWKS,
     refresh, RP-initiated logout, group allow-list, claim to header mapping, discovery test button.
   - 📋 Verified only against fake outpost/OIDC servers so far; run the checklist in `docs/authentik.md` against a real Authentik.
+- ✅ Per-endpoint exception rules (path prefix / exact / regex, IP / CIDR) for Forward Auth and OAuth2/OIDC, trusted-proxy aware and
+  traversal safe (upstream #652).
 - 🔧 Generic OIDC hardening: ✅ discovery, PKCE, token refresh, logout. 📋 group-based policies per route (the
   allow-list is currently global to the OAuth2 provider); 📋 stateless/shared sessions (see HA).
 
@@ -87,4 +91,5 @@ Status: ✅ done · 🔧 in progress · 📋 planned
   that do not need endpoint tags.
 
 ## 9. Observability
-- 📋 Prometheus metrics endpoint, structured JSON access logs, per-upstream latency/error stats.
+- ✅ Prometheus metrics (`-metrics`, `-metrics_port`, `/api/metrics`, see DEVELOPMENT.md) incl. per-upstream health/in-flight/EWMA, WAF, CAPTCHA, rate limit and certificate expiry.
+- 📋 Structured JSON access logs.

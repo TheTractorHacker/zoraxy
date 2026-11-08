@@ -9,6 +9,7 @@ package dynamicproxy
 */
 import (
 	_ "embed"
+	"imuslab.com/zoraxy/mod/metrics"
 	"net"
 	"net/http"
 	"strings"
@@ -95,6 +96,7 @@ type RouterOption struct {
 	LoadBalancer         *loadbalance.RouteManager  //Load balancer that handle load balancing of proxy target
 	PersistProxyEndpoint func(*ProxyEndpoint) error //Optional, called to save an endpoint config after a basic auth hash upgrade
 	PluginManager        *plugins.Manager           //Plugin manager for handling plugin routing
+	Metrics              *metrics.Registry          //Optional Prometheus metrics registry (nil or disabled = no overhead)
 
 	/* Timeouts */
 	ReadHeaderTimeout int64 //HTTP server read timeout in seconds
@@ -194,6 +196,17 @@ type ZorxAuthExceptionRule struct {
 	UseTrustedProxy bool              //If true, trust proxy headers (X-Real-Ip, CF-Connecting-IP, etc.) for CIDR matching. WARNING: enabling this allows header spoofing if the upstream proxy is not trusted.
 }
 
+// AuthExceptionRule defines a bypass rule of the Forward Auth and OAuth2 providers.
+// Requests matching any rule skip the SSO check. Matching rules and the safety checks
+// applied to paths and client IPs are documented in authexceptions.go.
+type AuthExceptionRule struct {
+	RuleType        AuthExceptionType //AuthExceptionType_Paths or AuthExceptionType_CIDR
+	MatchMode       string            //Paths only: "prefix" (default, segment boundary), "exact" or "regex" (full match of the normalised path)
+	PathPattern     string            //Paths only: prefix / exact path (starts with /) or Go regular expression
+	CaseInsensitive bool              //Paths only: compare without regard to letter case
+	CIDR            string            //CIDR only: IP address or CIDR block, matched against the trusted-proxy aware client IP
+}
+
 /* Routing Rule Data Structures */
 
 // A Virtual Directory endpoint, provide a subset of ProxyEndpoint for better
@@ -252,6 +265,9 @@ type AuthenticationProvider struct {
 
 	/* ZorxAuth SSO Settings */
 	ZorxAuthExceptionRules []*ZorxAuthExceptionRule //Rules to bypass ZorxAuth SSO authentication (path prefix/regex or IP/CIDR)
+
+	/* Forward Auth / OAuth2 exception rules (shared, see authexceptions.go) */
+	ExternalAuthExceptionRules []*AuthExceptionRule //Rules to bypass Forward Auth and OAuth2 SSO (path prefix / exact / regex, or IP / CIDR)
 }
 
 /* CAPTCHA Provider Configuration */

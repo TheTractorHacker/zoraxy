@@ -1,6 +1,7 @@
 package dynamicproxy
 
 import (
+	"imuslab.com/zoraxy/mod/metrics"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -28,6 +29,7 @@ func (h *ProxyHandler) handleAccessRouting(ruleID string, w http.ResponseWriter,
 
 	isBlocked, blockedReason := accessRequestBlocked(accessRule, h.Parent.Option.WebDirectory, w, r)
 	if isBlocked {
+		h.Parent.Option.Metrics.Event(metrics.EventAccessBlocked, endpointLabel(sep), blockedReason)
 		h.Parent.logRequest(r, false, 403, blockedReason, r.Host, "", sep)
 	}
 	return isBlocked

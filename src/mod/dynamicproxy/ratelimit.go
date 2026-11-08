@@ -2,6 +2,7 @@ package dynamicproxy
 
 import (
 	"errors"
+	"imuslab.com/zoraxy/mod/metrics"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -165,6 +166,7 @@ func (router *Router) handleRateLimit(w http.ResponseWriter, r *http.Request, pe
 	//Each endpoint gets its own bucket per client IP
 	if !router.rateLimitCounter.Allow(pe.RootOrMatchingDomain, ip, pe.RateLimit, pe.RateLimitBurst) {
 		w.WriteHeader(429)
+		router.Option.Metrics.Event(metrics.EventRateLimited, pe.RootOrMatchingDomain, "limit")
 		return errors.New("rate limit exceeded")
 	}
 
