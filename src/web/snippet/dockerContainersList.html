@@ -193,10 +193,14 @@
       }
 
       function processDockerData(hostData, dockerData) {
-        const { containers } = dockerData;
+        // Go serialises empty slices as null: rules without upstreams and an empty Docker host must not crash the picker
+        const containers = Array.isArray(dockerData.containers)
+          ? dockerData.containers
+          : [];
         const existingTargets = new Set(
-          hostData.flatMap(({ ActiveOrigins }) =>
-            ActiveOrigins.map(({ OriginIpOrDomain }) => OriginIpOrDomain)
+          (Array.isArray(hostData) ? hostData : []).flatMap(
+            ({ ActiveOrigins }) =>
+              (ActiveOrigins || []).map(({ OriginIpOrDomain }) => OriginIpOrDomain)
           )
         );
 
@@ -209,7 +213,7 @@
         );
 
         const zoraxyNetworkIDs = zoraxyContainer
-          ? Object.values(zoraxyContainer.NetworkSettings.Networks).map(
+          ? Object.values((zoraxyContainer.NetworkSettings || {}).Networks || {}).map(
               (network) => network.NetworkID
             )
           : [];
@@ -251,11 +255,11 @@
 
           // networks that are shared with Zoraxy
           const sharedNetworks = Object.values(
-            container.NetworkSettings.Networks
+            (container.NetworkSettings || {}).Networks || {}
           ).filter((network) => zoraxyNetworkIDs.includes(network.NetworkID));
 
           if (!sharedNetworks.length) {
-            const ips = Object.values(container.NetworkSettings.Networks).map(
+            const ips = Object.values((container.NetworkSettings || {}).Networks || {}).map(
               (network) => network.IPAddress
             );
 
