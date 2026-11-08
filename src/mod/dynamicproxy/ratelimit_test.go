@@ -34,6 +34,7 @@ func newTestRateLimitRouter(t testing.TB, trustProxyHeaders bool, trustedProxies
 		ConfigFolder:       filepath.Join(tmpDir, "access"),
 		TrustedProxiesFile: filepath.Join(tmpDir, "trusted_proxies.json"),
 		Database:           sysdb,
+		SkipPublicIPCheck:  true, //hermetic: no call to checkip.amazonaws.com
 	})
 	if err != nil {
 		t.Fatalf("unable to create access controller: %v", err)

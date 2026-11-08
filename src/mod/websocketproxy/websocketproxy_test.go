@@ -2,17 +2,12 @@ package websocketproxy
 
 import (
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"testing"
-	"time"
 
 	"github.com/gorilla/websocket"
-)
-
-var (
-	serverURL  = "ws://127.0.0.1:7777"
-	backendURL = "ws://127.0.0.1:8888"
 )
 
 func TestProxy(t *testing.T) {
@@ -27,6 +22,20 @@ func TestProxy(t *testing.T) {
 		Subprotocols: supportedSubProtocols,
 	}
 
+	// Both servers listen on ephemeral loopback ports so the test never
+	// collides with other processes or parallel test runs.
+	frontendListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	backendListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	frontendHost := frontendListener.Addr().String()
+	serverURL := "ws://" + frontendHost
+	backendURL := "ws://" + backendListener.Addr().String()
+
 	u, _ := url.Parse(backendURL)
 	proxy := NewProxy(u, Options{
 		SkipTLSValidation: false,
@@ -37,56 +46,37 @@ func TestProxy(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.Handle("/proxy", proxy)
-	errChan := make(chan error)
-	go func() {
-		if err := http.ListenAndServe(":7777", mux); err != nil {
-			errChan <- err
-		}
-	}()
-
-	select {
-	case err := <-errChan:
-		t.Fatal("ListenAndServe: ", err)
-	case <-time.After(time.Millisecond * 100):
-	}
+	frontend := &http.Server{Handler: mux}
+	go frontend.Serve(frontendListener)
+	defer frontend.Close()
 
 	// backend echo server
-	go func() {
-		mux2 := http.NewServeMux()
-		mux2.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			// Don't upgrade if original host header isn't preserved
-			if r.Host != "127.0.0.1:7777" {
-				log.Printf("Host header set incorrectly.  Expecting 127.0.0.1:7777 got %s", r.Host)
-				return
-			}
-
-			conn, err := upgrader.Upgrade(w, r, nil)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-
-			messageType, p, err := conn.ReadMessage()
-			if err != nil {
-				return
-			}
-
-			if err = conn.WriteMessage(messageType, p); err != nil {
-				return
-			}
-		})
-
-		err := http.ListenAndServe(":8888", mux2)
-		if err != nil {
-			errChan <- err
+	mux2 := http.NewServeMux()
+	mux2.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Don't upgrade if original host header isn't preserved
+		if r.Host != frontendHost {
+			log.Printf("Host header set incorrectly.  Expecting %s got %s", frontendHost, r.Host)
+			return
 		}
-	}()
 
-	select {
-	case err := <-errChan:
-		t.Fatal("ListenAndServe: ", err)
-	case <-time.After(time.Millisecond * 100):
-	}
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		messageType, p, err := conn.ReadMessage()
+		if err != nil {
+			return
+		}
+
+		if err = conn.WriteMessage(messageType, p); err != nil {
+			return
+		}
+	})
+	backend := &http.Server{Handler: mux2}
+	go backend.Serve(backendListener)
+	defer backend.Close()
 
 	// let's us define two subprotocols, only one is supported by the server
 	clientSubProtocols := []string{"test-protocol", "test-notsupported"}
