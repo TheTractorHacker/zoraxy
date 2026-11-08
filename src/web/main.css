@@ -1199,9 +1199,9 @@ body.darkTheme select.i18n-picker{
 html:not([lang^="en"]) .ui.menu .item,
 html:not([lang^="en"]) .ui.button,
 html:not([lang^="en"]) .ui.label,
-html:not([lang^="en"]) th,
 html:not([lang^="en"]) .menugroup-header span{
     overflow-wrap: anywhere;
     min-width: 0;
 }
 html:not([lang^="en"]) .ui.buttons .button{ white-space: normal; }
+html:not([lang^="en"]) th{ overflow-wrap: break-word; word-break: keep-all; }
