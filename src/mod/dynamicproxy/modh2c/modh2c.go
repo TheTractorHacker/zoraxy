@@ -11,7 +11,6 @@ import (
 	"crypto/tls"
 	"net"
 	"net/http"
-	"time"
 
 	"golang.org/x/net/http2"
 )
@@ -25,16 +24,9 @@ func NewH2CRoundTripper() *H2CRoundTripper {
 
 // Example from https://github.com/thrawn01/h2c-golang-example/blob/master/cmd/client/main.go
 func (h2c *H2CRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, req.Method, req.URL.String(), req.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	// Copy headers
-	req.Header = req.Header.Clone()
+	// Keep the caller's context: cancelling a private context when RoundTrip returns would
+	// abort the response body that the caller is still reading.
+	req = req.Clone(req.Context())
 
 	tr := &http2.Transport{
 		AllowHTTP: true,
