@@ -215,6 +215,7 @@ func main() {
 	// Create a entry mux to accept all management interface requests
 	entryMux := http.NewServeMux()
 	entryMux.Handle("/plugin/", pluginAPIMux)                                        //For plugins API access
+	mountAPIv1(entryMux)                                                             //REST API (/api/v1), Bearer token auth, outside cookie+CSRF stack
 	entryMux.Handle("/", clusterMgr.GuardLocalEdits(csrfMiddleware(webminPanelMux))) //For webmin UI access, require csrf token
 	//Cluster sync endpoints authenticate with an HMAC bearer token (404 unless role=primary)
 	entryMux.Handle(cluster.SnapshotPath, clusterMgr.SyncHandler())

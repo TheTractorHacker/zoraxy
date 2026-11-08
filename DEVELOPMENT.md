@@ -986,3 +986,22 @@ PY=./venv/bin/python tools/ui-smoke/run.sh --out ~/ui-smoke-shots
 ```
 
 Exit status is non-zero on any failure; `--allow REGEX` tolerates a known message (e.g. offline-only failures).
+
+## REST API and API tokens
+
+A stable, token authenticated subset of the management API lives under `/api/v1/` (code: `src/apiv1.go`,
+`src/mod/apitoken/`, spec `src/web/openapi.yaml`, docs page `/api/v1/docs`, UI `src/web/components/apitokens.html`
+under Others > API Tokens).
+
+- Tokens: `zrx_` + 256 bit random value, shown once at creation, stored only as SHA-256 hash (table `apitokens` in the
+  system database), compared in constant time. Scope `read` (GET/HEAD only) or `readwrite`; optional expiry and IP/CIDR
+  allow-list; revocable; last-used timestamp. Sent as `Authorization: Bearer <token>`.
+- `/api/v1/` is mounted on the entry mux in `main.go` (`mountAPIv1`), outside the cookie + CSRF stack, so no CSRF token is
+  needed for it. Bearer tokens are accepted ONLY there; every other route keeps cookie auth + CSRF unchanged. Token
+  management (`/api/apitoken/list|create|revoke|delete`) is registered on the normal admin router (cookie + CSRF).
+- Routes are thin wrappers: JSON body keys map 1:1 to the form parameters of the existing handlers, which are run through the
+  cluster edit guard using their legacy `/api/...` path. A route must be added to both `v1Routes` and `openapi.yaml`
+  (`TestAPIv1OpenAPIMatchesRoutes` enforces this). Never add token management or secret-returning routes to v1.
+- The client IP is the TCP peer address (forwarding headers are ignored); behind a reverse proxy, allow-list the proxy.
+- Token auth is rate limited (token bucket per token and per IP; 10 failed auths/minute per IP block that IP with 429) and
+  every use is audit logged (token name, method, route, IP, status; never the token or hash).

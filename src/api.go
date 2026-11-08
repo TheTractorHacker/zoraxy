@@ -474,6 +474,7 @@ func initAPIs(targetMux *http.ServeMux) {
 	RegisterMetricsAPIs(authRouter)
 	RegisterACMEAndAutoRenewerAPIs(authRouter)
 	RegisterStaticWebServerAPIs(authRouter)
+	RegisterAPIv1(authRouter)
 	RegisterPluginAPIs(authRouter)
 
 	//Docker UX Optimizations

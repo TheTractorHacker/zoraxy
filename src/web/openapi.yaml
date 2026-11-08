@@ -1,0 +1,233 @@
+openapi: 3.0.3
+info:
+  title: Zoraxy REST API
+  version: "1.0.0"
+  description: |
+    Stable, token authenticated subset of the Zoraxy management API.
+
+    Create a token in the admin panel (Others > API Tokens). Send it as
+    `Authorization: Bearer zrx_...`. Tokens have a scope: `read` allows GET and
+    HEAD only, `readwrite` allows everything documented here. Tokens can have an
+    expiry and an IP/CIDR allow-list. Requests are rate limited (HTTP 429).
+    Authentication failures return a generic 401 or 403 body.
+
+    No CSRF token is needed (and cookies are ignored) on `/api/v1`. Bearer tokens
+    are NOT accepted anywhere else, and token management itself needs the normal
+    admin login.
+
+    Request bodies are flat JSON objects whose keys are the parameter names used
+    by the corresponding admin UI call (`/api/proxy/add`, `/api/proxy/edit`);
+    values may be strings, numbers or booleans. Errors use `{"error": "..."}`.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/health:
+    get:
+      summary: Service health and version
+      operationId: getHealth
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string, example: ok}
+                  version: {type: string}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+  /api/v1/proxy-rules:
+    get:
+      summary: List HTTP proxy rules
+      description: Password hashes are never returned.
+      operationId: listProxyRules
+      parameters:
+        - name: type
+          in: query
+          schema: {type: string, enum: [host, root], default: host}
+      responses:
+        "200":
+          description: Array of proxy rules (host) or the default site (root)
+          content:
+            application/json:
+              schema: {}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+    post:
+      summary: Create a proxy rule
+      description: Requires a readwrite token.
+      operationId: createProxyRule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rootname, ep]
+              additionalProperties: true
+              properties:
+                rootname: {type: string, description: "Matching domain, e.g. app.example.com (extra aliases comma separated)"}
+                ep: {type: string, description: "Upstream target, e.g. 127.0.0.1:8080"}
+                tls: {type: boolean, description: "Upstream uses TLS"}
+                tlsval: {type: boolean, description: "Skip upstream TLS validation"}
+                access: {type: string, description: "Access rule ID (default: default)"}
+                tags: {type: string}
+      responses:
+        "201": {description: Created}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+  /api/v1/proxy-rules/{rootname}:
+    parameters:
+      - $ref: "#/components/parameters/rootname"
+    get:
+      summary: Get one proxy rule
+      operationId: getProxyRule
+      responses:
+        "200": {description: The proxy rule, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+    patch:
+      summary: Update a proxy rule (partial)
+      description: Only the supplied keys change. Requires a readwrite token.
+      operationId: updateProxyRule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: true}
+      responses:
+        "200": {description: Updated}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+    delete:
+      summary: Delete a proxy rule
+      description: Requires a readwrite token.
+      operationId: deleteProxyRule
+      responses:
+        "200": {description: Deleted}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+  /api/v1/proxy-rules/{rootname}/enable:
+    parameters:
+      - $ref: "#/components/parameters/rootname"
+    post:
+      summary: Enable a proxy rule
+      description: Requires a readwrite token.
+      operationId: enableProxyRule
+      responses:
+        "200": {description: Enabled}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+  /api/v1/proxy-rules/{rootname}/disable:
+    parameters:
+      - $ref: "#/components/parameters/rootname"
+    post:
+      summary: Disable a proxy rule
+      description: Requires a readwrite token.
+      operationId: disableProxyRule
+      responses:
+        "200": {description: Disabled}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+  /api/v1/access-rules:
+    get:
+      summary: List access rules (access lists)
+      operationId: listAccessRules
+      responses:
+        "200": {description: Array of access rules, content: {application/json: {schema: {type: array, items: {type: object}}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+  /api/v1/redirects:
+    get:
+      summary: List redirection rules
+      operationId: listRedirects
+      responses:
+        "200": {description: Array of redirection rules, content: {application/json: {schema: {type: array, items: {type: object}}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+  /api/v1/certificates:
+    get:
+      summary: List TLS certificates with expiry information
+      operationId: listCertificates
+      responses:
+        "200": {description: Array of certificates, content: {application/json: {schema: {type: array, items: {type: object}}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+  /api/v1/stats/summary:
+    get:
+      summary: Today's traffic statistics
+      operationId: getStatsSummary
+      parameters:
+        - name: fast
+          in: query
+          description: Only return the request counters
+          schema: {type: boolean}
+      responses:
+        "200": {description: Statistics, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+  /api/v1/waf/coverage:
+    get:
+      summary: WAF coverage per proxy rule
+      operationId: getWafCoverage
+      responses:
+        "200": {description: Coverage entries, content: {application/json: {schema: {}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: "API token created in the admin panel, prefix zrx_"
+  parameters:
+    rootname:
+      name: rootname
+      in: path
+      required: true
+      description: Matching domain of the proxy rule
+      schema: {type: string}
+  responses:
+    BadRequest:
+      description: The operation was rejected (message in the error field)
+      content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}
+    Unauthorized:
+      description: Missing, malformed, unknown, revoked or expired token
+      content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}
+    Forbidden:
+      description: Read-only token used for a write, or client IP not allowed
+      content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}
+    NotFound:
+      description: Not found
+      content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}
+    TooManyRequests:
+      description: Rate limited
+      content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: {type: string}
