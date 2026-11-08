@@ -162,3 +162,9 @@ FriendlyCaptcha, counting SSO redirect failures in the auto-ban, per-user admin 
 - ✅ `{{host}}` `{{client_ip}}` `{{request_id}}` `{{rule_name}}` `{{external_ip}}` in headers, redirects, static responses; rule templates; bulk edit (upstream #370 #826 #877 #924).
 - ✅ API tokens + `/api/v1` + OpenAPI (upstream #382 #714 #996), response bandwidth limit (upstream #1208), plain HTTP listener address (#909), IP calculators (#504), opt-in split-horizon DNS responder (#769).
 - 📋 UI editor for custom rule templates (API exists), bandwidth limit for WebSocket traffic.
+
+## Support closure (`docs/support-closure`)
+- ✅ 14 task guides under `docs/guides/` answering the mirrored support questions; fixes: virtual directory longest match and WebSocket base path,
+  blank DNS credential fields, logged upstream failure reasons, error page host variable, pprof endpoints, access rule help text.
+- 📋 Forward-auth subrequest should send the Trusted Proxy resolved client IP to Authelia/Authentik. 📋 Real-instance runs of the Authentik, Keycloak,
+  Google and Pocket ID guides. 📋 Per-route group policies (see section 4). 📋 Publish a container image from the fork (needs Docker Hub credentials).
