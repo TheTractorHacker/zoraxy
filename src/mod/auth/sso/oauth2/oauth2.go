@@ -43,6 +43,9 @@ type OAuth2RouterOptions struct {
 	OAuth2Issuer                string //OIDC issuer URL; discovery is fetched from <issuer>/.well-known/openid-configuration
 	OAuth2GroupsClaim           string //Claim holding the user's groups (default "groups")
 	OAuth2AllowedGroups         string //Comma separated groups; empty allows every authenticated user
+	OAuth2AllowedClaims         string //Generalised allow-list "claim=v1,v2; claim2=v3" (see access.go); empty = not checked
+	OAuth2AllowedEmails         string //Comma separated e-mail addresses; empty = not checked
+	OAuth2AllowedEmailDomains   string //Comma separated e-mail domains; empty = not checked
 	OAuth2HeaderMappings        string //Comma separated "Header=claim" pairs forwarded to the upstream
 	OAuth2EndSessionUrl         string //Optional override of the provider's end_session_endpoint
 	OAuth2PostLogoutRedirectUrl string //Optional post_logout_redirect_uri sent on RP-initiated logout
@@ -94,6 +97,9 @@ func NewOAuth2Router(options *OAuth2RouterOptions) *OAuth2Router {
 	rd("oauth2Issuer", &options.OAuth2Issuer)
 	rd("oauth2GroupsClaim", &options.OAuth2GroupsClaim)
 	rd("oauth2AllowedGroups", &options.OAuth2AllowedGroups)
+	rd("oauth2AllowedClaims", &options.OAuth2AllowedClaims)
+	rd("oauth2AllowedEmails", &options.OAuth2AllowedEmails)
+	rd("oauth2AllowedEmailDomains", &options.OAuth2AllowedEmailDomains)
 	rd("oauth2HeaderMappings", &options.OAuth2HeaderMappings)
 	rd("oauth2EndSessionUrl", &options.OAuth2EndSessionUrl)
 	rd("oauth2PostLogoutRedirectUrl", &options.OAuth2PostLogoutRedirectUrl)
@@ -176,6 +182,9 @@ func (ar *OAuth2Router) handleSetOAuthSettingsGET(w http.ResponseWriter, r *http
 		"oauth2Issuer":                 o.OAuth2Issuer,
 		"oauth2GroupsClaim":            o.OAuth2GroupsClaim,
 		"oauth2AllowedGroups":          o.OAuth2AllowedGroups,
+		"oauth2AllowedClaims":          o.OAuth2AllowedClaims,
+		"oauth2AllowedEmails":          o.OAuth2AllowedEmails,
+		"oauth2AllowedEmailDomains":    o.OAuth2AllowedEmailDomains,
 		"oauth2HeaderMappings":         o.OAuth2HeaderMappings,
 		"oauth2EndSessionUrl":          o.OAuth2EndSessionUrl,
 		"oauth2PostLogoutRedirectUrl":  o.OAuth2PostLogoutRedirectUrl,
@@ -254,6 +263,12 @@ func (ar *OAuth2Router) handleSetOAuthSettingsPOST(w http.ResponseWriter, r *htt
 		return
 	}
 
+	allowedClaims := opt("oauth2AllowedClaims")
+	if _, err := ParseClaimRules(allowedClaims); err != nil {
+		jsonError(w, "oauth2AllowedClaims: "+err.Error())
+		return
+	}
+
 	ar.mu.Lock()
 	o := ar.options
 	o.OAuth2WellKnownUrl = oauth2WellKnownUrl
@@ -268,6 +283,9 @@ func (ar *OAuth2Router) handleSetOAuthSettingsPOST(w http.ResponseWriter, r *htt
 	o.OAuth2Issuer = oauth2Issuer
 	o.OAuth2GroupsClaim = opt("oauth2GroupsClaim")
 	o.OAuth2AllowedGroups = opt("oauth2AllowedGroups")
+	o.OAuth2AllowedClaims = allowedClaims
+	o.OAuth2AllowedEmails = opt("oauth2AllowedEmails")
+	o.OAuth2AllowedEmailDomains = opt("oauth2AllowedEmailDomains")
 	o.OAuth2HeaderMappings = headerMappings
 	o.OAuth2EndSessionUrl = opt("oauth2EndSessionUrl")
 	o.OAuth2PostLogoutRedirectUrl = opt("oauth2PostLogoutRedirectUrl")
@@ -287,6 +305,9 @@ func (ar *OAuth2Router) handleSetOAuthSettingsPOST(w http.ResponseWriter, r *htt
 	wr("oauth2Issuer", oauth2Issuer)
 	wr("oauth2GroupsClaim", o.OAuth2GroupsClaim)
 	wr("oauth2AllowedGroups", o.OAuth2AllowedGroups)
+	wr("oauth2AllowedClaims", o.OAuth2AllowedClaims)
+	wr("oauth2AllowedEmails", o.OAuth2AllowedEmails)
+	wr("oauth2AllowedEmailDomains", o.OAuth2AllowedEmailDomains)
 	wr("oauth2HeaderMappings", headerMappings)
 	wr("oauth2EndSessionUrl", o.OAuth2EndSessionUrl)
 	wr("oauth2PostLogoutRedirectUrl", o.OAuth2PostLogoutRedirectUrl)
@@ -304,12 +325,13 @@ func (ar *OAuth2Router) handleSetOAuthSettingsDELETE(w http.ResponseWriter, r *h
 	o.OAuth2ClientId, o.OAuth2ClientSecret, o.OAuth2Scopes, o.OAuth2CodeChallengeMethod = "", "", "", ""
 	o.OAuth2Issuer, o.OAuth2GroupsClaim, o.OAuth2AllowedGroups, o.OAuth2HeaderMappings = "", "", "", ""
 	o.OAuth2EndSessionUrl, o.OAuth2PostLogoutRedirectUrl = "", ""
+	o.OAuth2AllowedClaims, o.OAuth2AllowedEmails, o.OAuth2AllowedEmailDomains = "", "", ""
 	ar.mu.Unlock()
 
 	for _, k := range []string{"oauth2WellKnownUrl", "oauth2ServerUrl", "oauth2TokenUrl", "oauth2UserInfoUrl",
 		"oauth2ClientId", "oauth2ClientSecret", "oauth2Scopes", "oauth2CodeChallengeMethod", "oauth2ConfigurationCacheTime",
 		"oauth2Issuer", "oauth2GroupsClaim", "oauth2AllowedGroups", "oauth2HeaderMappings", "oauth2EndSessionUrl",
-		"oauth2PostLogoutRedirectUrl"} {
+		"oauth2PostLogoutRedirectUrl", "oauth2AllowedClaims", "oauth2AllowedEmails", "oauth2AllowedEmailDomains"} {
 		ar.options.Database.Delete(dbTable, k)
 	}
 	ar.flushCaches()
@@ -590,7 +612,7 @@ func (ar *OAuth2Router) HandleOAuth2Auth(w http.ResponseWriter, r *http.Request)
 			expireCookie(w, r, sessionCookie)
 			return ar.startLogin(w, r, o, meta, cfg)
 		}
-		if !groupsAllowed(claims, o.OAuth2GroupsClaim, splitList(o.OAuth2AllowedGroups)) {
+		if !accessAllowed(o, claims) {
 			return ar.forbidden(w)
 		}
 		mappings, _ := ParseHeaderMappings(o.OAuth2HeaderMappings)
@@ -708,8 +730,8 @@ func (ar *OAuth2Router) handleCallback(ctx context.Context, w http.ResponseWrite
 		return deny(w, http.StatusUnauthorized, "Unauthorized")
 	}
 
-	if !groupsAllowed(claims, o.OAuth2GroupsClaim, splitList(o.OAuth2AllowedGroups)) {
-		ar.log(fmt.Sprintf("User %v denied by group allow-list", claims["sub"]), nil)
+	if !accessAllowed(o, claims) {
+		ar.log(fmt.Sprintf("User %v denied by the group / claim / e-mail allow-list", claims["sub"]), nil)
 		return ar.forbidden(w)
 	}
 
