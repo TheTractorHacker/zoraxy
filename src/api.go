@@ -14,6 +14,7 @@ import (
 	"imuslab.com/zoraxy/mod/info/hardwareinfo"
 	"imuslab.com/zoraxy/mod/ipscan"
 	"imuslab.com/zoraxy/mod/netstat"
+	"imuslab.com/zoraxy/mod/netcalc"
 	"imuslab.com/zoraxy/mod/netutils"
 	"imuslab.com/zoraxy/mod/utils"
 )
@@ -303,6 +304,7 @@ func RegisterStaticWebServerAPIs(authRouter *auth.RouterDef) {
 
 // Register the APIs for Network Utilities functions
 func RegisterNetworkUtilsAPIs(authRouter *auth.RouterDef) {
+	authRouter.HandleFunc("/api/tools/netcalc", netcalc.HandleNetCalc)
 	authRouter.HandleFunc("/api/tools/ipscan", ipscan.HandleIpScan)
 	authRouter.HandleFunc("/api/tools/portscan", ipscan.HandleScanPort)
 	authRouter.HandleFunc("/api/tools/traceroute", netutils.HandleTraceRoute)
