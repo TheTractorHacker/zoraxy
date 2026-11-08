@@ -23,3 +23,10 @@ Notes required by the Apache License 2.0 section 4:
   exclusions) that are passed to the engine at runtime.
 - Coraza and the Core Rule Set do not ship a `NOTICE` file at the pinned versions.
 - Zoraxy's own source files are not derived from Coraza or CRS source code; they use the public Coraza Go API.
+
+## Authentik / OIDC support
+
+- **github.com/go-jose/go-jose/v4** - Apache-2.0. JWT/JWS parsing and signature verification of OIDC ID tokens
+  (`src/mod/auth/sso/oauth2`). Already a transitive dependency; now a direct one.
+- **golang.org/x/oauth2** - BSD-3-Clause. OAuth 2.0 authorization code flow, PKCE helpers and token refresh.
+- **github.com/jellydator/ttlcache/v3** - MIT. Expiring in-memory session and login-state stores.

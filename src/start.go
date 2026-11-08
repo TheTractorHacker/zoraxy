@@ -194,8 +194,9 @@ func startupSequence() {
 	})
 
 	oauth2Router = oauth2.NewOAuth2Router(&oauth2.OAuth2RouterOptions{
-		Logger:   SystemWideLogger,
-		Database: sysdb,
+		Logger:     SystemWideLogger,
+		Database:   sysdb,
+		SystemUUID: nodeUUID,
 	})
 
 	zorxAuthRouter = zorxauth.NewAuthRouter(sysdb, SystemWideLogger)

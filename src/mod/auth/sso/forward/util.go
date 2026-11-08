@@ -88,7 +88,7 @@ func headerCopyIncludedExact(original, destination http.Header, keys []string) {
 			continue
 		}
 
-		if !stringInSliceFold(key, keys) {
+		if !headerNameMatches(key, keys) {
 			continue
 		}
 
@@ -96,11 +96,57 @@ func headerCopyIncludedExact(original, destination http.Header, keys []string) {
 	}
 }
 
+// headerNameMatches reports whether name matches one of the keys. A key ending in "*" is a
+// case-insensitive prefix match (e.g. "X-authentik-meta-*"); anything else is an exact
+// case-insensitive match.
+func headerNameMatches(name string, keys []string) bool {
+	for _, k := range keys {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		if strings.HasSuffix(k, "*") {
+			if hasPrefixFold(name, strings.TrimSuffix(k, "*")) {
+				return true
+			}
+			continue
+		}
+		if strings.EqualFold(name, k) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasPrefixFold(name, prefix string) bool {
+	return prefix != "" && len(name) >= len(prefix) && strings.EqualFold(name[:len(prefix)], prefix)
+}
+
+// headerReplaceIncluded replaces the listed headers on destination with the values from original.
+// Client supplied values of the listed headers are always removed first, so a client can never
+// inject an identity header that the auth server did not set. Keys ending in "*" act as prefixes.
 func headerReplaceIncluded(original, destination http.Header, keys []string) {
 	for _, key := range keys {
 		key = strings.TrimSpace(key)
 
 		if key == "" || stringInSliceFold(key, doNotCopyHeaders) {
+			continue
+		}
+
+		if strings.HasSuffix(key, "*") {
+			prefix := strings.TrimSuffix(key, "*")
+			for name := range destination {
+				if hasPrefixFold(name, prefix) {
+					delete(destination, name)
+				}
+			}
+			for name, values := range original {
+				if hasPrefixFold(name, prefix) {
+					for _, value := range values {
+						destination.Add(name, value)
+					}
+				}
+			}
 			continue
 		}
 
@@ -165,12 +211,21 @@ func rSetIPHeader(r, req *http.Request, headers ...string) {
 	}
 }
 
+// scrubForwardingHeaders removes every client supplied forwarding/original-URL header from the
+// auth subrequest so that only values computed by Zoraxy reach the auth server.
+func scrubForwardingHeaders(req *http.Request) {
+	for _, h := range []string{HeaderXForwardedProto, HeaderXForwardedHost, HeaderXForwardedURI,
+		HeaderXForwardedFor, HeaderXForwardedMethod, HeaderXOriginalURL, HeaderXOriginalIP, HeaderXOriginalMethod} {
+		req.Header.Del(h)
+	}
+}
+
 func rSetXForwardedHeaders(r, req *http.Request) {
 	rSetIPHeader(r, req, HeaderXForwardedFor)
 	req.Header.Set(HeaderXForwardedMethod, r.Method)
 	req.Header.Set(HeaderXForwardedProto, scheme(r))
 	req.Header.Set(HeaderXForwardedHost, r.Host)
-	req.Header.Set(HeaderXForwardedURI, r.URL.Path)
+	req.Header.Set(HeaderXForwardedURI, r.URL.RequestURI())
 }
 
 func rSetXOriginalHeaders(r, req *http.Request) {
@@ -178,9 +233,11 @@ func rSetXOriginalHeaders(r, req *http.Request) {
 	rSetIPHeader(r, req, HeaderXOriginalIP, HeaderXForwardedFor)
 
 	original := &url.URL{
-		Scheme: scheme(r),
-		Host:   r.Host,
-		Path:   r.URL.Path,
+		Scheme:   scheme(r),
+		Host:     r.Host,
+		Path:     r.URL.Path,
+		RawPath:  r.URL.RawPath,
+		RawQuery: r.URL.RawQuery,
 	}
 
 	req.Header.Set(HeaderXOriginalMethod, r.Method)

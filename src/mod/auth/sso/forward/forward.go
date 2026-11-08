@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"strings"
+	"sync"
 
 	"imuslab.com/zoraxy/mod/database"
 	"imuslab.com/zoraxy/mod/info/logger"
@@ -48,6 +51,21 @@ type AuthRouterOptions struct {
 	// /outpost.goauthentik.io in single-application mode. Matching is hardened against traversal.
 	IgnoredPaths []string
 
+	// OutpostURL is the base URL of an Authentik proxy outpost (e.g. https://auth.example.com or
+	// http://outpost:9000). When set, requests to /outpost.goauthentik.io/ on the protected host are
+	// reverse proxied to it (callback, start, sign_out, static assets) without authentication.
+	OutpostURL string
+
+	// StartRedirect controls what happens when the auth server answers 401 without a Location:
+	// "" passes the response through, "local" redirects the browser to
+	// <protected host>/outpost.goauthentik.io/start?rd=<url>, "outpost" redirects to
+	// <OutpostURL>/outpost.goauthentik.io/start?rd=<url>.
+	StartRedirect string
+
+	// PreserveHost sends the protected host as the Host header of the auth subrequest. Authentik
+	// proxy outposts select the application by Host, so this must be on for Authentik.
+	PreserveHost bool
+
 	Logger   *logger.Logger
 	Database *database.Database
 }
@@ -55,6 +73,10 @@ type AuthRouterOptions struct {
 type AuthRouter struct {
 	client  *http.Client
 	options *AuthRouterOptions
+
+	outpostMu    sync.RWMutex
+	outpostProxy *httputil.ReverseProxy
+	outpostBase  *url.URL
 }
 
 // NewAuthRouter creates a new AuthRouter object
@@ -66,6 +88,9 @@ func NewAuthRouter(options *AuthRouterOptions) *AuthRouter {
 
 	responseHeaders, responseClientHeaders, requestHeaders, requestIncludedCookies, requestExcludedCookies := "", "", "", "", ""
 	ignoredPaths := ""
+	options.Database.Read(DatabaseTable, DatabaseKeyOutpostURL, &options.OutpostURL)
+	options.Database.Read(DatabaseTable, DatabaseKeyStartRedirect, &options.StartRedirect)
+	options.Database.Read(DatabaseTable, DatabaseKeyPreserveHost, &options.PreserveHost)
 
 	options.Database.Read(DatabaseTable, DatabaseKeyResponseHeaders, &responseHeaders)
 	options.Database.Read(DatabaseTable, DatabaseKeyResponseClientHeaders, &responseClientHeaders)
@@ -85,12 +110,14 @@ func NewAuthRouter(options *AuthRouterOptions) *AuthRouter {
 
 	r := &AuthRouter{
 		client: &http.Client{
+			Timeout: AuthRequestTimeout,
 			CheckRedirect: func(r *http.Request, via []*http.Request) (err error) {
 				return http.ErrUseLastResponse
 			},
 		},
 		options: options,
 	}
+	r.initOutpostProxy()
 
 	r.logOptions()
 
@@ -122,6 +149,9 @@ func (ar *AuthRouter) handleOptionsGET(w http.ResponseWriter, r *http.Request) {
 		DatabaseKeyRequestIncludeBody:     ar.options.RequestIncludeBody,
 		DatabaseKeyUseXOriginalHeaders:    ar.options.UseXOriginalHeaders,
 		DatabaseKeyIgnoredPaths:           ar.options.IgnoredPaths,
+		DatabaseKeyOutpostURL:             ar.options.OutpostURL,
+		DatabaseKeyStartRedirect:          ar.options.StartRedirect,
+		DatabaseKeyPreserveHost:           ar.options.PreserveHost,
 	})
 
 	utils.SendJSONResponse(w, string(js))
@@ -147,6 +177,29 @@ func (ar *AuthRouter) handleOptionsPOST(w http.ResponseWriter, r *http.Request) 
 	requestIncludeBody, _ := utils.PostBool(r, DatabaseKeyRequestIncludeBody)
 	useXOriginalHeaders, _ := utils.PostBool(r, DatabaseKeyUseXOriginalHeaders)
 	ignoredPaths, _ := utils.PostPara(r, DatabaseKeyIgnoredPaths)
+	outpostURL, _ := utils.PostPara(r, DatabaseKeyOutpostURL)
+	startRedirect, _ := utils.PostPara(r, DatabaseKeyStartRedirect)
+	preserveHost, _ := utils.PostBool(r, DatabaseKeyPreserveHost)
+
+	if err := validateHTTPURL(address); err != nil {
+		utils.SendErrorResponse(w, "invalid address: "+err.Error())
+		return
+	}
+	outpostURL = strings.TrimRight(strings.TrimSpace(outpostURL), "/")
+	if outpostURL != "" {
+		if err := validateHTTPURL(outpostURL); err != nil {
+			utils.SendErrorResponse(w, "invalid outpostUrl: "+err.Error())
+			return
+		}
+	}
+	if startRedirect != StartRedirectNone && startRedirect != StartRedirectLocal && startRedirect != StartRedirectOutpost {
+		utils.SendErrorResponse(w, "invalid startRedirect")
+		return
+	}
+	if startRedirect != StartRedirectNone && outpostURL == "" {
+		utils.SendErrorResponse(w, "startRedirect requires outpostUrl")
+		return
+	}
 
 	// Write changes to runtime
 	ar.options.Address = address
@@ -158,6 +211,10 @@ func (ar *AuthRouter) handleOptionsPOST(w http.ResponseWriter, r *http.Request) 
 	ar.options.RequestIncludeBody = requestIncludeBody
 	ar.options.UseXOriginalHeaders = useXOriginalHeaders
 	ar.options.IgnoredPaths = cleanSplit(ignoredPaths)
+	ar.options.OutpostURL = outpostURL
+	ar.options.StartRedirect = startRedirect
+	ar.options.PreserveHost = preserveHost
+	ar.initOutpostProxy()
 
 	// Write changes to database
 	ar.options.Database.Write(DatabaseTable, DatabaseKeyAddress, address)
@@ -169,6 +226,9 @@ func (ar *AuthRouter) handleOptionsPOST(w http.ResponseWriter, r *http.Request) 
 	ar.options.Database.Write(DatabaseTable, DatabaseKeyRequestIncludeBody, ar.options.RequestIncludeBody)
 	ar.options.Database.Write(DatabaseTable, DatabaseKeyUseXOriginalHeaders, ar.options.UseXOriginalHeaders)
 	ar.options.Database.Write(DatabaseTable, DatabaseKeyIgnoredPaths, ignoredPaths)
+	ar.options.Database.Write(DatabaseTable, DatabaseKeyOutpostURL, outpostURL)
+	ar.options.Database.Write(DatabaseTable, DatabaseKeyStartRedirect, startRedirect)
+	ar.options.Database.Write(DatabaseTable, DatabaseKeyPreserveHost, preserveHost)
 
 	ar.logOptions()
 
@@ -185,8 +245,15 @@ func (ar *AuthRouter) handleOptionsDelete(w http.ResponseWriter, r *http.Request
 	ar.options.RequestIncludeBody = false
 	ar.options.UseXOriginalHeaders = false
 	ar.options.IgnoredPaths = nil
+	ar.options.OutpostURL = ""
+	ar.options.StartRedirect = ""
+	ar.options.PreserveHost = false
+	ar.initOutpostProxy()
 
 	ar.options.Database.Delete(DatabaseTable, DatabaseKeyAddress)
+	ar.options.Database.Delete(DatabaseTable, DatabaseKeyOutpostURL)
+	ar.options.Database.Delete(DatabaseTable, DatabaseKeyStartRedirect)
+	ar.options.Database.Delete(DatabaseTable, DatabaseKeyPreserveHost)
 	ar.options.Database.Delete(DatabaseTable, DatabaseKeyResponseHeaders)
 	ar.options.Database.Delete(DatabaseTable, DatabaseKeyResponseClientHeaders)
 	ar.options.Database.Delete(DatabaseTable, DatabaseKeyRequestHeaders)
@@ -210,6 +277,22 @@ func (ar *AuthRouter) HandleAuthProviderRouting(w http.ResponseWriter, r *http.R
 	// Skip forward auth for SSO-ignored paths. These paths are served WITHOUT authentication
 	// (e.g. an auth provider callback subpath that must reach its own handler), so matching is
 	// hardened against path traversal / boundary tricks (see IsIgnoredPath).
+	// The Authentik outpost path is proxied to the outpost itself (callback, start, sign_out, assets).
+	// It must never be gated by the auth check or it could not complete a sign-in.
+	if ar.handleOutpostPath(w, r) {
+		return ErrOutpostHandled
+	}
+
+	// In Authentik mode no client may ever supply X-authentik-* identity headers to the upstream,
+	// whether or not they are in the configured copy list. Legitimate values are re-added below.
+	if ar.options.OutpostURL != "" {
+		for name := range r.Header {
+			if hasPrefixFold(name, "X-authentik-") {
+				delete(r.Header, name)
+			}
+		}
+	}
+
 	if ar.IsIgnoredPath(r.RequestURI) {
 		headerReplaceIncluded(nil, r.Header, ar.options.ResponseHeaders)
 		return nil
@@ -220,18 +303,26 @@ func (ar *AuthRouter) HandleAuthProviderRouting(w http.ResponseWriter, r *http.R
 	}
 
 	// Make a request to Authz Server to verify the request
-	req, err := http.NewRequest(http.MethodGet, ar.options.Address, nil)
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, ar.options.Address, nil)
 	if err != nil {
 		return ar.handle500Error(w, err, "Unable to create request")
 	}
 
+	// Scrub all client supplied forwarding headers, then set the ones computed by Zoraxy.
 	headerCopyIncluded(r.Header, req.Header, ar.options.RequestHeaders, true)
 	headerCookieRedact(r, ar.options.RequestIncludedCookies, false)
+	scrubForwardingHeaders(req)
+	if ar.options.PreserveHost {
+		req.Host = r.Host
+	}
 
 	// TODO: Add support for headers from upstream proxies. This will likely involve implementing some form of
 	//       proxy specific trust system within Zoraxy.
 	if ar.options.UseXOriginalHeaders {
 		rSetXOriginalHeaders(r, req)
+		// Set the X-Forwarded-* variants as well. Some outpost modes (traefik/caddy) read those and
+		// they would otherwise be whatever the client sent.
+		rSetXForwardedHeaders(r, req)
 	} else {
 		rSetXForwardedHeaders(r, req)
 	}
@@ -268,6 +359,20 @@ func (ar *AuthRouter) HandleAuthProviderRouting(w http.ResponseWriter, r *http.R
 		return nil
 	}
 
+	// The auth server asked for a sign-in but gave us no redirect: send the browser to the outpost start URL.
+	if ar.options.StartRedirect != StartRedirectNone &&
+		(respForwarded.StatusCode == http.StatusUnauthorized) &&
+		respForwarded.Header.Get(HeaderLocation) == "" && wantsHTMLNavigation(r) {
+		if target, ok := ar.startURL(r); ok {
+			// Relay cookies the outpost set (e.g. the CSRF/state cookie for the start flow).
+			headerCopyIncluded(respForwarded.Header, w.Header(), []string{"Set-Cookie"}, false)
+			w.Header().Set("Cache-Control", "no-store")
+			http.Redirect(w, r, target, http.StatusFound)
+			return ErrUnauthorized
+		}
+		return ar.handle500Error(w, nil, "Start redirect is enabled but no outpost URL is configured")
+	}
+
 	// Copy the unsuccessful response.
 	headerCopyExcluded(respForwarded.Header, w.Header(), nil)
 
@@ -277,7 +382,7 @@ func (ar *AuthRouter) HandleAuthProviderRouting(w http.ResponseWriter, r *http.R
 		w.WriteHeader(respForwarded.StatusCode)
 	}
 
-	if _, err = io.Copy(w, respForwarded.Body); err != nil {
+	if _, err = io.Copy(w, io.LimitReader(respForwarded.Body, MaxAuthResponseBody)); err != nil {
 		return ar.handle500Error(w, err, "Unable to copy response")
 	}
 
@@ -294,5 +399,5 @@ func (ar *AuthRouter) handle500Error(w http.ResponseWriter, err error, message s
 }
 
 func (ar *AuthRouter) logOptions() {
-	ar.options.Logger.PrintAndLog(LogTitle, fmt.Sprintf("Forward Authz Options -> Address: %s, Response Headers: %s, Response Client Headers: %s, Request Headers: %s, Request Included Cookies: %s, Request Excluded Cookies: %s, Request Include Body: %t, Use X-Original Headers: %t, Ignored Paths: %s", ar.options.Address, strings.Join(ar.options.ResponseHeaders, ";"), strings.Join(ar.options.ResponseClientHeaders, ";"), strings.Join(ar.options.RequestHeaders, ";"), strings.Join(ar.options.RequestIncludedCookies, ";"), strings.Join(ar.options.RequestExcludedCookies, ";"), ar.options.RequestIncludeBody, ar.options.UseXOriginalHeaders, strings.Join(ar.options.IgnoredPaths, ";")), nil)
+	ar.options.Logger.PrintAndLog(LogTitle, fmt.Sprintf("Forward Authz Options -> Address: %s, Response Headers: %s, Response Client Headers: %s, Request Headers: %s, Request Included Cookies: %s, Request Excluded Cookies: %s, Request Include Body: %t, Use X-Original Headers: %t, Ignored Paths: %s, Outpost URL: %s, Start Redirect: %q, Preserve Host: %t", ar.options.Address, strings.Join(ar.options.ResponseHeaders, ";"), strings.Join(ar.options.ResponseClientHeaders, ";"), strings.Join(ar.options.RequestHeaders, ";"), strings.Join(ar.options.RequestIncludedCookies, ";"), strings.Join(ar.options.RequestExcludedCookies, ";"), ar.options.RequestIncludeBody, ar.options.UseXOriginalHeaders, strings.Join(ar.options.IgnoredPaths, ";"), ar.options.OutpostURL, ar.options.StartRedirect, ar.options.PreserveHost), nil)
 }
