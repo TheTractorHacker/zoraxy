@@ -338,6 +338,7 @@ func ReverseProxyInit() {
 		PluginManager:       pluginManager,
 		Metrics:             metricsRegistry,
 		Abuse:               getAbuseManager(),
+		Bots:                getBotEngine(),
 		/* Timeouts */
 		ReadHeaderTimeout: int64(readHeaderTimeout),
 		WriteTimeout:      int64(writeTimeout),
@@ -1961,6 +1962,7 @@ func ReverseProxyListDetail(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		targetEndpoint := dynamicproxy.CopyEndpoint(endpointRaw.(*dynamicproxy.ProxyEndpoint))
+		targetEndpoint.MaskHeaderRuleSecrets() //secrets are never sent back to the browser
 		js, _ := json.Marshal(targetEndpoint)
 		utils.SendJSONResponse(w, string(js))
 	} else if eptype == "root" {
@@ -2008,6 +2010,7 @@ func ReverseProxyList(w http.ResponseWriter, r *http.Request) {
 				})
 			}
 			thisEndpoint.AuthenticationProvider.BasicAuthCredentials = cleanedCredentials
+			thisEndpoint.MaskHeaderRuleSecrets()
 			results = append(results, thisEndpoint)
 			return true
 		})

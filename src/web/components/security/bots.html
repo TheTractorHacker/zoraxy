@@ -1,0 +1,74 @@
+<h3>Bot rules (User-Agent)</h3>
+<p>Block, challenge or only log requests by User-Agent. Managed lists plus your own rules; good bots (Googlebot, Bingbot ...)
+    can be allowed and are verified by reverse DNS so a faked User-Agent is not trusted. A User-Agent is easy to fake:
+    this stops lazy bots and scanners, not determined attackers. <b>Challenge</b> needs a CAPTCHA on the proxy rule (otherwise it blocks).
+    The AI crawler list is the same list the exploit detector's "block AI crawlers" option uses. Disabled by default.</p>
+<div class="ui form">
+    <div class="ui toggle checkbox"><input type="checkbox" id="brEnabled"><label>Enable for all proxy rules (a proxy rule can opt in or out below)</label></div>
+    <h4>Managed lists</h4>
+    <div style="overflow-x:auto"><table class="ui very basic unstackable table"><thead><tr><th>On</th><th>List</th><th>Action</th></tr></thead><tbody id="brCats"></tbody></table></div>
+    <h4>Good bots (allow-list)</h4>
+    <div id="brGood"></div>
+    <div class="inline field"><div class="ui checkbox"><input type="checkbox" id="brVerify"><label>Verify by reverse DNS (recommended). Unverified claimants are treated as fake bots.</label></div></div>
+    <div class="inline field"><label>Action for a fake bot</label> <select id="brFakeAct" class="ui dropdown"></select></div>
+    <div class="inline field"><label>Requests without a User-Agent</label> <select id="brEmpty" class="ui dropdown"><option value="">allow</option></select></div>
+    <h4>Custom rules (first match wins, before the managed lists)</h4>
+    <div style="overflow-x:auto"><table class="ui very basic unstackable table"><thead><tr><th>Name</th><th>Type</th><th>Pattern</th><th>Case insens.</th><th>Action</th><th></th></tr></thead><tbody id="brCustom"></tbody></table></div>
+    <button class="ui mini basic button" id="brAddRule"><i class="plus icon"></i> Add rule</button>
+    <p><small>Substring rules ignore case. Regular expressions use the safe RE2 syntax (no backreferences / lookaround), max 200 characters.</small></p>
+    <div class="ui divider"></div>
+    <button class="ui basic green button" id="brSave"><i class="save icon"></i> Save</button>
+</div>
+<div class="ui divider"></div>
+<h4>Per proxy rule</h4>
+<p>Default follows the switch above. "On" applies the rules to that proxy rule even when the global switch is off, "Off" exempts it.</p>
+<div style="overflow-x:auto"><table class="ui very basic unstackable table"><tbody id="brPolicies"></tbody></table></div>
+<script>
+(function () {
+    var ACTIONS = ["block", "challenge", "log", "drop"];
+    var data = null;
+    function esc(s) { return $("<div>").text(s == null ? "" : String(s)).html(); }
+    function toast(m, ok) { if (window.msgbox) { msgbox(m, ok); } }
+    function actSel(cls, cur) {
+        return '<select class="ui dropdown ' + cls + '">' + ACTIONS.map(function (a) { return '<option' + (a === cur ? " selected" : "") + ">" + a + "</option>"; }).join("") + "</select>";
+    }
+    function customRow(r) {
+        r = r || { Name: "", Type: "substring", Pattern: "", CaseInsensitive: true, Action: "block" };
+        return '<tr class="brRule"><td><input class="rn" value="' + esc(r.Name) + '"></td><td><select class="rt"><option' + (r.Type === "substring" ? " selected" : "") + '>substring</option><option' + (r.Type === "regex" ? " selected" : "") + '>regex</option></select></td>' +
+            '<td><input class="rp" value="' + esc(r.Pattern) + '"></td><td><input type="checkbox" class="rc"' + (r.CaseInsensitive ? " checked" : "") + '></td><td>' + actSel("ra", r.Action) + '</td><td><i class="trash icon brDel" style="cursor:pointer"></i></td></tr>';
+    }
+    function load() {
+        $.get("/api/botrules/get", function (d) {
+            data = d; var c = d.Config;
+            $("#brEnabled").prop("checked", c.Enabled); $("#brVerify").prop("checked", c.VerifyBots);
+            $("#brCats").html(d.Categories.map(function (k) {
+                var cc = (c.Categories || {})[k.ID] || { Enabled: false, Action: "block" };
+                return '<tr data-id="' + esc(k.ID) + '"><td><input type="checkbox" class="ce"' + (cc.Enabled ? " checked" : "") + '></td><td>' + esc(k.Title) + " (" + k.Count + ")</td><td>" + actSel("ca", cc.Action) + "</td></tr>";
+            }).join(""));
+            $("#brGood").html(d.GoodBots.map(function (n) {
+                return '<div class="ui checkbox" style="margin-right:1em"><input type="checkbox" class="gb" value="' + esc(n) + '"' + ((c.AllowedBots || []).indexOf(n) >= 0 ? " checked" : "") + "><label>" + esc(n) + "</label></div>";
+            }).join(""));
+            $("#brFakeAct").html(ACTIONS.map(function (a) { return "<option" + (a === (c.FakeBotAction || "block") ? " selected" : "") + ">" + a + "</option>"; }).join(""));
+            $("#brEmpty").html('<option value="">allow</option>' + ACTIONS.map(function (a) { return '<option' + (a === c.BlockEmptyUA ? " selected" : "") + ">" + a + "</option>"; }).join(""));
+            $("#brCustom").html((c.Custom || []).map(customRow).join(""));
+            $("#brPolicies").html(Object.keys(d.Policies || {}).sort().map(function (n) {
+                var p = d.Policies[n];
+                return '<tr><td>' + esc(n) + '</td><td><select class="brPol" data-ep="' + esc(n) + '"><option value=""' + (p === "" ? " selected" : "") + '>follow global</option><option value="on"' + (p === "on" ? " selected" : "") + '>on</option><option value="off"' + (p === "off" ? " selected" : "") + ">off</option></select></td></tr>";
+            }).join("") || "<tr><td>No proxy rules.</td></tr>");
+        });
+    }
+    $("#brAddRule").on("click", function () { $("#brCustom").append(customRow()); });
+    $("#brCustom").on("click", ".brDel", function () { $(this).closest("tr").remove(); });
+    $("#brSave").on("click", function () {
+        var c = { Enabled: $("#brEnabled").prop("checked"), VerifyBots: $("#brVerify").prop("checked"), FakeBotAction: $("#brFakeAct").val(), BlockEmptyUA: $("#brEmpty").val(), Categories: {}, Custom: [], AllowedBots: [] };
+        $("#brCats tr").each(function () { c.Categories[$(this).attr("data-id")] = { Enabled: $(this).find(".ce").prop("checked"), Action: $(this).find(".ca").val() }; });
+        $(".gb:checked").each(function () { c.AllowedBots.push($(this).val()); });
+        $(".brRule").each(function () { c.Custom.push({ Name: $(this).find(".rn").val(), Type: $(this).find(".rt").val(), Pattern: $(this).find(".rp").val(), CaseInsensitive: $(this).find(".rc").prop("checked"), Action: $(this).find(".ra").val() }); });
+        $.cjax({ type: "POST", url: "/api/botrules/set", data: { config: JSON.stringify(c) }, success: function (d) { if (d && d.error) { toast(d.error, false); } else { toast("Saved", true); load(); } } });
+    });
+    $("#brPolicies").on("change", ".brPol", function () {
+        $.cjax({ type: "POST", url: "/api/botrules/endpoint", data: { ep: $(this).attr("data-ep"), policy: $(this).val() }, success: function (d) { if (d && d.error) { toast(d.error, false); } else { toast("Saved", true); } } });
+    });
+    load();
+})();
+</script>

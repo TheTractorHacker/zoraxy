@@ -1,0 +1,66 @@
+<h3>Header access rules</h3>
+<p>Require a request header (for example a secret set by your CDN or a client) on a proxy rule, otherwise deny, drop the
+    connection or answer 404. All rules of a proxy rule must pass; a rule passes if <b>any</b> of its values matches, so you can
+    rotate secrets by adding the new value, deploying it, then removing the old one. Secrets are compared in constant time, never
+    logged and never shown again after saving (leave a secret field empty to keep the stored one). Off unless rules are added.</p>
+<div class="ui form">
+    <div class="field"><label>Proxy rule</label><select id="hrEp" class="ui dropdown"></select></div>
+    <div id="hrMsg" class="ui negative message" style="display:none"></div>
+    <div style="overflow-x:auto">
+        <table class="ui very basic unstackable table">
+            <thead><tr><th>Header</th><th>Match</th><th>Values (one per line)</th><th>Only below path</th><th>Otherwise</th><th></th></tr></thead>
+            <tbody id="hrRows"></tbody>
+        </table>
+    </div>
+    <button class="ui mini basic button" id="hrAdd"><i class="plus icon"></i> Add rule</button>
+    <button class="ui basic green button" id="hrSave"><i class="save icon"></i> Save</button>
+</div>
+<script>
+(function () {
+    function esc(s) { return $("<div>").text(s == null ? "" : String(s)).html(); }
+    function toast(m, ok) { if (window.msgbox) { msgbox(m, ok); } }
+    function row(r) {
+        r = r || { Name: "", Match: "equals", Values: [""], PathPrefix: "", Action: "deny" };
+        var secret = r.Match === "equals" || r.Match === "";
+        var vals = secret ? (r.Values || []).map(function (v, i) { return ""; }).join("\n") : (r.Values || []).join("\n");
+        var ph = secret && (r.Values || []).length ? (r.Values.length + " stored secret(s): leave empty to keep, one line each") : "";
+        return '<tr class="hrRow" data-n="' + (r.Values || []).length + '"><td><input class="hn" value="' + esc(r.Name) + '" placeholder="X-Edge-Key"></td>' +
+            '<td><select class="hm"><option' + (r.Match === "equals" || r.Match === "" ? " selected" : "") + '>equals</option><option' + (r.Match === "regex" ? " selected" : "") + '>regex</option><option' + (r.Match === "present" ? " selected" : "") + '>present</option></select></td>' +
+            '<td><textarea class="hv" rows="2" placeholder="' + esc(ph) + '" autocomplete="off">' + esc(vals) + '</textarea></td>' +
+            '<td><input class="hp" value="' + esc(r.PathPrefix) + '" placeholder="/admin"></td>' +
+            '<td><select class="ha"><option' + (r.Action === "deny" || !r.Action ? " selected" : "") + '>deny</option><option' + (r.Action === "drop" ? " selected" : "") + '>drop</option><option' + (r.Action === "notfound" ? " selected" : "") + '>notfound</option></select></td>' +
+            '<td><i class="trash icon hrDel" style="cursor:pointer"></i></td></tr>';
+    }
+    function loadRules() {
+        var ep = $("#hrEp").val(); if (!ep) { $("#hrRows").html(""); return; }
+        $.get("/api/headerrules/get?ep=" + encodeURIComponent(ep), function (d) {
+            if (d && d.error) { $("#hrMsg").text(d.error).show(); return; }
+            $("#hrMsg").hide();
+            $("#hrRows").html((d || []).map(row).join(""));
+        });
+    }
+    $.cjax({ type: "POST", url: "/api/proxy/list", data: { type: "host" }, success: function (list) {
+        var h = (list || []).map(function (e) { return "<option>" + esc(e.RootOrMatchingDomain) + "</option>"; }).join("");
+        $("#hrEp").html(h || "<option value=''>(no proxy rules)</option>");
+        loadRules();
+    } });
+    $("#hrEp").on("change", loadRules);
+    $("#hrAdd").on("click", function () { $("#hrRows").append(row()); });
+    $("#hrRows").on("click", ".hrDel", function () { $(this).closest("tr").remove(); });
+    $("#hrSave").on("click", function () {
+        var rules = [];
+        $(".hrRow").each(function () {
+            var m = $(this).find(".hm").val(), n = +$(this).attr("data-n");
+            var raw = $(this).find(".hv").val().split("\n");
+            var vals = raw.map(function (s) { return s.replace(/\r$/, ""); });
+            if (m !== "equals") { vals = vals.filter(Boolean); }
+            else if (n && vals.length === 1 && vals[0] === "") { vals = new Array(n).fill(""); } //keep all stored secrets
+            else { while (vals.length && vals[vals.length - 1] === "" && vals.length > n) { vals.pop(); } }
+            rules.push({ Name: $(this).find(".hn").val(), Match: m, Values: vals, PathPrefix: $(this).find(".hp").val(), Action: $(this).find(".ha").val() });
+        });
+        $.cjax({ type: "POST", url: "/api/headerrules/set", data: { ep: $("#hrEp").val(), rules: JSON.stringify(rules) }, success: function (d) {
+            if (d && d.error) { $("#hrMsg").text(d.error).show(); } else { $("#hrMsg").hide(); toast("Saved", true); loadRules(); }
+        } });
+    });
+})();
+</script>

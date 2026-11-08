@@ -446,6 +446,7 @@ func initAPIs(targetMux *http.ServeMux) {
 	RegisterStaticWebServerAPIs(authRouter)
 	RegisterPluginAPIs(authRouter)
 	RegisterAbuseAPIs(authRouter)
+	RegisterSecurityAPIs(authRouter)
 	RegisterAccessRuleExtraAPIs(authRouter)
 	authRouter.HandleFunc("/api/users/list", authAgent.HandleUserList)
 	authRouter.HandleFunc("/api/users/action", authAgent.HandleUserAction)

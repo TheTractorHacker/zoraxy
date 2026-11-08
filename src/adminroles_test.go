@@ -52,6 +52,7 @@ func TestViewerCannotReachAnyMutatingRoute(t *testing.T) {
 	RegisterStaticWebServerAPIs(rt)
 	RegisterPluginAPIs(rt)
 	RegisterAbuseAPIs(rt)
+	RegisterSecurityAPIs(rt)
 	RegisterAccessRuleExtraAPIs(rt)
 	defer stopAbuseManager()
 	rt.HandleFunc("/api/users/list", authAgent.HandleUserList)

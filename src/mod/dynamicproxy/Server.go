@@ -299,7 +299,7 @@ func (h *ProxyHandler) runEndpointChain(w http.ResponseWriter, r *http.Request, 
 	}
 
 	//Networking: client certificate policy (mTLS) and path scoped rules, see clientcert.go / pathrules.go
-	if h.enforceClientCert(w, r, sep) || h.handlePathRules(w, r, sep) {
+	if h.enforceClientCert(w, r, sep) || h.handlePathRules(w, r, sep) || h.handleHeaderRules(w, r, sep) || h.handleBotRules(w, r, sep) {
 		return true
 	}
 
