@@ -1,65 +1,105 @@
-<div class="standardContainer">
-    <div class="ui basic segment">
-        <h2>HTTP Proxy</h2>
-        <p>Proxy HTTP server with HTTP or HTTPS for multiple hosts. If you are only proxying for one host / domain, use Default Site instead.</p>
-    </div>
+<div class="standardContainer" id="httprpPage">
     <style>
-        #httpProxyList .ui.toggle.checkbox input:checked ~ label::before{
-            background-color: #00ca52 !important;
+        /* ---------- HTTP proxy rule list ---------- */
+        #httprpPage .ptHead{ display:flex; align-items:flex-start; justify-content:space-between; gap:1em; flex-wrap:wrap; margin-bottom:0.4em; }
+        #httprpPage .ptHead h2{ margin-bottom:0.2em; }
+        #httprpPage .ptHead p{ margin:0; opacity:0.75; max-width:46em; }
+        #httprpPage .ptTools{ display:flex; flex-wrap:wrap; gap:0.6em 0.8em; align-items:center; margin:1em 0 0.6em; }
+        #httprpPage .ptSearch{ flex:1 1 16em; max-width:26em; min-width:12em; }
+        #httprpPage .ptSeg{ display:inline-flex; border:1px solid var(--divider_color); border-radius:0.5em; overflow:hidden; background:var(--theme_bg_primary); }
+        #httprpPage .ptSeg button{ border:0; background:transparent; color:var(--text_color); padding:0.55em 0.85em; cursor:pointer; font:inherit; font-size:0.92em; border-right:1px solid var(--divider_color); white-space:nowrap; }
+        #httprpPage .ptSeg button:last-child{ border-right:0; }
+        #httprpPage .ptSeg button:hover{ background:var(--theme_bg_active); }
+        #httprpPage .ptSeg button.active{ background:#4b75ff; color:#fff; }
+        #httprpPage .ptSeg .n{ opacity:0.65; margin-left:0.25em; font-size:0.9em; }
+        #httprpPage .ptSeg button.hasErr:not(.active) .n{ color:#db2828; opacity:1; font-weight:700; }
+        #httprpPage .ptSpacer{ flex:1 1 0; }
+        #httprpPage .ptTagChips{ display:flex; flex-wrap:wrap; gap:0.4em; align-items:center; margin-bottom:0.7em; }
+        #httprpPage .ptChip{ border:1px solid var(--divider_color); background:var(--theme_bg_primary); color:var(--text_color); border-radius:2em; padding:0.2em 0.7em; font:inherit; font-size:0.85em; cursor:pointer; display:inline-flex; align-items:center; gap:0.4em; }
+        #httprpPage .ptChip:hover{ border-color:#4b75ff; }
+        #httprpPage .ptChip.on{ background:#4b75ff; border-color:#4b75ff; color:#fff; }
+        #httprpPage .ptChip .n{ opacity:0.6; }
+        #httprpPage .ptChipDot{ width:0.65em; height:0.65em; border-radius:50%; display:inline-block; }
+        #httprpPage .ptMoreTags{ border:1px dashed var(--divider_color); background:transparent; color:var(--text_color); border-radius:2em; padding:0.2em 0.5em; font-size:0.85em; }
+        #httprpPage .ptLink{ background:none; border:0; color:#4b75ff; cursor:pointer; font:inherit; padding:0 0.3em; }
+
+        /* bulk action bar: only exists while something is selected, sticks to the top while scrolling */
+        #bulkBar{ position:sticky; top:0.5em; z-index:6; display:flex; flex-wrap:wrap; gap:0.4em; align-items:center; padding:0.55em 0.8em; margin:0 0 0.8em; border-radius:0.6em; background:var(--theme_bg_inverted); color:var(--text_color_inverted); box-shadow:0 4px 14px rgba(0,0,0,0.25); }
+        #bulkBar[hidden]{ display:none !important; }
+        #bulkBar .bulkCount{ font-weight:700; margin-right:0.4em; }
+        #bulkBar .bulkAllSel{ opacity:0.75; font-size:0.9em; margin-right:0.4em; }
+        #bulkBar .ui.button{ margin:0; background:rgba(127,127,127,0.18) !important; color:inherit !important; box-shadow:none !important; border:1px solid rgba(127,127,127,0.35) !important; }
+        #bulkBar .ui.button:hover{ background:rgba(127,127,127,0.35) !important; }
+        #bulkBar .ui.button.danger{ color:#ff6b6b !important; }
+        #bulkBar .bulkSpacer{ flex:1 1 auto; }
+        #bulkBar .bulkHint{ opacity:0.6; font-size:0.85em; margin-left:0.3em; }
+        #bulkSelectMatching{ display:none; padding:0.45em 0.8em; margin-bottom:0.6em; border-radius:0.5em; background:var(--theme_bg_active); font-size:0.92em; }
+
+        #httpProxyTableWrapper{ width:100%; overflow-x:auto; border:1px solid var(--divider_color); border-radius:0.6em; background:var(--theme_bg_primary); }
+        table.ptTable{ width:100%; border-collapse:collapse; min-width:760px; }
+        table.ptTable th{ text-align:left; font-size:0.78em; text-transform:uppercase; letter-spacing:0.05em; color:var(--text_color_secondary); padding:0.7em 0.8em; border-bottom:1px solid var(--divider_color); background:var(--theme_advance); white-space:nowrap; user-select:none; }
+        table.ptTable th[data-sort]{ cursor:pointer; }
+        table.ptTable th[data-sort]:hover, table.ptTable th.sorted{ color:var(--text_color); }
+        table.ptTable th .ptArrow{ font-size:0.8em; margin-left:0.3em; }
+        table.ptTable td{ padding:0.65em 0.8em; border-bottom:1px solid var(--divider_color); vertical-align:middle; }
+        table.ptTable tbody tr:last-child td{ border-bottom:0; }
+        table.ptTable tbody tr.ptRow:hover{ background:var(--theme_bg_active); }
+        table.ptTable tr.isSel{ background:rgba(75,117,255,0.10); }
+        table.ptTable tr.isSel:hover{ background:rgba(75,117,255,0.16); }
+        table.ptTable tr.isOff .ptHost, table.ptTable tr.isOff .ptUps, table.ptTable tr.isOff .ptTagsCell{ opacity:0.55; }
+        table.ptTable .ptSel{ width:2.4em; text-align:center; padding-right:0; }
+        table.ptTable .ptSel input{ width:1.1em; height:1.1em; cursor:pointer; vertical-align:middle; }
+        table.ptTable .ptName{ min-width:14em; }
+        table.ptTable .ptName > .ptDot{ float:left; margin:0.5em 0.7em 0 0; }
+        table.ptTable .ptNameBody{ overflow:hidden; }
+        table.ptTable .ptHost{ font-weight:600; word-break:break-all; }
+        table.ptTable .ptSub{ font-size:0.82em; color:var(--text_color_secondary); margin-top:0.15em; }
+        table.ptTable .ptSub .ptSep::after{ content:"\00b7"; margin:0 0.45em; opacity:0.6; }
+        table.ptTable .ptSub .icon{ margin-right:0.25em; }
+        table.ptTable .ptUps{ word-break:break-all; font-size:0.93em; }
+        table.ptTable .ptMuted, #httprpPage .ptMuted{ opacity:0.5; }
+        table.ptTable .ptBad{ color:#db2828; }
+        table.ptTable .ptProt{ min-width:9em; }
+        table.ptTable .ptTagsCell{ min-width:6em; }
+        table.ptTable .ptAct{ white-space:nowrap; text-align:right; width:1%; }
+        table.ptTable .ptAct .ui.button{ margin:0 0 0 0.25em; }
+        table.ptTable .ptAct .ptDel{ box-shadow:none !important; }
+        .ptDot{ display:inline-block; width:0.7em; height:0.7em; border-radius:50%; background:#9aa0a6; flex:none; }
+        .ptDot.on{ background:#21ba45; box-shadow:0 0 0 3px rgba(33,186,69,0.18); }
+        .ptDot.err{ background:#db2828; box-shadow:0 0 0 3px rgba(219,40,40,0.18); }
+        .ptBadge{ display:inline-block; font-size:0.75em; line-height:1; padding:0.38em 0.6em; margin:0 0.3em 0.3em 0; border-radius:2em; border:1px solid var(--divider_color); background:var(--theme_advance); white-space:nowrap; }
+        .ptBadge .icon{ margin-right:0.3em !important; }
+        .ptBadge.waf{ border-color:rgba(33,186,69,0.5); }
+        .ptBadge.auth{ border-color:rgba(75,117,255,0.5); }
+        .ptTag{ display:inline-block; font-size:0.75em; font-weight:700; padding:0.35em 0.65em; margin:0 0.3em 0.3em 0; border-radius:0.3em; text-decoration:none; }
+        .ptTag:hover{ opacity:0.8; text-decoration:underline; }
+        .ptPill{ display:inline-flex; align-items:center; gap:0.45em; border:1px solid var(--divider_color); border-radius:2em; padding:0.28em 0.8em 0.28em 0.6em; font:inherit; font-size:0.85em; cursor:pointer; background:var(--theme_advance); color:var(--text_color); transition:background-color .15s, border-color .15s; white-space:nowrap; }
+        .ptPill:hover{ border-color:#4b75ff; }
+        .ptPill .ptPillDot{ width:0.6em; height:0.6em; border-radius:50%; background:#9aa0a6; }
+        .ptPill.on{ border-color:rgba(33,186,69,0.55); background:rgba(33,186,69,0.10); }
+        .ptPill.on .ptPillDot{ background:#21ba45; }
+        .ptPill.err{ border-color:rgba(219,40,40,0.6); background:rgba(219,40,40,0.10); }
+        .ptPill.err .ptPillDot{ background:#db2828; }
+        .ptEmpty{ text-align:center; padding:3.5em 1em; color:var(--text_color_secondary); }
+        .ptEmpty > .icon{ font-size:2.6em; opacity:0.35; margin-bottom:0.4em; }
+        .ptEmpty h3{ color:var(--text_color); margin:0.2em 0; }
+        .ptFooter{ display:flex; flex-wrap:wrap; gap:0.6em 1em; align-items:center; justify-content:space-between; margin:0.8em 0 1.2em; font-size:0.92em; color:var(--text_color_secondary); }
+        .ptFooter .ptPager{ display:inline-flex; align-items:center; gap:0.5em; }
+        #httprpPage th:focus-visible{ outline:2px solid #4b75ff; outline-offset:-2px; }
+        @keyframes ptFlash{ 0%,60%{ background:rgba(75,117,255,0.28); } 100%{ background:transparent; } }
+        table.ptTable tr.ptFlash td{ animation:ptFlash 3.5s ease-out; }
+        #ptToast{ position:fixed; left:50%; bottom:1.5em; transform:translate(-50%, 2em); opacity:0; pointer-events:none; z-index:2001; background:var(--theme_bg_inverted); color:var(--text_color_inverted); border-radius:0.6em; padding:0.7em 1em; box-shadow:0 6px 20px rgba(0,0,0,0.3); display:flex; gap:1em; align-items:center; transition:opacity .2s, transform .2s; max-width:calc(100vw - 2em); }
+        #ptToast.show{ opacity:1; transform:translate(-50%, 0); pointer-events:auto; }
+        #ptToast .ptToastAct{ border:0; background:transparent; color:#7aa2ff; font:inherit; font-weight:700; cursor:pointer; padding:0; }
+        @media (prefers-reduced-motion: reduce){ #ptToast{ transition:none; } table.ptTable tr.ptFlash td{ animation:none; background:rgba(75,117,255,0.2); } }
+        @media screen and (max-width: 640px){
+            #httprpPage .ptSearch{ max-width:none; flex-basis:100%; }
+            #httprpPage .ptSeg{ overflow-x:auto; max-width:100%; }
+            #httprpPage .ptHead .ui.primary.button{ width:100%; }
+            #bulkBar{ top:0.2em; }
         }
 
-        .subdEntry td:not(.ignoremw){
-            min-width: 100px;
-        }
-
-        .httpProxyListTools{
-            width: 100%;
-        }
-
-        .tag-select{
-            cursor: pointer;
-        }
-
-        th.no-sort{
-            cursor: default !important;
-        }
-
-        .tag-select:hover{
-            text-decoration: underline;
-            opacity: 0.8;
-        }
-
-        .inlineEditActionBtn{
-            border: 0px solid transparent !important;
-            box-shadow: none !important;
-            background-color: transparent !important;
-        }
-
-        body.darkTheme .ui.basic.small.icon.circular.button.inlineEditActionBtn{
-            border: 0px solid transparent !important;
-        }
-
-        /* Detail view toggle - hide by default */
-        th.details-view,
-        td.details-view {
-            display: none;
-        }
-
-        /* Table wrapper styling for detail view */
-        #httpProxyTableWrapper {
-            width: 100%;
-            overflow-x: auto;
-        }
-
-        #httpProxyTableWrapper.detail-view-enabled {
-            width: calc(100vw - 280px); /* Account for sidebar width */
-            max-width: none;
-        }
-
-        #httpProxyTableWrapper.detail-view-enabled table {
-            min-width: 1400px; /* Ensure table expands to accommodate all detail columns */
-        }
-
+        /* ---------- proxy rule editor ---------- */
         /* Custom, non overlaying modal for proxy rule editing */
         #httprpEditModal{
             position: fixed;
@@ -190,60 +230,82 @@
             display: none; /* Hidden by default */
         }
     </style>
-    <div class="httpProxyListTools" style="margin-bottom: 1em;">
-        <div id="tagFilterDropdown" class="ui floating basic dropdown labeled icon button" style="min-width: 150px;">
-            <i class="filter icon"></i>
-            <span class="text">Filter by tags</span>
-            <div class="menu">
-              <div class="ui icon search input">
-                <i class="search icon"></i>
-                <input type="text" placeholder="Search tags...">
-              </div>
-              <div class="divider"></div>
-                <div class="scrolling menu tagList">
-                    <!--
-                    Example: 
-                    <div class="item">
-                        <div class="ui red empty circular label"></div>
-                        Important
-                    </div>
-                    -->
-                    <!-- Add more tag options dynamically -->
-                </div>
-            </div>
+    <div class="ptHead">
+        <div>
+            <h2>HTTP Proxy</h2>
+            <p>Send requests for a domain to a server on your network. Only proxying one site? Use Default Site instead.</p>
         </div>
-        <div class="ui small input"  style="width: 300px; height: 38px;">
-            <!-- Prevent the browser from filling the saved Zoraxy login account into the  input searchInput below -->
-            <input type="password"  autocomplete="off" hidden/>
-            <input type="text" id="searchInput"  placeholder="Quick Search" onkeydown="handleSearchInput(event);" onchange="handleSearchInput(event);" onblur="handleSearchInput(event);">
+        <div>
+            <button type="button" class="ui primary button" id="ptNewRule" onclick="openNewRuleDialog();" title="Create a proxy rule (n)"><i class="plus icon"></i> New proxy rule</button>
         </div>
-        <button class="ui basic button" id="detailViewToggle" onclick="toggleDetailViewButton();" style="float: right;">
-            Basics View
-        </button>
     </div>
-    
-    <div id="httpProxyTableWrapper" style="width: 100%; overflow-x: auto; margin-bottom: 1em; min-height: 300px;">
-        <table class="ui unstackable sortable compact celled definition table">
+
+    <div class="ptTools">
+        <!-- Prevent the browser from filling the saved Zoraxy login account into the search input below -->
+        <input type="password" autocomplete="off" hidden/>
+        <div class="ui icon input ptSearch">
+            <input type="search" id="searchInput" placeholder="Search host, upstream, tag..." autocomplete="off" spellcheck="false" aria-label="Search proxy rules">
+            <i class="search icon"></i>
+        </div>
+        <div class="ptSeg" id="ptSeg" role="group" aria-label="Filter by status">
+            <button type="button" data-f="all" aria-pressed="true">All <span class="n">0</span></button>
+            <button type="button" data-f="enabled" aria-pressed="false">Enabled <span class="n">0</span></button>
+            <button type="button" data-f="disabled" aria-pressed="false">Disabled <span class="n">0</span></button>
+            <button type="button" data-f="errors" aria-pressed="false" title="Enabled rules without an active upstream or whose upstream is offline">Errors <span class="n">0</span></button>
+            <button type="button" data-f="noauth" aria-pressed="false" title="Rules without any authentication">No auth <span class="n">0</span></button>
+        </div>
+        <button type="button" class="ptLink" id="ptClear" style="display:none;">Clear filters</button>
+        <span class="ptSpacer"></span>
+        <button type="button" class="ui basic icon button" id="ptRefresh" title="Reload the list" aria-label="Reload the list"><i class="green refresh icon"></i></button>
+    </div>
+    <div class="ptTagChips" id="ptTagChips" style="display:none;" aria-label="Filter by tag"></div>
+
+    <!-- Bulk actions: shown only while rules are selected -->
+    <div id="bulkBar" role="toolbar" aria-label="Actions for the selected rules" hidden>
+        <b class="bulkCount">0 selected</b><span class="bulkAllSel" style="display:none;">(every matching rule)</span>
+        <button type="button" class="ui mini button" data-act="enable"><i class="toggle on icon"></i> Enable</button>
+        <button type="button" class="ui mini button" data-act="disable"><i class="toggle off icon"></i> Disable</button>
+        <button type="button" class="ui mini button" data-act="tags"><i class="tags icon"></i> Tags</button>
+        <button type="button" class="ui mini button" data-act="waf"><i class="shield alternate icon"></i> WAF</button>
+        <button type="button" class="ui mini button" data-act="rate"><i class="tachometer alternate icon"></i> Rate limit</button>
+        <button type="button" class="ui mini button" data-act="auth"><i class="key icon"></i> Authentication</button>
+        <button type="button" class="ui mini button" data-act="template"><i class="clone icon"></i> Template</button>
+        <button type="button" class="ui mini button danger" data-act="delete"><i class="trash icon"></i> Delete</button>
+        <span class="bulkSpacer"></span>
+        <span class="bulkHint">Esc to clear</span>
+        <button type="button" class="ui mini icon button" data-act="clear" title="Clear selection (Esc)" aria-label="Clear selection"><i class="times icon"></i></button>
+    </div>
+    <div id="bulkSelectMatching">All rules on this page are selected. <a href="#">Select all matching rules</a></div>
+
+    <div id="httpProxyTableWrapper">
+        <table class="ptTable" id="httpProxyTable">
             <thead>
                 <tr>
-                    <th></th>
-                    <th>Host</th>
-                    <th class="details-view">Alt. Listening Addr</th>
-                    <th>Destination</th>
-                    <th class="details-view">Authentication</th>
-                    <th>Virtual Directory</th>
-                    <th class="no-sort">Tags</th>
-                    <th class="no-sort" style="width:160px; cursor: default !important;"></th>
+                    <th class="ptSel"><input type="checkbox" id="bulkSelectAll" title="Select every rule on this page" aria-label="Select every rule on this page"></th>
+                    <th data-sort="host" tabindex="0" aria-sort="none">Host <span class="ptArrow"></span></th>
+                    <th data-sort="upstream" tabindex="0" aria-sort="none">Upstream <span class="ptArrow"></span></th>
+                    <th>Protection</th>
+                    <th data-sort="tags" tabindex="0" aria-sort="none">Tags <span class="ptArrow"></span></th>
+                    <th data-sort="status" tabindex="0" aria-sort="none">Status <span class="ptArrow"></span></th>
+                    <th><span class="ptSrOnly" style="position:absolute;left:-9999px;">Actions</span></th>
                 </tr>
             </thead>
             <tbody id="httpProxyList">
-            
+                <tr class="ptEmptyRow"><td colspan="7"><div class="ptEmpty"><i class="notched circle loading icon"></i><p>Loading proxy rules...</p></div></td></tr>
             </tbody>
         </table>
     </div>
 
-    <button class="ui icon right floated basic button" onclick="listProxyEndpoints();"><i class="green refresh icon"></i> Refresh</button>
-    <br><br>
+    <div class="ptFooter">
+        <span id="ptCount" aria-live="polite"></span>
+        <span class="ptPager" id="ptPager" style="display:none;">
+            <label for="ptPageSize">Rows</label>
+            <select id="ptPageSize"><option value="25">25</option><option value="50">50</option><option value="100">100</option></select>
+            <button type="button" class="ui mini basic icon button" id="ptPrev" aria-label="Previous page"><i class="angle left icon"></i></button>
+            <span id="ptPageNo"></span>
+            <button type="button" class="ui mini basic icon button" id="ptNext" aria-label="Next page"><i class="angle right icon"></i></button>
+        </span>
+    </div>
 </div>
 
 <!-- Modal for editing a HTTP Proxy Rule -->
@@ -987,312 +1049,9 @@
         return vdList;
     }
 
-    function renderTagList(subd){
-        let tagList = "";
-        if (subd.Tags.length > 0){
-            tagList = subd.Tags.map(tag => `<span class="ui tiny label tag-select" style="background-color: ${getTagColorByName(tag)}; color: ${getTagTextColor(tag)}">${tag}</span>`).join("");
-        }else{
-            tagList = "<small style='opacity: 0.3; pointer-events: none; user-select: none;'>No Tags</small>";
-            tagListEmpty = true;
-        }
-        return tagList;
-    }
-
-    function renderListeningPortsList(subd){
-        let portsList = "";
-        let ports = [];
-        
-        // Only show alternative listening ports (not primary or redirect ports)
-        if (subd.ListeningPorts && subd.ListeningPorts.length > 0) {
-            subd.ListeningPorts.forEach(port => {
-                ports.push(port);
-            });
-            portsList = ports.join("<br>");
-        } else {
-            portsList = `<small style="opacity: 0.3; pointer-events: none; user-select: none;">None</small>`;
-        }
-        
-        return portsList;
-    }
-
-    function renderAccessRuleName(subd){
-        // Return a placeholder that will be filled by resolveAccessRuleNameOnHostRPlist
-        let accessRuleID = subd.AccessFilterUUID || "default";
-        return `<span class="accessRuleNameInTable" ruleid="${accessRuleID}"></span>`;
-    }
-
-    /* List all proxy endpoints */
-    function listProxyEndpoints(preserveFilters = true){
-        let selectedTag = preserveFilters ? ($("#tagFilterDropdown").dropdown('get value') || "") : "";
-        $.get("/api/proxy/list?type=host", function(data){
-            $("#httpProxyList").html(``);
-            if (data.error !== undefined){
-                    $("#httpProxyList").append(`<tr>
-                    <td data-label="" colspan="9"><i class="remove icon"></i> ${data.error}</td>
-                </tr>`);
-            }else if (data.length == 0){
-                $("#httpProxyList").append(`<tr>
-                    <td data-label="" colspan="9"><i class="green check circle icon"></i> No HTTP Proxy Record</td>
-                </tr>`);
-            }else{
-                //Sort by RootOrMatchingDomain field
-                data.sort((a,b) => (a.RootOrMatchingDomain > b.RootOrMatchingDomain) ? 1 : ((b.RootOrMatchingDomain > a.RootOrMatchingDomain) ? -1 : 0))
-                httpProxyList = data;
-                data.forEach(subd => {
-                    let subdData = encodeURIComponent(JSON.stringify(subd));
-                    
-                    //Build the upstream list
-                    let upstreams = renderUpstreamList(subd);
-
-                    let inboundTlsIcon = "";
-                    if ($("#tls").checkbox("is checked")){
-                        inboundTlsIcon = `<i class="green lock icon" title="TLS Mode"></i>`;
-                        if (subd.BypassGlobalTLS){
-                            inboundTlsIcon = `<i class="grey lock icon" title="TLS Bypass Enabled"></i>`;
-                        }
-                    }else{
-                        inboundTlsIcon = `<i class="yellow lock open icon" title="Plain Text Mode"></i>`;
-                    }
-                    
-                    //Build the virtual directory list
-                    let vdList = renderVirtualDirectoryList(subd);
-                    let vdIsEmpty = (subd.VirtualDirectories.length == 0);
-
-                    //Build the Subdomain enable checkbox
-                    let enableChecked = "checked";
-                    if (subd.Disabled){
-                        enableChecked = "";
-                    }
-
-                    //Generate a  the TLS lock icons
-                    let httpProto = "http://";
-                    if ($("#tls").checkbox("is checked")) {
-                        httpProto = "https://";
-                    } else {
-                        httpProto = "http://";
-                    }
-                    let hostnameRedirectPort = currentListeningPort;
-                    if (hostnameRedirectPort == 80 || hostnameRedirectPort == 443){
-                        hostnameRedirectPort = "";
-                    }else{
-                        hostnameRedirectPort = ":" + hostnameRedirectPort;
-                    }
-
-                    //Generate alias domain list
-                    let aliasDomains = ``;
-                    if (subd.MatchingDomainAlias != undefined && subd.MatchingDomainAlias.length > 0){
-                        aliasDomains = `<small class="aliasDomains" eptuuid="${subd.RootOrMatchingDomain}" style="color: #636363;">Alias: `;
-                        (subd.MatchingDomainAlias || []).forEach(alias => {
-                            aliasDomains += `<a href="${httpProto}${alias}${hostnameRedirectPort}" target="_blank">${alias}</a>, `;
-                        });
-                        aliasDomains = aliasDomains.substr(0, aliasDomains.length - 2); //Remove the last tailing seperator
-                        aliasDomains += `</small><br>`;
-                    }
-
-                    //Build the sorting value
-                    let destSortValue = subd.ActiveOrigins.map(o => {
-                        // Check if it's an IP address (with optional port)
-                        let upstreamAddr = o.OriginIpOrDomain;
-                        let subpath = "";
-                        if (upstreamAddr.indexOf("/") !== -1) {
-                            let parts = upstreamAddr.split("/");
-                            subpath = parts.slice(1).join("/");
-                            upstreamAddr = parts[0];
-                        }
-                        let ipPortRegex = /^(\d{1,3}\.){3}\d{1,3}(:\d+)?$/;
-                        if (ipPortRegex.test(upstreamAddr)) {
-                            let [ip, port] = upstreamAddr.split(":");
-                            // Convert IP to hex
-                            let hexIp = ip.split('.').map(x => ('00' + parseInt(x).toString(16)).slice(-2)).join('');
-                            let hexPort = port ? (port.length < 5 ? port.padStart(5, '0') : port) : '';
-                            return hexIp + (hexPort ? ':' + hexPort : '') + "/" + subpath;
-                        }
-                        // Otherwise, treat it as a domain name
-                        return upstreamAddr;
-                    }).join(",");
-                    
-                    //Build tag list
-                    let tagList = renderTagList(subd);
-                    let tagListEmpty = (subd.Tags.length == 0);
-                    
-                    //Build listening ports list
-                    let listeningPortsList = renderListeningPortsList(subd);
-                    
-                    //Build access rule display (will be populated later)
-                    let accessRuleDisplay = renderAccessRuleName(subd);
-                    
-                    //Build authentication display
-                    let authDisplay = "";
-                    if (subd.AuthenticationProvider.AuthMethod == 0x1) {
-                        authDisplay = `<i class="ui grey key icon"></i> Basic Auth`;
-                    } else if (subd.AuthenticationProvider.AuthMethod == 0x2) {
-                        authDisplay = `<i class="ui blue key icon"></i> Forward Auth`;
-                    } else if (subd.AuthenticationProvider.AuthMethod == 0x3) {
-                        authDisplay = `<i class="ui yellow key icon"></i> OAuth2`;
-                    } else if (subd.AuthenticationProvider.AuthMethod == 0x4) {
-                        authDisplay = `<i class="ui purple key icon"></i> Zoraxy Auth`;
-                    } else {
-                        authDisplay = `<small style="opacity: 0.3; pointer-events: none; user-select: none;">None</small>`;
-                    }
-                    let authDisplayEmpty = (subd.AuthenticationProvider.AuthMethod == 0x0);
-                    
-                    $("#httpProxyList").append(`<tr eptuuid="${subd.RootOrMatchingDomain}" payload="${subdData}" class="subdEntry">
-                        <td class="collapsing ignoremw" datatype="enable">
-                            <div class="ui toggle tiny fitted checkbox" style="margin-bottom: -0.5em; margin-right: 0.4em;" title="Enable / Disable Rule">
-                                <input type="checkbox" class="enableToggle" name="active" ${enableChecked} eptuuid="${subd.RootOrMatchingDomain}" onchange="handleProxyRuleToggle(this);">
-                                <label></label>
-                            </div>
-                        </td>
-                        <td data-label="" editable="true" datatype="inbound">
-                            <a href="${httpProto}${subd.RootOrMatchingDomain}${hostnameRedirectPort}" target="_blank">${subd.RootOrMatchingDomain}</a> ${inboundTlsIcon}<br>
-                            ${aliasDomains}
-                            <small class="accessRuleNameUnderHost" ruleid="${subd.AccessFilterUUID}"></small>
-                        </td>
-                        <td data-label="listening-ports" datatype="ports" class="details-view">
-                            ${listeningPortsList}
-                        </td>
-                        <td data-label="" editable="true" datatype="domain" data-sort-value="${destSortValue}" style="word-break: break-all;">
-                            <div class="upstreamList">
-                                ${upstreams}        
-                            </div>
-                        </td>
-                        <td data-label="auth" datatype="auth" class="details-view" style="${authDisplayEmpty?"text-align: center;":""}">
-                            ${authDisplay}
-                        </td>
-                        <td data-label="" editable="true" datatype="vdir" style="${vdIsEmpty?"text-align: center;":""}">${vdList}</td>
-                        <td data-label="tags" payload="${encodeURIComponent(JSON.stringify(subd.Tags || []))}" datatype="tags" style="${tagListEmpty?"text-align: center;":""}">
-                            <div class="tags-list">
-                            ${tagList}
-                            </div>
-                        </td>
-                        <!-- <td data-label="" editable="true" datatype="advanced" style="width: 350px;">
-                            ${subd.AuthenticationProvider.AuthMethod == 0x1?`<i class="ui grey key icon"></i> Basic Auth`:``}
-                            ${subd.AuthenticationProvider.AuthMethod == 0x2?`<i class="ui blue key icon"></i> Forward Auth`:``}
-                            ${subd.AuthenticationProvider.AuthMethod == 0x3?`<i class="ui yellow key icon"></i> OAuth2`:``}
-                            ${subd.AuthenticationProvider.AuthMethod == 0x4?`<i class="ui purple key icon"></i> Zoraxy Auth`:``}
-                            ${subd.AuthenticationProvider.AuthMethod != 0x0 && subd.RequireRateLimit?"<br>":""}
-                            ${subd.RequireRateLimit?`<i class="ui green check icon"></i> Rate Limit @ ${subd.RateLimit} req/s`:``}
-                            ${subd.AuthenticationProvider.AuthMethod == 0x0 && !subd.RequireRateLimit?`<small style="opacity: 0.3; pointer-events: none; user-select: none;">No Special Settings</small>`:""}
-                        </td> -->
-                        <td class="center aligned ignoremw" editable="true" datatype="action" data-label="">
-                            <button title="Edit Proxy Rule" class="ui small blue basic button editBtn inlineEditActionBtn" onclick='editEndpoint("${(subd.RootOrMatchingDomain).hexEncode()}")'><i class="edit icon"></i> Edit</button>
-                            <button title="Remove Proxy Rule" class="ui circular mini red basic icon button inlineEditActionBtn" onclick='deleteEndpoint("${(subd.RootOrMatchingDomain).hexEncode()}")'><i class="trash icon"></i></button>
-                        </td>
-                    </tr>`);
-                });
-                populateTagFilterDropdown(data);
-                $("#tagFilterDropdown").dropdown('set selected', selectedTag);
-            }
-
-            resolveAccessRuleNameOnHostRPlist();
-            initDetailView();
-            filterProxyList();
-        });
-    }
-
-    //Perform realtime alias update without refreshing the whole page
-    function updateAliasListForEndpoint(endpointName, newAliasDomainList){
-        let targetEle = $(`.aliasDomains[eptuuid='${endpointName}']`);
-        console.log(targetEle);
-        if (targetEle.length == 0){
-            return;
-        }
-
-        let aliasDomains = ``;
-        if (newAliasDomainList != undefined && newAliasDomainList.length > 0){
-            aliasDomains = `Alias: `;
-            newAliasDomainList.forEach(alias => {
-                aliasDomains += `<a href="//${alias}" target="_blank">${alias}</a>, `;
-            });
-            aliasDomains = aliasDomains.substr(0, aliasDomains.length - 2); //Remove the last tailing seperator
-            $(targetEle).html(aliasDomains);
-            $(targetEle).show();
-        }else{
-            $(targetEle).hide();
-        }
-    }
-
-    //Resolve & Update all rule names on host PR list
-    function resolveAccessRuleNameOnHostRPlist(){
-        //Resolve the access filters
-        $.get("/api/access/list", function(data){
-            console.log(data);
-            if (data.error == undefined){
-                //Build a map base on the data
-                let accessRuleMap = {};
-                for (var i = 0; i < data.length; i++){
-                    accessRuleMap[data[i].ID] = data[i];
-                }
-                
-                // Update both the under-host display and the details-view column
-                $(".accessRuleNameUnderHost, .accessRuleNameInTable").each(function(){
-                    let thisAccessRuleID = $(this).attr("ruleid");
-                    if (thisAccessRuleID== ""){
-                        thisAccessRuleID = "default"
-                    }
-
-                    // Check if this is in the details-view column
-                    let isDetailsColumn = $(this).hasClass("accessRuleNameInTable");
-
-                    if (thisAccessRuleID == "default"){
-                        // Show "default" in details-view column, hide in under-host display
-                        if (isDetailsColumn) {
-                            $(this).html("default");
-                        } else {
-                            $(this).html("");
-                        }
-                        return;
-                    }
-
-                    let rule = accessRuleMap[thisAccessRuleID];
-                    if (rule == undefined){
-                        //Missing config or config too old
-                        $(this).html(`<i class="ui red exclamation triangle icon"></i> <b style="color: #db2828;">Access Rule Error</b>`);
-                        return;
-                    }
-                    let icon = `<i class="ui grey filter icon"></i>`;
-                    if (rule.ID == "default"){
-                        icon = `<i class="ui yellow star icon"></i>`;
-                    }else if (rule.BlacklistEnabled && !rule.WhitelistEnabled){
-                        //This is a blacklist filter
-                        icon = `<i class="ui red filter icon"></i>`;
-                    }else if (rule.WhitelistEnabled && !rule.BlacklistEnabled){
-                        //This is a whitelist filter
-                        icon = `<i class="ui green filter icon"></i>`;
-                    }else if (rule.WhitelistEnabled && rule.BlacklistEnabled){
-                        //Whitelist and blacklist filter
-                        icon = `<i class="ui yellow filter icon"></i>`;
-                    }
-
-                    if (rule != undefined){
-                        $(this).html(`${icon} ${rule.Name}`);
-                    }
-                });
-            }
-        })
-    }
-
-    //Update the access rule name on given epuuid, call by hostAccessEditor.html
-    function updateAccessRuleNameUnderHost(epuuid, newruleUID){
-        $(`tr[eptuuid='${epuuid}'].subdEntry`).find(".accessRuleNameUnderHost").attr("ruleid", newruleUID);
-        $(`tr[eptuuid='${epuuid}'].subdEntry`).find(".accessRuleNameInTable").attr("ruleid", newruleUID);
-        resolveAccessRuleNameOnHostRPlist();
-    }
-
-    
     /*
         Inline editor for httprp.html
     */
-
-    function editEndpoint(uuid) {
-        uuid = uuid.hexDecode();
-        var row = $('tr[eptuuid="' + uuid + '"]');
-        var payload = $(row).attr("payload");
-        payload = JSON.parse(decodeURIComponent(payload));
-        //Show the HTTP Proxy Rule Editor Modal
-        initHttpProxyRuleEditorModal(payload);
-        return;
-    }
 
     function exitProxyInlineEdit(){
         listProxyEndpoints();
@@ -1679,28 +1438,7 @@
     }
 
     //Generic functions for delete rp endpoints 
-    function deleteEndpoint(epoint){
-        epoint = decodeURIComponent(epoint).hexDecode();
-        if (confirm("Confirm remove proxy for :" + epoint + "?")){
-            $.cjax({
-                url: "/api/proxy/del",
-                method: "POST",
-                data: {ep: epoint},
-                success: function(data){
-                    if (data.error == undefined){
-                        listProxyEndpoints();
-                        msgbox("Proxy Rule Deleted", true);
-                        reloadUptimeList();
-                    }else{
-                        msgbox(data.error, false);
-                    }
-                }
-            })
-        }
-    }
-
-    
-    /* button events */
+/* button events */
     function editBasicAuthCredentials(uuid){
         let payload = encodeURIComponent(JSON.stringify({
             ept: "host",
@@ -1762,30 +1500,6 @@
             ep: uuid
         }));
         showEditorSideWrapper("snippet/upstreams.html?t=" + Date.now() + "#" + payload);
-    }
-
-    function handleProxyRuleToggle(object){
-        let endpointUUID = $(object).attr("eptuuid");
-        let isChecked = object.checked;
-        $.cjax({
-            url: "/api/proxy/toggle",
-            data: {
-                "ep": endpointUUID,
-                "enable": isChecked
-            },
-            success: function(data){
-                if (data.error != undefined){
-                    msgbox(data.error, false);
-                }else{
-                    if (isChecked){
-                        msgbox("Proxy Rule Enabled");
-                    }else{
-                        msgbox("Proxy Rule Disabled");
-                    }
-                    
-                }
-            }
-        })
     }
 
     /* 
@@ -1896,87 +1610,6 @@
         });
     }
 
-    /* Tags & Search */
-    function toggleDetailViewButton() {
-        // Check current state
-        let currentState = localStorage.getItem("httprp_detailView");
-        let isDetailsView = currentState === "true";
-        
-        // Toggle the state
-        if (isDetailsView) {
-            // Switch to Basics view
-            $(".standardContainer th.details-view, .standardContainer td.details-view").hide();
-            $("#httpProxyTableWrapper").removeClass("detail-view-enabled");
-            localStorage.setItem("httprp_detailView", "false");
-            $("#detailViewToggle").text("Basics View");
-        } else {
-            // Switch to Details view
-            $(".standardContainer th.details-view, .standardContainer td.details-view").show();
-            $("#httpProxyTableWrapper").addClass("detail-view-enabled");
-            localStorage.setItem("httprp_detailView", "true");
-            $("#detailViewToggle").text("Details View");
-        }
-    }
-
-    function toggleDetailView(isChecked) {
-        if (isChecked) {
-            // Show detail view columns (only in the proxy list table, not in the editor)
-            $(".standardContainer th.details-view, .standardContainer td.details-view").show();
-            $("#httpProxyTableWrapper").addClass("detail-view-enabled");
-            // Save to localStorage
-            localStorage.setItem("httprp_detailView", "true");
-        } else {
-            // Hide detail view columns
-            $(".standardContainer th.details-view, .standardContainer td.details-view").hide();
-            $("#httpProxyTableWrapper").removeClass("detail-view-enabled");
-            // Save to localStorage
-            localStorage.setItem("httprp_detailView", "false");
-        }
-    }
-
-    function initDetailView() {
-        // Load detail view preference from localStorage
-        let detailViewEnabled = localStorage.getItem("httprp_detailView");
-        if (detailViewEnabled === "true") {
-            // Show details view
-            $(".standardContainer th.details-view, .standardContainer td.details-view").show();
-            $("#httpProxyTableWrapper").addClass("detail-view-enabled");
-            $("#detailViewToggle").text("Details View");
-        } else {
-            // Show basics view (default)
-            $(".standardContainer th.details-view, .standardContainer td.details-view").hide();
-            $("#httpProxyTableWrapper").removeClass("detail-view-enabled");
-            $("#detailViewToggle").text("Basics View");
-        }
-    }
-
-    function handleSearchInput(event){
-        if (event.key == "Escape"){
-            $("#searchInput").val("");
-        }
-        filterProxyList();
-    }
-
-     // Function to filter the proxy list
-     function filterProxyList() {
-        let searchInput = $("#searchInput").val().toLowerCase();
-        let selectedTag = $("#tagFilterDropdown").dropdown('get value');
-        $("#httpProxyList tr").each(function() {
-            let host = $(this).find("td[data-label='']").text().toLowerCase();
-            let tagElements = $(this).find("td[data-label='tags']");
-            let tags = tagElements.attr("payload");
-            if (tags === undefined) {
-                return; //placeholder row (e.g. "no proxy rules"), not a host entry
-            }
-            tags = JSON.parse(decodeURIComponent(tags));
-            if ((host.includes(searchInput) || searchInput === "") && (tags.includes(selectedTag) || selectedTag === "")) {
-                $(this).show();
-            } else {
-                $(this).hide();
-            }
-        });
-    }
-
     // Function to generate a color based on a tag name
     function getTagColorByName(tagName) {
         function hashCode(str) {
@@ -1999,27 +1632,6 @@
         return brightness > 125 ? "#000000" : "#ffffff";
     }
     
-     // Populate the tag filter dropdown
-     function populateTagFilterDropdown(data) {
-        let tags = new Set();
-        data.forEach(subd => {
-            (subd.Tags || []).forEach(tag => tags.add(tag));
-        });
-        tags = Array.from(tags).sort((a, b) => a.localeCompare(b));
-        let dropdownMenu = $("#tagFilterDropdown .tagList");
-        dropdownMenu.html(`<div class="item tag-select" data-value="">
-            <div class="ui grey empty circular label"></div>
-            Show all
-        </div>`);
-        tags.forEach(tag => {
-            let thisTagColor = getTagColorByName(tag);
-            dropdownMenu.append(`<div class="item tag-select" data-value="${tag}">
-                <div class="ui empty circular label" style="background-color: ${thisTagColor}; border-color: ${thisTagColor};" ></div>
-                ${tag}
-            </div>`);
-        });
-    }
-
     // Edit tags for a specific endpoint
     function editTags(uuid){
         let payload = encodeURIComponent(JSON.stringify({
@@ -2028,18 +1640,6 @@
         }));
         showEditorSideWrapper("snippet/tagEditor.html?t=" + Date.now() + "#" + payload);
     }
-
-    // Render the tags preview from tag editing snippet, callback from tags editor
-    function renderTagsPreview(endpoint, tags){
-        let targetProxyRuleEle = $(".subdEntry[eptuuid='" + endpoint + "'] td[data-label='tags']");
-        //Update the tag DOM
-        let newTagDOM = tags.map(tag => `<span class="ui tiny label tag-select" style="background-color: ${getTagColorByName(tag)}; color: ${getTagTextColor(tag)}">${tag}</span>`).join("");
-        $(targetProxyRuleEle).find(".tags-list").html(newTagDOM);
-
-        //Update the tag payload
-        $(targetProxyRuleEle).attr("payload", encodeURIComponent(JSON.stringify(tags)));
-    }
-
 
     function getTagsArrayFromEndpoint(endpoint){
         let subd = getEditingHttpProxyCachedSubd();
@@ -2914,16 +2514,9 @@
         Page Initialization Functions 
     */
 
-    // Initialize the proxy list on page load
+    // Initialize the proxy list on page load (script/proxytable.js)
     $(document).ready(function() {
         listProxyEndpoints(false);
-
-        // Event listener for clicking on tags
-        $(document).on('click', '.tag-select', function() {
-            let tag = $(this).text().trim();
-            $('#tagFilterDropdown').dropdown('set selected', tag);
-            filterProxyList();
-        });
     });
 
     //Bind on tab switch events
@@ -2938,9 +2531,10 @@
             window.scrollTo(0, 0);
             $("body").css("overflow", "hidden");
         } else {
-            listProxyEndpoints(false);
+            listProxyEndpoints(true);
         }
     }
         
 </script>
 <script src="script/proxybulk.js"></script>
+<script src="script/proxytable.js"></script>

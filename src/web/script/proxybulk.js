@@ -2,78 +2,25 @@
     proxybulk.js
 
     Multi-select and bulk actions for the HTTP proxy rule table (components/httprp.html).
-    Works on top of the existing table: a checkbox is injected in the first cell of every
-    row (re-injected whenever the list is rebuilt) and a bar with the actions is shown above
-    the table while rules are selected. All actions go through one call, /api/proxy/bulk,
-    which answers with one result per rule.
+    The selection and the action bar live in script/proxytable.js, which calls ProxyBulk.run(action, ruleNames).
+    This file holds the action dialogs (preview, confirm, result). All actions go through one call,
+    /api/proxy/bulk, which answers with one result per rule.
 */
 (function(){
-    var selected = {};   // rule name -> true
-    var bar, modal, observer;
+    var modal, names = [];
 
     function esc(s){ return $("<div>").text(s).html(); }
-    function names(){ return Object.keys(selected); }
 
-    function updateBar(){
-        var n = names().length;
-        if (!bar) { return; }
-        bar.toggle(n > 0);
-        bar.find(".bulkCount").text(n + " selected");
-        var all = $("#httpProxyList tr.subdEntry:visible");
-        var allSel = all.length > 0 && all.filter(function(){ return selected[$(this).attr("eptuuid")]; }).length === all.length;
-        $("#bulkSelectAll").prop("checked", allSel);
-    }
-
-    function injectCheckboxes(){
-        $("#httpProxyList tr.subdEntry").each(function(){
-            var tr = $(this);
-            if (tr.find(".bulkSel").length) { return; }
-            var name = tr.attr("eptuuid");
-            var cb = $('<input type="checkbox" class="bulkSel" title="Select for bulk edit" style="margin-left:0.5em; vertical-align:middle; width:1.1em; height:1.1em;">');
-            cb.prop("checked", !!selected[name]);
-            cb.on("change", function(){ if (this.checked) { selected[name] = true; } else { delete selected[name]; } updateBar(); });
-            tr.find("td").first().append(cb);
-        });
-        var th = $("#httpProxyList").closest("table").find("thead th").first();
-        if (th.length && !$("#bulkSelectAll").length) {
-            th.append($('<input type="checkbox" id="bulkSelectAll" title="Select all visible rules" style="vertical-align:middle; width:1.1em; height:1.1em;">').on("change", function(){
-                var on = this.checked;
-                $("#httpProxyList tr.subdEntry:visible").each(function(){
-                    var name = $(this).attr("eptuuid");
-                    if (on) { selected[name] = true; } else { delete selected[name]; }
-                    $(this).find(".bulkSel").prop("checked", on);
-                });
-                updateBar();
-            }));
+    function ensureModal(){
+        if (!modal || !document.body.contains(modal[0])) {
+            $("#bulkModal").remove();
+            modal = $('<div class="ui small modal" id="bulkModal"><div class="header"></div><div class="scrolling content"></div><div class="actions"></div></div>');
+            $("body").append(modal);
         }
-        // forget rules that no longer exist
-        var present = {};
-        $("#httpProxyList tr.subdEntry").each(function(){ present[$(this).attr("eptuuid")] = true; });
-        Object.keys(selected).forEach(function(k){ if (!present[k]) { delete selected[k]; } });
-        updateBar();
-    }
-
-    function buildBar(){
-        bar = $('<div id="bulkBar" class="ui segment" style="display:none; padding:0.6em 0.8em; margin-bottom:0.8em;">' +
-            '<b class="bulkCount"></b> &nbsp;' +
-            '<button class="ui mini basic green button" data-act="enable"><i class="toggle on icon"></i> Enable</button>' +
-            '<button class="ui mini basic grey button" data-act="disable"><i class="toggle off icon"></i> Disable</button>' +
-            '<button class="ui mini basic button" data-act="tags"><i class="tags icon"></i> Tags</button>' +
-            '<button class="ui mini basic button" data-act="waf"><i class="shield alternate icon"></i> WAF</button>' +
-            '<button class="ui mini basic button" data-act="rate"><i class="tachometer alternate icon"></i> Rate limit</button>' +
-            '<button class="ui mini basic button" data-act="auth"><i class="key icon"></i> Authentication</button>' +
-            '<button class="ui mini basic button" data-act="template"><i class="clone icon"></i> Apply template</button>' +
-            '<button class="ui mini basic red button" data-act="delete"><i class="trash icon"></i> Delete</button>' +
-            '<button class="ui mini basic button" data-act="clear" style="float:right;">Clear selection</button>' +
-            '</div>');
-        $("#httpProxyTableWrapper").before(bar);
-        bar.on("click", "button", function(){ run($(this).data("act")); });
-
-        modal = $('<div class="ui small modal" id="bulkModal"><div class="header"></div><div class="scrolling content"></div><div class="actions"></div></div>');
-        $("body").append(modal);
     }
 
     function openModal(title, bodyHtml, buttons){
+        ensureModal();
         modal.find(".header").text(title);
         modal.find(".content").html(bodyHtml);
         var actions = modal.find(".actions").empty();
@@ -100,7 +47,7 @@
     }
 
     function call(action, params, extra, dry, done){
-        var data = $.extend({ rules: JSON.stringify(names()), action: action, params: JSON.stringify(params || {}), dryrun: !!dry }, extra || {});
+        var data = $.extend({ rules: JSON.stringify(names), action: action, params: JSON.stringify(params || {}), dryrun: !!dry }, extra || {});
         $.cjax({ url: "/api/proxy/bulk", method: "POST", data: data, success: function(resp){
             if (resp && resp.error) { msgbox(resp.error, false, 8000); return; }
             done(resp.results || []);
@@ -124,9 +71,9 @@
         });
     }
 
-    function run(act){
-        var n = names().length;
-        if (act === "clear") { selected = {}; $(".bulkSel, #bulkSelectAll").prop("checked", false); updateBar(); return; }
+    function run(act, selectedNames){
+        names = selectedNames || [];
+        var n = names.length;
         if (n === 0) { return; }
         if (act === "enable") { execute("enable", {}, null, "Enable " + n + " rule(s)", false); }
         else if (act === "disable") { execute("disable", {}, null, "Disable " + n + " rule(s)", false); }
@@ -181,7 +128,7 @@
         }
         else if (act === "delete") {
             openModal("Delete " + n + " rule(s)?",
-                '<div class="ui negative message">This permanently removes the following proxy rules:</div><div style="max-height:12em; overflow:auto;"><code>' + names().map(esc).join("<br>") + '</code></div>' +
+                '<div class="ui negative message">This permanently removes the following proxy rules:</div><div style="max-height:12em; overflow:auto;"><code>' + names.map(esc).join("<br>") + '</code></div>' +
                 '<div class="ui form" style="margin-top:1em;"><div class="field"><label>Type DELETE to confirm</label><input type="text" id="bulkDelConfirm" autocomplete="off"></div></div>',
                 [{ label: "Delete", cls: "red", fn: function(){
                     if ($("#bulkDelConfirm").val() !== "DELETE") { msgbox("Type DELETE to confirm", false); return; }
@@ -190,14 +137,5 @@
         }
     }
 
-    function init(){
-        var list = document.getElementById("httpProxyList");
-        if (!list) { return; }
-        $("#bulkBar, #bulkModal").remove();
-        buildBar();
-        observer = new MutationObserver(function(){ injectCheckboxes(); });
-        observer.observe(list, { childList: true });
-        injectCheckboxes();
-    }
-    $(init);
+    window.ProxyBulk = { run: run };
 })();
