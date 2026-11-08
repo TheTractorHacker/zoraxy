@@ -148,6 +148,11 @@
                         </div>
                         <small>Maximum waiting time for server header response, set to 0 for default</small>
                         <br>
+                        <div class="ui checkbox" style="margin-top: 0.8em;">
+                            <input type="checkbox" id="disableKeepAlive">
+                            <label>Disable connection reuse (keep-alive)<br><small>Open a new connection for every request. Use for upstreams that close the connection after each response (intermittent 502 / 521). Slower; leave off otherwise.</small></label>
+                        </div>
+                        <br>
                     </div>
                 </div>
                 
@@ -410,6 +415,10 @@
                                     <input type="checkbox" class="drainingCheckbox" ${upstream.Draining?"checked":""}>
                                     <label>Draining<br><small>Receive no new requests or sticky sessions. Requests in flight finish normally. Use before maintenance.</small></label>
                                 </div>
+                                <div class="ui checkbox" style="margin-top: 0.8em;">
+                                    <input type="checkbox" class="disableKeepAliveCheckbox" ${upstream.DisableKeepAlive?"checked":""}>
+                                    <label>Disable connection reuse (keep-alive)<br><small>Open a new connection for every request. Use for upstreams that close the connection after each response (intermittent 502 / 521). Slower; leave off otherwise.</small></label>
+                                </div>
                                 
                             </div>
                         </div>
@@ -469,6 +478,7 @@
                 let activateLoadbalancer = $("#activateNewUpstreamCheckbox")[0].checked;
                 let maxConn = $("#maxConn").val();
                 let respTimeout = $("#respTimeout").val();
+                let disableKeepAlive = $("#disableKeepAlive")[0].checked;
 
                 if (maxConn == "" || isNaN(maxConn)){ 
                     maxConn = 0;
@@ -498,6 +508,7 @@
                         "active": activateLoadbalancer,
                         "maxconn": maxConn,
                         "respt": respTimeout,
+                        "nokeepalive": disableKeepAlive,
                     },
                     success: function(data){
                         if (data.error != undefined){
@@ -508,6 +519,7 @@
                             $("#originURL").val("");
                             $("#maxConn").val("0");
                             $("#respTimeout").val("0");
+                            $("#disableKeepAlive").prop("checked", false);
                         }
                     }
                 })
@@ -548,6 +560,7 @@
                 let maxInFlight = parseInt($(upstream).find(".maxInFlight").val());
                 originalSettings.MaxInFlight = (isNaN(maxInFlight) || maxInFlight < 0) ? 0 : maxInFlight;
                 originalSettings.Draining = $(upstream).find(".drainingCheckbox")[0].checked;
+                originalSettings.DisableKeepAlive = $(upstream).find(".disableKeepAliveCheckbox")[0].checked;
 
                 //console.log(originalSettings);
                 return originalSettings;

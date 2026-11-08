@@ -47,6 +47,7 @@ func (u *Upstream) StartProxy(tlsServerName string) error {
 		ResponseHeaderTimeout:   u.RespTimeout,
 		MaxConcurrentConnection: u.MaxConn,
 		UpstreamTLSServerName:   tlsServerName,
+		DisableKeepAlive:        u.DisableKeepAlive,
 	})
 
 	u.proxy = proxy

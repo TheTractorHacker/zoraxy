@@ -108,6 +108,7 @@ type DpcoreOptions struct {
 	ResponseHeaderTimeout   int64         //Timeout for response header, set to 0 for default
 	DevelopmentMode         bool          //Enable development mode for this proxy core
 	UpstreamTLSServerName   string        //Override the TLS SNI / cert verification hostname for HTTPS upstreams. Empty = derive from the upstream address
+	DisableKeepAlive        bool          //Do not reuse upstream connections (one connection per request), for upstreams that close after every response (#1343)
 }
 
 // sniServerName normalizes a host value into a usable TLS SNI ServerName.
@@ -304,7 +305,7 @@ func newBaseTransport(opts *DpcoreOptions) *http.Transport {
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 		DisableCompression:    true,
-		DisableKeepAlives:     false,
+		DisableKeepAlives:     opts.DisableKeepAlive,
 	}
 
 	if opts.ResponseHeaderTimeout > 0 {
