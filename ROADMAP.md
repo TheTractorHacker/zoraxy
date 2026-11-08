@@ -201,3 +201,10 @@ FriendlyCaptcha, counting SSO redirect failures in the auto-ban, per-user admin 
 - ✅ **Sablier** (fork #120 / upstream #564): native dynamic / blocking strategies per rule, ready cache, fail open / closed, SSRF-safe URL. 📋 Verified only against a fake Sablier.
 - ✅ **zrok** (fork #63 / upstream #136): supervised zrok CLI behind `-allow_external_tools` (shares, reserved names on 1.x, private access, backoff, redacted logs).
   📋 Verified only against a fake zrok binary; 📋 zrok agent mode and a Windows path.
+## Remaining items batch (`fix/remaining-items`)
+- ✅ Config migrations, localhost certificate, cert export and web SSH honour `-conf` / `-tmp`; start-up warning for stray `./conf` (fork follow-up of the bug sweep).
+- ✅ Updater: 10 minute release cache + ETag (304 is free), friendly GitHub rate-limit message, optional GitHub token (fork #259); same-tag re-publish no longer offered (fork #269).
+- ✅ Custom rule template editor (create / edit / clone / delete, live preview, validation) and custom templates in the New proxy rule picker.
+- ✅ CodeQL (Go, JavaScript, Actions) and Dependabot gomod (fork #146 / upstream #741); 📋 needs GitHub Actions enabled on the fork.
+- ✅ FriendlyCaptcha on the CAPTCHA page, Status map console error, Quick Start tours on the new HTTP Proxy page, Recent nav duplicates, openapi.yaml scope notes.
+- 📋 Templates cannot yet set auth provider, CORS or access rule (the template schema has no such fields).

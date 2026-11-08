@@ -437,6 +437,14 @@ def main():
                 check_horizontal(pg, "desktop")
                 pg.screenshot(path=os.path.join(args.out, f"{t}-{theme}.png"))
 
+        # ---- nav: the Recent block must not repeat the always visible top level items ----
+        current["page"] = "nav-recent"
+        recent = pg.eval_on_selector_all("#group-recent .recent-item", "els => els.map(e => e.getAttribute('title'))")
+        if any(t in ("Status", "Quick Start") for t in recent):
+            fail("nav", f"Recent repeats the top level items listed right below it: {recent}")
+        if len(recent) == 0 and tabs:
+            fail("nav", "Recent is empty after visiting every page")
+
         # ---- standalone pages: access log search, notifications, statistics filters ----
         for name in ("logsearch", "notifications", "statsFilters"):
             current["page"] = "snippet/" + name
@@ -621,6 +629,135 @@ def main():
             pg.evaluate("""host => new Promise(res => $.cjax({url: '/api/proxy/del', method: 'POST', data: {ep: host}, success: res, error: res}))""", host)
             pg.evaluate("listProxyEndpoints()")
 
+        # ---- Quick Start tour: the "subdomain" walkthrough goes through HTTP Proxy + the New proxy rule dialog ----
+        current["page"] = "quickstart-tour"
+        try:
+            pg.evaluate("openTabById('qstart')")
+            settle(pg)
+            pg.evaluate("currentQuickSetupClass = 'subdomain'; startQuickStartTour();")
+            total = pg.evaluate("tourSteps['subdomain'].length")
+            if total < 8:
+                fail("tour", f"subdomain tour has only {total} steps")
+            focus_expected = ("Domain", "Upstream (where the app runs)", "Upstream uses HTTPS", "Ignore Certificate", "Template", "More Options", "Save New Proxy Rule", "Create New Proxy Rule")
+            for i in range(total):
+                pg.wait_for_timeout(1900)
+                info = pg.evaluate("""() => ({title: $('#tourModal .tourStepTitle').text(), focus: $('.tourFocusObject').length,
+                    overlay: $('#tourModalOverlay').is(':visible') ? $('#tourModalOverlay').width() : 0,
+                    dialog: $('#newRuleModal').hasClass('visible'), tab: location.hash})""")
+                t = info["title"]
+                print("  tour step", i + 1, t, info)
+                if any(t.endswith(k) for k in focus_expected):
+                    if info["focus"] != 1 or info["overlay"] <= 0:
+                        fail("tour", f"step '{t}' highlights nothing: {info}")
+                if any(t.endswith(k) for k in focus_expected[:7]) and "Create New Proxy Rule" not in t and not info["dialog"]:
+                    fail("tour", f"step '{t}' expects the New proxy rule dialog to be open")
+                if i in (3, total - 4):
+                    pg.screenshot(path=os.path.join(args.out, f"tour-step-{i + 1}.png"))
+                if i < total - 1:
+                    pg.evaluate("nextTourStep()")
+            pg.evaluate("endTourFocus()")
+            pg.wait_for_timeout(800)
+            if pg.evaluate("$('#newRuleModal').hasClass('visible')"):
+                fail("tour", "the New proxy rule dialog stayed open after the tour ended")
+        except Exception as ex:
+            fail("tour", f"tour check failed: {' '.join(str(ex).split()[:30])}")
+            pg.screenshot(path=os.path.join(args.out, "tour-failure.png"))
+            pg.evaluate("endTourFocus()")
+        pg.evaluate("openTabById('status')")
+
+        # ---- Rule template manager: create, validation errors, live preview, picker, clone, delete ----
+        current["page"] = "rule-templates"
+        try:
+            pg.evaluate("openTabById('httprp')")
+            settle(pg)
+            pg.click("#ptTemplates")
+            pg.wait_for_selector("#ruleTplModal .rtTable", timeout=5000)
+            if "Secure web app" not in pg.inner_text("#ruleTplModal"):
+                fail("templates", "built in templates are not listed")
+            pg.click("#rtNew")
+            pg.wait_for_selector("#rtForm", timeout=5000)
+            # an invalid name is reported by the server and blocks saving
+            pg.fill("#rtName", "-bad name")
+            pg.wait_for_timeout(900)
+            if "template name must be" not in pg.inner_text("#rtPreview") or "disabled" not in (pg.get_attribute("#rtSave", "class") or ""):
+                fail("templates", "an invalid name is not reported / Save is not disabled")
+            pg.fill("#rtName", "Smoke template")
+            pg.fill("#rtDesc", "Created by the UI smoke test")
+            pg.check("#rtHstsOn")
+            pg.fill("#rtHsts", "31536000")
+            pg.check("#rtRateOn")
+            pg.fill("#rtRate", "20")
+            pg.fill("#rtTags", "smoke, tpl")
+            pg.select_option("#rtWaf", "block")
+            pg.click("#rtAddHdr")
+            pg.fill("#rtHdrs .rtHKey", "X-Smoke")
+            pg.fill("#rtHdrs .rtHVal", "1")
+            pg.wait_for_timeout(1100)
+            prev = pg.inner_text("#rtPreview")
+            for want in ("HSTS max age", "Rate limit (req/s)", "Tags", "WAF source", "Header X-Smoke"):
+                if want not in prev:
+                    fail("templates", f"live preview lacks '{want}': {prev[:200]}")
+            pg.screenshot(path=os.path.join(args.out, "template-editor.png"), full_page=True)
+            pg.click("#rtSave")
+            pg.wait_for_selector("#ruleTplModal .rtTable", timeout=5000)
+            if "Smoke template" not in pg.inner_text("#ruleTplModal"):
+                fail("templates", "the saved template is not listed")
+            # clone, then delete the clone
+            pg.click("#ruleTplModal tr:has-text('Smoke template') .rtCloneBtn")
+            pg.wait_for_selector("#rtForm", timeout=5000)
+            if pg.input_value("#rtName") != "Smoke template copy":
+                fail("templates", "clone did not pre-fill the name")
+            pg.click("#rtSave")
+            pg.wait_for_selector("#ruleTplModal .rtTable", timeout=5000)
+            pg.screenshot(path=os.path.join(args.out, "template-list.png"), full_page=True)
+            pg.click("#rtClose")
+            pg.wait_for_timeout(600)
+            # the new rule dialog offers the custom template
+            pg.evaluate("openNewRuleDialog()")
+            pg.wait_for_selector("#nrTplGrid .nrTpl", timeout=5000)
+            pg.wait_for_timeout(600)
+            if "Smoke template" not in pg.inner_text("#nrTplGrid"):
+                fail("templates", "the New proxy rule dialog does not list the custom template")
+            pg.click("#nrCancel")
+            pg.wait_for_timeout(500)
+            pg.click("#ptTemplates")
+            pg.wait_for_selector("#ruleTplModal .rtTable", timeout=5000)
+            for name in ("Smoke template copy", "Smoke template"):
+                row = f"#ruleTplModal tr:has-text('{name}') .rtDelBtn"
+                pg.click(row)
+                pg.click(row)
+                pg.wait_for_timeout(700)
+            if "Smoke template" in pg.inner_text("#ruleTplModal"):
+                fail("templates", "deleting the templates did not remove them")
+            pg.click("#rtClose")
+        except Exception as ex:
+            fail("templates", f"template manager flow failed: {' '.join(str(ex).split()[:30])}")
+            pg.screenshot(path=os.path.join(args.out, "templates-failure.png"))
+        pg.wait_for_timeout(500)
+
+        # ---- Status page visitor map must not be created while hidden (jsVectorMap logs scale(NaN)) ----
+        current["page"] = "status-map"
+        try:
+            pg.route("**/api/stats/countries", lambda route: route.fulfill(status=200, content_type="application/json", body='{"US": 5, "DE": 2, "JP": 1}'))
+            pg.evaluate("openTabById('seccenter')")
+            settle(pg)
+            pg.evaluate("updateVisitorLocations()")
+            pg.wait_for_timeout(600)
+            if pg.evaluate("typeof worldMap !== 'undefined' && worldMap !== undefined"):
+                fail("status-map", "the world map was created while the Status tab was hidden")
+            pg.evaluate("openTabById('status')")
+            pg.wait_for_timeout(1200)
+            if not pg.evaluate("typeof worldMap !== 'undefined' && worldMap !== undefined"):
+                fail("status-map", "the world map was not created once the Status tab became visible")
+            if pg.evaluate("document.querySelectorAll('#worldMap svg').length") < 1:
+                fail("status-map", "the world map has no SVG")
+            pg.screenshot(path=os.path.join(args.out, "status-map.png"), full_page=True)
+        except Exception as ex:
+            fail("status-map", f"status map check failed: {' '.join(str(ex).split()[:30])}")
+        finally:
+            pg.unroute("**/api/stats/countries")
+            pg.evaluate("updateVisitorLocations()")
+
         # ---- CAPTCHA / Bot check page ----
         current["page"] = "captcha-page"
         host = "smoke-captcha.invalid"
@@ -652,6 +789,39 @@ def main():
             saved = pg.evaluate("""host => fetch('/api/proxy/detail?type=host&epname=' + host).then(r => r.json())""", host)
             if not saved.get("RequireCaptcha") or (saved.get("CaptchaConfig") or {}).get("Branding", {}).get("Heading") != "Smoke heading":
                 fail("captcha", "saving the CAPTCHA page did not persist the settings")
+            # Friendly Captcha: provider option, endpoint select, provider dependent sections, save, reopen, preview
+            pg.click("div.ui.dropdown:has(> #cpProvider)")
+            pg.click("div.ui.dropdown:has(> #cpProvider) .menu .item[data-value='3']")
+            if not pg.is_visible(".cpProviderFriendly") or pg.is_visible(".cpTurnstileSeg") or pg.is_visible(".cpProviderRecaptcha"):
+                fail("captcha", "provider sections are wrong for Friendly Captcha")
+            pg.click("div.ui.dropdown:has(> #cpFriendlyEndpoint)")
+            pg.click("div.ui.dropdown:has(> #cpFriendlyEndpoint) .menu .item[data-value='eu']")
+            pg.fill("#cpSiteKey", "FCMSMOKESITEKEY")
+            pg.fill("#cpSecretKey", "A1SMOKEAPIKEY")
+            pg.click("#cpPageBtns [data-page=challenge]")
+            pg.wait_for_timeout(1800)
+            frame = next((f for f in pg.frames if f.name == "cpPreviewFrame"), None)
+            html = frame.content().lower() if frame is not None else ""
+            if "friendly" not in html:
+                fail("captcha", "the preview does not render the Friendly Captcha widget page")
+            open(os.path.join(args.out, "captcha-friendly-preview.html"), "w").write(html)
+            pg.screenshot(path=os.path.join(args.out, "captcha-friendly.png"), full_page=True)
+            pg.click("#cpSave")
+            pg.wait_for_timeout(1200)
+            saved = pg.evaluate("""host => fetch('/api/proxy/detail?type=host&epname=' + host).then(r => r.json())""", host)
+            cc = saved.get("CaptchaConfig") or {}
+            if cc.get("Provider") != 3 or cc.get("FriendlyEndpoint") != "eu" or cc.get("SiteKey") != "FCMSMOKESITEKEY":
+                fail("captcha", f"Friendly Captcha settings were not persisted: {cc.get('Provider')} {cc.get('FriendlyEndpoint')}")
+            pg.click("#cpBack")
+            pg.wait_for_selector("#cpOverview", state="visible", timeout=5000)
+            if "Friendly Captcha" not in pg.inner_text(row):
+                fail("captcha", "overview does not name the Friendly Captcha provider")
+            pg.click(row + " .cpEdit")
+            pg.wait_for_selector("#cpEditor", state="visible", timeout=5000)
+            shown = pg.inner_text("div.ui.dropdown:has(> #cpProvider) > .text") + "|" + pg.inner_text("div.ui.dropdown:has(> #cpFriendlyEndpoint) > .text")
+            if pg.input_value("#cpProvider") != "3" or pg.input_value("#cpFriendlyEndpoint") != "eu" or not pg.is_visible(".cpProviderFriendly") \
+                    or "Friendly" not in shown or "EU" not in shown:
+                fail("captcha", "reopened editor did not restore the Friendly Captcha settings")
             pg.click("#cpBack")
             pg.wait_for_selector("#cpOverview", state="visible", timeout=5000)
             pg.click("#cpGlobalBtn")
