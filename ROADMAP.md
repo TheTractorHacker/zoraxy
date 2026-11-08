@@ -162,3 +162,12 @@ FriendlyCaptcha, counting SSO redirect failures in the auto-ban, per-user admin 
 - ✅ `{{host}}` `{{client_ip}}` `{{request_id}}` `{{rule_name}}` `{{external_ip}}` in headers, redirects, static responses; rule templates; bulk edit (upstream #370 #826 #877 #924).
 - ✅ API tokens + `/api/v1` + OpenAPI (upstream #382 #714 #996), response bandwidth limit (upstream #1208), plain HTTP listener address (#909), IP calculators (#504), opt-in split-horizon DNS responder (#769).
 - 📋 UI editor for custom rule templates (API exists), bandwidth limit for WebSocket traffic.
+## 13. Auth and CAPTCHA remaining items (`feat/auth-captcha-remaining`)
+- ✅ Multiple OIDC / OAuth2 providers, selectable per proxy rule (fork #172 / #223, upstream #884 / #1162): provider registry, per-provider
+  callback path and cookie, provider manager on the SSO page, per-rule provider and extra allow-lists. The legacy single configuration
+  is migrated to the provider `default`.
+- ✅ OIDC sessions persisted encrypted at rest (fork #212), shared across HA nodes through a short lived portable ticket when a cluster secret is set.
+- ✅ Friendly Captcha v2 provider (fork #228 / upstream #1198), incl. the EU endpoint.
+- ✅ CAPTCHA path exceptions in exact and regex mode with canonical-path-only matching (fork #222 / upstream #1161).
+- ✅ Role claim shapes (Keycloak realm / client roles, Entra roles and groups, Authentik groups, Google hd) tested and documented (fork #172).
+- 📋 Per path (not per rule) provider selection; a rule-level override that widens (instead of narrowing) the provider's allow-lists; real-IdP verification of Entra, Google and GitHub presets.

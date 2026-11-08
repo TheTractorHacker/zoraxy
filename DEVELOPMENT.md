@@ -1301,3 +1301,39 @@ otherwise each rule is applied independently on a copy and reported (partial upd
 
 Tests: `go test -race ./mod/dynamicproxy/...` (ops_test.go through `ProxyHandler.ServeHTTP`, bulk_test.go, unix_upstream_test.go,
 loadbalance/clientrules_test.go, redirection/advanced_test.go).
+
+## OAuth2 provider registry, persisted sessions, Friendly Captcha, CAPTCHA path modes (`feat/auth-captcha-remaining`)
+
+This section supersedes the statements above that OIDC sessions are in memory only and that "OAuth2/OIDC cookies hold the provider token".
+
+**Providers** (`src/mod/auth/sso/oauth2/providers.go`). Named providers live in DB table `oauth2_providers` (key = id, JSON record, the
+client secret is stored like it always was and is never returned by the API). Id: `^[a-z0-9][a-z0-9_-]{0,31}$`, at most 32 providers.
+`default` is the legacy single configuration: on the first start the old `oauth2` table keys are copied into the record `default`
+(marker `oauth2/providersMigrated`), later starts read only the registry. Edits of `default` are mirrored back to the legacy keys so a
+downgrade keeps working. Rules without a provider id use `default`; a rule that names a missing provider fails closed (HTTP 500).
+- API (admin): `GET/POST/DELETE /api/sso/OAuth2/providers` (`id`, `name`, `preset` + the `oauth2*` fields of the legacy API; a blank or masked secret on
+  update keeps the stored one; DELETE is refused while a rule uses it); `GET/POST /api/sso/OAuth2/discovery` accepts `id`; `/api/sso/OAuth2` keeps
+  operating on `default`.
+- Rule: `AuthenticationProvider.OAuth2ProviderID` and the optional `OAuth2AllowedGroups|Claims|Emails|EmailDomains` (all `omitempty`, so old rule files
+  load unchanged). Rule lists are AND-combined with the provider's (they can only narrow). `/api/proxy/edit` accepts `oauth2provider`, `oauth2groups`,
+  `oauth2claims`, `oauth2emails`, `oauth2emaildomains` (only the ones sent change).
+- Isolation: callback `/internal/oauth2` and logout `/internal/oauth2/logout` for `default`, `/internal/oauth2/p/<id>` and `/p/<id>/logout` for the others
+  (register that redirect URI at the IdP). Session cookie `z-session` (default) / `z-session-<id>`; the pending-login state, the session record and the
+  cookie are bound to host and provider, a state or cookie of one provider is refused by another. Editing or deleting a provider ends its sessions only.
+  Path exceptions (`ExternalAuthExceptionRules`) are evaluated before any provider code, so they work with every provider. Identity headers mapped by
+  any provider are scrubbed from client requests.
+- Claims: `claimValue` resolves nested paths with the longest-key-wins rule (`resource_access.my.app.roles`); arrays, scalars and booleans are matched exactly.
+
+**Sessions at rest** (`persist.go`). Table `oauth2_sessions`: `{exp, p, blob}`, blob = AES-256-GCM(nonce|JSON) with AAD `session|<id>`, key = HKDF of the
+same secret as the cookie signing key (node UUID, or `cluster.KeyMaterial(..., "oauth2-session")` when a cluster secret is set). Max 5000 records
+(earliest expiry dropped), expired/tampered records removed on read and by a 10 minute janitor. Not persisted when no stable key exists. Logout deletes the record.
+HA: the database is node local, so with a cluster secret the login also sets a sealed `z-ticket[-id]` cookie (claims only, no tokens, at most 30 minutes, AAD = session id). A node
+without the record rebuilds a non refreshable session from it; afterwards the browser re-authenticates (usually silently). A ticket cannot be revoked on other nodes before it expires.
+
+**Friendly Captcha** (`captcha/friendly.go`). Provider `3`. Site key = sitekey, secret key = API key (`X-API-Key`), field `frc-captcha-response`, siteverify
+`POST https://global.frcapi.com/api/v2/captcha/siteverify` (EU: `https://eu.frcapi.com/...`, config `FriendlyEndpoint` `global|eu`, also sets `data-api-endpoint` of the widget), JSON
+`{response, sitekey}`; any non-200 fails closed. With `VerifyHostname` the challenge origin must be the requested host. Widget SDK pinned to `@friendlycaptcha/sdk@1.1.3` from jsDelivr; CSP adds the SDK path, `*.frcapi.com`,
+`worker-src blob:` and `'wasm-unsafe-eval'` for this provider only (the Altcha page no longer receives Google hosts either). Tests point the verify URLs at httptest servers.
+
+**CAPTCHA path exceptions** (`captcha/exceptions.go`). `ExceptionRule.MatchMode` `""|prefix|exact|regex` and `CaseInsensitive` (both `omitempty`). exact/regex match the whole path and only
+canonical request targets (`pathmatch.CanonicalPath`, shared with the SSO exceptions); the legacy prefix mode is unchanged. API `/api/proxy/captcha/exceptions/add|delete` takes `mode`, `nocase`.

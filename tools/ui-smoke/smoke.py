@@ -28,6 +28,7 @@ os.makedirs(args.out, exist_ok=True)
 # Offline-tolerant: external fetches (plugin store, update check, ...) may fail in a sandbox.
 allow = [re.compile(a) for a in args.allow] + [
     re.compile(r"favicon"),
+    re.compile(r"ERR_ABORTED"),  # a navigation cancelled the in-flight polling requests of the previous page
     re.compile(r"ERR_(NAME_NOT_RESOLVED|INTERNET_DISCONNECTED|CONNECTION)"),
 ]
 failures = []
@@ -62,6 +63,47 @@ def check_horizontal(pg, label):
     ov = pg.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
     if ov > 2:
         fail("layout", f"{label}: page overflows horizontally by {ov}px")
+
+
+class FakeOIDC:
+    """Minimal OpenID Provider for the provider-manager smoke test: discovery + empty JWKS only."""
+
+    def __init__(self, port):
+        import http.server
+        import json as _json
+        import threading
+        holder = {}
+
+        class H(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                if self.path.endswith("/.well-known/openid-configuration"):
+                    base, issuer = holder["base"], holder["base"] + "/"
+                    body = {"issuer": issuer, "authorization_endpoint": base + "/authorize", "token_endpoint": base + "/token",
+                            "userinfo_endpoint": base + "/userinfo", "jwks_uri": base + "/jwks",
+                            "code_challenge_methods_supported": ["S256"], "id_token_signing_alg_values_supported": ["RS256"],
+                            "grant_types_supported": ["authorization_code", "refresh_token"], "scopes_supported": ["openid", "profile", "email", "offline_access"]}
+                elif self.path == "/jwks":
+                    body = {"keys": []}
+                else:
+                    body = {"ok": True}
+                raw = _json.dumps(body).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+
+        self.srv = http.server.ThreadingHTTPServer(("127.0.0.1", port), H)  # port 0 = any free port
+        self.base = f"http://127.0.0.1:{self.srv.server_address[1]}"
+        self.issuer = self.base + "/"
+        holder["base"] = self.base
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+
+    def stop(self):
+        self.srv.shutdown()
 
 
 def main():
@@ -263,6 +305,140 @@ def main():
         finally:
             pg.evaluate("""host => new Promise(res => $.cjax({url: '/api/proxy/del', method: 'POST', data: {ep: host}, success: res, error: res}))""", host)
             pg.evaluate("listProxyEndpoints()")
+
+        # ---- SSO: OAuth2 provider manager and per-rule provider selection ----
+        # Two fake OIDC providers (discovery only) are started here; two proxy rules are bound to them and
+        # the sign-in redirect of each rule must lead to its own provider.
+        current["page"] = "sso-providers"
+        idps = [FakeOIDC(0), FakeOIDC(0)]
+        hostA, hostB = "sso-a.smoke.invalid", "sso-b.smoke.invalid"
+        api = lambda path, data: pg.evaluate("""([p, d]) => new Promise(res => $.cjax({url: p, method: 'POST', data: d,
+            success: r => res(r), error: e => res({error: 'http ' + e.status})}))""", [path, data])
+        try:
+            pg.goto(args.url + "/", wait_until="networkidle")
+            pg.evaluate("openTabById('sso')")
+            settle(pg)
+            pg.click(".ssoTabs .item[data-tab='oauth2_tab']")
+            pg.wait_for_selector("#oauth2ProviderList", state="visible")
+            for i, (pid, idp) in enumerate(zip(("idpa", "idpb"), idps)):
+                pg.click("#oauth2NewProvider")
+                pg.fill("#oauth2ProviderId", pid)
+                pg.fill("#oauth2ProviderName", "Fake IdP " + pid[-1].upper())
+                pg.fill("#oauth2Issuer", idp.issuer)
+                pg.fill("#oauth2ClientId", "client-" + pid)
+                pg.fill("#oauth2ClientSecret", "secret-" + pid + "-0123456789")
+                pg.click("#oauth2TestDiscovery")
+                pg.wait_for_selector("#oauth2DiscoveryResult .message", timeout=8000)
+                txt = pg.inner_text("#oauth2DiscoveryResult")
+                if idp.issuer not in txt:
+                    fail("sso-providers", "discovery test did not report the issuer: " + txt[:120])
+                if i == 0:
+                    pg.screenshot(path=os.path.join(args.out, "sso-provider-editor.png"), full_page=True)
+                pg.click("#oauth2Settings button[type=submit]")
+                pg.wait_for_selector(f"#oauth2ProviderList tr[data-id='{pid}']", timeout=8000)
+            pg.screenshot(path=os.path.join(args.out, "sso-providers.png"), full_page=True)
+            # the secret is never sent back to the browser
+            listing = pg.evaluate("fetch('/api/sso/OAuth2/providers').then(r => r.text())")
+            if "secret-idp" in listing:
+                fail("sso-providers", "provider list leaks a client secret")
+            # editing keeps the stored secret when the field is left empty
+            pg.click("#oauth2ProviderList tr[data-id='idpa'] .oauth2EditBtn")
+            if pg.input_value("#oauth2ClientSecret") != "":
+                fail("sso-providers", "secret field is not empty when editing")
+            pg.fill("#oauth2ProviderName", "Fake IdP A (edited)")
+            pg.click("#oauth2Settings button[type=submit]")
+            pg.wait_for_function("document.querySelector(\"#oauth2ProviderList tr[data-id='idpa']\").innerText.includes('edited')", timeout=8000)
+
+            # two rules, bound to the two providers
+            for host, pid in ((hostA, "idpa"), (hostB, "idpb")):
+                r = api("/api/proxy/add", {"type": "host", "rootname": host, "ep": "127.0.0.1:9", "tls": False, "tlsval": False, "bypassGlobalTLS": False})
+                r = r if isinstance(r, dict) else {}
+            api("/api/proxy/edit", {"rootname": hostA, "authprovider": 3, "oauth2provider": "idpa"})
+
+            # rule B is assigned through the rule editor
+            pg.evaluate("openTabById('httprp')")
+            settle(pg)
+            pg.evaluate("listProxyEndpoints()")
+            settle(pg, 900)
+            pg.evaluate("h => { const b = [...document.querySelectorAll('#httpProxyList .editBtn')].find(e => e.getAttribute('rootname') === h || e.closest('tr').innerText.includes(h)); b.click(); }", hostB)
+            pg.wait_for_selector("#httprpEditModal", state="visible", timeout=5000)
+            settle(pg, 800)
+            pg.click(".hrpedit_menu_item[cfgpage='security']")
+            pg.click(".authProviderPicker input[value='3']", force=True)
+            pg.wait_for_selector(".oauth2RuleSettings", state="visible", timeout=5000)
+            settle(pg, 600)
+            opts = pg.eval_on_selector_all(".oauth2ProviderSelect option", "els => els.map(e => e.value)")
+            if "idpa" not in opts or "idpb" not in opts:
+                fail("rule-provider", f"provider dropdown lacks the configured providers: {opts}")
+            pg.select_option(".oauth2ProviderSelect", "idpb")
+            pg.fill(".oauth2RuleGroups", "staff")
+            pg.press(".oauth2RuleGroups", "Tab")  # blur = change event = inline save
+            settle(pg, 900)
+            pg.screenshot(path=os.path.join(args.out, "rule-oauth2-provider.png"))
+            pg.evaluate("closeHttpRuleEditor()")
+            detail = pg.evaluate("h => fetch('/api/proxy/detail?type=host&epname=' + encodeURIComponent(h)).then(r => r.json())", hostB)
+            ap = (detail or {}).get("AuthenticationProvider") or {}
+            if ap.get("AuthMethod") != 3 or ap.get("OAuth2ProviderID") != "idpb":
+                # fall back to the API when the inline save button differs, so the routing check below still runs
+                api("/api/proxy/edit", {"rootname": hostB, "authprovider": 3, "oauth2provider": "idpb", "oauth2groups": "staff"})
+                detail = pg.evaluate("h => fetch('/api/proxy/detail?type=host&epname=' + encodeURIComponent(h)).then(r => r.json())", hostB)
+                ap = (detail or {}).get("AuthenticationProvider") or {}
+                fail("rule-provider", "rule editor did not persist the provider by itself (API fallback used)")
+            if ap.get("OAuth2AllowedGroups") != "staff":
+                fail("rule-provider", f"per rule group list not stored: {ap}")
+
+            # a provider that rules use cannot be deleted
+            pg.evaluate("openTabById('sso')")
+            settle(pg)
+            pg.click(".ssoTabs .item[data-tab='oauth2_tab']")
+            pg.click("#oauth2ProviderList tr[data-id='idpa'] .oauth2EditBtn")
+            pg.click("#oauth2Clear")
+            pg.wait_for_timeout(900)
+            if pg.locator("#oauth2ProviderList tr[data-id='idpa']").count() != 1:
+                fail("sso-providers", "a provider in use was deleted")
+            pg.screenshot(path=os.path.join(args.out, "sso-provider-delete-refused.png"))
+            used = pg.evaluate("fetch('/api/sso/OAuth2/providers').then(r => r.json())")
+            if not any(p["id"] == "idpa" and hostA in (p.get("usedBy") or []) for p in used):
+                fail("sso-providers", "usedBy does not list the rule that uses the provider")
+
+            # real routing: plain HTTP listener on loopback, each Host must be sent to its own provider
+            import socket
+            _s = socket.socket(); _s.bind(("127.0.0.1", 0)); proxy_port = _s.getsockname()[1]; _s.close()
+            api("/api/proxy/httpListenAddr", {"addr": f"127.0.0.1:{proxy_port}"})
+            api("/api/proxy/useHttpsRedirect", {"set": False})
+            api("/api/proxy/listenPort80", {"enable": True})
+            pg.wait_for_timeout(1500)
+            import http.client
+            def first_hop(host, path="/private"):
+                c = http.client.HTTPConnection("127.0.0.1", proxy_port, timeout=8)
+                c.request("GET", path, headers={"Host": host})
+                resp = c.getresponse()
+                return resp.status, resp.getheader("Location") or ""
+            for host, idp, pid in ((hostA, idps[0], "idpa"), (hostB, idps[1], "idpb")):
+                st, loc = first_hop(host)
+                if st != 302 or not loc.startswith(idp.base + "/authorize"):
+                    fail("rule-routing", f"{host}: expected a redirect to {idp.base}/authorize, got {st} {loc[:100]}")
+                elif f"%2Finternal%2Foauth2%2Fp%2F{pid}" not in loc:
+                    fail("rule-routing", f"{host}: redirect_uri does not carry the provider callback path: {loc[:160]}")
+                else:
+                    print(f"  {host} -> {loc.split('?')[0]} (ok)")
+            # an exempt path works for both providers
+            for host in (hostA, hostB):
+                api("/api/proxy/auth/exceptions/add", {"ep": host, "type": 0, "pattern": "/webhook", "mode": "prefix"})
+                st, loc = first_hop(host, "/webhook/x")
+                if st == 302 and "authorize" in loc:
+                    fail("rule-routing", f"{host}: exempt path was sent to sign-in")
+        except Exception as ex:
+            fail("sso-providers", f"flow failed: {' '.join(str(ex).split()[:40])}")
+            pg.screenshot(path=os.path.join(args.out, "sso-providers-failure.png"))
+        finally:
+            for host in (hostA, hostB):
+                api("/api/proxy/del", {"ep": host})
+            api("/api/proxy/listenPort80", {"enable": False})
+            for idp in idps:
+                idp.stop()
+            for pid in ("idpa", "idpb"):
+                pg.evaluate("p => new Promise(res => $.cjax({url: '/api/sso/OAuth2/providers?id=' + p, method: 'DELETE', success: res, error: res}))", pid)
 
         # ---- narrow / mobile layout ----
         current["page"] = "mobile"

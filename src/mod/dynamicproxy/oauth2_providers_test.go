@@ -49,12 +49,12 @@ func TestOAuth2ProviderPerRule(t *testing.T) {
 	add("partners", "idp-partners.test")
 
 	mk := func(provider string) *ProxyEndpoint {
-		cp := *sep
+		cp := CopyEndpoint(sep)
 		cp.AuthenticationProvider = &AuthenticationProvider{
 			AuthMethod: AuthMethodOauth2, OAuth2ProviderID: provider,
 			ExternalAuthExceptionRules: []*AuthExceptionRule{exRule("prefix", "/webhook", false)},
 		}
-		return &cp
+		return cp
 	}
 	h := router.mux.(*ProxyHandler)
 	do := func(ep *ProxyEndpoint, target string) (handled bool, loc string) {
