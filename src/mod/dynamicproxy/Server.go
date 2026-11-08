@@ -360,6 +360,11 @@ func (h *ProxyHandler) runEndpointChain(w http.ResponseWriter, r *http.Request, 
 		return true
 	}
 
+	//Lua script handler / hook and Sablier gate (platform_chain.go), both off unless configured on the rule
+	if h.handlePlatformStages(w, r, sep) {
+		return true
+	}
+
 	//Plugin routing
 	if h.Parent.routePlugin(w, r, sep) {
 		return true

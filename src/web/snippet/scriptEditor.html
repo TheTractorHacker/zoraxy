@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <!-- Notes: This should be opened in its original path. Per rule Lua script (API: /api/proxy/script/*) -->
+        <meta charset="utf-8">
+        <meta name="zoraxy.csrf.Token" content="{{.csrfToken}}">
+        <link rel="stylesheet" href="../script/semantic/semantic.min.css">
+        <script src="../script/jquery-3.6.0.min.js"></script>
+        <script src="../script/semantic/semantic.min.js"></script>
+        <script src="../script/utils.js"></script>
+    </head>
+    <body>
+        <link rel="stylesheet" href="../darktheme.css">
+        <script src="../script/darktheme.js"></script>
+        <br>
+        <div class="ui container">
+            <h3 class="ui header">Lua script</h3>
+            <p>Off until enabled. A sandboxed Lua script either <b>serves the response itself</b> (no backend needed, e.g. <code>robots.txt</code> or a custom 403) or <b>hooks</b> the request before it is proxied. It runs after the rule's access list, WAF, rate limit, CAPTCHA and authentication.</p>
+            <div class="ui warning message">
+                <div class="header">Admin-authored code runs inside the proxy</div>
+                Only the base, <code>table</code>, <code>string</code> and <code>math</code> libraries exist. There is no file, process, network or module access and no <code>load</code>.
+                Every run has a time limit, a memory ceiling and a response size cap. Errors are shown to visitors as <code>500</code> with a request id, never the script.
+            </div>
+
+            <div class="ui form">
+                <div class="field"><div class="ui toggle checkbox"><input type="checkbox" id="scEnabled"><label>Enable the script for this rule</label></div></div>
+                <div class="three fields">
+                    <div class="field"><label>Mode</label>
+                        <select id="scMode">
+                            <option value="handler">Handler: the script produces the response</option>
+                            <option value="hook">Hook: may answer, otherwise continue to the upstream</option>
+                        </select></div>
+                    <div class="field"><label>Only for paths below (optional)</label><input type="text" id="scPrefix" placeholder="/api"></div>
+                    <div class="field"><label>Time limit (ms, 100 default, max 2000)</label><input type="number" id="scTimeout" min="0" max="2000" placeholder="100"></div>
+                </div>
+                <div class="two fields">
+                    <div class="field"><label>Response size limit (KiB, 256 default, max 1024)</label><input type="number" id="scResp" min="0" max="1024" placeholder="256"></div>
+                    <div class="field"><label>Parallel runs (4 default, max 32)</label><input type="number" id="scConc" min="0" max="32" placeholder="4"></div>
+                </div>
+                <div class="field">
+                    <label>Script</label>
+                    <textarea id="scCode" rows="14" spellcheck="false" style="font-family: monospace; white-space: pre;"></textarea>
+                    <small>Read: <code>request.method .path .query .args .headers (lower case names) .host .client_ip .rule .request_id .scheme .body</code> (body: handler mode only, 64 KiB max).
+                    Answer: set <code>response.status</code> / <code>response.headers["X"]</code> / <code>response.body</code>, or call <code>respond(status, body, content_type)</code> / <code>redirect(url, code)</code>.
+                    Hook: <code>request_header_set(name, value)</code>, <code>request_header_del(name)</code>.
+                    Helpers: <code>json.encode/decode</code>, <code>base64.encode/decode</code>, <code>hex</code>, <code>url.escape/unescape</code>, <code>crypto.sha256 / hmac_sha256 / equals</code>, <code>time.now / format</code>, <code>kv.get/set/incr/delete</code> (in memory, per rule), <code>log(...)</code>, Lua patterns (<code>string.find/match/gsub</code>).</small>
+                </div>
+                <button class="ui primary button" onclick="saveScript();"><i class="save icon"></i> Save</button>
+                <button class="ui basic button" onclick="sampleScript();"><i class="file alternate icon"></i> Insert robots.txt sample</button>
+            </div>
+
+            <h4 class="ui dividing header">Test run</h4>
+            <p>Runs the script above in the same sandbox against a sample request. Nothing is saved and the rule's persistent <code>kv</code> store is not touched.</p>
+            <div class="ui form">
+                <div class="four fields">
+                    <div class="field"><label>Method</label><input type="text" id="tMethod" value="GET"></div>
+                    <div class="field"><label>Path</label><input type="text" id="tPath" value="/robots.txt"></div>
+                    <div class="field"><label>Query</label><input type="text" id="tQuery" placeholder="a=1&amp;b=2"></div>
+                    <div class="field"><label>Client IP</label><input type="text" id="tIP" value="203.0.113.7"></div>
+                </div>
+                <div class="two fields">
+                    <div class="field"><label>Headers (Name: value per line)</label><textarea id="tHeaders" rows="3">User-Agent: curl/8.0</textarea></div>
+                    <div class="field"><label>Body</label><textarea id="tBody" rows="3"></textarea></div>
+                </div>
+                <button class="ui basic button" onclick="testScript();"><i class="play icon"></i> Test run</button>
+            </div>
+            <div id="tOut" class="ui segment" style="display:none; margin-top:1em;">
+                <div id="tSummary"></div>
+                <pre id="tBodyOut" style="white-space:pre-wrap; word-break:break-all; max-height:16em; overflow:auto; margin:0.5em 0;"></pre>
+                <div id="tLogs" style="font-family:monospace; font-size:90%;"></div>
+            </div>
+            <br><br>
+        </div>
+
+        <script>
+            let editingEndpoint = {};
+            if (window.location.hash.length > 1) {
+                try { editingEndpoint = JSON.parse(decodeURIComponent(window.location.hash.substr(1))); } catch (ex) { console.log("bad hash", ex); }
+            }
+            $('.ui.checkbox').checkbox();
+            const SAMPLE = 'response.headers["Content-Type"] = "text/plain"\nresponse.body = "User-agent: *\\nDisallow: /\\n"\n';
+
+            function num(id) { return parseInt($(id).val(), 10) || 0; }
+            function collect() {
+                return {Enabled: $('#scEnabled').prop('checked'), Mode: $('#scMode').val(), Code: $('#scCode').val(), PathPrefix: $('#scPrefix').val().trim(),
+                        TimeoutMs: num('#scTimeout'), MaxResponseKB: num('#scResp'), Concurrency: num('#scConc')};
+            }
+            function sampleScript() { $('#scCode').val(SAMPLE); }
+            function saveScript() {
+                $.cjax({url: '/api/proxy/script/set', method: 'POST', data: {ep: editingEndpoint.ep, config: JSON.stringify(collect())},
+                    success: function(resp) {
+                        if (resp && resp.error) { parent.msgbox(resp.error, false, 8000); } else { parent.msgbox("Saved", true); }
+                    }});
+            }
+            function testScript() {
+                let hdrs = {};
+                $('#tHeaders').val().split('\n').forEach(function(l) { let i = l.indexOf(':'); if (i > 0) { hdrs[l.substr(0, i).trim()] = l.substr(i + 1).trim(); } });
+                let sample = {Method: $('#tMethod').val(), Path: $('#tPath').val(), Query: $('#tQuery').val(), ClientIP: $('#tIP').val(), Host: 'example.com', Body: $('#tBody').val(), Headers: hdrs};
+                $.cjax({url: '/api/proxy/script/test', method: 'POST', data: {ep: editingEndpoint.ep, config: JSON.stringify(collect()), sample: JSON.stringify(sample)},
+                    success: function(r) {
+                        $('#tOut').show();
+                        if (r && r.error) { $('#tSummary').text(r.error); $('#tBodyOut').text(''); $('#tLogs').text(''); return; }
+                        if (r.Error) { $('#tSummary').html('').append($('<span class="ui red label">').text('Error')).append(' ').append($('<span>').text(r.Error)); $('#tBodyOut').text(''); $('#tLogs').text(''); return; }
+                        let s = $('#tSummary').empty();
+                        s.append($('<b>').text(r.Responded ? 'Response: ' + r.Status : 'Request continues to the upstream')).append(' (' + r.DurationMs.toFixed(2) + ' ms)');
+                        (r.Headers || []).forEach(function(h) { s.append($('<div>').text(h[0] + ': ' + h[1])); });
+                        (r.ReqSet || []).forEach(function(h) { s.append($('<div>').text('upstream request header set: ' + h[0] + ': ' + h[1])); });
+                        (r.ReqDel || []).forEach(function(h) { s.append($('<div>').text('upstream request header removed: ' + h)); });
+                        $('#tBodyOut').text(r.Body + (r.Truncated ? '\n... (truncated)' : ''));
+                        $('#tLogs').empty();
+                        (r.Logs || []).forEach(function(l) { $('#tLogs').append($('<div>').text('log: ' + l)); });
+                    }});
+            }
+            $.get('/api/proxy/script/get?ep=' + encodeURIComponent(editingEndpoint.ep), function(resp) {
+                if (resp && resp.error) { parent.msgbox(resp.error, false, 8000); return; }
+                let c = resp.Script || {};
+                $('#scEnabled').prop('checked', !!c.Enabled);
+                $('#scMode').val(c.Mode || 'handler');
+                $('#scPrefix').val(c.PathPrefix || '');
+                $('#scTimeout').val(c.TimeoutMs || '');
+                $('#scResp').val(c.MaxResponseKB || '');
+                $('#scConc').val(c.Concurrency || '');
+                $('#scCode').val(c.Code || '');
+            });
+        </script>
+    </body>
+</html>

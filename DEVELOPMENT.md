@@ -1335,3 +1335,36 @@ Code: `src/mod/ech` (keys, config serialisation, DNS check), `src/echapi.go` (AP
   (`TestQUICECHSupport` fails if that stops being true, then revisit this paragraph).
 - Observability: the page shows counts of TLS requests that arrived through ECH vs. not; `r.TLS.ECHAccepted` is available to code.
 - Not validated here: real browsers (Firefox/Chrome) against a public DNS record; the Go client in the tests is the interop peer.
+
+### Lua script handlers (fork #88 / upstream #367)
+
+Code: `src/mod/luascript` (sandbox, helper libraries, pattern matcher), `src/mod/dynamicproxy/script_handler.go` (per-rule `Script`
+config, request handling, admin test run), `src/scriptapi.go`, `src/web/snippet/scriptEditor.html` (button "Lua Script" in the
+endpoint editor). Off unless a rule has `Script.Enabled`.
+
+Modes: `handler` (the script produces the response, no upstream is contacted) and `hook` (runs before the upstream, may answer through
+`respond()` / `redirect()` / a changed `response` table or let the request continue after `request_header_set/del`). It runs in the shared
+endpoint chain after authentication and static responses, before plugin routing and the upstream. `PathPrefix` limits it to a subtree.
+
+API available to scripts: `request.*` (method, path, query, args, headers (lower case), host, client_ip, rule, request_id, scheme, body in
+handler mode, 64 KiB max), `response.status/headers/body`, `respond`, `redirect`, `request_header_set/del`, `log`, `json`, `base64`, `hex`,
+`url`, `crypto.sha256/hmac_sha256/equals`, `time.now/format`, `kv.get/set/incr/delete` (in memory, per rule, 1000 keys / 1 MiB, optional TTL,
+survives edits of the script, cleared on restart).
+
+**Security review (this is admin-authored code execution in the proxy process).** Threat model: a rule editor (admin) can already run the
+proxy as any upstream they like, but the script must not become a shell, a file reader, a port scanner or an availability weapon.
+
+| Risk | Control | Test |
+|---|---|---|
+| Files, processes, network, env | Only `base`, `table`, `string`, `math` are opened. `os`, `io`, `package`, `debug`, `coroutine`, `require`, `module`, `dofile`, `loadfile`, `load`, `loadstring`, `getfenv`, `setfenv`, `collectgarbage`, `print`, `newproxy` are nil. No Go function that touches the OS is exposed. Precompiled chunks are refused. | `TestNoDangerousGlobals`, `TestEscapeAttempts` (os.execute, io.open, io.popen, require, load/loadstring, dofile, debug, package.loaded, getfenv, string.dump, metatable tricks) |
+| Infinite loops | Context deadline (default 100 ms, max 2 s) checked by the VM on every instruction (this is the instruction limit: it is time based, gopher-lua has no instruction counter). Client disconnect also cancels. A run that ignores the deadline for 750 ms more is abandoned, counted, and scripts are refused if more than 16 such runs exist (should stay 0). | `TestInfiniteLoopTimesOut` (while, tail call, pcall loop, table fill, sort comparator, gsub loop), `TestCancelledParent` |
+| Deep recursion / stack abuse | Call stack 120 frames, Lua registry capped at 40960 slots: recursion and `unpack` of huge ranges fail with a stack overflow error. | `TestDeepRecursion` |
+| Memory bombs | `string.rep` / `string.format` capped at 1 MiB / width 99; `gsub` result 1 MiB; JSON in/out 256 KiB; kv 1 MiB; response body cap (default 256 KiB, max 1 MiB); source 64 KiB. Everything else (concat doubling, table growth) is stopped by the **live heap watchdog**: sampled every 2 ms, cancels the run when the process live heap grew more than 64 MiB since the run started. The sample is process wide, so a heavily loaded proxy can occasionally make an innocent run fail with "memory ceiling" (500); a single concat step can overshoot the ceiling by about 2x before the next sample. | `TestMemoryBombs` |
+| Pattern DoS (`a*a*a*b`) | gopher-lua's matcher is replaced by a step budgeted port of the Lua 5.1 matcher (400k steps, recursion 200, subject 256 KiB, pattern 256 bytes): `string.find/match/gmatch/gsub`. | `TestPatternCatastrophe`, `TestPatterns` |
+| Cross-request leaks | A fresh Lua state per run (no shared globals), a per-script semaphore (default 4 parallel runs, max 32; extra requests wait for the remaining time budget, then 503). Panics are recovered. | `TestConcurrentRunsAreIsolated`, `TestConcurrencyPoolBusy` |
+| Header / response injection | Header names and values validated (no CR/LF/NUL), hop-by-hop and `Content-Length` refused, status 200-599, redirect 3xx only. | `TestResponseValidation`, `TestRespondStopsAndRedirect` |
+| Information disclosure | Failures answer `500 - Script error (request id ...)`; details (line number, message) go to the log only. The source is only served by `/api/proxy/script/get`, which viewer accounts cannot call. | `TestScriptErrorsAreOpaque` |
+
+Residual risk: a native Go function that ignores the context could in theory hold a request goroutine (every exposed native is bounded as
+above). The heap watchdog is a ceiling, not an accountant. Treat script editing like shell access to the proxy host's CPU and memory,
+not like a safe multi-tenant sandbox: do not give untrusted users the admin role.

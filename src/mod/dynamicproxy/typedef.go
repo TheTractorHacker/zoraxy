@@ -411,6 +411,7 @@ type ProxyEndpoint struct {
 	basicScopeErr  error                 `json:"-"`
 	Tags           []string              // Tags for the proxy endpoint
 	Ops            *OpsConfig            `json:",omitempty"` //Error pages, static responses, CORS, bandwidth limit (ops_config.go)
+	Script         *ScriptConfig         `json:",omitempty"` //Lua script handler / hook (script_handler.go), off unless enabled
 }
 
 /*
