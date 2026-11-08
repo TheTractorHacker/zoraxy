@@ -2,17 +2,23 @@
   "scenarios": {
     "h2c_grpc_upstream": {
       "fixed_now": true,
-      "commits": ["11a2c86"],
+      "commits": [
+        "11a2c86"
+      ],
       "notes": "Found: 'TE: trailers' was stripped before the h2c upstream (gRPC servers that require it would refuse proxied calls). Fixed in dpcore, regression test TestTETrailersIsForwardedToUpstream."
     },
     "captcha_exemptions": {
       "fixed_now": true,
-      "commits": ["c8ff583"],
+      "commits": [
+        "c8ff583"
+      ],
       "notes": "Found: a protected prefix '/private' was skipped by '/private;x=1/area' (servlet path parameter). Fixed in captcha.pathPrefixMatch, regression test TestShouldEnforcePathPathParameters."
     },
     "ui_new_rule_dialog_to_traffic": {
       "fixed_now": true,
-      "commits": ["a1e4113"],
+      "commits": [
+        "a1e4113"
+      ],
       "notes": "Found: Network Tools threw 'data.forEach is not a function' when /api/mdns/list answers the mDNS-disabled error object. One-line guard in components/networktools.html."
     },
     "vdir_longest_match": {
@@ -22,7 +28,11 @@
       "notes": "Observation: when a trusted proxy sends both X-Real-Ip and CF-Connecting-IP, X-Real-Ip wins (netutils.GetRequesterIP order). Behind Cloudflare a visitor can supply X-Real-Ip and Cloudflare does not strip it; trust only a CDN that overwrites it, or use the 'sanitise client IP headers' switch."
     },
     "proxy_protocol": {
-      "notes": "Observation: the PROXY listener (c0va23 NewDefaultListener, no SourceChecker) honours a PROXY header from ANY peer, so anyone who can reach the listener directly can choose the client address the access lists, auto-ban and rate limit see. Only expose the port to the load balancer. See ROADMAP."
+      "fixed_now": true,
+      "commits": [
+        "4698461"
+      ],
+      "notes": "Found: the PROXY listener honoured a header from ANY peer (client address spoofing against access lists, auto-ban, rate limit). Now only trusted proxies and loopback/private/link-local peers are believed; other peers headers are consumed and ignored. Unit test TestProxyProtocolSourceChecker. The e2e peer is loopback so the scenario proves the trusted path; the untrusted path is unit tested (no public source address available locally)."
     },
     "captcha_altcha_flow": {
       "notes": "Session expiry itself is covered only by unit tests (session_test.go): the minimum session length is 60 s and the signing key is in memory, so an expired cookie cannot be minted from outside."
@@ -31,7 +41,12 @@
       "notes": "The check that a Bearer token is useless on the cookie+CSRF admin routes needs auth mode (the harness runs -noauth); it is covered by src/apiv1_test.go."
     },
     "ops_error_pages_static_cors": {
-      "issues": [313, 431, 680, 1208]
+      "issues": [
+        313,
+        431,
+        680,
+        1208
+      ]
     },
     "unix_socket_upstream": {
       "issues": [],
@@ -39,37 +54,73 @@
     }
   },
   "not_testable": [
-    {"scenario": "acme_real_ca_and_dns_providers", "issues": [],
-     "evidence": "Issuing certificates needs a real ACME CA (or a Pebble instance) and real DNS provider credentials; nothing in this harness can stand in for them without testing only the fake.",
-     "needs": "Run /api/acme/obtainCert against Let's Encrypt staging (HTTP-01 on a public host, DNS-01 with a real provider token) and keep the log."},
-    {"scenario": "cloudflare_real_edge", "issues": [934],
-     "evidence": "Real CF-Connecting-IP / Cloudflare IP ranges / Turnstile widget need Cloudflare in front of the proxy. The header handling itself is covered by client_ip_trust_and_spoofing.",
-     "needs": "A Cloudflare proxied hostname pointing at a Zoraxy with the Cloudflare ranges as trusted proxies; request through it and check the client IP in the access log."},
-    {"scenario": "captcha_widget_in_browser", "issues": [77, 222],
-     "evidence": "The Turnstile / reCAPTCHA / Friendly Captcha / Altcha JavaScript widgets are loaded by the visitor's browser from the provider CDNs. Only the server side (page, verify, session) is exercised, with the provider hosts redirected to a local TLS fake.",
-     "needs": "A real site key pair per provider and a browser pass-through of the challenge page; one screenshot per provider."},
-    {"scenario": "captcha_session_expiry", "issues": [],
-     "evidence": "Cookies are signed with an in-memory key and the minimum lifetime is 60 s; expiry is covered by unit tests (captcha/session_test.go) and cannot be forced from outside without sleeping a minute per case.",
-     "needs": "Optional: a 90 s wall-clock run configuring SessionDuration=60 and checking X-Zoraxy-Captcha-Reason: expired."},
-    {"scenario": "authentik_authelia_real_servers", "issues": [33, 78],
-     "evidence": "Forward auth and OIDC were driven against protocol-faithful fakes (Authelia-style authz endpoint, Authentik-style outpost path, RS256 OIDC provider). Real servers need their own deployment and users.",
-     "needs": "Run the checklist in docs/authentik.md / docs/guides/authelia.md against real instances and attach the browser traces."},
-    {"scenario": "ech_real_browser_dns", "issues": [235],
-     "evidence": "A Go TLS client with the ECHConfigList is the interop peer; real browsers need a published HTTPS DNS record on a public name.",
-     "needs": "Publish the HTTPS RR shown on the ECH page and check Chrome/Firefox with chrome://net-export or Wireshark that ECH was accepted."},
-    {"scenario": "sablier_real_server", "issues": [120],
-     "evidence": "Only a fake following Sablier's documented HTTP contract; no Docker/Swarm/Kubernetes provider involved.",
-     "needs": "A Sablier instance with a sleeping container, wake it through Zoraxy and compare the waiting page and timing."},
-    {"scenario": "http3_quic_listener", "issues": [],
-     "evidence": "The harness client speaks HTTP/1.1 and HTTP/2 only; python's stdlib has no QUIC client and the Go helper does not use quic-go.",
-     "needs": "A curl --http3 or quic-go client run against the enabled QUIC listener."}
+    {
+      "scenario": "acme_real_ca_and_dns_providers",
+      "issues": [],
+      "evidence": "Issuing certificates needs a real ACME CA (or a Pebble instance) and real DNS provider credentials; nothing in this harness can stand in for them without testing only the fake.",
+      "needs": "Run /api/acme/obtainCert against Let's Encrypt staging (HTTP-01 on a public host, DNS-01 with a real provider token) and keep the log."
+    },
+    {
+      "scenario": "cloudflare_real_edge",
+      "issues": [
+        934
+      ],
+      "evidence": "Real CF-Connecting-IP / Cloudflare IP ranges / Turnstile widget need Cloudflare in front of the proxy. The header handling itself is covered by client_ip_trust_and_spoofing.",
+      "needs": "A Cloudflare proxied hostname pointing at a Zoraxy with the Cloudflare ranges as trusted proxies; request through it and check the client IP in the access log."
+    },
+    {
+      "scenario": "captcha_widget_in_browser",
+      "issues": [
+        77,
+        222
+      ],
+      "evidence": "The Turnstile / reCAPTCHA / Friendly Captcha / Altcha JavaScript widgets are loaded by the visitor's browser from the provider CDNs. Only the server side (page, verify, session) is exercised, with the provider hosts redirected to a local TLS fake.",
+      "needs": "A real site key pair per provider and a browser pass-through of the challenge page; one screenshot per provider."
+    },
+    {
+      "scenario": "captcha_session_expiry",
+      "issues": [],
+      "evidence": "Cookies are signed with an in-memory key and the minimum lifetime is 60 s; expiry is covered by unit tests (captcha/session_test.go) and cannot be forced from outside without sleeping a minute per case.",
+      "needs": "Optional: a 90 s wall-clock run configuring SessionDuration=60 and checking X-Zoraxy-Captcha-Reason: expired."
+    },
+    {
+      "scenario": "authentik_authelia_real_servers",
+      "issues": [
+        33,
+        78
+      ],
+      "evidence": "Forward auth and OIDC were driven against protocol-faithful fakes (Authelia-style authz endpoint, Authentik-style outpost path, RS256 OIDC provider). Real servers need their own deployment and users.",
+      "needs": "Run the checklist in docs/authentik.md / docs/guides/authelia.md against real instances and attach the browser traces."
+    },
+    {
+      "scenario": "ech_real_browser_dns",
+      "issues": [
+        235
+      ],
+      "evidence": "A Go TLS client with the ECHConfigList is the interop peer; real browsers need a published HTTPS DNS record on a public name.",
+      "needs": "Publish the HTTPS RR shown on the ECH page and check Chrome/Firefox with chrome://net-export or Wireshark that ECH was accepted."
+    },
+    {
+      "scenario": "sablier_real_server",
+      "issues": [
+        120
+      ],
+      "evidence": "Only a fake following Sablier's documented HTTP contract; no Docker/Swarm/Kubernetes provider involved.",
+      "needs": "A Sablier instance with a sleeping container, wake it through Zoraxy and compare the waiting page and timing."
+    },
+    {
+      "scenario": "http3_quic_listener",
+      "issues": [],
+      "evidence": "The harness client speaks HTTP/1.1 and HTTP/2 only; python's stdlib has no QUIC client and the Go helper does not use quic-go.",
+      "needs": "A curl --http3 or quic-go client run against the enabled QUIC listener."
+    }
   ],
   "not_covered": [
-    {"scenario": "ui_driven_rule_features", "issues": [],
-     "evidence": "Only the New proxy rule dialog and a table toggle are driven through the UI (ui_new_rule_dialog_to_traffic). Every other scenario configures through the same HTTP API calls the UI makes. Per-feature editors (WAF tab, CAPTCHA customise, bulk edit dialog) belong to the admin-side E2E (test/e2e-admin).",
-     "needs": "Extend the Playwright scenarios per editor; the API calls are already proven here."},
-    {"scenario": "tls_sni_certificate_selection_matrix", "issues": [],
-     "evidence": "TLS listener, SNI-based certificate choice and wildcard certs are exercised indirectly (mTLS, ECH, secondary port, h2c) but there is no dedicated matrix of preferred/default/wildcard certificates.",
-     "needs": "A scenario with three certificates and asserting the served CN per SNI."}
+    {
+      "scenario": "ui_driven_rule_features",
+      "issues": [],
+      "evidence": "Only the New proxy rule dialog and a table toggle are driven through the UI (ui_new_rule_dialog_to_traffic). Every other scenario configures through the same HTTP API calls the UI makes. Per-feature editors (WAF tab, CAPTCHA customise, bulk edit dialog) belong to the admin-side E2E (test/e2e-admin).",
+      "needs": "Extend the Playwright scenarios per editor; the API calls are already proven here."
+    }
   ]
 }

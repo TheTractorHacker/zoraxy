@@ -190,6 +190,8 @@ def tls_sni_certificate_selection():
             check(got["m2.test"] == "m1.test", "SAN certificate not selected for m2.test: %s" % got)
             check(got["x.wild.test"] == "*.wild.test", "wildcard certificate not selected: %s" % got)
             check(got["unknown.test"] not in ("a.test", "m1.test", "*.wild.test"), "unknown SNI served a site certificate: %s" % got)
+            # a preferred certificate is used when per-name SNI matching is switched off for the rule
+            z.api("/api/proxy/setTlsConfig", ep="pinned.test", tlsConfig=json.dumps({"DisableSNI": True, "DisableLegacyCertificateMatching": False, "EnableAutoHTTPS": False, "PreferredCertificate": {}}))
             z.api("/api/cert/setPreferredCertificate", domain="pinned.test", certname="pref")
             got["pinned.test"] = cn("pinned.test")
             check(got["pinned.test"] == "preferred.test", "preferred certificate override ignored: %s" % got)

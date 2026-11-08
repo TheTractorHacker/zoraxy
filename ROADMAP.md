@@ -201,3 +201,4 @@ FriendlyCaptcha, counting SSO redirect failures in the auto-ban, per-user admin 
 - ✅ **Sablier** (fork #120 / upstream #564): native dynamic / blocking strategies per rule, ready cache, fail open / closed, SSRF-safe URL. 📋 Verified only against a fake Sablier.
 - ✅ **zrok** (fork #63 / upstream #136): supervised zrok CLI behind `-allow_external_tools` (shares, reserved names on 1.x, private access, backoff, redacted logs).
   📋 Verified only against a fake zrok binary; 📋 zrok agent mode and a Windows path.
+- ✅ **Data-plane end-to-end suite** (`tools/e2e`, DEVELOPMENT.md "End-to-end verification"): 50+ scenarios against a real binary with real traffic; evidence in `docs/verification/e2e-dataplane.md`. 📋 Observed, not changed: virtual directories match a string prefix without a segment boundary (`/apix` -> vdir `/api`); with a trusted proxy `X-Real-Ip` outranks `CF-Connecting-IP`; Playwright coverage of the per-feature editors.
