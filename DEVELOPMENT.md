@@ -681,3 +681,76 @@ Report: `docs/triage/sweep-1.md|json`. Developer notes for the fixes on `fix/bug
   returns on a missing destination; vdir edit keeps `Disabled`.
 - **Stream proxy**: `connCopy` always releases its wait group and closes both sockets on error; PROXY headers pick TCPv4/TCPv6 (UDPv4/UDPv6) from the
   addresses; rejected clients are closed after 300 ms in a goroutine so the accept loop never sleeps.
+
+
+## Certificates and ACME (feat/certs-acme-2)
+
+Everything below is opt-in; with no new flag and no saved profile Zoraxy behaves as before (RSA2048, Let's Encrypt,
+per certificate DNS credentials).
+
+### ACME options
+* **Key type** (`RSA2048|RSA3072|RSA4096|EC256|EC384`): per request (`keyType`), default preference
+  (`/api/acme/keytype`, table `acmepref` key `keytype`). Order: request, key type stored in `<cert>.json`, preference, RSA2048.
+* **Staging CA**: built in as `Let's Encrypt (Staging)` (`mod/acme/ca.json`). **Saved CA profiles** (`/api/acme/profiles/ca`,
+  stored in `acmepref/ca_profiles`): custom directory URL, optional EAB key id + HMAC, skip-TLS, default ACME `profile`.
+  ACME accounts are already stored per directory URL + email, so several CAs live side by side.
+* **Per certificate metadata** (`conf/certs/<name>.json`) additionally records `key_type`, `acme_profile`, `ca_profile_id`,
+  `dns_profile_id`, `managed_by`, `source`, `issued_at`. Renewal reuses all of them. Old files without these fields still work.
+* **ACME profile selection** is passed through to lego (`ObtainRequest.Profile`); CAs that do not offer profiles ignore an empty value.
+* **DNS credential profiles** (`/api/acme/profiles/dns`, `acmepref/dns_profiles`): named provider + credentials. Secrets are
+  stored in the system database exactly like the per certificate DNS credentials, are masked (`********`) in every API response
+  and a masked value sent back keeps the stored secret. A *default* profile is pre-selected in the request dialog and is used
+  when a certificate has no credentials of its own (this covers the proxy rule creation flow, #380).
+* The EAB HMAC key is no longer written to the log.
+* **Renew now** (`POST /api/acme/renewCert cert=<name>`) renews one certificate with its stored settings and returns the
+  operation log (`{ok, log[], error}`); lines mentioning hmac/password/secret/token are withheld.
+* Unattended renewal skips certificates whose `managed_by` is `mapdir`, `csr` or `upload`.
+
+### CSR flow (`/api/cert/csr`)
+`op=generate` creates key + CSR (subject, SANs incl. wildcard/IP, key type). The key is written 0600 to
+`conf/certs/pending-csr/<id>.key` (a sub folder, never loaded as a certificate). `op=complete` takes the issued PEM (leaf first),
+checks it matches the key, is not expired and covers the requested names (override with `force`), refuses to replace an existing
+certificate unless `overwrite`, then installs `<name>.pem/.key/.json` (`managed_by: csr`) and deletes the pending key.
+
+### Certificates from a directory (`-certs_dir`, `-certs_dir_interval`)
+Polling (mtime+size, then SHA-256) every N seconds, no extra dependency. Layouts: `fullchain.pem`+`privkey.pem` (also in
+`live/<name>/`, symlinks followed), `<name>.crt|.pem`+`<name>.key`, `tls.crt`+`tls.key`, one pair per sub folder. Key/certificate
+mismatch and expired certificates are rejected, an existing certificate not imported from the directory is never overwritten,
+source files are only read, and when a source disappears the imported copy stays. Imports are `managed_by: mapdir` (badge
+"Folder (external)") and are never renewed by ACME. Status: `/api/cert/mapdir`.
+
+### Event hooks (`mod/notify`, `/api/notify/hooks`, `conf/notify.json` mode 0600)
+Events: `certificate.issued`, `certificate.renewal_failed`, `certificate.expiring` (checked every 6 h, once per day per
+certificate, window `expiryWarnDays`, default 14). Sources call `notifyManager.Emit(notify.Event{...})`; destinations implement
+`notify.Sink`. A later notifications batch (uptime, WAF) only needs new event names and `Emit` calls. The plugin
+`eventsystem` package was not reused because its event type is plugin-API specific.
+* **Webhooks**: https only, JSON body (`event, time, source, subject, domains, expiry, days_left, ca, error`), headers
+  `X-Zoraxy-Event`, `X-Zoraxy-Timestamp` and, with a secret, `X-Zoraxy-Signature: sha256=hex(HMAC(secret, timestamp + "." + body))`.
+  10 s request timeout, 4 attempts with 1 s, 4 s, 16 s backoff for network errors / 429 / 5xx (other 4xx are final), redirects are not followed,
+  environment proxies are ignored. **SSRF guard**: the dialer refuses loopback, RFC1918/ULA, link-local (incl. 169.254.169.254), CGNAT,
+  multicast and unspecified addresses *after DNS resolution*, so rebinding and internal hostnames are caught. The admin toggle
+  "allow private targets" lifts the guard (and then permits `http://`). Webhooks are not sent in offline mode.
+* **Command hook**: only available when Zoraxy is started with `-allow_hook_commands`; without it the config cannot be saved and nothing
+  ever runs. **This lets an administrator execute programs as the Zoraxy user.** The program must be an absolute path, is started
+  without a shell (arguments are literal), with a minimal environment (`PATH` plus `ZORAXY_EVENT, ZORAXY_SOURCE, ZORAXY_SUBJECT,
+  ZORAXY_DOMAINS, ZORAXY_CA, ZORAXY_ERROR, ZORAXY_TIME, ZORAXY_EXPIRY, ZORAXY_DAYS_LEFT, ZORAXY_EVENT_JSON`; the parent environment is
+  not inherited), 30 s default timeout (max 10 min) and the first 4 KB of output are logged.
+
+### Offline mode (`-offline`)
+`mod/offline` is a process wide switch. When on, these refuse with `ErrOffline` before opening a socket: GeoIP database download
+(manual, weekly scheduler, `-update_geoip`), public IP lookup (access controller start-up and ticker, HTTPS wizard), update check
+and download, plugin store sync and plugin downloads, scheduled and start-up certificate renewal, webhooks.
+**Not affected**: proxying, upstream health checks and uptime monitors, mDNS, and certificates an administrator explicitly requests
+(obtain / renew now, which need to reach the CA and DNS provider). Features that call out by configuration (SSO/OIDC providers, CAPTCHA
+verification, cluster follower) are not blocked; they cannot work without network anyway. Tests (`mod/offline`, `mod/plugins`,
+`mod/updater`, `mod/acme`) install a counting failing dialer (`offlinetest.Install`) and assert zero dials in offline mode and
+at least one dial in the online control run.
+
+### Certificate list
+`/api/cert/list?date=true` adds `Issuer, KeyType, ManagedBy, CAProfileID, DNSProfileID, Renewable, Source`; `/api/cert/usage` maps
+certificate store names to the proxy rule hostnames that resolve to them. The list shows a green/orange/red days badge
+(over 30 / 30 to 8 / 7 or less), managed-by label, used-by and a renew button with log output.
+
+### Manual verification needing real accounts
+Staging issuance (`Let's Encrypt (Staging)`), EAB with ZeroSSL, a real DNS provider profile, ACME `profile` support, and webhook delivery to a
+real HTTPS receiver cannot be covered by unit tests (no CA is contacted in tests).

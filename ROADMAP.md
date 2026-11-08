@@ -102,3 +102,13 @@ Status: ✅ done · 🔧 in progress · 📋 planned
 - 🔧 GeoIP (#1334): Malaysian IPv6 prefixes are pinned by an overrides table. 📋 Switch to a maintained dataset (licence decision) and
   regenerate `geoipv4.csv` / `geoipv6.csv`; `tools` updater still downloads the deprecated npm package.
 - 📋 Whitelist lookup still scans linearly (same index idea as the blacklist). 📋 h2c: apply the response-header timeout.
+
+
+## 11. Certificates and ACME batch (`feat/certs-acme-2`)
+- ✅ ACME key type selection (#1123), staging CA + saved custom CA profiles with EAB (#408, #1267), reusable DNS credential profiles
+  with a default profile (#1332, #380), CSR generation + pairing (#433), certificates from a watched directory (#798), certificate
+  event webhooks and an opt-in command hook (#496/#899 certificate part), `-offline` mode (#782), richer certificate list with
+  renew-now log.
+- 📋 Notification sources beyond certificates (uptime, WAF) can reuse `mod/notify`; per-event retry persistence (undelivered webhooks are
+  dropped after the retry window); webhook delivery log in the UI; DNS profile selection inside the proxy rule dialog itself
+  (`httprp.html` is owned by the networking work); ARI (renewal information) support when lego exposes it; Encrypted Client Hello (#1319) is out of scope.

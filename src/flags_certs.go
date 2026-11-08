@@ -3,10 +3,10 @@ package main
 import "flag"
 
 /*
-	flags_certs.go
+flags_certs.go
 
-	Start-up flags of the certificate / ACME / offline feature set. They live in their own file
-	to keep def.go untouched.
+Start-up flags of the certificate / ACME / offline feature set. They live in their own file
+to keep def.go untouched.
 */
 var (
 	offlineMode = flag.Bool("offline", false, "Offline mode: never make start-up/background outbound calls (GeoIP database download, public IP lookup, update checks, plugin store sync, webhooks). Explicit ACME requests still work. See DEVELOPMENT.md")
