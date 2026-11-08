@@ -137,6 +137,9 @@ func startupSequence() {
 		http.Redirect(w, r, "/login.html", http.StatusTemporaryRedirect)
 	})
 
+	authAgent.LoginGuard = abuseLoginGuard
+	authAgent.OnLoginFailure = abuseLoginFailed
+
 	// Create an API key manager for plugin authentication
 	pluginApiKeyManager = auth.NewAPIKeyManager()
 
@@ -478,6 +481,8 @@ func ShutdownSeq() {
 	if netstatBuffers != nil {
 		netstatBuffers.Close()
 	}
+
+	stopAbuseManager()
 
 	SystemWideLogger.Println("Closing Statistic Collector")
 	if statisticCollector != nil {

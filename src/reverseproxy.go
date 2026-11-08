@@ -337,6 +337,7 @@ func ReverseProxyInit() {
 		LoadBalancer:        loadBalancer,
 		PluginManager:       pluginManager,
 		Metrics:             metricsRegistry,
+		Abuse:               getAbuseManager(),
 		/* Timeouts */
 		ReadHeaderTimeout: int64(readHeaderTimeout),
 		WriteTimeout:      int64(writeTimeout),

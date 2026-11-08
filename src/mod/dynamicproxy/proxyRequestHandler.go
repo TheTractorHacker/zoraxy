@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"imuslab.com/zoraxy/mod/abuse"
 	"imuslab.com/zoraxy/mod/dynamicproxy/dpcore"
 	"imuslab.com/zoraxy/mod/dynamicproxy/loadbalance"
 	"imuslab.com/zoraxy/mod/dynamicproxy/rewrite"
@@ -405,6 +406,14 @@ func (router *Router) logRequest(r *http.Request, succ bool, statusCode int, for
 	// untrusted proxy headers (X-Forwarded-For, X-Real-IP, etc.) cannot be used
 	// to spoof the IP recorded in the log file or the statistics collector.
 	clientIP := router.GetClientIPForEndpoint(r, endpoint)
+
+	// Feed the abuse detectors with explicit block reasons (no-op unless abuse banning is on)
+	switch forwardType {
+	case "waf-blocked":
+		abuseNoteKind(r, abuse.KindWAF)
+	case "exploit-blocked":
+		abuseNoteKind(r, abuse.KindExploit)
+	}
 
 	// Notes: endpoint can be nil if the request has been handled before a host name can be resolved
 	// e.g. Redirection matching rule

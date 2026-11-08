@@ -23,6 +23,7 @@ import (
 	"imuslab.com/zoraxy/mod/auth/sso/zorxauth"
 	"imuslab.com/zoraxy/mod/cluster"
 
+	"imuslab.com/zoraxy/mod/abuse"
 	"imuslab.com/zoraxy/mod/access"
 	"imuslab.com/zoraxy/mod/auth/sso/forward"
 	"imuslab.com/zoraxy/mod/dynamicproxy/captcha"
@@ -101,6 +102,7 @@ type RouterOption struct {
 	PersistProxyEndpoint func(*ProxyEndpoint) error `json:"-"` //Optional, called to save an endpoint config after a basic auth hash upgrade
 	PluginManager        *plugins.Manager           //Plugin manager for handling plugin routing
 	Metrics              *metrics.Registry          //Optional Prometheus metrics registry (nil or disabled = no overhead)
+	Abuse                *abuse.Manager             `json:"-"` //Optional automatic abuse banning (nil or disabled = no overhead), see abuse_hook.go
 
 	/* Timeouts */
 	ReadHeaderTimeout int64 //HTTP server read timeout in seconds

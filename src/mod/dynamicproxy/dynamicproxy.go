@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"imuslab.com/zoraxy/mod/abuse"
 	"imuslab.com/zoraxy/mod/metrics"
 	"net"
 	"net/http"
@@ -374,6 +375,12 @@ func (router *Router) handleNonTLSRequest(w http.ResponseWriter, r *http.Request
 	if strings.Contains(r.Host, ":") {
 		domainOnly = strings.Split(r.Host, ":")[0]
 	}
+	var abuseDone func()
+	var abuseRejected bool
+	if w, r, abuseDone, abuseRejected = router.abuseBegin(w, r, sep); abuseRejected {
+		return
+	}
+	defer abuseDone()
 	w = router.pluginWrapResponse(w, r, sep) //plugin response stage, no-op without response plugins
 	if proxyHandler.runEndpointChain(w, r, sep, domainOnly) {
 		return
@@ -457,6 +464,9 @@ func (router *Router) handleCaptchaGating(w http.ResponseWriter, r *http.Request
 	if r.URL.Path == captcha.VerifyPath {
 		captcha.HandleVerification(w, r, sep.CaptchaConfig, router.captchaSessionStore, clientIP)
 		router.recordCaptchaVerification(w, sep)
+		if !captchaVerifiedOK(w) {
+			abuseNoteKind(r, abuse.KindCaptchaFail)
+		}
 		return true, false
 	}
 

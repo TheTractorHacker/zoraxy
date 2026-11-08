@@ -1,0 +1,131 @@
+<h3>Automatic abuse banning</h3>
+<p>Counts abusive events per client IP (trusted-proxy aware) and bans repeat offenders for a limited, escalating time.
+    Loopback, private ranges, trusted proxies, this server and the allow-list below are never banned unless you
+    explicitly allow banning private ranges. Disabled by default.</p>
+
+<div class="ui form" id="abuseForm">
+    <div class="ui toggle checkbox"><input type="checkbox" id="abEnabled"><label>Enable automatic banning</label></div>
+    <div class="ui divider"></div>
+    <h4>Detectors</h4>
+    <div style="overflow-x:auto">
+        <table class="ui very basic unstackable table">
+            <thead><tr><th>Enabled</th><th>Event</th><th>Events (N)</th><th>Within seconds (T)</th></tr></thead>
+            <tbody id="abDetectors"></tbody>
+        </table>
+    </div>
+    <h4>Ban</h4>
+    <div class="four fields">
+        <div class="field"><label>Ban duration (s)</label><input type="number" id="abBan" min="1"></div>
+        <div class="field"><label>Escalation factor</label><input type="number" id="abEsc" min="1" max="10" step="0.5"></div>
+        <div class="field"><label>Max ban (s)</label><input type="number" id="abMax" min="1"></div>
+        <div class="field"><label>IPv6 prefix tracked</label><input type="number" id="abV6" min="32" max="128"></div>
+    </div>
+    <div class="field"><label>Allow-list (never banned), one IP or CIDR per line</label><textarea id="abAllow" rows="3"></textarea></div>
+    <div class="field"><label>Proxy rules excluded from detection (hostname per line)</label><textarea id="abExclude" rows="2"></textarea></div>
+    <div class="inline field"><div class="ui checkbox"><input type="checkbox" id="abDrop"><label>Close the connection of banned clients without a response (default: 403 page)</label></div></div>
+    <div class="inline field"><div class="ui checkbox"><input type="checkbox" id="abPerEp"><label>Count and ban per proxy rule instead of globally</label></div></div>
+    <div class="inline field"><div class="ui checkbox"><input type="checkbox" id="abPriv"><label>Allow banning loopback / private ranges (dangerous: may lock out your LAN)</label></div></div>
+    <button class="ui basic green button" id="abSave"><i class="save icon"></i> Save</button>
+</div>
+
+<div class="ui divider"></div>
+<h4>Active bans <button class="ui mini basic icon button" id="abRefresh" title="Refresh"><i class="refresh icon"></i></button></h4>
+<div style="overflow-x:auto">
+    <table class="ui unstackable celled table">
+        <thead><tr><th>IP / prefix</th><th>Scope</th><th>Reason</th><th>Since</th><th>Expires</th><th></th></tr></thead>
+        <tbody id="abBans"><tr><td colspan="6">Loading...</td></tr></tbody>
+    </table>
+</div>
+<div class="ui form">
+    <div class="four fields">
+        <div class="field"><input type="text" id="abNewIp" placeholder="IP address"></div>
+        <div class="field"><input type="number" id="abNewSecs" placeholder="seconds (empty = permanent)"></div>
+        <div class="field"><input type="text" id="abNewReason" placeholder="reason"></div>
+        <div class="field"><button class="ui basic red button" id="abAdd"><i class="ban icon"></i> Ban</button></div>
+    </div>
+</div>
+
+<div class="ui divider"></div>
+<h4>Remote API (external tools)</h4>
+<p>Allows scripts or fail2ban actions to ban / unban IPs:
+    <code>curl -X POST -H "Authorization: Bearer TOKEN" -d "ip=203.0.113.9&amp;seconds=3600" https://admin-host/api/abuse/remote/ban</code>
+    (also <code>/unban</code>, <code>/list</code>). Disabled until a token is generated; only a hash is stored.</p>
+<div id="abTokenState"></div>
+<button class="ui basic button" id="abTokGen">Generate new token</button>
+<button class="ui basic red button" id="abTokRevoke">Revoke token</button>
+<div id="abTokShow" class="ui warning message" style="display:none"></div>
+
+<script>
+(function () {
+    var KINDS = {
+        unauthorized: "401 Unauthorized responses (failed basic auth)", forbidden: "403 Forbidden responses",
+        not_found: "404 Not Found (scanners)", rate_limited: "Rate limit rejections (429)", waf_block: "WAF blocks",
+        exploit_block: "Exploit detector blocks", bot_block: "Bot rule blocks", captcha_fail: "Failed CAPTCHA",
+        login_fail: "Failed admin panel logins"
+    };
+    var cfg = null;
+    function esc(s) { return $("<div>").text(s == null ? "" : String(s)).html(); }
+    function lines(v) { return v.split("\n").map(function (x) { return x.trim(); }).filter(Boolean); }
+    function toast(m, ok) { if (window.parent && window.parent.msgbox) { window.parent.msgbox(m, ok); } else if (window.msgbox) { msgbox(m, ok); } }
+    function fmt(t) { return t ? new Date(t * 1000).toLocaleString() : "never"; }
+
+    function loadConfig() {
+        $.get("/api/abuse/config", function (c) {
+            cfg = c;
+            $("#abEnabled").prop("checked", c.Enabled);
+            $("#abBan").val(c.BanSeconds); $("#abEsc").val(c.EscalationFactor); $("#abMax").val(c.MaxBanSeconds); $("#abV6").val(c.IPv6Prefix);
+            $("#abAllow").val((c.AllowList || []).join("\n")); $("#abExclude").val((c.ExcludeEndpoints || []).join("\n"));
+            $("#abDrop").prop("checked", c.DropConnection); $("#abPerEp").prop("checked", c.PerEndpoint); $("#abPriv").prop("checked", c.BanPrivate);
+            var rows = "";
+            (c.AllKinds || []).forEach(function (k) {
+                var d = c.Detectors[k] || {};
+                rows += '<tr data-k="' + esc(k) + '"><td><input type="checkbox" class="dEn"' + (d.Enabled ? " checked" : "") + '></td><td>' + esc(KINDS[k] || k) +
+                    '</td><td><input type="number" class="dTh" min="1" value="' + esc(d.Threshold) + '" style="width:6em"></td><td><input type="number" class="dWin" min="1" value="' + esc(d.WindowSec) + '" style="width:7em"></td></tr>';
+            });
+            $("#abDetectors").html(rows);
+            $("#abTokenState").html(c.RemoteTokenSet ? "A token is set." : "No token set (remote API disabled).");
+        });
+    }
+    function loadBans() {
+        $.get("/api/abuse/list", function (r) {
+            var h = "";
+            (r.Bans || []).forEach(function (b) {
+                h += "<tr><td>" + esc(b.IP) + "</td><td>" + esc(b.Scope || "all") + "</td><td>" + esc(b.Reason) + " (" + esc(b.Source) + ", level " + esc(b.Level) + ")</td><td>" +
+                    esc(fmt(b.Created)) + "</td><td>" + esc(fmt(b.Expires)) + '</td><td><button class="ui mini basic button abUnban" data-ip="' + esc(b.IP) + '" data-scope="' + esc(b.Scope) + '">Unban</button></td></tr>';
+            });
+            $("#abBans").html(h || '<tr><td colspan="6">No active bans.</td></tr>');
+        });
+    }
+    $("#abSave").on("click", function () {
+        var c = { Enabled: $("#abEnabled").prop("checked"), Detectors: {}, BanSeconds: +$("#abBan").val(), EscalationFactor: +$("#abEsc").val(),
+            MaxBanSeconds: +$("#abMax").val(), IPv6Prefix: +$("#abV6").val(), AllowList: lines($("#abAllow").val()), ExcludeEndpoints: lines($("#abExclude").val()),
+            DropConnection: $("#abDrop").prop("checked"), PerEndpoint: $("#abPerEp").prop("checked"), BanPrivate: $("#abPriv").prop("checked") };
+        $("#abDetectors tr").each(function () {
+            c.Detectors[$(this).attr("data-k")] = { Enabled: $(this).find(".dEn").prop("checked"), Threshold: +$(this).find(".dTh").val(), WindowSec: +$(this).find(".dWin").val() };
+        });
+        $.cjax({ type: "POST", url: "/api/abuse/setConfig", data: { config: JSON.stringify(c) }, success: function (d) {
+            if (d && d.error) { toast(d.error, false); } else { toast("Saved", true); loadConfig(); }
+        } });
+    });
+    $("#abBans").on("click", ".abUnban", function () {
+        $.cjax({ type: "POST", url: "/api/abuse/unban", data: { ip: $(this).attr("data-ip"), scope: $(this).attr("data-scope") }, success: function (d) {
+            if (d && d.error) { toast(d.error, false); } loadBans();
+        } });
+    });
+    $("#abAdd").on("click", function () {
+        $.cjax({ type: "POST", url: "/api/abuse/ban", data: { ip: $("#abNewIp").val(), seconds: $("#abNewSecs").val(), reason: $("#abNewReason").val() }, success: function (d) {
+            if (d && d.error) { toast(d.error, false); } else { $("#abNewIp").val(""); } loadBans();
+        } });
+    });
+    $("#abRefresh").on("click", loadBans);
+    $("#abTokGen").on("click", function () {
+        $.cjax({ type: "POST", url: "/api/abuse/token", data: { action: "generate" }, success: function (d) {
+            if (d && d.token) { $("#abTokShow").text("Token (shown once): " + d.token).show(); loadConfig(); } else { toast((d && d.error) || "failed", false); }
+        } });
+    });
+    $("#abTokRevoke").on("click", function () {
+        $.cjax({ type: "POST", url: "/api/abuse/token", data: { action: "revoke" }, success: function () { $("#abTokShow").hide(); loadConfig(); } });
+    });
+    loadConfig(); loadBans();
+})();
+</script>

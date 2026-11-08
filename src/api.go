@@ -475,6 +475,7 @@ func initAPIs(targetMux *http.ServeMux) {
 	RegisterACMEAndAutoRenewerAPIs(authRouter)
 	RegisterStaticWebServerAPIs(authRouter)
 	RegisterPluginAPIs(authRouter)
+	RegisterAbuseAPIs(authRouter)
 
 	//Docker UX Optimizations
 	authRouter.HandleFunc("/api/docker/available", DockerUXOptimizer.HandleDockerAvailable)

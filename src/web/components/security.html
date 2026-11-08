@@ -1,0 +1,31 @@
+<div class="standardContainer">
+    <div class="ui basic segment">
+        <h2>Security Center</h2>
+        <p>Automatic abuse banning, bot rules, admin accounts and an authentication audit. Every feature here is off
+            (or empty) until you configure it.</p>
+    </div>
+    <div class="ui top attached tabular menu" id="secTabs">
+        <a class="item active" data-sec="abuse"><i class="ban icon"></i> Auto-ban</a>
+    </div>
+    <div class="ui bottom attached segment" id="secPane">
+        <div class="ui active centered inline loader"></div>
+    </div>
+</div>
+<script>
+    (function () {
+        function loadSecTab(name) {
+            $("#secTabs .item").removeClass("active");
+            $("#secTabs .item[data-sec='" + name + "']").addClass("active");
+            $("#secPane").html('<div class="ui active centered inline loader"></div>');
+            $.get("./components/security/" + name + ".html", function (html) {
+                $("#secPane").html(html);
+            }).fail(function () {
+                $("#secPane").html('<div class="ui negative message">Unable to load this section.</div>');
+            });
+        }
+        $("#secTabs").on("click", ".item", function () {
+            loadSecTab($(this).attr("data-sec"));
+        });
+        loadSecTab("abuse");
+    })();
+</script>

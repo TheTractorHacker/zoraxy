@@ -28,6 +28,9 @@ type AuthAgent struct {
 	Database                *db.Database
 	LoginRedirectionHandler func(http.ResponseWriter, *http.Request)
 	Logger                  *logger.Logger
+
+	LoginGuard     func(r *http.Request) bool             //Optional: return false to refuse login attempts (e.g. auto-banned client)
+	OnLoginFailure func(r *http.Request, username string) //Optional: called after a failed login attempt
 }
 
 type AuthEndpoints struct {
@@ -95,6 +98,11 @@ func (a *AuthAgent) HandleCheckAuth(w http.ResponseWriter, r *http.Request, hand
 // Handle login request, require POST username and password
 func (a *AuthAgent) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
+	if a.LoginGuard != nil && !a.LoginGuard(r) {
+		http.Error(w, "429 - Too many failed attempts", http.StatusTooManyRequests)
+		return
+	}
+
 	//Get username from request using POST mode
 	username, err := utils.PostPara(r, "username")
 	if err != nil {
@@ -133,6 +141,9 @@ func (a *AuthAgent) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	} else {
 		//Password incorrect
 		a.Logger.PrintAndLog("auth", username+" login request rejected: "+rejectionReason, nil)
+		if a.OnLoginFailure != nil {
+			a.OnLoginFailure(r, username)
+		}
 
 		utils.SendErrorResponse(w, rejectionReason)
 		return
