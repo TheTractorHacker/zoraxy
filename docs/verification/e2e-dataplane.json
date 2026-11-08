@@ -5,7 +5,7 @@
    512
   ],
   "status": "PASS",
-  "evidence": "CIDR blacklist, per-rule attach, whitelist ok; imported 200k entries in 0.6s (report keys ['accepted', 'alreadyPresent', 'dryRun', 'duplicateIssues', 'duplicates']); median request latency 43.2 ms with list active vs 43.1 ms without; ipcheck(95.92.18.108)={\"countryIsoCode\": \"PT\", \"rules\": [{\"id\": \"default\", \"name\": \"Default\", \"allowed (rerun: tools/e2e/run.sh --only access_rules_lists)",
+  "evidence": "CIDR blacklist, per-rule attach, whitelist ok; imported 200k entries in 0.9s (report keys ['accepted', 'alreadyPresent', 'dryRun', 'duplicateIssues', 'duplicates']); median request latency 43.1 ms with list active vs 43.0 ms without; ipcheck(95.92.18.108)={\"countryIsoCode\": \"PT\", \"rules\": [{\"id\": \"default\", \"name\": \"Default\", \"allowed (rerun: tools/e2e/run.sh --only access_rules_lists)",
   "commits": [],
   "notes": ""
  },
@@ -225,7 +225,7 @@
    79
   ],
   "status": "PASS",
-  "evidence": "{\"round_robin\": {\"A\": 10, \"B\": 10, \"C\": 10}, \"weighted_5_1_0\": {\"A\": 50, \"B\": 10}, \"ip_hash_spread_24_ips\": {\"C\": 9, \"A\": 9, \"B\": 6}, \"header_hash_spread_24_keys\": {\"A\": 12, \"C\": 6, \"B\": 6}, \"least_conn_parked_on_slow\": 1, \"least_conn_next_12\": {\"B\": 7, \"C\": 5}} (rerun: tools/e2e/run.sh --only lb_algorithms)",
+  "evidence": "{\"round_robin\": {\"A\": 10, \"B\": 10, \"C\": 10}, \"weighted_5_1_0\": {\"A\": 50, \"B\": 10}, \"ip_hash_spread_24_ips\": {\"A\": 8, \"B\": 9, \"C\": 7}, \"header_hash_spread_24_keys\": {\"C\": 12, \"A\": 5, \"B\": 7}, \"least_conn_parked_on_slow\": 1, \"least_conn_next_12\": {\"B\": 6, \"C\": 6}} (rerun: tools/e2e/run.sh --only lb_algorithms)",
   "commits": [],
   "notes": ""
  },
@@ -319,7 +319,7 @@
   "scenario": "plain_http_listener_chain",
   "issues": [],
   "status": "PASS",
-  "evidence": "plain listener :28937 serves bypass rule (200), TLS-only rule => 307, WAF blocks attack on plain path (403), redirect on plain path => 307 (rerun: tools/e2e/run.sh --only plain_http_listener_chain)",
+  "evidence": "plain listener :28921 serves bypass rule (200), TLS-only rule => 307, WAF blocks attack on plain path (403), redirect on plain path => 307 (rerun: tools/e2e/run.sh --only plain_http_listener_chain)",
   "commits": [],
   "notes": "[area: core]"
  },
@@ -351,7 +351,7 @@
    934
   ],
   "status": "PASS",
-  "evidence": "upstream got 'PROXY TCP4 127.0.0.6 127.0.0.1 32861 28946' (v1) and a v2 binary header with source 127.0.0.6 (rerun: tools/e2e/run.sh --only proxy_protocol_upstream)",
+  "evidence": "upstream got 'PROXY TCP4 127.0.0.6 127.0.0.1 47317 28930' (v1) and a v2 binary header with source 127.0.0.6 (rerun: tools/e2e/run.sh --only proxy_protocol_upstream)",
   "commits": [],
   "notes": ""
  },
@@ -410,7 +410,7 @@
    1042
   ],
   "status": "PASS",
-  "evidence": "secondary :28966 plain -> TLS (cert CN sp.test) -> plain again (rerun: tools/e2e/run.sh --only secondary_port_tls)",
+  "evidence": "secondary :28950 plain -> TLS (cert CN sp.test) -> plain again (rerun: tools/e2e/run.sh --only secondary_port_tls)",
   "commits": [],
   "notes": ""
  },
@@ -443,6 +443,14 @@
   "notes": "[area: dpcore-streaming]"
  },
  {
+  "scenario": "tls_sni_certificate_selection",
+  "issues": [],
+  "status": "PASS",
+  "evidence": "served CN per SNI: {'a.test': 'a.test', 'm2.test': 'm1.test', 'x.wild.test': '*.wild.test', 'unknown.test': 'Zoraxy Self-host', 'pinned.test': 'preferred.test'} (rerun: tools/e2e/run.sh --only tls_sni_certificate_selection)",
+  "commits": [],
+  "notes": "[area: core]"
+ },
+ {
   "scenario": "ui_new_rule_dialog_to_traffic",
   "issues": [],
   "status": "FIXED-NOW",
@@ -456,7 +464,7 @@
   "scenario": "unix_socket_upstream",
   "issues": [],
   "status": "PASS",
-  "evidence": "proxied to unix:/tmp/zx-uds-hl7me5zc/b.sock, path preserved (rerun: tools/e2e/run.sh --only unix_socket_upstream)",
+  "evidence": "proxied to unix:/tmp/zx-uds-c_pkulgv/b.sock, path preserved (rerun: tools/e2e/run.sh --only unix_socket_upstream)",
   "commits": [],
   "notes": "Upstream issue #663; the task gave no fork issue number."
  },
@@ -600,13 +608,5 @@
   "evidence": "Only the New proxy rule dialog and a table toggle are driven through the UI (ui_new_rule_dialog_to_traffic). Every other scenario configures through the same HTTP API calls the UI makes. Per-feature editors (WAF tab, CAPTCHA customise, bulk edit dialog) belong to the admin-side E2E (test/e2e-admin).",
   "commits": [],
   "notes": "Extend the Playwright scenarios per editor; the API calls are already proven here."
- },
- {
-  "scenario": "tls_sni_certificate_selection_matrix",
-  "issues": [],
-  "status": "NOT-COVERED",
-  "evidence": "TLS listener, SNI-based certificate choice and wildcard certs are exercised indirectly (mTLS, ECH, secondary port, h2c) but there is no dedicated matrix of preferred/default/wildcard certificates.",
-  "commits": [],
-  "notes": "A scenario with three certificates and asserting the served CN per SNI."
  }
 ]
