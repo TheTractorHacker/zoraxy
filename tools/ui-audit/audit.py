@@ -21,7 +21,7 @@ and writes a full-page screenshot of every state. Output (outside the repo, give
   shots/<viewport>-<theme>/<page>[__<tab>].png
 
 Usage:  audit.py --url http://127.0.0.1:8000 --out DIR [--themes light,dark] [--viewports desktop,mobile]
-                 [--pages status,waf] [--no-shots] [--allow REGEX ...]
+                 [--pages status,waf] [--lang zh-CN] [--no-shots] [--allow REGEX ...]
 Run it against a throw-away instance started with -noauth (see DEVELOPMENT.md, "UI audit bot"). Exit 1 when a finding of
 severity "major" or higher exists (use --report-only to always exit 0).
 """
@@ -41,6 +41,7 @@ ap.add_argument("--out", required=True, help="output directory (outside the repo
 ap.add_argument("--themes", default="light,dark")
 ap.add_argument("--viewports", default="desktop,mobile")
 ap.add_argument("--pages", default="", help="comma separated nav tags to audit (default: all)")
+ap.add_argument("--lang", default="", help="UI language code to run the audit in (e.g. zh-CN, de); default English")
 ap.add_argument("--no-shots", action="store_true")
 ap.add_argument("--allow", action="append", default=[], help="regex of console / request messages to ignore")
 ap.add_argument("--report-only", action="store_true", help="exit 0 even when there are major findings")
@@ -362,6 +363,8 @@ def _run():
         for vpname in args.viewports.split(","):
             for theme in args.themes.split(","):
                 ctx = b.new_context(viewport=VIEWPORTS[vpname])
+                if args.lang:
+                    ctx.add_init_script("try{localStorage.setItem('zoraxy.lang',%s)}catch(e){}" % json.dumps(args.lang))
                 pg = ctx.new_page()
                 ctx_label.update(viewport=vpname, theme=theme, page="init", tab="")
 

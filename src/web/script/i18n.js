@@ -331,8 +331,7 @@
             var s = sel[i];
             if (s.getAttribute("data-i18n-mounted")) continue;
             s.setAttribute("data-i18n-mounted", "1");
-            s.setAttribute("data-i18n-skip", "");
-            LANGS.forEach(function (l) { var o = document.createElement("option"); o.value = l[0]; o.textContent = l[1]; s.appendChild(o); });
+            LANGS.forEach(function (l) { var o = document.createElement("option"); o.value = l[0]; o.textContent = l[1]; o.setAttribute("data-i18n-skip", ""); s.appendChild(o); });
             s.value = lang;
             s.addEventListener("change", function (e) { setLanguage(e.target.value); });
         }
@@ -359,7 +358,7 @@
     }
 
     var api = {
-        languages: LANGS, setLanguage: setLanguage, apply: function (root) { if (lang !== "en") walk(root || document.documentElement); },
+        languages: LANGS, setLanguage: setLanguage, mountPickers: mountPickers, apply: function (root) { if (lang !== "en") walk(root || document.documentElement); },
         t: t, tf: tf, match: match, _c: null
     };
     Object.defineProperty(api, "lang", { get: function () { return lang; }, enumerable: true });
