@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <!-- Notes: This should be opened in its original path -->
+        <meta charset="utf-8">
+        <meta name="zoraxy.csrf.Token" content="{{.csrfToken}}">
+        <link rel="stylesheet" href="../script/semantic/semantic.min.css">
+        <script src="../script/jquery-3.6.0.min.js"></script>
+        <script src="../script/semantic/semantic.min.js"></script>
+        <script src="../script/utils.js"></script>
+    </head>
+    <body>
+        <link rel="stylesheet" href="../darktheme.css">
+        <script src="../script/darktheme.js"></script>
+        <br>
+        <div class="ui container">
+            <h3 class="ui header">Networking options</h3>
+            <p>Client certificates (mTLS), direct peer restriction and TLS on secondary ports for this proxy rule. Every section is saved on its own and is <b>off</b> unless you turn it on.</p>
+
+            <!-- Client certificates -->
+            <div class="ui segment">
+                <h4 class="ui header"><i class="id card icon"></i> Client certificates (mTLS)</h4>
+                <div class="ui form">
+                    <div class="field">
+                        <label>Mode</label>
+                        <select class="ui fluid dropdown" id="ccMode">
+                            <option value="">Off (no certificate requested)</option>
+                            <option value="require_and_verify">Require and verify against the CA bundle</option>
+                            <option value="request">Request (optional, verified against the CA bundle if sent)</option>
+                            <option value="require">Require a certificate, pinned by the allow list (no CA)</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>CA certificate bundle (PEM)</label>
+                        <textarea id="ccCA" rows="6" placeholder="-----BEGIN CERTIFICATE-----" style="font-family: monospace;"></textarea>
+                        <div style="margin-top: 0.4em;">
+                            <input type="file" id="ccCAFile" accept=".pem,.crt,.cer" style="display:none;">
+                            <button class="ui basic mini button" onclick="$('#ccCAFile').click();"><i class="upload icon"></i> Upload file</button>
+                            <button class="ui basic mini button" onclick="inspectCA();"><i class="search icon"></i> Check bundle</button>
+                        </div>
+                        <div id="ccCAInfo" style="margin-top: 0.4em;"></div>
+                    </div>
+                    <div class="two fields">
+                        <div class="field">
+                            <label>Allow list (optional, one per line)</label>
+                            <textarea id="ccAllow" rows="4" placeholder="cn:alice&#10;san:alice@example.org&#10;sha256 fingerprint"></textarea>
+                        </div>
+                        <div class="field">
+                            <label>Block list (optional, one per line)</label>
+                            <textarea id="ccBlock" rows="4" placeholder="serial:1a2b3c&#10;sha256 fingerprint"></textarea>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <div class="ui checkbox"><input type="checkbox" id="ccNoHeaders"><label>Do <b>not</b> pass the client identity to the upstream</label></div>
+                    </div>
+                    <button class="ui primary button" onclick="saveClientCert();"><i class="save icon"></i> Save client certificate settings</button>
+                </div>
+                <div class="ui basic message">
+                    <ul>
+                        <li>Only visitors of <b>this</b> host name are asked for a certificate (selected by the TLS server name); other proxy rules are not affected. The check is repeated for the <code>Host</code> header, so a client cannot reach this rule through another host name's TLS session.</li>
+                        <li>Allow / block list entries: <code>cn:name</code>, <code>san:dns-or-email-or-uri-or-ip</code>, <code>serial:hex</code>, a SHA-256 fingerprint (hex, colons allowed), or a bare name (matches the CN or a SAN). If an allow list exists only listed certificates pass.</li>
+                        <li>The upstream receives <code>X-Client-Cert-Subject</code>, <code>-Fingerprint</code>, <code>-Serial</code> and <code>-Verified</code>. Headers with these names sent by the visitor are always removed first.</li>
+                        <li><b>Revocation is not supported:</b> there is no CRL or OCSP check. To cut off a certificate, put its serial or fingerprint on the block list, or replace the CA bundle.</li>
+                        <li>HTTP (non TLS) requests to a rule that requires a certificate are refused.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Allowed peers -->
+            <div class="ui segment">
+                <h4 class="ui header"><i class="plug icon"></i> Only accept connections from these peers</h4>
+                <div class="ui form">
+                    <div class="field">
+                        <label>Allowed direct peers (IP / CIDR, one per line, empty = anyone)</label>
+                        <textarea id="peerList" rows="4" placeholder="173.245.48.0/20&#10;10.0.0.5"></textarea>
+                    </div>
+                    <button class="ui primary button" onclick="savePeers();"><i class="save icon"></i> Save allowed peers</button>
+                </div>
+                <div class="ui basic message">
+                    Only connections whose <b>TCP peer address</b> is in this list reach the proxy rule; everybody else gets 403 before any other check. Forwarded headers (<code>X-Forwarded-For</code>, <code>CF-Connecting-IP</code>...) are never used for this decision, so they cannot be spoofed to get in. Use it to make sure only your CDN or load balancer can talk to a rule. It applies to HTTPS, plain HTTP on port 80 and secondary ports. If Zoraxy's own listener uses PROXY protocol, the peer is the address announced in the PROXY header.
+                </div>
+            </div>
+
+            <!-- Secondary port TLS -->
+            <div class="ui segment">
+                <h4 class="ui header"><i class="lock icon"></i> TLS on secondary listening ports</h4>
+                <div class="ui form">
+                    <div class="field">
+                        <div class="ui toggle checkbox"><input type="checkbox" id="secTLS"><label>Serve the secondary ports of this rule over HTTPS</label></div>
+                    </div>
+                    <div class="field"><label>Secondary ports of this rule</label><div id="secPorts" style="font-family: monospace;">-</div></div>
+                    <button class="ui primary button" onclick="saveSecondaryTLS();"><i class="save icon"></i> Save</button>
+                </div>
+                <div class="ui basic message">
+                    Without this switch the secondary listening ports speak plain HTTP. With it they use the normal certificate store (chosen by the TLS server name), the global minimum TLS version and cipher profile, and the client certificate settings above. A port is one listener: if several rules share a port and one of them asks for TLS, the port serves TLS for all of them.
+                </div>
+            </div>
+            <br><br>
+        </div>
+
+        <script>
+            let editingEndpoint = {};
+            if (window.location.hash.length > 1) {
+                try {
+                    editingEndpoint = JSON.parse(decodeURIComponent(window.location.hash.substr(1)));
+                } catch (ex) {
+                    console.log("Unable to load endpoint data from hash", ex);
+                }
+            }
+            $('#ccMode').dropdown();
+
+            function lines(id) {
+                return $(id).val().split('\n').map(function(x){ return x.trim(); }).filter(function(x){ return x.length > 0; });
+            }
+
+            function post(url, data, okMsg) {
+                data.ep = editingEndpoint.ep;
+                $.cjax({
+                    url: url,
+                    method: 'POST',
+                    data: data,
+                    success: function(resp) {
+                        if (resp && resp.error) {
+                            parent.msgbox(resp.error, false, 8000);
+                        } else {
+                            parent.msgbox(okMsg, true);
+                        }
+                    }
+                });
+            }
+
+            function saveClientCert() {
+                let cfg = {
+                    Mode: $('#ccMode').val() || "",
+                    CAPEM: $('#ccCA').val(),
+                    AllowList: lines('#ccAllow'),
+                    BlockList: lines('#ccBlock'),
+                    DisableIdentityHeaders: $('#ccNoHeaders').is(':checked')
+                };
+                post('/api/proxy/networking/clientcert', { config: JSON.stringify(cfg) }, "Client certificate settings saved");
+            }
+
+            function savePeers() {
+                post('/api/proxy/networking/peers', { cidrs: JSON.stringify(lines('#peerList')) }, "Allowed peers saved");
+            }
+
+            function saveSecondaryTLS() {
+                post('/api/proxy/networking/secondarytls', { enable: $('#secTLS').is(':checked') }, "Secondary port TLS setting saved");
+            }
+
+            function inspectCA() {
+                $.cjax({
+                    url: '/api/proxy/networking/clientcert/inspect',
+                    method: 'POST',
+                    data: { pem: $('#ccCA').val() },
+                    success: function(resp) {
+                        let box = $('#ccCAInfo');
+                        box.empty();
+                        if (resp && resp.error) {
+                            box.append($('<div class="ui red mini message"></div>').text(resp.error));
+                            return;
+                        }
+                        if (!resp || resp.length === 0) {
+                            box.append($('<div class="ui yellow mini message"></div>').text("No certificate found"));
+                            return;
+                        }
+                        resp.forEach(function(c) {
+                            let line = c.Subject + " (valid until " + c.NotAfter + (c.Expired ? ", EXPIRED" : "") + (c.IsCA ? "" : ", not a CA certificate") + ")";
+                            box.append($('<div></div>').css('color', (c.Expired || !c.IsCA) ? '#c0392b' : '#27ae60').text(line));
+                        });
+                    }
+                });
+            }
+
+            $('#ccCAFile').on('change', function() {
+                let f = this.files[0];
+                if (!f) return;
+                if (f.size > 512 * 1024) {
+                    parent.msgbox("File is too large for a CA bundle", false, 5000);
+                    return;
+                }
+                let reader = new FileReader();
+                reader.onload = function(e) { $('#ccCA').val(e.target.result); inspectCA(); };
+                reader.readAsText(f);
+            });
+
+            function load() {
+                if (!editingEndpoint.ep) return;
+                $.get('/api/proxy/networking/get?ep=' + encodeURIComponent(editingEndpoint.ep), function(data) {
+                    if (data.error != undefined) {
+                        parent.msgbox(data.error, false, 5000);
+                        return;
+                    }
+                    let cc = data.ClientCert || {};
+                    $('#ccMode').dropdown('set selected', cc.Mode || "");
+                    $('#ccCA').val(cc.CAPEM || "");
+                    $('#ccAllow').val((cc.AllowList || []).join('\n'));
+                    $('#ccBlock').val((cc.BlockList || []).join('\n'));
+                    $('#ccNoHeaders').prop('checked', !!cc.DisableIdentityHeaders);
+                    $('#peerList').val((data.AllowedPeerCIDRs || []).join('\n'));
+                    $('#secTLS').prop('checked', !!data.SecondaryPortsTLS);
+                    $('#secPorts').text((data.ListeningPorts && data.ListeningPorts.length) ? data.ListeningPorts.join(', ') : 'none configured');
+                    if (cc.CAPEM) inspectCA();
+                });
+            }
+            load();
+        </script>
+    </body>
+</html>
