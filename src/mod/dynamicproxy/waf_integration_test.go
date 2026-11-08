@@ -19,6 +19,13 @@ import (
 // newWAFTestProxy wires a real Router + ProxyHandler in front of a recording
 // upstream, with the given WAF config on the endpoint.
 func newWAFTestProxy(t testing.TB, cfg *waf.Config) (*ProxyHandler, *int32, *[]byte) {
+	h, hits, last := newCentralWAFTestProxy(t, nil, func(ep *ProxyEndpoint) { ep.WAF = cfg })
+	return h, hits, last
+}
+
+// newCentralWAFTestProxy is newWAFTestProxy with an optional central state
+// (installed before the endpoint is prepared) and an endpoint customiser.
+func newCentralWAFTestProxy(t testing.TB, st *waf.State, customise func(*ProxyEndpoint)) (*ProxyHandler, *int32, *[]byte) {
 	t.Helper()
 	var hits int32
 	var lastBody []byte
@@ -42,6 +49,9 @@ func newWAFTestProxy(t testing.TB, cfg *waf.Config) (*ProxyHandler, *int32, *[]b
 	router.Option.RedirectRuleTable = rt
 	router.ProxyEndpoints = &sync.Map{}
 	router.loadBalancer = loadbalance.NewLoadBalancer(&loadbalance.Options{Logger: lg})
+	if st != nil {
+		router.SetWAFState(st)
+	}
 
 	ep := &ProxyEndpoint{
 		RootOrMatchingDomain:   "waf.test",
@@ -49,7 +59,9 @@ func newWAFTestProxy(t testing.TB, cfg *waf.Config) (*ProxyHandler, *int32, *[]b
 		ActiveOrigins:          []*loadbalance.Upstream{{OriginIpOrDomain: strings.TrimPrefix(upstream.URL, "http://")}},
 		DisableLogging:         true,
 		AuthenticationProvider: &AuthenticationProvider{AuthMethod: AuthMethodNone},
-		WAF:                    cfg,
+	}
+	if customise != nil {
+		customise(ep)
 	}
 	prepared, err := router.PrepareProxyRoute(ep)
 	if err != nil {

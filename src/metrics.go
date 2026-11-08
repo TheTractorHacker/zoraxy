@@ -173,6 +173,22 @@ func collectZoraxyMetrics(e *metrics.Emitter) {
 		e.Counter("zoraxy_waf_rule_hits_total", "WAF rule matches by rule id (top 200 rules).", float64(r.v), "rule", r.k)
 	}
 
+	// Central WAF: policy switch and endpoint coverage by effective mode (3 label values, bounded)
+	if dynamicProxyRouter != nil {
+		enabled := 0.0
+		if dynamicProxyRouter.WAFState().Policy.Enabled {
+			enabled = 1
+		}
+		e.Gauge("zoraxy_waf_policy_enabled", "1 if the global WAF policy is enabled.", enabled)
+		byMode := map[string]float64{waf.ModeOff: 0, waf.ModeDetectionOnly: 0, waf.ModeBlock: 0}
+		for _, c := range dynamicProxyRouter.WAFCoverage() {
+			byMode[c.Mode]++
+		}
+		for _, m := range []string{waf.ModeOff, waf.ModeDetectionOnly, waf.ModeBlock} {
+			e.Gauge("zoraxy_waf_endpoints", "Proxy endpoints by effective WAF mode.", byMode[m], "mode", m)
+		}
+	}
+
 	// TLS certificate expiry (one leaf per certificate file)
 	if tlsCertManager != nil {
 		for _, c := range tlsCertManager.LoadedCerts {
