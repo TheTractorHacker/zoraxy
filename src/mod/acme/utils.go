@@ -112,3 +112,21 @@ func CertExpireSoon(certBytes []byte, numberOfDays int) bool {
 	}
 	return false
 }
+
+// firstCert returns the first parseable CERTIFICATE block of a PEM bundle.
+func firstCert(certBytes []byte) (*x509.Certificate, error) {
+	rest := certBytes
+	for {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			return nil, errNoCert
+		}
+		if block.Type != "CERTIFICATE" {
+			continue
+		}
+		if cert, err := x509.ParseCertificate(block.Bytes); err == nil {
+			return cert, nil
+		}
+	}
+}

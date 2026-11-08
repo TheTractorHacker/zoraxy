@@ -385,6 +385,12 @@ func (a *AutoRenewer) renewExpiredDomains(certs []*ExpiredCerts) ([]string, erro
 			}
 		}
 
+		if certInfo.IsExternallyManaged() {
+			// uploaded / mapped directory / CSR certificates are renewed by whoever manages them
+			a.Logf("Skipping "+certName+": externally managed ("+certInfo.ManagedBy+")", nil)
+			continue
+		}
+
 		//For upgrading config from older version of Zoraxy which don't have timeout
 		if certInfo.PropTimeout == 0 {
 			//Set default timeout
@@ -406,7 +412,12 @@ func (a *AutoRenewer) renewExpiredDomains(certs []*ExpiredCerts) ([]string, erro
 			a.Logf("Could not extract SANs from PEM for "+fileName+", using original domains", errSan)
 		}
 
-		_, err = a.AcmeHandler.ObtainCert(expiredCert.Domains, certName, a.RenewerConfig.Email, certInfo.AcmeName, certInfo.AcmeUrl, certInfo.SkipTLS, certInfo.UseDNS, certInfo.PropTimeout, dnsServers, certInfo.DisableRecursiveNssCheck, certInfo.DisableAuthoritativeNssCheck)
+		_, err = a.AcmeHandler.ObtainCertWithOptions(expiredCert.Domains, certName, a.RenewerConfig.Email, certInfo.AcmeName, certInfo.AcmeUrl, certInfo.SkipTLS, certInfo.UseDNS, certInfo.PropTimeout, dnsServers, certInfo.DisableRecursiveNssCheck, certInfo.DisableAuthoritativeNssCheck, ObtainOptions{
+			KeyType:      certInfo.KeyType,
+			Profile:      certInfo.AcmeProfile,
+			CAProfileID:  certInfo.CAProfileID,
+			DNSProfileID: certInfo.DNSProfileID,
+		})
 		if err != nil {
 			a.Logf("Renew "+fileName+"("+strings.Join(expiredCert.Domains, ",")+") failed", err)
 		} else {
