@@ -3,6 +3,7 @@ package access
 import (
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"imuslab.com/zoraxy/mod/database"
@@ -36,7 +37,8 @@ type AccessRule struct {
 	BlackListContryCode  *map[string]string
 	BlackListIP          *map[string]string
 
-	parent *Controller
+	parent  *Controller
+	blIndex atomic.Value // *blacklistIndex, compiled IP blacklist lookup (see blacklist_index.go)
 }
 
 type TrustedProxy struct {
@@ -55,6 +57,6 @@ type Controller struct {
 	//Internal
 	publicIpTicker     *time.Ticker
 	publicIpTickerStop chan bool
-	trustedCIDRs       []*net.IPNet   // Pre-parsed CIDR entries for fast lookup
-	trustedCIDRMu      sync.RWMutex   // Protects trustedCIDRs
+	trustedCIDRs       []*net.IPNet // Pre-parsed CIDR entries for fast lookup
+	trustedCIDRMu      sync.RWMutex // Protects trustedCIDRs
 }

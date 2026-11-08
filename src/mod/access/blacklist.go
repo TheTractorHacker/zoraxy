@@ -3,8 +3,6 @@ package access
 import (
 	"fmt"
 	"strings"
-
-	"imuslab.com/zoraxy/mod/netutils"
 )
 
 /*
@@ -72,26 +70,8 @@ func (s *AccessRule) GetAllBlacklistedIp() []string {
 }
 
 func (s *AccessRule) IsIPBlacklisted(ipAddr string) bool {
-	IPBlacklist := *s.BlackListIP
-	_, ok := IPBlacklist[ipAddr]
-	if ok {
-		return true
-	}
-
-	//Check for CIDR
-	for ipOrCIDR, _ := range IPBlacklist {
-		wildcardMatch := netutils.MatchIpWildcard(ipAddr, ipOrCIDR)
-		if wildcardMatch {
-			return true
-		}
-
-		cidrMatch := netutils.MatchIpCIDR(ipAddr, ipOrCIDR)
-		if cidrMatch {
-			return true
-		}
-	}
-
-	return false
+	_, ok := s.blacklistIndexFor().lookup(ipAddr)
+	return ok
 }
 
 // GetBlacklistedIPComment returns the comment for a blacklisted IP address
@@ -107,22 +87,8 @@ func (s *AccessRule) GetBlacklistedIPComment(ipAddr string) (string, error) {
 		}
 	}
 
-	IPBlacklist := *s.BlackListIP
-	if comment, ok := IPBlacklist[ipAddr]; ok {
+	if comment, ok := s.blacklistIndexFor().lookup(ipAddr); ok {
 		return comment, nil
-	}
-
-	//Check for CIDR
-	for ipOrCIDR, comment := range IPBlacklist {
-		wildcardMatch := netutils.MatchIpWildcard(ipAddr, ipOrCIDR)
-		if wildcardMatch {
-			return comment, nil
-		}
-
-		cidrMatch := netutils.MatchIpCIDR(ipAddr, ipOrCIDR)
-		if cidrMatch {
-			return comment, nil
-		}
 	}
 
 	return "", fmt.Errorf("IP %s not found in blacklist", ipAddr)
