@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"regexp"
 
+	"imuslab.com/zoraxy/mod/auth/sso/oauth2"
 	"imuslab.com/zoraxy/mod/netutils"
 	"imuslab.com/zoraxy/mod/pathmatch"
 )
@@ -67,7 +68,7 @@ func handleAuthProviderRouting(sep *ProxyEndpoint, w http.ResponseWriter, r *htt
 			}
 			break
 		}
-		err := h.handleOAuth2Auth(w, r)
+		err := h.handleOAuth2Auth(w, r, sep)
 		if err != nil {
 			clientIP := h.Parent.GetClientIPForEndpoint(r, sep)
 			h.Parent.Option.Logger.LogHTTPRequest(r, "host-http", 401, requestHostname, "", clientIP)
@@ -198,8 +199,20 @@ func (h *ProxyHandler) handleForwardAuth(w http.ResponseWriter, r *http.Request)
 }
 
 /* OAuth2 Auth */
-func (h *ProxyHandler) handleOAuth2Auth(w http.ResponseWriter, r *http.Request) error {
-	return h.Parent.Option.OAuth2Router.HandleOAuth2Auth(w, r)
+func (h *ProxyHandler) handleOAuth2Auth(w http.ResponseWriter, r *http.Request, sep *ProxyEndpoint) error {
+	return h.Parent.Option.OAuth2Router.HandleOAuth2AuthFor(w, r, oauth2RuleOptions(sep))
+}
+
+// oauth2RuleOptions maps the endpoint's OAuth2 settings (provider id and per rule allow-lists).
+func oauth2RuleOptions(sep *ProxyEndpoint) oauth2.RuleOptions {
+	if sep == nil || sep.AuthenticationProvider == nil {
+		return oauth2.RuleOptions{}
+	}
+	ap := sep.AuthenticationProvider
+	return oauth2.RuleOptions{
+		ProviderID: ap.OAuth2ProviderID, AllowedGroups: ap.OAuth2AllowedGroups, AllowedClaims: ap.OAuth2AllowedClaims,
+		AllowedEmails: ap.OAuth2AllowedEmails, AllowedEmailDomains: ap.OAuth2AllowedEmailDomains,
+	}
 }
 
 /* ZorxAuth */

@@ -44,50 +44,79 @@ func normalizeCaptchaExceptionPath(p string) string {
 	return p
 }
 
-// normalizeCaptchaException validates and normalises a rule value for a type
-// (EXCEPTION_TYPE_PATH / EXCEPTION_TYPE_IP).
-func normalizeCaptchaException(ruleType int, value string) (captcha.ExceptionType, string, error) {
-	value = strings.TrimSpace(value)
-	switch ruleType {
-	case EXCEPTION_TYPE_PATH:
-		p := normalizeCaptchaExceptionPath(value)
-		if p == "" {
-			return 0, "", errors.New("invalid path prefix given")
-		}
-		return captcha.ExceptionTypePaths, p, nil
-	case EXCEPTION_TYPE_IP:
-		if _, _, err := net.ParseCIDR(value); err != nil && net.ParseIP(value) == nil {
-			return 0, "", errors.New("invalid IP address or CIDR given")
-		}
-		return captcha.ExceptionTypeCIDR, value, nil
-	}
-	return 0, "", errors.New("invalid exception type given")
+// captchaExceptionSpec is one rule as submitted by the editor.
+type captchaExceptionSpec struct {
+	Type   int    // EXCEPTION_TYPE_PATH / EXCEPTION_TYPE_IP
+	Value  string // path prefix / exact path / regular expression, or IP / CIDR
+	Mode   string // path rules: "", prefix, exact or regex
+	NoCase bool   // path rules: case insensitive
 }
 
-func captchaRuleMatches(rule *captcha.ExceptionRule, t captcha.ExceptionType, value string) bool {
+// normalizeCaptchaException validates and normalises a rule value for a type.
+func normalizeCaptchaException(spec captchaExceptionSpec) (captcha.ExceptionType, string, string, error) {
+	value := strings.TrimSpace(spec.Value)
+	switch spec.Type {
+	case EXCEPTION_TYPE_PATH:
+		mode := strings.ToLower(strings.TrimSpace(spec.Mode))
+		if mode == captcha.ExceptionMatchPrefix {
+			mode = ""
+		}
+		if err := captcha.ValidateExceptionPattern(mode, value); err != nil {
+			return 0, "", "", err
+		}
+		if mode == captcha.ExceptionMatchRegex {
+			if value == "" {
+				return 0, "", "", errors.New("invalid path pattern given")
+			}
+			return captcha.ExceptionTypePaths, value, mode, nil
+		}
+		p := normalizeCaptchaExceptionPath(value)
+		if p == "" {
+			return 0, "", "", errors.New("invalid path prefix given")
+		}
+		return captcha.ExceptionTypePaths, p, mode, nil
+	case EXCEPTION_TYPE_IP:
+		if _, _, err := net.ParseCIDR(value); err != nil && net.ParseIP(value) == nil {
+			return 0, "", "", errors.New("invalid IP address or CIDR given")
+		}
+		return captcha.ExceptionTypeCIDR, value, "", nil
+	}
+	return 0, "", "", errors.New("invalid exception type given")
+}
+
+func captchaRuleMatches(rule *captcha.ExceptionRule, t captcha.ExceptionType, value, mode string, noCase bool) bool {
 	if rule == nil || rule.RuleType != t {
 		return false
 	}
 	if t == captcha.ExceptionTypePaths {
-		return normalizeCaptchaExceptionPath(rule.PathPrefix) == value
+		ruleMode := strings.ToLower(rule.MatchMode)
+		if ruleMode == captcha.ExceptionMatchPrefix {
+			ruleMode = ""
+		}
+		stored := normalizeCaptchaExceptionPath(rule.PathPrefix)
+		if ruleMode == captcha.ExceptionMatchRegex {
+			stored = strings.TrimSpace(rule.PathPrefix)
+		}
+		return stored == value && ruleMode == mode && rule.CaseInsensitive == noCase
 	}
 	return strings.TrimSpace(rule.CIDR) == value
 }
 
 // addCaptchaExceptionRule appends a rule, rejecting invalid values and duplicates.
-func addCaptchaExceptionRule(cfg *captcha.Config, ruleType int, value string) error {
-	t, v, err := normalizeCaptchaException(ruleType, value)
+func addCaptchaExceptionRule(cfg *captcha.Config, spec captchaExceptionSpec) error {
+	t, v, mode, err := normalizeCaptchaException(spec)
 	if err != nil {
 		return err
 	}
+	noCase := spec.NoCase && t == captcha.ExceptionTypePaths
 	for _, rule := range cfg.ExceptionRules {
-		if captchaRuleMatches(rule, t, v) {
+		if captchaRuleMatches(rule, t, v, mode, noCase) {
 			return errors.New("this rule already exists")
 		}
 	}
 	rule := &captcha.ExceptionRule{RuleType: t}
 	if t == captcha.ExceptionTypePaths {
-		rule.PathPrefix = v
+		rule.PathPrefix, rule.MatchMode, rule.CaseInsensitive = v, mode, noCase
 	} else {
 		rule.CIDR = v
 	}
@@ -96,16 +125,17 @@ func addCaptchaExceptionRule(cfg *captcha.Config, ruleType int, value string) er
 	return nil
 }
 
-// removeCaptchaExceptionRule deletes a rule by type and value.
-func removeCaptchaExceptionRule(cfg *captcha.Config, ruleType int, value string) error {
-	t, v, err := normalizeCaptchaException(ruleType, value)
+// removeCaptchaExceptionRule deletes a rule by type, value, mode and case flag.
+func removeCaptchaExceptionRule(cfg *captcha.Config, spec captchaExceptionSpec) error {
+	t, v, mode, err := normalizeCaptchaException(spec)
 	if err != nil {
 		return err
 	}
+	noCase := spec.NoCase && t == captcha.ExceptionTypePaths
 	kept := []*captcha.ExceptionRule{}
 	found := false
 	for _, rule := range cfg.ExceptionRules {
-		if captchaRuleMatches(rule, t, v) {
+		if captchaRuleMatches(rule, t, v, mode, noCase) {
 			found = true
 			continue
 		}
@@ -143,8 +173,8 @@ func ListProxyCaptchaExceptionRules(w http.ResponseWriter, r *http.Request) {
 }
 
 // modifyProxyCaptchaExceptionRule is the shared add / delete handler body.
-// POST: ep, type (0 = path prefix, 1 = IP / CIDR), value.
-func modifyProxyCaptchaExceptionRule(w http.ResponseWriter, r *http.Request, mutate func(*captcha.Config, int, string) error) {
+// POST: ep, type (0 = path, 1 = IP / CIDR), value, mode (prefix|exact|regex, paths only), nocase.
+func modifyProxyCaptchaExceptionRule(w http.ResponseWriter, r *http.Request, mutate func(*captcha.Config, captchaExceptionSpec) error) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
@@ -159,6 +189,8 @@ func modifyProxyCaptchaExceptionRule(w http.ResponseWriter, r *http.Request, mut
 		ruleType = EXCEPTION_TYPE_PATH
 	}
 	value, _ := utils.PostPara(r, "value")
+	mode, _ := utils.PostPara(r, "mode")
+	noCase, _ := utils.PostBool(r, "nocase")
 	targetProxy, err := dynamicProxyRouter.LoadProxy(ep)
 	if err != nil {
 		utils.SendErrorResponse(w, err.Error())
@@ -168,7 +200,7 @@ func modifyProxyCaptchaExceptionRule(w http.ResponseWriter, r *http.Request, mut
 		utils.SendErrorResponse(w, "CAPTCHA is not configured for this endpoint")
 		return
 	}
-	if err := mutate(targetProxy.CaptchaConfig, ruleType, value); err != nil {
+	if err := mutate(targetProxy.CaptchaConfig, captchaExceptionSpec{Type: ruleType, Value: value, Mode: mode, NoCase: noCase}); err != nil {
 		utils.SendErrorResponse(w, err.Error())
 		return
 	}

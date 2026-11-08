@@ -559,6 +559,28 @@
                                     </div>
                                 </div>
                             </div>
+                            <div class="oauth2RuleSettings ui form" style="display:none; margin: 0.6em 0.4em;">
+                                <div class="field">
+                                    <label>OAuth2 / OIDC provider</label>
+                                    <select class="oauth2ProviderSelect" style="width:100%;padding:0.6em;">
+                                        <option value="">default</option>
+                                    </select>
+                                    <small>Providers are managed on the SSO page. Rules that pick none use <code>default</code>.</small>
+                                </div>
+                                <div class="two fields">
+                                    <div class="field"><label>Extra allowed groups (this rule)</label>
+                                        <input type="text" class="oauth2RuleGroups" placeholder="admins,family"></div>
+                                    <div class="field"><label>Extra allowed claim values (this rule)</label>
+                                        <input type="text" class="oauth2RuleClaims" placeholder="roles=admin; department=it"></div>
+                                </div>
+                                <div class="two fields">
+                                    <div class="field"><label>Extra allowed e-mail addresses</label>
+                                        <input type="text" class="oauth2RuleEmails" placeholder="alice@example.com"></div>
+                                    <div class="field"><label>Extra allowed e-mail domains</label>
+                                        <input type="text" class="oauth2RuleEmailDomains" placeholder="example.com"></div>
+                                </div>
+                                <small style="opacity:0.7;">Rule level lists are checked in addition to the ones of the provider (both must allow the user). Empty = not checked. Path exceptions (button below) work with every provider.</small>
+                            </div>
                             <br>
                             <button class="ui basic compact small button editBasicAuthCredentialsBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="ui blue user circle icon"></i> Basic Auth Credentials</button>
                             <button class="ui basic compact small button editZorxAuthExceptionsBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="ui purple shield alternate icon"></i> ZorxAuth Exceptions</button>
@@ -638,6 +660,7 @@
                                         <div class="item" data-value="0"><i class="cloud icon"></i> Cloudflare Turnstile</div>
                                         <div class="item" data-value="1"><i class="google icon"></i> Google reCAPTCHA</div>
                                         <div class="item" data-value="2"><i class="microchip icon"></i> Altcha (self-hosted, secret key = HMAC key, site key unused)</div>
+                                        <div class="item" data-value="3"><i class="shield alternate icon"></i> Friendly Captcha (site key = sitekey, secret key = API key)</div>
                                     </div>
                                 </div>
                                 <div class="ui small fluid input" style="margin-bottom: 0.8em;">
@@ -658,6 +681,15 @@
                                 </div>
                                 <button class="ui basic compact small button editCaptchaExceptionsBtn" style="margin-top: 0.8em;"><i class="ui yellow shield alternate icon"></i> CAPTCHA Exceptions</button>
                                 <button class="ui basic compact small button openCaptchaPageBtn" style="margin-top: 0.8em;"><i class="paint brush icon"></i> Customise bot-check page</button> <!-- feat/ui-audit-captcha-waf -->
+                                <!-- Friendly Captcha specific settings -->
+                                <div class="friendlyCaptchaSettings" style="margin-top: 0.8em; display: none;">
+                                    <label>Friendly Captcha endpoint</label>
+                                    <select class="friendlyEndpointSelect" style="width:100%;padding:0.6em;margin-bottom:0.4em;">
+                                        <option value="global">Global (global.frcapi.com)</option>
+                                        <option value="eu">EU (eu.frcapi.com, dedicated EU endpoint)</option>
+                                    </select>
+                                    <small style="opacity:0.7;">Must match the application's endpoint in the Friendly Captcha dashboard. The widget and the server verification both use it.</small>
+                                </div>
                                 <!-- Google reCAPTCHA specific settings -->
                                 <div class="googleRecaptchaSettings" style="margin-top: 0.8em; display: none;">
                                     <label>reCAPTCHA Version</label>
@@ -1489,7 +1521,8 @@
     function updateCaptchaProviderSections(editor){
         let provider = editor.find(".captchaProviderDropdown").dropdown("get value");
         let version = editor.find(".recaptchaVersionDropdown").dropdown("get value");
-        editor.find(".turnstileSettings").toggle(provider != "1");
+        editor.find(".turnstileSettings").toggle(provider != "1" && provider != "3");
+        editor.find(".friendlyCaptchaSettings").toggle(provider == "3");
         editor.find(".recaptchaPageSettings").toggle(provider == "1");
         editor.find(".recaptchaInvisibleBox").toggle(version != "v3");
         editor.find(".recaptchaActionBox").toggle(version == "v3");
@@ -1513,6 +1546,7 @@
         fields.page = page;
         fields.captchaProvider = editor.find(".captchaProviderDropdown").dropdown("get value");
         fields.captchaRecaptchaVersion = editor.find(".recaptchaVersionDropdown").dropdown("get value");
+        fields.captchaFriendlyEndpoint = editor.find(".friendlyEndpointSelect").val() || "global";
         fields.domain = editor.data("cpDomain") || "";
         let csrf = document.getElementsByTagName("meta")["zoraxy.csrf.Token"];
         if (csrf){
@@ -1637,6 +1671,11 @@
                 "enableConnectSupport": enableConnectSupport,
                 "enableUpgradeForwarding": enableUpgradeForwarding,
                 "authprovider" :authProviderType,
+                "oauth2provider": $(editor).find(".oauth2ProviderSelect").val() || "",
+                "oauth2groups": $(editor).find(".oauth2RuleGroups").val() || "",
+                "oauth2claims": $(editor).find(".oauth2RuleClaims").val() || "",
+                "oauth2emails": $(editor).find(".oauth2RuleEmails").val() || "",
+                "oauth2emaildomains": $(editor).find(".oauth2RuleEmailDomains").val() || "",
                 "rate" :requireRateLimit,
                 "dChunkedEnc": disableChunkedTransferEncoding,
                 "forceHTTP11": forceHTTP11,
@@ -1653,6 +1692,7 @@
                 "rateburst": rateLimitBurst,
                 "captcha": requireCaptcha,
                 "captchaProvider": captchaProvider,
+                "captchaFriendlyEndpoint": $(editor).find(".friendlyEndpointSelect").val() || "global",
                 "captchaSiteKey": captchaSiteKey,
                 "captchaSecretKey": captchaSecretKey,
                 "captchaSessionDuration": captchaSessionDuration,
@@ -2431,8 +2471,35 @@
         }
 
         editor.find(".authProviderPicker input[type='radio']").off("change").on("change", function() {
+            editor.find(".oauth2RuleSettings").toggle($(this).val() == "3" && $(this).is(":checked"));
             saveProxyInlineEdit(uuid);
         });
+
+        // OAuth2 provider selection and per rule allow-lists
+        (function(){
+            let ap = subd.AuthenticationProvider || {};
+            let sel = editor.find(".oauth2ProviderSelect");
+            sel.empty().append($("<option></option>").attr("value", "").text("default"));
+            $.get("/api/sso/OAuth2/providers", function(list){
+                (list || []).forEach(function(p){
+                    if (p.id == "default") return;
+                    sel.append($("<option></option>").attr("value", p.id).text(p.name && p.name != p.id ? p.name + " (" + p.id + ")" : p.id));
+                });
+                let cur = ap.OAuth2ProviderID || "";
+                if (cur && sel.find("option[value='" + cur + "']").length == 0) {
+                    sel.append($("<option></option>").attr("value", cur).text(cur + " (missing)"));
+                }
+                sel.val(cur);
+            });
+            editor.find(".oauth2RuleGroups").val(ap.OAuth2AllowedGroups || "");
+            editor.find(".oauth2RuleClaims").val(ap.OAuth2AllowedClaims || "");
+            editor.find(".oauth2RuleEmails").val(ap.OAuth2AllowedEmails || "");
+            editor.find(".oauth2RuleEmailDomains").val(ap.OAuth2AllowedEmailDomains || "");
+            editor.find(".oauth2RuleSettings").toggle(ap.AuthMethod == 0x3);
+            editor.find(".oauth2ProviderSelect, .oauth2RuleGroups, .oauth2RuleClaims, .oauth2RuleEmails, .oauth2RuleEmailDomains").off("change").on("change", function(){
+                saveProxyInlineEdit(uuid);
+            });
+        })();
 
         editor.find(".editBasicAuthCredentialsBtn").off("click").on("click", function(){
             editBasicAuthCredentials(uuid);
@@ -2540,6 +2607,7 @@
         // Populate CAPTCHA config if it exists
         if (subd.CaptchaConfig) {
             editor.find(".captchaProviderDropdown input[type='hidden']").val((subd.CaptchaConfig.Provider || 0).toString());
+            editor.find(".friendlyEndpointSelect").val(subd.CaptchaConfig.FriendlyEndpoint || "global");
             editor.find(".CaptchaSiteKey").val(subd.CaptchaConfig.SiteKey || "");
             editor.find(".CaptchaSecretKey").val(subd.CaptchaConfig.SecretKey || "");
             editor.find(".CaptchaSessionDuration").val(subd.CaptchaConfig.SessionDuration || 3600);

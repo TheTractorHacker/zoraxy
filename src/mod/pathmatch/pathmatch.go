@@ -77,3 +77,32 @@ func RequestTarget(r *http.Request) string {
 	}
 	return "/"
 }
+
+// CanonicalPath returns the decoded and cleaned path of a request target if,
+// and only if, the target is in canonical form. ok == false means "do not exempt".
+func CanonicalPath(target string) (string, bool) {
+	u, err := url.ParseRequestURI(target)
+	if err != nil {
+		return "", false
+	}
+	p := u.Path
+	if p == "" || p[0] != '/' {
+		return "", false
+	}
+	for i := 0; i < len(p); i++ {
+		c := p[i]
+		if c < 0x20 || c == 0x7f || c == '\\' || c == ';' || c == '%' {
+			return "", false
+		}
+	}
+	clean := path.Clean(p)
+	trimmed := p
+	if len(trimmed) > 1 {
+		trimmed = strings.TrimSuffix(trimmed, "/")
+	}
+	if clean != trimmed {
+		//dot segments or duplicate slashes were present
+		return "", false
+	}
+	return clean, true
+}

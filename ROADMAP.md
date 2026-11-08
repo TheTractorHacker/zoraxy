@@ -172,3 +172,12 @@ FriendlyCaptcha, counting SSO redirect failures in the auto-ban, per-user admin 
   blank DNS credential fields, logged upstream failure reasons, error page host variable, pprof endpoints, access rule help text.
 - 📋 Forward-auth subrequest should send the Trusted Proxy resolved client IP to Authelia/Authentik. 📋 Real-instance runs of the Authentik, Keycloak,
   Google and Pocket ID guides. 📋 Per-route group policies (see section 4). 📋 Publish a container image from the fork (needs Docker Hub credentials).
+## 13. Auth and CAPTCHA remaining items (`feat/auth-captcha-remaining`)
+- ✅ Multiple OIDC / OAuth2 providers, selectable per proxy rule (fork #172 / #223, upstream #884 / #1162): provider registry, per-provider
+  callback path and cookie, provider manager on the SSO page, per-rule provider and extra allow-lists. The legacy single configuration
+  is migrated to the provider `default`.
+- ✅ OIDC sessions persisted encrypted at rest (fork #212), shared across HA nodes through a short lived portable ticket when a cluster secret is set.
+- ✅ Friendly Captcha v2 provider (fork #228 / upstream #1198), incl. the EU endpoint.
+- ✅ CAPTCHA path exceptions in exact and regex mode with canonical-path-only matching (fork #222 / upstream #1161).
+- ✅ Role claim shapes (Keycloak realm / client roles, Entra roles and groups, Authentik groups, Google hd) tested and documented (fork #172).
+- 📋 Per path (not per rule) provider selection; a rule-level override that widens (instead of narrowing) the provider's allow-lists; real-IdP verification of Entra, Google and GitHub presets.

@@ -286,6 +286,13 @@ type AuthenticationProvider struct {
 
 	/* Forward Auth / OAuth2 exception rules (shared, see authexceptions.go) */
 	ExternalAuthExceptionRules []*AuthExceptionRule //Rules to bypass Forward Auth and OAuth2 SSO (path prefix / exact / regex, or IP / CIDR)
+
+	/* OAuth2 provider selection (empty = the "default" provider, i.e. the legacy single configuration) */
+	OAuth2ProviderID          string `json:",omitempty"` //Id of the OAuth2 / OIDC provider this rule signs in with
+	OAuth2AllowedGroups       string `json:",omitempty"` //Extra group allow-list for this rule, AND-combined with the provider's
+	OAuth2AllowedClaims       string `json:",omitempty"` //Extra "claim=v1,v2; claim2=v3" allow-list for this rule
+	OAuth2AllowedEmails       string `json:",omitempty"` //Extra e-mail allow-list for this rule
+	OAuth2AllowedEmailDomains string `json:",omitempty"` //Extra e-mail domain allow-list for this rule
 }
 
 /* CAPTCHA Provider Configuration */

@@ -46,6 +46,7 @@ const (
 	ProviderCloudflare Provider = 0
 	ProviderGoogle     Provider = 1
 	ProviderAltcha     Provider = 2 //self-hosted proof of work, see altcha.go
+	ProviderFriendly   Provider = 3 //Friendly Captcha v2, see friendly.go
 )
 
 // ExceptionType defines the type of CAPTCHA exception rule
@@ -74,14 +75,19 @@ type Config struct {
 	RecaptchaInvisible bool              `json:"RecaptchaInvisible,omitempty"` // v2 only: invisible badge instead of the checkbox
 	RecaptchaAction    string            `json:"RecaptchaAction,omitempty"`    // v3 only: action name, default "access", checked in siteverify
 	AltchaMaxNumber    int               `json:"AltchaMaxNumber,omitempty"`    // Altcha only: work factor (max secret number), default 100000
+	FriendlyEndpoint   string            `json:"FriendlyEndpoint,omitempty"`   // Friendly Captcha only: "global" (default) or "eu"
 	VerifyHostname     bool              `json:"VerifyHostname,omitempty"`     // reject tokens whose siteverify hostname differs from the requested host
 }
 
 // ExceptionRule defines rules for bypassing CAPTCHA
 type ExceptionRule struct {
 	RuleType   ExceptionType `json:"RuleType"`
-	PathPrefix string        `json:"PathPrefix"` // For path-based exceptions
+	PathPrefix string        `json:"PathPrefix"` // For path-based exceptions: prefix, exact path or regular expression, see MatchMode
 	CIDR       string        `json:"CIDR"`       // For IP-based exceptions
+
+	// MatchMode of a path rule: "" / "prefix" (default), "exact" or "regex" (whole path); see exceptions.go
+	MatchMode       string `json:"MatchMode,omitempty"`
+	CaseInsensitive bool   `json:"CaseInsensitive,omitempty"`
 }
 
 // SessionStore issues and validates CAPTCHA sessions.
@@ -244,7 +250,7 @@ func CheckException(r *http.Request, rules []*ExceptionRule, clientIP string) bo
 		}
 		switch rule.RuleType {
 		case ExceptionTypePaths:
-			if pathmatch.RequestPathWithinPrefix(requestTarget, rule.PathPrefix) {
+			if pathRuleMatches(rule, requestTarget) {
 				return true
 			}
 		case ExceptionTypeCIDR:
@@ -368,6 +374,13 @@ func HandleVerification(w http.ResponseWriter, r *http.Request, config *Config, 
 		}
 	}
 
+	if config.Provider == ProviderFriendly {
+		token = strings.TrimSpace(r.PostFormValue(FriendlyField))
+		if token == "" {
+			token = strings.TrimSpace(r.FormValue(FriendlyField))
+		}
+	}
+
 	if token == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
@@ -387,6 +400,8 @@ func HandleVerification(w http.ResponseWriter, r *http.Request, config *Config, 
 		verifyErr = VerifyTurnstile(token, config.SecretKey, clientIP, exp)
 	case ProviderAltcha:
 		verifyErr = VerifyAltcha(token, config.SecretKey, time.Now())
+	case ProviderFriendly:
+		verifyErr = VerifyFriendly(token, config.SecretKey, config.SiteKey, config.FriendlyEndpoint, exp)
 	case ProviderGoogle:
 		verifyErr = VerifyRecaptcha(token, config.SecretKey, clientIP, exp)
 	default:

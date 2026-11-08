@@ -103,6 +103,9 @@ func parseCaptchaPageSettings(r *http.Request, cfg *captcha.Config) {
 	cfg.RecaptchaInvisible, _ = utils.PostBool(r, "captchaRecaptchaInvisible")
 	cfg.RecaptchaAction = postText(r, "captchaRecaptchaAction")
 	cfg.VerifyHostname, _ = utils.PostBool(r, "captchaVerifyHostname")
+	if cfg.Provider == captcha.ProviderFriendly {
+		cfg.FriendlyEndpoint = captcha.NormalizeFriendlyEndpoint(postText(r, "captchaFriendlyEndpoint"))
+	}
 }
 
 // buildCaptchaConfigFromRequest builds and validates a CAPTCHA config from the
@@ -1033,6 +1036,10 @@ func ReverseProxyHandleEditEndpoint(w http.ResponseWriter, r *http.Request) {
 	}
 	if authMethodGiven {
 		newProxyEndpoint.AuthenticationProvider.AuthMethod = requestedAuthMethod
+	}
+	if err := applyOAuth2RuleForm(r, newProxyEndpoint.AuthenticationProvider); err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
 	}
 
 	disableAutoFallback := postBoolOr(r, "dAutoFallback", cur.DisableAutoFallback)

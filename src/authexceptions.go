@@ -16,15 +16,15 @@ import (
 	Admin API for the exception rules of Forward Auth and OAuth2 (upstream #652).
 	Matching lives in mod/dynamicproxy/authexceptions.go.
 
-	GET  /api/proxy/auth/exceptions/list?ep=<rule>
-	POST /api/proxy/auth/exceptions/add      ep, type (0 path | 1 ip), pattern, mode (prefix|exact|regex), nocase, cidr
-	POST /api/proxy/auth/exceptions/delete   ep, type, pattern, mode, nocase | cidr
+	GET  /api/proxy/auth/sso/exceptions/list?ep=<rule>
+	POST /api/proxy/auth/sso/exceptions/add      ep, type (0 path | 1 ip), pattern, mode (prefix|exact|regex), nocase, cidr
+	POST /api/proxy/auth/sso/exceptions/delete   ep, type, pattern, mode, nocase | cidr
 */
 
 func RegisterAuthExceptionAPIs(authRouter *auth.RouterDef) {
-	authRouter.HandleFunc("/api/proxy/auth/exceptions/list", ListProxyAuthExceptionRules)
-	authRouter.HandleFunc("/api/proxy/auth/exceptions/add", AddProxyAuthExceptionRule)
-	authRouter.HandleFunc("/api/proxy/auth/exceptions/delete", RemoveProxyAuthExceptionRule)
+	authRouter.HandleFunc("/api/proxy/auth/sso/exceptions/list", ListProxyAuthExceptionRules)
+	authRouter.HandleFunc("/api/proxy/auth/sso/exceptions/add", AddProxyAuthExceptionRule)
+	authRouter.HandleFunc("/api/proxy/auth/sso/exceptions/delete", RemoveProxyAuthExceptionRule)
 }
 
 func authExceptionSendErr(w http.ResponseWriter, msg string) {

@@ -294,6 +294,16 @@ func (f *fakeIdP) userinfo(w http.ResponseWriter, r *http.Request) {
 
 /* test harness */
 
+func newTestDB(t *testing.T) *database.Database {
+	t.Helper()
+	db, err := database.NewDatabase(filepath.Join(t.TempDir(), "o.db"), database.GetRecommendedBackendType())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(db.Close)
+	return db
+}
+
 func newTestRouter(t *testing.T, idp *fakeIdP, mutate func(o *OAuth2RouterOptions)) *OAuth2Router {
 	t.Helper()
 	db, err := database.NewDatabase(filepath.Join(t.TempDir(), "o.db"), database.GetRecommendedBackendType())
@@ -319,6 +329,7 @@ func newTestRouter(t *testing.T, idp *fakeIdP, mutate func(o *OAuth2RouterOption
 type browser struct {
 	t       *testing.T
 	ar      *OAuth2Router
+	ro      RuleOptions
 	cookies map[string]*http.Cookie
 }
 
@@ -347,7 +358,7 @@ func (b *browser) absorb(w *httptest.ResponseRecorder) {
 // do sends a request through the router. handled reports whether the router wrote a response.
 func (b *browser) do(r *http.Request) (w *httptest.ResponseRecorder, err error) {
 	w = httptest.NewRecorder()
-	err = b.ar.HandleOAuth2Auth(w, r)
+	err = b.ar.HandleOAuth2AuthFor(w, r, b.ro)
 	b.absorb(w)
 	return
 }
