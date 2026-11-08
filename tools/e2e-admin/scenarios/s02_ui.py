@@ -13,10 +13,16 @@ PYW = os.path.expanduser(os.environ.get("PY", "~/ui-test-tools/py.sh"))
 def smoke():
     if "out" in _cache:
         return _cache["out"]
-    with Env("ui") as e:
+    # like tools/ui-smoke/run.sh: a default instance (proxy TLS on), only the proxy port is moved off 443
+    pp = alloc_port()
+    inst = Instance("ui", flags=["-default_inbound_port", str(pp)]).start()
+    try:
         shots = os.environ.get("E2E_SHOTS", "/tmp")
-        r = subprocess.run([PYW, SMOKE, "--url", e.inst.url, "--out", shots], capture_output=True, text=True, timeout=900)
+        r = subprocess.run([PYW, SMOKE, "--url", inst.url, "--out", shots], capture_output=True, text=True, timeout=1500)
         _cache["out"] = (r.returncode, r.stdout + r.stderr)
+    finally:
+        inst.cleanup()
+        free_port(pp)
     return _cache["out"]
 
 

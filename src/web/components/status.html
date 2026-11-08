@@ -1405,11 +1405,11 @@
 
                 if (networkInChart != undefined){
                     networkInChart.data.datasets[0].data = rxValues;
-                    networkInChart.update();
+                    networkInChart.update("none");
                 }
                 if (networkOutChart != undefined){
                     networkOutChart.data.datasets[0].data = txValues;
-                    networkOutChart.update();
+                    networkOutChart.update("none");
                 }
             },
             complete: function(){

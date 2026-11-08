@@ -301,11 +301,11 @@ def main():
             errs = []
             pg.on("pageerror", lambda e: errs.append(str(e)))
             pg.goto(args.url + "/", wait_until="networkidle")
-            pg.wait_for_selector("#mainmenu .item")
+            pg.wait_for_selector("#mainmenu .item", state="attached")  # the Quick Start entry (first item) hides once rules exist
             if not args.no_seed:
                 seed(pg)
                 pg.reload(wait_until="networkidle")
-                pg.wait_for_selector("#mainmenu .item")
+                pg.wait_for_selector("#mainmenu .item", state="attached")  # the Quick Start entry (first item) hides once rules exist
             cdp = ctx.new_cdp_session(pg)
             cdp.send("Performance.enable")
             tabs = list(dict.fromkeys(pg.eval_on_selector_all("#mainmenu .item[tag]", "els => els.map(e => e.getAttribute('tag'))")))
