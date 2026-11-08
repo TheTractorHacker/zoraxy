@@ -66,6 +66,11 @@ type ACMEHandler struct {
 	KeyFileMode    os.FileMode
 	PublicFileMode os.FileMode
 
+	// CertStorePath is the folder certificates, keys and renew info are written to and
+	// scanned from. Empty means DefaultCertStorePath. Set it from the -conf flag, a
+	// hard coded ./conf/certs breaks installs that run with a custom config folder.
+	CertStorePath string
+
 	// issueMu serialises certificate issuance. The HTTP-01 challenge listener binds one
 	// shared port, so concurrent obtain / renew requests would collide with
 	// "address already in use" (upstream #1117).
@@ -74,6 +79,18 @@ type ACMEHandler struct {
 	portMu sync.RWMutex
 	// beforeIssue is a test hook run once the issuance lock is held; a non nil error aborts ObtainCert
 	beforeIssue func() error
+}
+
+// DefaultCertStorePath is used when ACMEHandler.CertStorePath is empty
+const DefaultCertStorePath = "./conf/certs"
+
+// certPath returns the path of a file in the certificate store
+func (a *ACMEHandler) certPath(name string) string {
+	base := a.CertStorePath
+	if base == "" {
+		base = DefaultCertStorePath
+	}
+	return filepath.Join(base, name)
 }
 
 // NewACME creates a new ACMEHandler instance.
@@ -229,7 +246,7 @@ func (a *ACMEHandler) obtainCertLocked(domains []string, certificateName string,
 	}
 
 	// Load certificate info from JSON file
-	certInfo, err := LoadCertInfoJSON(fmt.Sprintf("./conf/certs/%s.json", certificateName))
+	certInfo, err := LoadCertInfoJSON(a.certPath(certificateName + ".json"))
 	if err == nil {
 		useDNS = certInfo.UseDNS
 		if dnsServers == "" && certInfo.DNSServers != nil && len(certInfo.DNSServers) > 0 {
@@ -411,12 +428,12 @@ func (a *ACMEHandler) obtainCertLocked(domains []string, certificateName string,
 
 	// Each certificate comes back with the cert bytes, the bytes of the client's
 	// private key, and a certificate URL.
-	err = a.writeFileWithMode("./conf/certs/"+certificateName+".pem", certificates.Certificate, a.PublicFileMode)
+	err = a.writeFileWithMode(a.certPath(certificateName+".pem"), certificates.Certificate, a.PublicFileMode)
 	if err != nil {
 		a.Logf("Failed to write public key to disk", err)
 		return false, err
 	}
-	err = a.writeFileWithMode("./conf/certs/"+certificateName+".key", certificates.PrivateKey, a.KeyFileMode)
+	err = a.writeFileWithMode(a.certPath(certificateName+".key"), certificates.PrivateKey, a.KeyFileMode)
 	if err != nil {
 		a.Logf("Failed to write private key to disk", err)
 		return false, err
@@ -440,7 +457,7 @@ func (a *ACMEHandler) obtainCertLocked(domains []string, certificateName string,
 		return false, err
 	}
 
-	err = a.writeFileWithMode("./conf/certs/"+certificateName+".json", certInfoBytes, a.PublicFileMode)
+	err = a.writeFileWithMode(a.certPath(certificateName+".json"), certInfoBytes, a.PublicFileMode)
 	if err != nil {
 		a.Logf("Failed to write certificate renew config to file", err)
 		return false, err
@@ -455,7 +472,7 @@ func (a *ACMEHandler) obtainCertLocked(domains []string, certificateName string,
 // it will said expired as well!
 func (a *ACMEHandler) CheckCertificate() []string {
 	// read from dir
-	filenames, err := os.ReadDir("./conf/certs/")
+	filenames, err := os.ReadDir(a.certPath(""))
 
 	expiredCerts := []string{}
 
@@ -465,7 +482,7 @@ func (a *ACMEHandler) CheckCertificate() []string {
 	}
 
 	for _, filename := range filenames {
-		certFilepath := filepath.Join("./conf/certs/", filename.Name())
+		certFilepath := a.certPath(filename.Name())
 
 		certBytes, err := os.ReadFile(certFilepath)
 		if err != nil {
@@ -612,7 +629,7 @@ func (a *ACMEHandler) HandleRenewCertificate(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Extract SANs from existing PEM to ensure all domains are included
-	pemPath := fmt.Sprintf("./conf/certs/%s.pem", filename)
+	pemPath := a.certPath(filename + ".pem")
 	sanDomains, err := ExtractDomainsFromPEM(pemPath)
 	if err == nil {
 		// Merge domainPara + SANs

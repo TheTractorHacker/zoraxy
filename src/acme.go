@@ -48,7 +48,9 @@ func initACME() *acme.ACMEHandler {
 	keyFileMode := parseACMEFileMode(*acmeKeyFileMode, 0o600, "acmekeymode")
 	publicFileMode := parseACMEFileMode(*acmePublicFileMode, 0o644, "acmepublicmode")
 
-	return acme.NewACME(strconv.Itoa(port), sysdb, SystemWideLogger, *acmeTestMode, keyFileMode, publicFileMode)
+	handler := acme.NewACME(strconv.Itoa(port), sysdb, SystemWideLogger, *acmeTestMode, keyFileMode, publicFileMode)
+	handler.CertStorePath = CONF_CERT_STORE
+	return handler
 }
 
 func parseACMEFileMode(raw string, fallback os.FileMode, flagName string) os.FileMode {
