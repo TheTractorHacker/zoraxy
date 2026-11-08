@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-acme/lego/v5/acme"
@@ -64,6 +65,15 @@ type ACMEHandler struct {
 	TestMode       bool
 	KeyFileMode    os.FileMode
 	PublicFileMode os.FileMode
+
+	// issueMu serialises certificate issuance. The HTTP-01 challenge listener binds one
+	// shared port, so concurrent obtain / renew requests would collide with
+	// "address already in use" (upstream #1117).
+	issueMu sync.Mutex
+	// portMu protects Port, which may be re-picked when it was taken by someone else
+	portMu sync.RWMutex
+	// beforeIssue is a test hook run once the issuance lock is held; a non nil error aborts ObtainCert
+	beforeIssue func() error
 }
 
 // NewACME creates a new ACMEHandler instance.
@@ -102,7 +112,38 @@ func (a *ACMEHandler) writeFileWithMode(filename string, data []byte, mode os.Fi
 }
 
 // ObtainCert obtains a certificate for the specified domains.
+// Only one issuance runs at a time: requests (manual clicks, auto renew, several names) queue up.
 func (a *ACMEHandler) ObtainCert(domains []string, certificateName string, email string, caName string, caUrl string, skipTLS bool, useDNS bool, propagationTimeout int, dnsServers string, disableRecursiveNssCheck bool, disableAuthoritativeNssCheck bool) (bool, error) {
+	a.issueMu.Lock()
+	defer a.issueMu.Unlock()
+	if a.beforeIssue != nil {
+		if err := a.beforeIssue(); err != nil {
+			return false, err
+		}
+	}
+	return a.obtainCertLocked(domains, certificateName, email, caName, caUrl, skipTLS, useDNS, propagationTimeout, dnsServers, disableRecursiveNssCheck, disableAuthoritativeNssCheck)
+}
+
+// ensureFreeChallengePort re-checks the HTTP-01 port right before use. The port is picked once
+// at start-up, so something else (e.g. an outbound socket in the ephemeral range) may hold it by now.
+func (a *ACMEHandler) ensureFreeChallengePort() {
+	a.portMu.Lock()
+	defer a.portMu.Unlock()
+	port, err := strconv.Atoi(a.Port)
+	if err == nil && !IsPortInUse(port) {
+		return
+	}
+	for i := 0; i < 50; i++ {
+		candidate := 30000 + int(time.Now().UnixNano()%30000) + i
+		if candidate < 65535 && !IsPortInUse(candidate) {
+			a.Logf("ACME challenge port "+a.Port+" is in use, switching to "+strconv.Itoa(candidate), nil)
+			a.Port = strconv.Itoa(candidate)
+			return
+		}
+	}
+}
+
+func (a *ACMEHandler) obtainCertLocked(domains []string, certificateName string, email string, caName string, caUrl string, skipTLS bool, useDNS bool, propagationTimeout int, dnsServers string, disableRecursiveNssCheck bool, disableAuthoritativeNssCheck bool) (bool, error) {
 	ctx := context.TODO()
 
 	a.Logf("Obtaining certificate for: "+strings.Join(domains, ", "), nil)
@@ -274,7 +315,8 @@ func (a *ACMEHandler) ObtainCert(domains []string, certificateName string, email
 			return false, err
 		}
 	} else {
-		err = client.Challenge.SetHTTP01Provider(http01.NewProviderServer("", a.Port))
+		a.ensureFreeChallengePort()
+		err = client.Challenge.SetHTTP01Provider(http01.NewProviderServer("", a.Getport()))
 		if err != nil {
 			a.Logf("Failed to resolve HTTP01 Provider", err)
 			return false, err
@@ -458,6 +500,8 @@ func (a *ACMEHandler) CheckCertificate() []string {
 
 // return the current port number
 func (a *ACMEHandler) Getport() string {
+	a.portMu.RLock()
+	defer a.portMu.RUnlock()
 	return a.Port
 }
 
