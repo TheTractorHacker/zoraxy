@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -784,6 +785,31 @@ func ReverseProxyHandleAddEndpoint(w http.ResponseWriter, r *http.Request) {
 	utils.SendOK(w)
 }
 
+// authMethodFromRequest reads the "authprovider" form parameter of a proxy rule edit.
+// given is false when the parameter is not present at all.
+func authMethodFromRequest(r *http.Request) (method dynamicproxy.AuthMethod, given bool, err error) {
+	raw, perr := utils.PostPara(r, "authprovider")
+	if perr != nil {
+		return dynamicproxy.AuthMethodNone, false, nil
+	}
+	authProviderType, convErr := strconv.Atoi(raw)
+	if convErr != nil {
+		return dynamicproxy.AuthMethodNone, true, errors.New("Invalid auth provider type")
+	}
+	switch authProviderType {
+	case 1:
+		return dynamicproxy.AuthMethodBasic, true, nil
+	case 2:
+		return dynamicproxy.AuthMethodForward, true, nil
+	case 3:
+		return dynamicproxy.AuthMethodOauth2, true, nil
+	case 4:
+		return dynamicproxy.AuthMethodZorxAuth, true, nil
+	default:
+		return dynamicproxy.AuthMethodNone, true, nil
+	}
+}
+
 /*
 ReverseProxyHandleEditEndpoint handles proxy endpoint edit
 (host only, for root use Default Site page to edit)
@@ -817,15 +843,11 @@ func ReverseProxyHandleEditEndpoint(w http.ResponseWriter, r *http.Request) {
 	utmURI, _ := utils.PostPara(r, "utmURI")
 	utmURI = strings.TrimSpace(utmURI)
 
-	// Auth Provider
-	authProviderTypeStr, _ := utils.PostPara(r, "authprovider")
-	if authProviderTypeStr == "" {
-		authProviderTypeStr = "0"
-	}
-
-	authProviderType, err := strconv.Atoi(authProviderTypeStr)
+	// Auth Provider. When the parameter is absent (stale cached UI, API client, plugin) the
+	// current authentication method is kept instead of silently switching it to "None"
+	requestedAuthMethod, authMethodGiven, err := authMethodFromRequest(r)
 	if err != nil {
-		utils.SendErrorResponse(w, "Invalid auth provider type")
+		utils.SendErrorResponse(w, err.Error())
 		return
 	}
 
@@ -914,17 +936,8 @@ func ReverseProxyHandleEditEndpoint(w http.ResponseWriter, r *http.Request) {
 			BasicAuthExceptionRules: []*dynamicproxy.BasicAuthExceptionRule{},
 		}
 	}
-	switch authProviderType {
-	case 1:
-		newProxyEndpoint.AuthenticationProvider.AuthMethod = dynamicproxy.AuthMethodBasic
-	case 2:
-		newProxyEndpoint.AuthenticationProvider.AuthMethod = dynamicproxy.AuthMethodForward
-	case 3:
-		newProxyEndpoint.AuthenticationProvider.AuthMethod = dynamicproxy.AuthMethodOauth2
-	case 4:
-		newProxyEndpoint.AuthenticationProvider.AuthMethod = dynamicproxy.AuthMethodZorxAuth
-	default:
-		newProxyEndpoint.AuthenticationProvider.AuthMethod = dynamicproxy.AuthMethodNone
+	if authMethodGiven {
+		newProxyEndpoint.AuthenticationProvider.AuthMethod = requestedAuthMethod
 	}
 
 	disableAutoFallback, _ := utils.PostBool(r, "dAutoFallback")
