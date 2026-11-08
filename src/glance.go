@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"sort"
 	"sync"
 	"time"
 
@@ -48,7 +49,25 @@ type glanceCert struct {
 	DaysLeft int
 }
 
+// glanceUp is one monitored upstream for the health list of the Status page
+type glanceUp struct {
+	Name       string
+	URL        string
+	Online     bool
+	StatusCode int
+	LatencyMs  int64
+}
+
+// glanceCertExp is one certificate for the expiry list (soonest first)
+type glanceCertExp struct {
+	Name     string
+	DaysLeft int
+	NotAfter int64
+}
+
 type GlanceData struct {
+	Upstreams      []glanceUp      // every monitored upstream (down ones first, max 40)
+	CertList       []glanceCertExp // the certificates that expire first (max 8)
 	Rates          statistic.Rates
 	BandwidthRx    int64
 	BandwidthTx    int64
@@ -63,7 +82,7 @@ type GlanceData struct {
 }
 
 func buildGlance(now time.Time) GlanceData {
-	g := GlanceData{UpstreamsDown: []glanceDown{}, CertsExpiring: []glanceCert{}, AlertsRecent: []notify.DeliveryRecord{}, WarnDays: 30}
+	g := GlanceData{Upstreams: []glanceUp{}, CertList: []glanceCertExp{}, UpstreamsDown: []glanceDown{}, CertsExpiring: []glanceCert{}, AlertsRecent: []notify.DeliveryRecord{}, WarnDays: 30}
 	if statisticCollector != nil {
 		g.Rates = statisticCollector.RecentRates(5)
 		g.BlockedToday = statisticCollector.GetExportSummaryBlocked()
@@ -73,6 +92,9 @@ func buildGlance(now time.Time) GlanceData {
 	if uptimeMonitor != nil {
 		for _, rec := range uptimeMonitor.LatestRecords() {
 			g.UpstreamsTotal++
+			if len(g.Upstreams) < 40 {
+				g.Upstreams = append(g.Upstreams, glanceUp{rec.Name, rec.URL, rec.Online, rec.StatusCode, rec.Latency})
+			}
 			if !rec.Online && len(g.UpstreamsDown) < 10 {
 				g.UpstreamsDown = append(g.UpstreamsDown, glanceDown{rec.Name, rec.URL, rec.StatusCode})
 			}
@@ -81,6 +103,13 @@ func buildGlance(now time.Time) GlanceData {
 
 	certs := glanceCerts.get()
 	g.CertsTotal = len(certs)
+	sort.SliceStable(g.Upstreams, func(i, j int) bool { return !g.Upstreams[i].Online && g.Upstreams[j].Online })
+	for i, c := range certs {
+		if i >= 8 {
+			break
+		}
+		g.CertList = append(g.CertList, glanceCertExp{c.Name, int(c.NotAfter.Sub(now).Hours() / 24), c.NotAfter.Unix()})
+	}
 	for _, c := range certs {
 		days := int(c.NotAfter.Sub(now).Hours() / 24)
 		if days > g.WarnDays || len(g.CertsExpiring) >= 5 {

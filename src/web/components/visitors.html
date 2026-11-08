@@ -1,0 +1,541 @@
+<!--
+    Visitors: who visited, when and where.
+    Data: /api/visitors/* (mod/visitors). One record per client IP plus a ring buffer of recent visits.
+    Client IPs are resolved with the trusted-proxy aware resolver, so traffic through Cloudflare is
+    listed under the real visitor (and marked "cloudflare"), while a forged CF-Connecting-IP from
+    an untrusted peer is ignored.
+-->
+<style>
+    #visitorsPage .vKpis{
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 0.8em;
+        margin: 1em 0;
+    }
+    #visitorsPage .vKpi{
+        background: var(--theme_bg_primary);
+        border: 1px solid var(--divider_color);
+        border-radius: 0.8em;
+        padding: 0.8em 1em;
+    }
+    #visitorsPage .vKpi .vKpiLabel{ font-size: 0.82em; color: var(--text_color_secondary); }
+    #visitorsPage .vKpi .vKpiValue{ font-size: 1.7em; font-weight: 600; line-height: 1.2; }
+    #visitorsPage .vKpi .vKpiSub{ font-size: 0.78em; color: var(--text_color_secondary); min-height: 1.2em; }
+    #visitorsPage .vToolbar{
+        display: flex; flex-wrap: wrap; gap: 0.5em; align-items: center; margin: 0.8em 0;
+    }
+    #visitorsPage .vToolbar .ui.input{ flex: 1 1 14em; min-width: 10em; }
+    #visitorsPage .vToolbar select{
+        padding: 0.55em 0.6em; border-radius: 0.3em; border: 1px solid var(--divider_color);
+        background: var(--theme_bg_primary); color: var(--text_color); max-width: 13em;
+    }
+    #visitorsPage .vTableWrap{ overflow-x: auto; }
+    #visitorsPage table.vTable{ width: 100%; border-collapse: collapse; font-size: 0.92em; }
+    #visitorsPage table.vTable th{
+        text-align: left; padding: 0.6em 0.7em; white-space: nowrap; user-select: none;
+        border-bottom: 2px solid var(--divider_color); color: var(--table_header_text_color, var(--text_color));
+    }
+    #visitorsPage table.vTable th.sortable{ cursor: pointer; }
+    #visitorsPage table.vTable th.sortable:hover{ text-decoration: underline; }
+    #visitorsPage table.vTable td{ padding: 0.5em 0.7em; border-bottom: 1px solid var(--divider_color); vertical-align: top; }
+    #visitorsPage table.vTable td:nth-child(1), #visitorsPage table.vTable td:nth-child(2), #visitorsPage table.vTable td:nth-child(3), #visitorsPage table.vTable td:nth-child(4){ white-space: nowrap; }
+    #visitorsPage table.vTable tbody tr{ cursor: pointer; }
+    #visitorsPage table.vTable tbody tr:hover{ background: rgba(128,128,128,0.10); }
+    #visitorsPage .vMono{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.95em; }
+    #visitorsPage .vUA{ max-width: 22em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text_color_secondary); }
+    #visitorsPage .vHosts{ max-width: 16em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #visitorsPage .vChip{
+        display: inline-block; padding: 0.05em 0.55em; border-radius: 1em; font-size: 0.8em; font-weight: 600;
+        border: 1px solid var(--divider_color); white-space: nowrap;
+    }
+    #visitorsPage .vChip.cloudflare{ background: rgba(243,128,32,0.15); color: #d9660a; border-color: rgba(243,128,32,0.5); }
+    #visitorsPage .vChip.proxy{ background: rgba(33,133,208,0.14); color: #1f78c1; border-color: rgba(33,133,208,0.45); }
+    #visitorsPage .vChip.direct{ color: var(--text_color_secondary); }
+    #visitorsPage .vChip.new{ background: rgba(33,186,69,0.16); color: #1a9a3a; border-color: rgba(33,186,69,0.5); margin-left: 0.4em; }
+    #visitorsPage .vChip.blocked{ background: rgba(219,40,40,0.14); color: #c62828; border-color: rgba(219,40,40,0.5); }
+    #visitorsPage .vStatus2{ color: #1a9a3a; } #visitorsPage .vStatus3{ color: #1f78c1; }
+    #visitorsPage .vStatus4{ color: #d9660a; } #visitorsPage .vStatus5{ color: #c62828; }
+    #visitorsPage .vPager{ display: flex; align-items: center; gap: 0.6em; margin-top: 0.8em; flex-wrap: wrap; }
+    #visitorsPage .vEmpty{ text-align: center; padding: 2.5em 1em; color: var(--text_color_secondary); }
+    #visitorsPage .vEmpty i.icon{ font-size: 2.4em; opacity: 0.5; display: block; margin: 0 auto 0.4em; }
+    #visitorsPage .vSkel td > div{ height: 0.9em; border-radius: 0.3em; background: rgba(128,128,128,0.18); animation: vPulse 1.4s ease-in-out infinite; }
+    @keyframes vPulse{ 50%{ opacity: 0.45; } }
+    @media (prefers-reduced-motion: reduce){ #visitorsPage .vSkel td > div{ animation: none; } }
+    #visitorsPage .vPrivacy{ font-size: 0.9em; }
+    #visitorsPage .vTabs .item{ cursor: pointer; }
+
+    /* detail drawer */
+    #visitorDrawer{
+        position: fixed; top: 0; right: 0; height: 100%; width: min(34em, 100%); z-index: 1100;
+        background: var(--theme_bg_primary); color: var(--text_color); border-left: 1px solid var(--divider_color);
+        box-shadow: -6px 0 24px rgba(0,0,0,0.25); overflow-y: auto; padding: 1.2em 1.2em 3em;
+        transform: translateX(105%); transition: transform 0.18s ease-out; visibility: hidden;
+    }
+    #visitorDrawer.open{ transform: none; visibility: visible; }
+    @media (prefers-reduced-motion: reduce){ #visitorDrawer{ transition: none; } }
+    #visitorDrawer h3{ margin-top: 0; word-break: break-all; }
+    #visitorDrawer .vdKV{ display: grid; grid-template-columns: 8em 1fr; gap: 0.3em 0.8em; margin: 0.8em 0; font-size: 0.93em; }
+    #visitorDrawer .vdKV div:nth-child(odd){ color: var(--text_color_secondary); }
+    #visitorDrawer .vdList{ font-size: 0.9em; margin: 0.3em 0 1em; padding: 0; list-style: none; }
+    #visitorDrawer .vdList li{ display: flex; justify-content: space-between; gap: 1em; padding: 0.15em 0; border-bottom: 1px dashed var(--divider_color); }
+    #visitorDrawer .vdList li span:first-child{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #visitorDrawer .vdActions{ display: flex; flex-wrap: wrap; gap: 0.4em; margin: 0.8em 0; }
+    #visitorDrawer .vdActions .ui.button{ margin: 0; }
+    #visitorDrawerShade{ position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 1099; display: none; }
+    #visitorDrawerShade.open{ display: block; }
+</style>
+
+<div class="standardContainer" id="visitorsPage">
+    <div class="ui basic segment">
+        <h2>Visitors</h2>
+        <p>Who visited your sites, when and from where. Traffic that arrives through Cloudflare or another trusted proxy is listed under the real visitor address.</p>
+
+        <div class="vKpis" id="vKpis">
+            <div class="vKpi"><div class="vKpiLabel">Known IP addresses</div><div class="vKpiValue" id="vkIps">-</div><div class="vKpiSub" id="vkIpsSub"></div></div>
+            <div class="vKpi"><div class="vKpiLabel">Active, last 24 hours</div><div class="vKpiValue" id="vkActive">-</div><div class="vKpiSub"></div></div>
+            <div class="vKpi"><div class="vKpiLabel">New in the last hour</div><div class="vKpiValue" id="vkNew">-</div><div class="vKpiSub" id="vkNewSub"></div></div>
+            <div class="vKpi"><div class="vKpiLabel">With blocked requests</div><div class="vKpiValue" id="vkBlocked">-</div><div class="vKpiSub"></div></div>
+            <div class="vKpi"><div class="vKpiLabel">Through Cloudflare / proxies</div><div class="vKpiValue" id="vkVia">-</div><div class="vKpiSub" id="vkViaSub"></div></div>
+        </div>
+
+        <div class="ui top attached tabular menu vTabs" id="vTabs">
+            <a class="active item" data-vtab="list"><i class="users icon"></i> Visitors</a>
+            <a class="item" data-vtab="recent"><i class="stream icon"></i> Recent visits</a>
+            <a class="item" data-vtab="settings"><i class="cog icon"></i> Settings &amp; privacy</a>
+        </div>
+
+        <!-- Visitors -->
+        <div class="ui bottom attached segment vPane" data-vpane="list">
+            <div class="vToolbar">
+                <div class="ui small icon input"><input type="search" id="vSearch" placeholder="Search IP, host, country, user agent" aria-label="Search visitors" autocomplete="off"><i class="search icon"></i></div>
+                <select id="vSince" aria-label="Time range">
+                    <option value="0">All time</option><option value="1">Last hour</option><option value="24" selected>Last 24 hours</option>
+                    <option value="168">Last 7 days</option><option value="720">Last 30 days</option>
+                </select>
+                <select id="vHost" aria-label="Host"><option value="">All hosts</option></select>
+                <select id="vCountry" aria-label="Country"><option value="">All countries</option></select>
+                <select id="vVia" aria-label="Via"><option value="">Any route</option><option value="direct">Direct</option><option value="cloudflare">Cloudflare</option><option value="proxy">Other proxy</option></select>
+                <div class="ui checkbox" id="vBlockedBox"><input type="checkbox" id="vBlocked"><label>Blocked only</label></div>
+                <span style="flex:1"></span>
+                <button class="ui small basic icon button" id="vRefresh" title="Refresh"><i class="sync icon"></i></button>
+                <button class="ui small basic button" id="vExportCsv"><i class="download icon"></i> CSV</button>
+                <button class="ui small basic button" id="vExportJson"><i class="download icon"></i> JSON</button>
+            </div>
+            <div class="vTableWrap">
+                <table class="vTable" id="vTable">
+                    <thead><tr>
+                        <th class="sortable" data-sort="ip">IP address</th>
+                        <th class="sortable" data-sort="country">Country</th>
+                        <th class="sortable" data-sort="first">First seen</th>
+                        <th class="sortable" data-sort="last">Last seen</th>
+                        <th class="sortable" data-sort="hits">Hits</th>
+                        <th class="sortable" data-sort="blocked">Blocked</th>
+                        <th class="sortable" data-sort="hosts">Hosts</th>
+                        <th class="sortable" data-sort="via">Via</th>
+                        <th>User agent</th>
+                    </tr></thead>
+                    <tbody id="vBody"></tbody>
+                </table>
+            </div>
+            <div class="vPager">
+                <button class="ui small basic button" id="vPrev"><i class="left chevron icon"></i> Previous</button>
+                <span id="vPageInfo"></span>
+                <button class="ui small basic button" id="vNext">Next <i class="right chevron icon"></i></button>
+                <select id="vSize" aria-label="Rows per page"><option>25</option><option selected>50</option><option>100</option><option>200</option></select>
+            </div>
+        </div>
+
+        <!-- Recent visits (live tail) -->
+        <div class="ui bottom attached segment vPane" data-vpane="recent" style="display:none;">
+            <div class="vToolbar">
+                <div class="ui small icon input"><input type="search" id="vrSearch" placeholder="Filter the live list (IP, host, path, user agent)" aria-label="Filter recent visits" autocomplete="off"><i class="search icon"></i></div>
+                <div class="ui checkbox"><input type="checkbox" id="vrBlocked"><label>Blocked only</label></div>
+                <span style="flex:1"></span>
+                <button class="ui small basic button" id="vrPause"><i class="pause icon"></i> Pause</button>
+                <button class="ui small basic button" id="vrExportCsv"><i class="download icon"></i> CSV</button>
+                <button class="ui small basic button" id="vrExportJson"><i class="download icon"></i> JSON</button>
+            </div>
+            <div class="vTableWrap">
+                <table class="vTable" id="vrTable">
+                    <thead><tr><th>Time</th><th>IP address</th><th>Country</th><th>Host</th><th>Request</th><th>Status</th><th>Via</th><th>User agent</th></tr></thead>
+                    <tbody id="vrBody"></tbody>
+                </table>
+            </div>
+            <small id="vrInfo" style="color: var(--text_color_secondary);">Updates every few seconds while this page is open.</small>
+        </div>
+
+        <!-- Settings and privacy -->
+        <div class="ui bottom attached segment vPane" data-vpane="settings" style="display:none;">
+            <div class="ui info message vPrivacy">
+                <div class="header"><i class="shield alternate icon"></i> Privacy</div>
+                <p>IP addresses are personal data (for example under the GDPR). Only keep this list if you have a reason to, tell your visitors in your privacy policy, and keep the retention short.
+                    URL query strings are not stored unless you enable it below, requests from addresses on the
+                    <a href="#" onclick="showSideWrapper('snippet/statsFilters.html?t=' + Date.now()); return false;">statistics exclusion list</a> are not recorded,
+                    and every record can be deleted from here.</p>
+            </div>
+            <div class="ui form" style="max-width: 36em;">
+                <div class="field"><div class="ui toggle checkbox" id="vsEnabledBox"><input type="checkbox" id="vsEnabled"><label>Record visitors</label></div></div>
+                <div class="three fields">
+                    <div class="field"><label for="vsAge">Keep for (days)</label><input type="number" id="vsAge" min="1" max="3650"></div>
+                    <div class="field"><label for="vsIps">Max. IP addresses</label><input type="number" id="vsIps" min="100" max="500000"></div>
+                    <div class="field"><label for="vsRing">Recent visits kept</label><input type="number" id="vsRing" min="100" max="200000"></div>
+                </div>
+                <div class="field"><div class="ui checkbox" id="vsQueryBox"><input type="checkbox" id="vsQuery"><label>Keep URL query strings (may contain tokens or personal data)</label></div></div>
+                <div class="field"><div class="ui checkbox" id="vsNotifyBox"><input type="checkbox" id="vsNotify"><label>Send a notification when the first visitor from a new country shows up (event <code>visitor.new_country</code>, also needs a subscription in the notification centre)</label></div></div>
+                <button class="ui primary button" id="vsSave"><i class="save icon"></i> Save settings</button>
+                <span id="vsMsg" style="margin-left: 0.8em;"></span>
+            </div>
+            <div class="ui divider"></div>
+            <p id="vsStats" style="color: var(--text_color_secondary);"></p>
+            <button class="ui red basic button" id="vsPurge"><i class="trash icon"></i> Delete all visitor data</button>
+            <span id="vsPurgeConfirm" style="display:none; margin-left: 0.6em;">
+                This erases every stored visitor. <button class="ui red small button" id="vsPurgeYes">Yes, delete everything</button>
+                <button class="ui small basic button" id="vsPurgeNo">Cancel</button>
+            </span>
+        </div>
+    </div>
+</div>
+
+<div id="visitorDrawerShade"></div>
+<aside id="visitorDrawer" role="dialog" aria-modal="true" aria-label="Visitor details" aria-hidden="true">
+    <button class="ui right floated basic icon button" id="vdClose" title="Close"><i class="times icon"></i></button>
+    <h3 id="vdTitle" class="vMono"></h3>
+    <div id="vdBody"></div>
+</aside>
+
+<script>
+(function(){
+    var P = "#visitorsPage ";
+    var V = {tab: "list", page: 0, size: 50, sort: "last", dir: "desc", total: 0, lastJSON: "", seq: 0, paused: false,
+             summaryLoaded: false, hostsKey: "", countriesKey: "", rows: [], drawerIP: ""};
+
+    function esc(t){ return String(t == null ? "" : t).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+    function flag(cc){
+        if (!cc || cc.length !== 2) return "";
+        var A = 0x1F1E6, a = "A".charCodeAt(0), u = cc.toUpperCase();
+        return String.fromCodePoint(A + u.charCodeAt(0) - a, A + u.charCodeAt(1) - a);
+    }
+    function country(cc){
+        if (!cc) return '<span style="color:var(--text_color_secondary)">unknown</span>';
+        var name = "";
+        try { name = getCountryName(cc); } catch (e) {}
+        return '<span title="' + esc(name) + '">' + flag(cc) + " " + esc(cc) + (name ? " <small style='color:var(--text_color_secondary)'>" + esc(name) + "</small>" : "") + "</span>";
+    }
+    function ago(sec){
+        var d = Math.max(0, Math.floor(Date.now() / 1000) - sec);
+        if (d < 60) return d + "s ago";
+        if (d < 3600) return Math.floor(d / 60) + "m ago";
+        if (d < 86400) return Math.floor(d / 3600) + "h ago";
+        return Math.floor(d / 86400) + "d ago";
+    }
+    function when(sec){ return '<span title="' + esc(new Date(sec * 1000).toLocaleString()) + '">' + ago(sec) + "</span>"; }
+    function viaChip(v, hdr){ return '<span class="vChip ' + esc(v) + '" title="' + esc(hdr ? "client address taken from " + hdr : "") + '">' + (v === "cloudflare" ? "Cloudflare" : v === "proxy" ? "Proxy" : "Direct") + "</span>"; }
+    function statusCls(s){ return "vStatus" + String(s).charAt(0); }
+    function api(url, ok, fail){
+        return $.ajax({url: url, dataType: "json", success: function(d){
+            if (d && d.error){ if (fail) fail(d.error); else msgbox(d.error, false); return; }
+            ok(d);
+        }, error: function(x){ if (fail) fail("HTTP " + x.status); }});
+    }
+    function post(url, data, ok){
+        $.cjax({url: url, method: "POST", data: data, success: function(d){
+            if (d && d.error){ msgbox(d.error, false); return; }
+            if (ok) ok(d);
+        }, error: function(x){ msgbox("Request failed (HTTP " + x.status + ")", false); }});
+    }
+
+    /* ---------- filters ---------- */
+    function filterQuery(extra){
+        var p = [];
+        function add(k, v){ if (v !== "" && v != null) p.push(k + "=" + encodeURIComponent(v)); }
+        if (V.tab === "recent"){
+            add("q", $("#vrSearch").val().trim());
+            if ($("#vrBlocked").prop("checked")) add("blocked", "1");
+        } else {
+            add("q", $("#vSearch").val().trim());
+            add("since", $("#vSince").val());
+            add("host", $("#vHost").val());
+            add("country", $("#vCountry").val());
+            add("via", $("#vVia").val());
+            if ($("#vBlocked").prop("checked")) add("blocked", "1");
+        }
+        return p.join("&") + (extra ? "&" + extra : "");
+    }
+
+    /* ---------- KPIs ---------- */
+    function loadSummary(){
+        api("./api/visitors/summary", function(d){
+            var s = d.Summary, st = d.Stats;
+            $("#vkIps").text(s.ips.toLocaleString());
+            $("#vkIpsSub").text(st.enabled ? "recording" : "recording is switched off");
+            $("#vkActive").text(s.active24h.toLocaleString());
+            $("#vkNew").text(s.new1h.toLocaleString());
+            $("#vkNewSub").text(s.new24h + " in the last 24 hours");
+            $("#vkBlocked").text(s.blockedIPs.toLocaleString());
+            var cf = (s.via.cloudflare || 0), px = (s.via.proxy || 0);
+            $("#vkVia").text(s.ips ? Math.round(100 * (cf + px) / s.ips) + "%" : "-");
+            $("#vkViaSub").text(cf + " Cloudflare, " + px + " other");
+            // filter choices
+            var hk = (s.hosts || []).join("|"), ck = (s.countries || []).join("|");
+            if (hk !== V.hostsKey){
+                V.hostsKey = hk;
+                var cur = $("#vHost").val();
+                $("#vHost").html('<option value="">All hosts</option>' + (s.hosts || []).map(function(h){ return '<option value="' + esc(h) + '">' + esc(h) + "</option>"; }).join("")).val(cur);
+            }
+            if (ck !== V.countriesKey){
+                V.countriesKey = ck;
+                var cc = $("#vCountry").val();
+                $("#vCountry").html('<option value="">All countries</option>' + (s.countries || []).map(function(c){
+                    var n = ""; try { n = getCountryName(c); } catch (e) {}
+                    return '<option value="' + esc(c) + '">' + flag(c) + " " + esc(c) + (n ? " " + esc(n) : "") + "</option>";
+                }).join("")).val(cc);
+            }
+            fillSettings(d);
+        });
+    }
+
+    /* ---------- visitors table ---------- */
+    function skeleton(cols, rows){
+        var tr = "<tr class='vSkel'>" + new Array(cols + 1).join("<td><div></div></td>") + "</tr>";
+        return new Array(rows + 1).join(tr);
+    }
+    function loadList(force){
+        var q = filterQuery("sort=" + V.sort + "&dir=" + V.dir + "&page=" + V.page + "&size=" + V.size);
+        if (force || !V.lastJSON) $("#vBody").html(skeleton(9, 6));
+        api("./api/visitors/list?" + q, function(d){
+            var js = JSON.stringify(d);
+            if (js === V.lastJSON && !force) return;     // nothing changed: leave the DOM alone
+            V.lastJSON = js;
+            V.total = d.total;
+            var now = Math.floor(Date.now() / 1000);
+            if (d.items.length === 0){
+                $("#vBody").html('<tr><td colspan="9"><div class="vEmpty"><i class="user clock icon"></i>' +
+                    (V.total === 0 && !$("#vSearch").val() && $("#vSince").val() === "0" && !$("#vHost").val() && !$("#vCountry").val() && !$("#vVia").val() && !$("#vBlocked").prop("checked")
+                        ? "No visitors recorded yet. They show up here as soon as requests reach one of your proxy rules."
+                        : "No visitor matches these filters.") + "</div></td></tr>");
+            } else {
+                var html = "";
+                d.items.forEach(function(v){
+                    var hosts = Object.keys(v.hosts || {});
+                    hosts.sort(function(a, b){ return v.hosts[b] - v.hosts[a]; });
+                    html += '<tr data-ip="' + esc(v.ip) + '">' +
+                        '<td class="vMono">' + esc(v.ip) + (now - v.first < 3600 ? '<span class="vChip new" title="First seen within the last hour">new</span>' : "") + "</td>" +
+                        "<td>" + country(v.country) + "</td>" +
+                        "<td>" + when(v.first) + "</td><td>" + when(v.last) + "</td>" +
+                        "<td>" + v.hits.toLocaleString() + "</td>" +
+                        "<td>" + (v.blocked ? '<span class="vChip blocked">' + v.blocked.toLocaleString() + "</span>" : "0") + "</td>" +
+                        '<td><div class="vHosts" title="' + esc(hosts.join(", ")) + '">' + (hosts.length > 1 ? "<b>" + hosts.length + "</b> " : "") + esc(hosts.slice(0, 2).join(", ")) + "</div></td>" +
+                        "<td>" + viaChip(v.via, v.viaHeader) + "</td>" +
+                        '<td><div class="vUA" title="' + esc(v.ua) + '">' + esc(v.ua) + "</div></td></tr>";
+                });
+                $("#vBody").html(html);
+            }
+            var pages = Math.max(1, Math.ceil(d.total / V.size));
+            $("#vPageInfo").text(d.total.toLocaleString() + " visitor" + (d.total === 1 ? "" : "s") + " - page " + (V.page + 1) + " of " + pages);
+            $("#vPrev").prop("disabled", V.page <= 0);
+            $("#vNext").prop("disabled", V.page + 1 >= pages);
+            $("#vTable th.sortable").each(function(){
+                var s = $(this).attr("data-sort");
+                $(this).find(".sortArrow").remove();
+                if (s === V.sort) $(this).append('<span class="sortArrow"> ' + (V.dir === "asc" ? "▲" : "▼") + "</span>");
+            });
+        }, function(err){
+            $("#vBody").html('<tr><td colspan="9"><div class="vEmpty"><i class="exclamation triangle icon"></i>Unable to load visitors (' + esc(err) + ")</div></td></tr>");
+        });
+    }
+
+    /* ---------- recent visits ---------- */
+    function visitRow(v){
+        return '<tr data-ip="' + esc(v.ip) + '"><td>' + when(v.t) + '</td><td class="vMono">' + esc(v.ip) + (v.new ? '<span class="vChip new">new</span>' : "") + "</td><td>" + country(v.country) + "</td>" +
+            "<td>" + esc(v.host) + "</td><td class='vMono'>" + esc(v.method) + " " + esc(v.path) + "</td>" +
+            "<td class='" + statusCls(v.status) + "'>" + esc(v.status) + (v.blocked ? ' <span class="vChip blocked">blocked</span>' : "") + "</td>" +
+            "<td>" + viaChip(v.via, "") + '</td><td><div class="vUA" title="' + esc(v.ua) + '">' + esc(v.ua) + "</div></td></tr>";
+    }
+    function loadRecent(reset){
+        if (V.paused && !reset) return;
+        if (reset){ V.seq = 0; $("#vrBody").html(skeleton(8, 5)); }
+        api("./api/visitors/recent?" + filterQuery("limit=" + (reset ? 200 : 100) + "&after=" + V.seq), function(d){
+            if (reset) $("#vrBody").empty();
+            if (d.Seq < V.seq){ V.seq = 0; }             // the store was purged
+            V.seq = d.Seq;
+            var vs = d.Visits || [];
+            if (vs.length) $("#vrBody").prepend(vs.map(visitRow).join(""));    // newest first
+            var extra = $("#vrBody tr").length - 500;                           // keep the DOM small
+            if (extra > 0) $("#vrBody tr").slice(-extra).remove();
+            if ($("#vrBody tr").length === 0){
+                $("#vrBody").html('<tr><td colspan="8"><div class="vEmpty"><i class="stream icon"></i>No visits recorded yet. New requests appear here live.</div></td></tr>');
+            } else {
+                $("#vrBody .vEmpty").closest("tr").remove();
+            }
+        });
+    }
+
+    /* ---------- drawer ---------- */
+    function openDrawer(ip){
+        V.drawerIP = ip;
+        $("#vdTitle").text(ip);
+        $("#vdBody").html('<div class="vEmpty"><i class="spinner loading icon"></i>Loading...</div>');
+        $("#visitorDrawerShade").addClass("open");
+        $("#visitorDrawer").addClass("open").attr("aria-hidden", "false");
+        api("./api/visitors/detail?ip=" + encodeURIComponent(ip), function(d){
+            var v = d.Visitor, hosts = Object.keys(v.hosts || {}), paths = Object.keys(v.paths || {});
+            hosts.sort(function(a, b){ return v.hosts[b] - v.hosts[a]; });
+            paths.sort(function(a, b){ return v.paths[b] - v.paths[a]; });
+            function list(keys, map){ return keys.length ? '<ul class="vdList">' + keys.map(function(k){ return "<li><span class='vMono' title='" + esc(k) + "'>" + esc(k) + "</span><span>" + map[k] + "</span></li>"; }).join("") + "</ul>" : "<p>-</p>"; }
+            // 14 day sparkline
+            var today = Math.floor(Date.now() / 86400000), bars = [], max = 1, byDay = {};
+            (v.daily || []).forEach(function(x){ byDay[x.d] = x.n; if (x.n > max) max = x.n; });
+            for (var i = 13; i >= 0; i--) bars.push(byDay[today - i] || 0);
+            var spark = '<svg width="100%" height="48" viewBox="0 0 140 48" preserveAspectRatio="none" role="img" aria-label="hits per day, last 14 days">' +
+                bars.map(function(n, i){ var h = Math.max(n ? 3 : 1, 44 * n / max); return '<rect x="' + (i * 10 + 1) + '" y="' + (46 - h) + '" width="8" height="' + h + '" rx="1" fill="#2185d0" opacity="' + (n ? 0.9 : 0.25) + '"><title>' + n + " hits</title></rect>"; }).join("") + "</svg>";
+            var html = '<div class="vdActions">' +
+                '<button class="ui small red basic button" data-act="blacklist"><i class="ban icon"></i> Blacklist</button>' +
+                '<button class="ui small green basic button" data-act="whitelist"><i class="check icon"></i> Whitelist</button>' +
+                '<button class="ui small orange basic button" data-act="ban"><i class="gavel icon"></i> Ban 24h</button>' +
+                '<button class="ui small basic button" data-act="exclude"><i class="eye slash icon"></i> Exclude from stats</button>' +
+                '<button class="ui small basic button" data-act="whois"><i class="search icon"></i> Whois / lookup</button>' +
+                '<button class="ui small basic button" data-act="delete"><i class="trash icon"></i> Delete record</button></div>' +
+                '<div class="vdKV">' +
+                "<div>Country</div><div>" + country(v.country) + "</div>" +
+                "<div>Route</div><div>" + viaChip(v.via, v.viaHeader) + (v.viaHeader ? " <small>(" + esc(v.viaHeader) + ")</small>" : "") + "</div>" +
+                "<div>First seen</div><div>" + esc(new Date(v.first * 1000).toLocaleString()) + "</div>" +
+                "<div>Last seen</div><div>" + esc(new Date(v.last * 1000).toLocaleString()) + " (" + ago(v.last) + ")</div>" +
+                "<div>Hits</div><div>" + v.hits.toLocaleString() + (v.blocked ? ' <span class="vChip blocked">' + v.blocked + " blocked</span>" : "") + "</div>" +
+                "<div>Last request</div><div class='vMono' style='word-break:break-all'>" + esc(v.lastHost) + esc(v.lastPath) + " <span class='" + statusCls(v.status) + "'>" + esc(v.status) + "</span></div>" +
+                "<div>User agent</div><div style='word-break:break-all'>" + esc(v.ua) + "</div></div>" +
+                "<h4>Hits per day (14 days)</h4>" + spark +
+                "<h4>Hosts</h4>" + list(hosts, v.hosts) + "<h4>Paths</h4>" + list(paths, v.paths) +
+                "<h4>Recent visits</h4><div class='vTableWrap'><table class='vTable'><tbody>" +
+                (d.Recent || []).slice(0, 50).map(function(r){ return "<tr style='cursor:default'><td>" + when(r.t) + "</td><td>" + esc(r.host) + "</td><td class='vMono'>" + esc(r.method) + " " + esc(r.path) + "</td><td class='" + statusCls(r.status) + "'>" + esc(r.status) + "</td></tr>"; }).join("") +
+                "</tbody></table></div>";
+            if (V.drawerIP === ip) $("#vdBody").html(html);
+        }, function(err){
+            $("#vdBody").html('<div class="vEmpty"><i class="exclamation triangle icon"></i>' + esc(err) + "</div>");
+        });
+    }
+    function closeDrawer(){
+        V.drawerIP = "";
+        $("#visitorDrawer").removeClass("open").attr("aria-hidden", "true");
+        $("#visitorDrawerShade").removeClass("open");
+    }
+    function drawerAction(act){
+        var ip = V.drawerIP;
+        if (!ip) return;
+        if (act === "blacklist") post("./api/blacklist/ip/add", {ip: ip, comment: "from Visitors"}, function(){ msgbox(ip + " added to the blacklist"); });
+        else if (act === "whitelist") post("./api/whitelist/ip/add", {ip: ip, comment: "from Visitors"}, function(){ msgbox(ip + " added to the whitelist"); });
+        else if (act === "ban") post("./api/abuse/ban", {ip: ip, seconds: 86400, reason: "banned from Visitors"}, function(){ msgbox(ip + " banned for 24 hours"); });
+        else if (act === "exclude"){
+            api("./api/stats/settings", function(d){
+                var s = d.Settings, list = (s.ExcludeNetworks || []).slice();
+                if (list.indexOf(ip) < 0 && list.indexOf(ip + (ip.indexOf(":") > -1 ? "/128" : "/32")) < 0) list.push(ip + (ip.indexOf(":") > -1 ? "/128" : "/32"));
+                s.ExcludeNetworks = list;
+                $.cjax({url: "./api/stats/settings", method: "POST", contentType: "application/json", data: JSON.stringify(s), success: function(r){
+                    if (r && r.error){ msgbox(r.error, false); return; }
+                    msgbox(ip + " is excluded from statistics and the visitor list from now on");
+                }});
+            });
+        }
+        else if (act === "whois"){
+            closeDrawer();
+            openTabById("networktool");
+            setTimeout(function(){ $("#whoisdomain").val(ip); if (typeof performWhoisLookup === "function") performWhoisLookup(); }, 400);
+        }
+        else if (act === "delete"){
+            var $b = $('#vdBody [data-act="delete"]');
+            if (!$b.data("armed")){ $b.data("armed", true).addClass("red").html('<i class="trash icon"></i> Click again to delete'); setTimeout(function(){ $b.data("armed", false).removeClass("red").html('<i class="trash icon"></i> Delete record'); }, 4000); return; }
+            post("./api/visitors/delete", {ip: ip}, function(){ msgbox("Record deleted"); closeDrawer(); refreshAll(true); });
+        }
+    }
+
+    /* ---------- settings ---------- */
+    function fillSettings(d){
+        if (!d.Stats) return;
+        var st = d.Stats;
+        $("#vsStats").text("Stored: " + st.ips.toLocaleString() + " IP addresses and " + st.visits.toLocaleString() + " recent visits." + (st.dropped ? " " + st.dropped + " events were dropped while the proxy was overloaded." : ""));
+        if (V.settingsLoaded) return;
+        api("./api/visitors/settings", function(s){
+            V.settingsLoaded = true;
+            var x = s.Settings;
+            $("#vsEnabled").prop("checked", x.Enabled); $("#vsAge").val(x.MaxAgeDays); $("#vsIps").val(x.MaxIPs); $("#vsRing").val(x.MaxVisits);
+            $("#vsQuery").prop("checked", x.KeepQuery); $("#vsNotify").prop("checked", x.NotifyNewCountry);
+        });
+    }
+    function saveSettings(){
+        var body = {Enabled: $("#vsEnabled").prop("checked"), MaxAgeDays: parseInt($("#vsAge").val(), 10) || 90, MaxIPs: parseInt($("#vsIps").val(), 10) || 20000,
+                    MaxVisits: parseInt($("#vsRing").val(), 10) || 5000, KeepQuery: $("#vsQuery").prop("checked"), NotifyNewCountry: $("#vsNotify").prop("checked")};
+        $.cjax({url: "./api/visitors/settings", method: "POST", contentType: "application/json", data: JSON.stringify(body), dataType: "json", success: function(d){
+            if (d && d.error){ $("#vsMsg").css("color", "#c62828").text(d.error); return; }
+            var x = d.Settings;
+            $("#vsAge").val(x.MaxAgeDays); $("#vsIps").val(x.MaxIPs); $("#vsRing").val(x.MaxVisits);
+            $("#vsMsg").css("color", "#1a9a3a").text("Saved");
+            setTimeout(function(){ $("#vsMsg").text(""); }, 3000);
+            loadSummary();
+        }, error: function(x){ $("#vsMsg").css("color", "#c62828").text("Failed (HTTP " + x.status + ")"); }});
+    }
+
+    /* ---------- wiring ---------- */
+    function setTab(t){
+        V.tab = t;
+        $("#vTabs .item").removeClass("active").filter('[data-vtab="' + t + '"]').addClass("active");
+        $(P + ".vPane").hide().filter('[data-vpane="' + t + '"]').show();
+        if (t === "list") loadList(true);
+        if (t === "recent") loadRecent(true);
+        if (t === "settings") loadSummary();
+    }
+    function refreshAll(force){
+        loadSummary();
+        if (V.tab === "list") loadList(force === true);
+        if (V.tab === "recent") loadRecent(false);
+    }
+    var searchTimer = null;
+    function debounced(fn){ clearTimeout(searchTimer); searchTimer = setTimeout(fn, 250); }
+    function exportUrl(scope, format){ return "./api/visitors/export?" + filterQuery("scope=" + scope + "&format=" + format); }
+
+    $("#vTabs").on("click", ".item", function(){ setTab($(this).attr("data-vtab")); });
+    $("#vSearch").on("input", function(){ debounced(function(){ V.page = 0; loadList(true); }); });
+    $("#vSince, #vHost, #vCountry, #vVia, #vBlocked").on("change", function(){ V.page = 0; loadList(true); });
+    $("#vSize").on("change", function(){ V.size = parseInt($(this).val(), 10); V.page = 0; loadList(true); });
+    $("#vPrev").on("click", function(){ if (V.page > 0){ V.page--; loadList(true); } });
+    $("#vNext").on("click", function(){ V.page++; loadList(true); });
+    $("#vRefresh").on("click", function(){ refreshAll(true); });
+    $("#vTable thead").on("click", "th.sortable", function(){
+        var s = $(this).attr("data-sort");
+        if (V.sort === s) V.dir = V.dir === "asc" ? "desc" : "asc"; else { V.sort = s; V.dir = (s === "ip" || s === "country" || s === "via") ? "asc" : "desc"; }
+        V.page = 0; loadList(true);
+    });
+    $("#vExportCsv").on("click", function(){ window.location = exportUrl("visitors", "csv"); });
+    $("#vExportJson").on("click", function(){ window.location = exportUrl("visitors", "json"); });
+    $("#vrExportCsv").on("click", function(){ window.location = exportUrl("visits", "csv"); });
+    $("#vrExportJson").on("click", function(){ window.location = exportUrl("visits", "json"); });
+    $("#vrSearch").on("input", function(){ debounced(function(){ loadRecent(true); }); });
+    $("#vrBlocked").on("change", function(){ loadRecent(true); });
+    $("#vrPause").on("click", function(){
+        V.paused = !V.paused;
+        $(this).html(V.paused ? '<i class="play icon"></i> Resume' : '<i class="pause icon"></i> Pause');
+        if (!V.paused) loadRecent(false);
+    });
+    $("#vBody, #vrBody").on("click", "tr[data-ip]", function(){ openDrawer($(this).attr("data-ip")); });
+    $("#vdClose, #visitorDrawerShade").on("click", closeDrawer);
+    $(document).on("keydown", function(e){ if (e.key === "Escape" && V.drawerIP) closeDrawer(); });
+    $("#vdBody").on("click", "[data-act]", function(){ drawerAction($(this).attr("data-act")); });
+    $("#vsSave").on("click", saveSettings);
+    $("#vsPurge").on("click", function(){ $("#vsPurgeConfirm").show(); $(this).hide(); });
+    $("#vsPurgeNo").on("click", function(){ $("#vsPurgeConfirm").hide(); $("#vsPurge").show(); });
+    $("#vsPurgeYes").on("click", function(){
+        post("./api/visitors/purge", {confirm: "yes"}, function(){ msgbox("All visitor data deleted"); $("#vsPurgeConfirm").hide(); $("#vsPurge").show(); V.lastJSON = ""; refreshAll(true); });
+    });
+
+    // The checkbox widgets of Semantic UI
+    $(P + ".ui.checkbox, #vsEnabledBox").checkbox();
+
+    // refresh only while this page is the active tab (perfkit.js also skips these timers otherwise)
+    setInterval(function(){
+        if (!document.getElementById("visitorsPage") || !$("#visitors").is(":visible")) return;
+        refreshAll(false);
+    }, 5000);
+
+    tabSwitchEventBind["visitors"] = function(){ V.settingsLoaded = false; refreshAll(true); };
+    loadSummary();
+    loadList(true);
+})();
+</script>

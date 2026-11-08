@@ -1021,7 +1021,8 @@
         }
     }
 
-    function flowRunning() { return _animOn && _onScreen && !document.hidden; }
+    var _idle = false; // set by the Status page after a while without user activity
+    function flowRunning() { return _animOn && _onScreen && !document.hidden && !_idle; }
 
     function requestFlowDraw() {
         // pan / zoom: redraw once per frame; the animation timer keeps its own cadence
@@ -1041,7 +1042,7 @@
     new ResizeObserver(() => { _flowDirtySize = true; requestFlowDraw(); }).observe(_wrapper);
 
     function applyAnim() {
-        document.body.classList.toggle("anim-paused", !_animOn || !_onScreen || document.hidden);
+        document.body.classList.toggle("anim-paused", !flowRunning());
         startFlowLoop();
         const b = document.getElementById("btn-anim");
         b.classList.toggle("off", !_animOn);
@@ -1057,6 +1058,7 @@
     window.addEventListener("message", e => {
         if (e.origin !== window.location.origin || !e.data || e.data.type !== "zoraxy-diagram") return;
         if (typeof e.data.anim === "boolean") { _animOn = e.data.anim; applyAnim(); }
+        if (typeof e.data.idle === "boolean") { _idle = e.data.idle; applyAnim(); }
     });
     document.addEventListener("visibilitychange", applyAnim);
     if (window.IntersectionObserver) {

@@ -221,11 +221,24 @@ def seed(pg):
     pg.wait_for_timeout(1500)
     print(" enable:", cj("/api/proxy/enable", {"enable": "true"}))
     pg.wait_for_timeout(1000)
+    # behave like a proxy behind Cloudflare: trust the local peer, so CF-Connecting-IP / X-Forwarded-For are honoured
+    cj("/api/trustedproxy/add", {"ip": "127.0.0.1", "desc": "perf seed"})
+    cj("/api/whitelist/trustProxy", {"enable": "true"})
     paths = ["/", "/index.html", "/api/items", "/api/items/42", "/static/app.js", "/login", "/err/x", "/health", "/a/b/c/d"]
+    pool = [f"{a}.{b}.{c}.{d}" for a, b, c, d in
+            [(8, 8, 8, 8), (1, 1, 1, 1), (81, 2, 69, 142), (217, 160, 0, 1), (202, 108, 22, 5), (200, 221, 11, 100), (91, 198, 174, 192),
+             (45, 33, 32, 156), (185, 199, 108, 153), (151, 101, 1, 69), (104, 18, 12, 1), (13, 107, 21, 200), (176, 9, 12, 59)]]
+    pool += [f"203.0.113.{i}" for i in range(1, 60)] + [f"198.51.100.{i}" for i in range(1, 40)]
     ok = 0
     for i in range(args.requests):
         host = f"site{i % args.rules:02d}.perf.test"
-        req = urllib.request.Request(f"http://127.0.0.1:{args.proxy_port}{paths[i % len(paths)]}", headers={"Host": host})
+        hdr = {"Host": host, "User-Agent": ["Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0", "curl/8.4.0", "Googlebot/2.1", "Mozilla/5.0 (iPhone) Safari/604.1"][i % 4]}
+        ip = pool[(i * 7) % len(pool)]
+        if i % 5 == 0:
+            hdr["X-Forwarded-For"] = ip
+        elif i % 5 != 4:
+            hdr["CF-Connecting-IP"] = ip
+        req = urllib.request.Request(f"http://127.0.0.1:{args.proxy_port}{paths[i % len(paths)]}", headers=hdr)
         try:
             urllib.request.urlopen(req, timeout=3).read()
             ok += 1

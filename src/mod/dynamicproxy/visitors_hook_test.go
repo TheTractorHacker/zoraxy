@@ -1,6 +1,7 @@
 package dynamicproxy
 
 import (
+	"encoding/json"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
@@ -100,4 +101,15 @@ func TestVisitorExclusionAndOptOut(t *testing.T) {
 		t.Errorf("blocked hit not counted: %+v", v)
 	}
 	_ = statistic.IsBlockedForwardType
+}
+
+// /api/proxy/status marshals the whole RouterOption; the tracker (it holds funcs) must stay out of it
+func TestRouterOptionStillMarshalsWithTracker(t *testing.T) {
+	router, _, _ := newNonTLSTestRouter(t)
+	tr := visitors.New("", visitors.DefaultSettings())
+	tr.OnNewCountry = func(string, string, string) {}
+	router.Option.VisitorTracker = tr
+	if _, err := json.Marshal(router.Option); err != nil {
+		t.Fatalf("RouterOption no longer marshals: %v", err)
+	}
 }
