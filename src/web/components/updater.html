@@ -1,0 +1,314 @@
+<div class="standardContainer">
+    <div class="ui basic segment">
+        <h2>Update</h2>
+        <p>Update Zoraxy to a signed release published on GitHub, or run the database / configuration migrations on demand.
+            Releases are only fetched when you open this page or press <b>Check for updates</b>; there is no automatic update.
+            Every binary is verified against an ed25519 signature and a SHA-256 checksum before it is installed.</p>
+    </div>
+    <div class="ui divider"></div>
+
+    <!-- Versions -->
+    <div class="ui basic segment">
+        <h3>Versions</h3>
+        <div class="ui two stackable cards" style="margin-top:0;">
+            <div class="card"><div class="content">
+                <div class="meta">Running</div>
+                <div class="header" id="upCurrent">-</div>
+                <div class="description" id="upCurrentDetail" style="color:grey;"></div>
+            </div></div>
+            <div class="card"><div class="content">
+                <div class="meta">Latest on channel <span id="upChannelLabel">stable</span></div>
+                <div class="header" id="upLatest">Not checked yet</div>
+                <div class="description" id="upLatestDetail" style="color:grey;"></div>
+            </div></div>
+        </div>
+        <div id="upReason" class="ui small message" style="display:none;"></div>
+        <div id="upNotesWrap" style="display:none;">
+            <h4>Release notes</h4>
+            <pre id="upNotes" style="white-space:pre-wrap; max-height:14em; overflow:auto; background:#f6f6f6; padding:0.75em; border-radius:4px;"></pre>
+        </div>
+    </div>
+
+    <!-- Options -->
+    <div class="ui basic segment">
+        <h3>Options</h3>
+        <div class="ui form">
+            <div class="inline fields">
+                <div class="field">
+                    <label for="upChannel">Release channel</label>
+                    <select id="upChannel" class="ui dropdown" onchange="window.upSetChannel(this.value);">
+                        <option value="stable">stable (releases only)</option>
+                        <option value="beta">beta (includes pre-releases)</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <div class="ui toggle checkbox" id="upBackupToggle">
+                        <input type="checkbox" id="upBackup" checked onchange="window.upSetBackup(this.checked);">
+                        <label>Back up first (conf/, sys.db, sys.uuid to ../backups/)</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div style="margin-top:1em;">
+            <button class="ui basic button" id="upCheckBtn" onclick="window.upCheck(true);"><i class="refresh icon"></i> Check for updates</button>
+            <button class="ui primary button" id="upAppBtn" onclick="window.upConfirm('app');"><i class="download icon"></i> Update App</button>
+            <button class="ui orange button" id="upDbBtn" onclick="window.upConfirm('db');"><i class="database icon"></i> Update Database</button>
+            <button class="ui basic red button" id="upRollbackBtn" onclick="window.upConfirm('rollback');"><i class="undo icon"></i> Roll back</button>
+        </div>
+        <div id="upBtnReasons" style="margin-top:0.75em; color:#a33; font-size:0.95em;"></div>
+    </div>
+
+    <!-- Preflight -->
+    <div class="ui basic segment">
+        <h3>Preflight checks</h3>
+        <table class="ui unstackable basic celled table">
+            <thead><tr><th style="width:2.5em;"></th><th>Check</th><th>Detail</th></tr></thead>
+            <tbody id="upPreflight"><tr><td colspan="3">Loading...</td></tr></tbody>
+        </table>
+        <div style="color:grey;">Restart method: <b id="upMethod">-</b> &nbsp; Binary: <code id="upExe">-</code></div>
+    </div>
+
+    <!-- Live log -->
+    <div class="ui basic segment" id="upLogWrap" style="display:none;">
+        <h3>Progress <span id="upStage" style="font-weight:normal; color:grey;"></span></h3>
+        <div class="ui indicating progress" id="upProgress" style="display:none;"><div class="bar"></div></div>
+        <pre id="upLog" style="max-height:20em; overflow:auto; background:#1b1c1d; color:#ddd; padding:0.75em; border-radius:4px; white-space:pre-wrap;"></pre>
+    </div>
+
+    <!-- History -->
+    <div class="ui basic segment">
+        <h3>History</h3>
+        <table class="ui unstackable basic celled table">
+            <thead><tr><th>Time</th><th>Action</th><th>From</th><th>To</th><th>Result</th><th>Detail</th></tr></thead>
+            <tbody id="upHistory"><tr><td colspan="6">No history</td></tr></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Confirmation modal -->
+<div class="ui small modal" id="upModal">
+    <div class="header" id="upModalTitle">Confirm</div>
+    <div class="content"><p id="upModalText"></p></div>
+    <div class="actions">
+        <button class="ui cancel button">Cancel</button>
+        <button class="ui primary approve button" id="upModalOk">Continue</button>
+    </div>
+</div>
+
+<script>
+(function(){
+    let state = { info: null, check: null, pollTimer: null, active: false, sawRunning: false };
+
+    function esc(s){ return $("<div>").text(s == null ? "" : String(s)).html(); }
+    function errText(xhr){
+        if (xhr && xhr.responseJSON && xhr.responseJSON.error) return xhr.responseJSON.error;
+        return (xhr && xhr.statusText) || "request failed";
+    }
+    function fmtTime(t){ return t && t.indexOf("0001-") != 0 ? new Date(t).toLocaleString() : "-"; }
+    function fmtSize(n){ return n > 0 ? (n / 1048576).toFixed(1) + " MiB" : "-"; }
+
+    function renderInfo(info){
+        state.info = info;
+        let s = info.settings, p = info.preflight, c = info.current;
+        $("#upChannel").val(s.channel);
+        $("#upChannelLabel").text(s.channel);
+        $("#upBackup").prop("checked", s.backup_first);
+        $("#upCurrent").text(c.tag ? c.tag : "v" + c.version);
+        $("#upCurrentDetail").text(c.known ? "Installed by the updater, published " + fmtTime(c.published) :
+            "Base version " + c.version + " (build date unknown: not installed by the updater yet)");
+        $("#upMethod").text(p.restart_method);
+        $("#upExe").text(p.executable || "unknown");
+        let rows = "";
+        (p.checks || []).forEach(function(ch){
+            let icon = ch.status == "ok" ? '<i class="green check circle icon"></i>' :
+                ch.status == "warn" ? '<i class="yellow exclamation triangle icon"></i>' : '<i class="red times circle icon"></i>';
+            rows += "<tr><td>" + icon + "</td><td>" + esc(ch.label) + "</td><td>" + esc(ch.detail) + "</td></tr>";
+        });
+        $("#upPreflight").html(rows || "<tr><td colspan='3'>No checks</td></tr>");
+        updateButtons();
+    }
+
+    function setBtn(sel, reason){
+        let $b = $(sel);
+        $b.toggleClass("disabled", !!reason).attr("title", reason || "");
+        return reason ? reason : null;
+    }
+
+    function updateButtons(){
+        let info = state.info;
+        if (!info) return;
+        let p = info.preflight, busy = state.active || p.busy;
+        let reasons = [];
+        let appReason = busy ? "An update operation is running." : (p.app_blocked ||
+            (!state.check ? "Press \"Check for updates\" first." : (!state.check.update_available ? (state.check.reason || "No update available.") : "")));
+        let r;
+        if ((r = setBtn("#upAppBtn", appReason))) reasons.push("Update App: " + r);
+        if ((r = setBtn("#upDbBtn", busy ? "An update operation is running." : p.db_blocked))) reasons.push("Update Database: " + r);
+        let rbReason = busy ? "An update operation is running." : (p.restart_method == "docker" ? "Disabled in Docker." :
+            (p.pending_confirmation ? "An update is awaiting health confirmation; it rolls back automatically." :
+            (!p.rollback_available ? "There is no previous binary to roll back to." : "")));
+        if ((r = setBtn("#upRollbackBtn", rbReason))) reasons.push("Roll back: " + r);
+        setBtn("#upCheckBtn", busy ? "An update operation is running." : "");
+        $("#upChannel").prop("disabled", busy);
+        $("#upBtnReasons").html(reasons.map(esc).join("<br>"));
+    }
+
+    function renderCheck(res){
+        state.check = res;
+        let l = res.latest;
+        $("#upLatest").text(l ? l.tag : "none");
+        $("#upLatestDetail").text(l ? ("Published " + fmtTime(l.published) + (l.prerelease ? " (pre-release)" : "") +
+            ", " + res.asset_name + " " + fmtSize(res.asset_size)) : "");
+        let $r = $("#upReason");
+        if (res.update_available){
+            $r.attr("class", "ui small positive message").text("An update is available.").show();
+        }else{
+            $r.attr("class", "ui small message").text(res.reason || "No update available.").show();
+        }
+        if (l && l.notes){
+            $("#upNotes").text(l.notes);
+            $("#upNotesWrap").show();
+        }else{
+            $("#upNotesWrap").hide();
+        }
+        updateButtons();
+    }
+
+    function renderStatus(st){
+        if (!st || st.state == "idle" && !state.active) return;
+        $("#upLogWrap").show();
+        $("#upStage").text(st.stage ? "- " + st.stage + " (" + st.state + ")" : "");
+        let lines = (st.log || []).map(function(l){ return new Date(l.time).toLocaleTimeString() + "  " + l.text; });
+        if (st.error) lines.push("ERROR: " + st.error);
+        let el = document.getElementById("upLog");
+        let atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
+        $("#upLog").text(lines.join("\n"));
+        if (atBottom) el.scrollTop = el.scrollHeight;
+        if (st.total > 0 && st.state == "running" && st.stage && st.stage.indexOf("Downloading ") == 0 && st.stage.indexOf("signature") < 0){
+            $("#upProgress").show().progress({percent: Math.floor(st.done * 100 / st.total)});
+        }else{
+            $("#upProgress").hide();
+        }
+    }
+
+    function loadHistory(){
+        $.get("./api/updater/history", function(data){
+            if (!data || !data.length){ $("#upHistory").html("<tr><td colspan='6'>No history</td></tr>"); return; }
+            let rows = "";
+            data.forEach(function(h){
+                rows += "<tr><td>" + esc(fmtTime(h.time)) + "</td><td>" + esc(h.action) + "</td><td>" + esc(h.from) + "</td><td>" +
+                    esc(h.to) + "</td><td>" + esc(h.result) + "</td><td>" + esc(h.detail) + "</td></tr>";
+            });
+            $("#upHistory").html(rows);
+        });
+    }
+
+    function loadInfo(cb){
+        $.get("./api/updater/info", function(info){
+            renderInfo(info);
+            if (cb) cb(info);
+        }).fail(function(xhr){ if (cb) cb(null, xhr); });
+    }
+
+    window.upCheck = function(force){
+        $("#upCheckBtn").addClass("loading");
+        $.get("./api/updater/check" + (force ? "?force=true" : ""), function(data){
+            renderCheck(data.result);
+            if (state.info) { state.info.preflight = data.preflight; renderInfo(state.info); }
+        }).fail(function(xhr){
+            msgbox(errText(xhr), false, 6000);
+        }).always(function(){ $("#upCheckBtn").removeClass("loading"); });
+    };
+
+    window.upSetChannel = function(ch){
+        $.cjax({method: "POST", url: "./api/updater/setChannel", data: {channel: ch}, success: function(){
+            state.check = null;
+            $("#upLatest").text("Not checked yet"); $("#upLatestDetail").text(""); $("#upNotesWrap").hide(); $("#upReason").hide();
+            loadInfo(function(){ window.upCheck(true); });
+        }, error: function(xhr){ msgbox(errText(xhr), false); loadInfo(); }});
+    };
+
+    window.upSetBackup = function(on){
+        $.cjax({method: "POST", url: "./api/updater/setBackup", data: {enabled: on ? "true" : "false"},
+            error: function(xhr){ msgbox(errText(xhr), false); loadInfo(); }});
+    };
+
+    window.upConfirm = function(kind){
+        if ($("#up" + (kind == "app" ? "App" : kind == "db" ? "Db" : "Rollback") + "Btn").hasClass("disabled")) return;
+        let backup = $("#upBackup").is(":checked");
+        let bk = backup ? " A backup of conf/, sys.db and sys.uuid is written to the backups folder first; the operation is aborted if the backup fails." :
+            " <b>No backup will be taken.</b>";
+        let title, text;
+        if (kind == "app"){
+            let tag = state.check && state.check.latest ? state.check.latest.tag : "the latest release";
+            title = "Update Zoraxy to " + tag + "?";
+            text = "The new binary is downloaded, its signature and checksum are verified, and Zoraxy then restarts (about 5-20 seconds of downtime, the web admin and all proxy listeners are interrupted)." + bk +
+                " If the new version is not healthy within 90 seconds it is rolled back automatically.";
+        }else if (kind == "db"){
+            title = "Run database / configuration migrations?";
+            text = "This runs the same migrations Zoraxy runs at startup and reports what changed. No restart." + bk;
+        }else{
+            title = "Roll back to the previous version?";
+            text = "The previous binary is restored and Zoraxy restarts. Configuration is not reverted.";
+        }
+        $("#upModalTitle").text(title);
+        $("#upModalText").html(text);
+        $("#upModal").modal({onApprove: function(){ start(kind, backup); }}).modal("show");
+    };
+
+    function start(kind, backup){
+        let url = kind == "rollback" ? "./api/updater/rollback" : "./api/updater/start";
+        let data = kind == "rollback" ? {confirm: "true"} : {action: kind, backup: backup ? "true" : "false", confirm: "true"};
+        $.cjax({method: "POST", url: url, data: data, success: function(){
+            state.active = true; state.sawRunning = false;
+            $("#upLog").text(""); $("#upLogWrap").show();
+            updateButtons();
+            poll();
+        }, error: function(xhr){ msgbox(errText(xhr), false, 6000); }});
+    }
+
+    function poll(){
+        clearTimeout(state.pollTimer);
+        $.ajax({url: "./api/updater/status", method: "GET", timeout: 4000, success: function(st){
+            if (st.state == "running" || st.state == "restarting") state.sawRunning = true;
+            renderStatus(st);
+            if (st.state == "running" || st.state == "restarting"){
+                state.pollTimer = setTimeout(poll, 1000);
+                return;
+            }
+            // idle after we saw it running means the process restarted into the new binary
+            finish(st);
+        }, error: function(){
+            // server is restarting: keep trying
+            $("#upStage").text("- waiting for Zoraxy to restart...");
+            state.pollTimer = setTimeout(poll, 1500);
+        }});
+    }
+
+    function finish(st){
+        state.active = false;
+        if (st.state == "failed"){
+            msgbox("Update failed: " + st.error, false, 8000);
+        }else{
+            msgbox("Finished", true);
+        }
+        loadInfo(function(){
+            state.check = null;
+            loadHistory();
+            if (st.state == "idle"){
+                // fresh process: reload so the UI matches the new binary
+                setTimeout(function(){ location.reload(); }, 2500);
+            }
+        });
+    }
+
+    // Only load (and only then contact GitHub) when the tab is opened.
+    tabSwitchEventBind["updater"] = function(){
+        loadInfo(function(info){
+            if (info && info.status && info.status.state == "running"){ state.active = true; poll(); }
+            else window.upCheck(false);
+        });
+        loadHistory();
+    };
+})();
+</script>
