@@ -26,8 +26,8 @@ import (
 	hash. The map key is HMAC-SHA256(per-process random key, endpoint | header
 	| stored hash), so the password is never kept in memory by the cache, a
 	leaked key list is useless, and changing the stored hash (password change)
-	invalidates every cached entry. Only successes are cached; failures always
-	pay the full argon2 cost (bounded by auth's concurrency limiter).
+	invalidates every cached entry. Only successes are cached; repeated failures
+	from one client are throttled by basicauth_backoff.go.
 */
 
 const (
@@ -44,6 +44,10 @@ var (
 	basicAuthCacheMu   sync.Mutex
 	basicAuthCacheData = map[string]time.Time{}
 )
+
+// basicAuthVerifyPassword is the (expensive, argon2) password check; a variable
+// so tests can count how often it really runs.
+var basicAuthVerifyPassword = auth.VerifyPassword
 
 func newBasicAuthCacheKey() []byte {
 	k := make([]byte, 32)
@@ -96,8 +100,10 @@ func basicAuthCacheStore(id string) {
 
 // verifyBasicAuthCredentials checks username / password against the
 // endpoint's credentials, upgrading legacy hashes on success
-func verifyBasicAuthCredentials(pe *ProxyEndpoint, username string, password string, authHeader string) bool {
+func verifyBasicAuthCredentials(pe *ProxyEndpoint, username string, password string, authHeader string, clientIP string) bool {
 	endpoint := pe.RootOrMatchingDomain
+	failKey := basicAuthFailKey(endpoint, clientIP, username)
+	blocked := false
 
 	basicAuthCredMu.RLock()
 	creds := append([]*BasicAuthCredentials(nil), pe.AuthenticationProvider.BasicAuthCredentials...)
@@ -114,10 +120,17 @@ func verifyBasicAuthCredentials(pe *ProxyEndpoint, username string, password str
 
 		cacheID := basicAuthCacheID(endpoint, authHeader, stored[i])
 		if authHeader != "" && basicAuthCacheHit(cacheID) {
+			basicAuthClearFailures(failKey)
 			return true
 		}
 
-		ok, needsRehash := auth.VerifyPassword(password, stored[i], auth.ProfileBasicAuth)
+		//Too many recent failures from this client: reject without paying argon2
+		if basicAuthBlocked(failKey) {
+			blocked = true
+			break
+		}
+
+		ok, needsRehash := basicAuthVerifyPassword(password, stored[i], auth.ProfileBasicAuth)
 		if !ok {
 			continue
 		}
@@ -131,7 +144,11 @@ func verifyBasicAuthCredentials(pe *ProxyEndpoint, username string, password str
 		if authHeader != "" {
 			basicAuthCacheStore(cacheID)
 		}
+		basicAuthClearFailures(failKey)
 		return true
+	}
+	if !blocked {
+		basicAuthRecordFailure(failKey)
 	}
 	return false
 }

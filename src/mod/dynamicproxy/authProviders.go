@@ -153,7 +153,7 @@ func handleBasicAuth(w http.ResponseWriter, r *http.Request, pe *ProxyEndpoint) 
 	}
 
 	//Check for the credentials to see if there is one matching
-	matchingFound := verifyBasicAuthCredentials(pe, u, p, r.Header.Get("Authorization"))
+	matchingFound := verifyBasicAuthCredentials(pe, u, p, r.Header.Get("Authorization"), netutils.GetRequesterIPUntrusted(r))
 	if matchingFound {
 		//Set the X-Remote-User header
 		r.Header.Set("X-Remote-User", u)
