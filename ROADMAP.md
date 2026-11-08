@@ -162,3 +162,13 @@ FriendlyCaptcha, counting SSO redirect failures in the auto-ban, per-user admin 
 - ✅ `{{host}}` `{{client_ip}}` `{{request_id}}` `{{rule_name}}` `{{external_ip}}` in headers, redirects, static responses; rule templates; bulk edit (upstream #370 #826 #877 #924).
 - ✅ API tokens + `/api/v1` + OpenAPI (upstream #382 #714 #996), response bandwidth limit (upstream #1208), plain HTTP listener address (#909), IP calculators (#504), opt-in split-horizon DNS responder (#769).
 - 📋 UI editor for custom rule templates (API exists), bandwidth limit for WebSocket traffic.
+
+## 13. Platform features (`feat/platform-features`)
+- ✅ **Encrypted Client Hello** (fork #235 / upstream #1319): server side ECH with HPKE key generation, rotation (newest key advertised, older keys decrypt-only for a retain
+  window), PEM import / export, per-handshake hot reload through `GetEncryptedClientHelloKeys` (kept by the per-SNI mTLS clones, also on HTTP/3), ECHConfigList + HTTPS record
+  example, DNS HTTPS record check. 📋 Automatic DNS publishing through a provider API; 📋 per-rule hostname selection; 📋 verification against real browsers.
+- ✅ **Lua scripts** (fork #88 / upstream #367): sandboxed per-rule script handler / hook (gopher-lua, step-budgeted patterns, time / heap / size limits, KV, JSON, crypto helpers),
+  admin test run. 📋 Script versions and diff, a shared library of snippets, per-script metrics.
+- ✅ **Sablier** (fork #120 / upstream #564): native dynamic / blocking strategies per rule, ready cache, fail open / closed, SSRF-safe URL. 📋 Verified only against a fake Sablier.
+- ✅ **zrok** (fork #63 / upstream #136): supervised zrok CLI behind `-allow_external_tools` (shares, reserved names on 1.x, private access, backoff, redacted logs).
+  📋 Verified only against a fake zrok binary; 📋 zrok agent mode and a Windows path.
