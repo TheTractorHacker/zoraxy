@@ -1,0 +1,142 @@
+# Fork-only: propose upstream Zoraxy code updates as a pull request.
+#
+# Never force-pushes, never pushes to the default branch, never deploys.
+# It pushes a new branch `upstream-sync/<upstream-sha>` that points at the
+# upstream commit, test-merges it into the default branch, runs build, vet and
+# tests on the merge, and opens a PR with the results (including conflicts).
+#
+# Note: if upstream changed files under .github/workflows, GitHub rejects the
+# push from GITHUB_TOKEN. Then either add a fine-grained token with Contents
+# and Workflows write access as the UPSTREAM_SYNC_TOKEN secret, or run
+# .github/upstream-sync/code_sync.sh locally.
+name: "Fork: upstream code sync"
+
+on:
+  workflow_dispatch:
+  # Scheduled sync is disabled until approved. To enable, uncomment:
+  # schedule:
+  #   - cron: "43 5 * * 1"   # Mondays 05:43 UTC
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: fork-upstream-code-sync
+  cancel-in-progress: false
+
+jobs:
+  propose:
+    if: github.repository == 'TheTractorHacker/zoraxy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      UPSTREAM: tobychui/zoraxy
+      BASE: ${{ github.event.repository.default_branch }}
+      GH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN || secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout fork default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          token: ${{ secrets.UPSTREAM_SYNC_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Fetch upstream
+        id: fetch
+        run: |
+          git remote add upstream "https://github.com/$UPSTREAM.git"
+          git remote set-url --push upstream DISABLED   # can never push upstream
+          git fetch --no-tags upstream
+          UP_BRANCH=$(gh api "repos/$UPSTREAM" -q .default_branch)
+          UP_SHA=$(git rev-parse "upstream/$UP_BRANCH")
+          BEHIND=$(git rev-list --count "HEAD..$UP_SHA")
+          BRANCH="upstream-sync/${UP_SHA:0:12}"
+          echo "up_branch=$UP_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "up_sha=$UP_SHA" >> "$GITHUB_OUTPUT"
+          echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "Upstream $UPSTREAM@$UP_BRANCH is $UP_SHA; $BASE is missing $BEHIND upstream commits." >> "$GITHUB_STEP_SUMMARY"
+          if [ "$BEHIND" = 0 ]; then echo "Already up to date." >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Check for an existing sync PR
+        id: existing
+        if: steps.fetch.outputs.behind != '0'
+        env:
+          BRANCH: ${{ steps.fetch.outputs.branch }}
+        run: |
+          n=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --state open --json number -q 'length')
+          echo "open=$n" >> "$GITHUB_OUTPUT"
+          [ "$n" != 0 ] && echo "PR for $BRANCH is already open; nothing to do." >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Set up Go
+        if: steps.fetch.outputs.behind != '0' && steps.existing.outputs.open == '0'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: src/go.mod
+          cache-dependency-path: src/go.sum
+
+      - name: Test-merge and run checks
+        id: check
+        if: steps.fetch.outputs.behind != '0' && steps.existing.outputs.open == '0'
+        env:
+          UP_SHA: ${{ steps.fetch.outputs.up_sha }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          report=check-report.md
+          if git merge --no-ff --no-commit "$UP_SHA" > merge.log 2>&1; then
+            echo "merge=clean" >> "$GITHUB_OUTPUT"
+            echo "### Test merge: clean" > "$report"
+            status=0
+            ( cd src && go build ./... ) > build.log 2>&1 || status=1
+            ( cd src && go vet ./... ) > vet.log 2>&1 || status=$((status|2))
+            ( cd src && go test ./... ) > test.log 2>&1 || status=$((status|4))
+            {
+              echo; echo "| Check | Result |"; echo "|---|---|"
+              echo "| go build | $([ $((status & 1)) = 0 ] && echo pass || echo **FAIL**) |"
+              echo "| go vet | $([ $((status & 2)) = 0 ] && echo pass || echo **FAIL**) |"
+              echo "| go test | $([ $((status & 4)) = 0 ] && echo pass || echo **FAIL**) |"
+              echo; echo "<details><summary>go test output (tail)</summary>"; echo
+              echo '```'; tail -n 60 test.log; echo '```'; echo "</details>"
+            } >> "$report"
+            echo "checks=$status" >> "$GITHUB_OUTPUT"
+          else
+            echo "merge=conflict" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Test merge: CONFLICTS"; echo
+              echo "Resolve these by hand before merging (build and tests were not run):"; echo
+              git diff --name-only --diff-filter=U | sed 's/^/- `/; s/$/`/'
+            } > "$report"
+            echo "checks=skipped" >> "$GITHUB_OUTPUT"
+          fi
+          git merge --abort 2>/dev/null || git reset --hard -q HEAD
+          cat "$report" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Push sync branch and open PR
+        if: steps.fetch.outputs.behind != '0' && steps.existing.outputs.open == '0'
+        env:
+          UP_SHA: ${{ steps.fetch.outputs.up_sha }}
+          UP_BRANCH: ${{ steps.fetch.outputs.up_branch }}
+          BEHIND: ${{ steps.fetch.outputs.behind }}
+          BRANCH: ${{ steps.fetch.outputs.branch }}
+          MERGE: ${{ steps.check.outputs.merge }}
+        run: |
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then
+            echo "Branch $BRANCH already exists on the fork; not touching it."
+          else
+            # New branch name, plain push: never --force.
+            git push origin "$UP_SHA:refs/heads/$BRANCH"
+          fi
+          {
+            echo "Brings in **$BEHIND** commits from [\`$UPSTREAM\`@\`$UP_BRANCH\`](https://github.com/$UPSTREAM/tree/$UP_SHA) (\`${UP_SHA:0:12}\`)."
+            echo
+            cat check-report.md
+            echo
+            echo "**Before merging:** review the changes against your custom code, then deploy by hand."
+            echo "This workflow never merges, force-pushes or deploys."
+          } > pr-body.md
+          title="Upstream sync: $UPSTREAM@${UP_SHA:0:12}"
+          [ "$MERGE" = conflict ] && title="$title (conflicts)"
+          gh pr create --repo "$GITHUB_REPOSITORY" --base "$BASE" --head "$BRANCH" \
+            --title "$title" --body-file pr-body.md

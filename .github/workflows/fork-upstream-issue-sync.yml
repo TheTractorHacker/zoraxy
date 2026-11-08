@@ -1,0 +1,60 @@
+# Fork-only: mirror new/changed upstream Zoraxy issues and comments into this fork.
+# Reads tobychui/zoraxy (public, read only) and writes issues here. GITHUB_TOKEN is
+# scoped to this repository, so this job cannot modify the upstream repository.
+name: "Fork: upstream issue sync"
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Read only: report what would change, write nothing"
+        type: boolean
+        default: true
+      max_creates:
+        description: "Stop if more than this many new issues would be created"
+        type: number
+        default: 50
+  # Scheduled sync is disabled until approved. To enable, uncomment:
+  # schedule:
+  #   - cron: "17 */6 * * *"   # every 6 hours
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: fork-upstream-issue-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'TheTractorHacker/zoraxy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout sync script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/upstream-sync
+          persist-credentials: false
+
+      - name: Sync issues from upstream
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+          MAX_CREATES: ${{ inputs.max_creates || 50 }}
+        run: |
+          case "$MAX_CREATES" in ''|*[!0-9]*) echo "max_creates must be a number"; exit 1;; esac
+          args=(sync --upstream tobychui/zoraxy --target "$GITHUB_REPOSITORY"
+                --max-creates "$MAX_CREATES" --write-interval 3 --report-dir reports)
+          [ "$DRY_RUN" = "true" ] && args+=(--dry-run)
+          python3 -I .github/upstream-sync/issue_sync.py "${args[@]}"
+
+      - name: Upload sync report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: issue-sync-report-${{ github.run_id }}
+          path: reports/
+          if-no-files-found: ignore
+          retention-days: 30
