@@ -224,10 +224,21 @@ def upgrade_from_upstream():
             # inspect the stored hash after stopping (db is exclusive)
             inst.stop()
             inst.proc = None
+            blob = b""
+            for root, _, fs in os.walk(os.path.join(d, "sys.db")) if os.path.isdir(os.path.join(d, "sys.db")) else [(d, [], ["sys.db"])]:
+                for f in fs:
+                    try:
+                        blob += open(os.path.join(root, f), "rb").read()
+                    except Exception:
+                        pass
+            legacy = hashlib.sha512(b"legacy-pass-1").hexdigest().encode()
+            check(b"$argon2id$" in blob, "stored admin hash was not rewritten as argon2id after the first login")
+            # a LevelDB log may still hold the superseded record until compaction: only warn through the evidence text
+            migrated_note = "old sha512 record compacted away" if legacy not in blob else "old sha512 record still present in the DB log until compaction"
         finally:
             inst.cleanup(keep=True)
         return ("ORIGINAL upstream v3.3.5 binary (built from upstream commit cde4451) created a conf dir + sys.db (admin with sha512 hash, proxy rule, blacklist entry); this build started on the same files: "
-                "admin logged in with the old password on first try (no lock-out), rule still proxies, blacklist kept, second login and wrong-password refusal behave")
+                f"admin logged in with the old password on first try (no lock-out), the stored hash is now argon2id ({migrated_note}), rule still proxies, blacklist kept, second login and wrong-password refusal behave")
     finally:
         try:
             os.killpg(p.pid, signal.SIGKILL)

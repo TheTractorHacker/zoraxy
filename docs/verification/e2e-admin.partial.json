@@ -1,13 +1,11 @@
 [
  {
-  "scenario": "fleet-hub-two-nodes",
+  "scenario": "upgrade-from-original-upstream-v3.3.5",
   "issues": [
-   "81",
-   "183",
-   "1070"
+   "110"
   ],
   "status": "PASS",
-  "evidence": "hub + 2 node processes: join tokens (single-use, bogus refused), rule publish immediate to both nodes (verified by proxying real requests through each node), node-local rule preserved, per-node {{node.x}} variables (applied; undefined variable blocks publish; quote injection rejected), managed rule read-only on node (403) while local rules stay editable, drift detection after hand-editing a managed file, canary publish -> promotion, rollback to the older version, key rotation (node keeps syncing), revoke (status revoked), audit log entries for the actions (rerun: tools/e2e-admin/run.sh --only fleet-hub-two-nodes)",
+  "evidence": "ORIGINAL upstream v3.3.5 binary (built from upstream commit cde4451) created a conf dir + sys.db (admin with sha512 hash, proxy rule, blacklist entry); this build started on the same files: admin logged in with the old password on first try (no lock-out), the stored hash is now argon2id (old sha512 record compacted away), rule still proxies, blacklist kept, second login and wrong-password refusal behave (rerun: tools/e2e-admin/run.sh --only upgrade-from-original-upstream-v3.3.5)",
   "commits": [],
   "notes": ""
  }
