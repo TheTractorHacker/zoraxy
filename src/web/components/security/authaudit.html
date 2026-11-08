@@ -1,0 +1,44 @@
+<h3>Authentication audit</h3>
+<p>Every proxy rule with its effective authentication provider, and what weakens it (exception rules that skip the check, a basic
+    auth scope that leaves part of the host open, exceptions trusting forwarded headers). Reporting only; nothing changes unless you press
+    <b>Tag by auth provider</b>, which replaces the <code>auth:*</code> tags of the rules (other tags are kept).</p>
+<div class="ui toggle checkbox"><input type="checkbox" id="aaReq"><label>Warn about rules without authentication (report only, never blocks)</label></div>
+<div id="aaWarn" class="ui warning message" style="display:none"></div>
+<div style="margin:1em 0">
+    <button class="ui basic button" id="aaTag"><i class="tags icon"></i> Tag by auth provider</button>
+    <button class="ui basic icon button" id="aaRefresh" title="Refresh"><i class="refresh icon"></i></button>
+</div>
+<div style="overflow-x:auto">
+    <table class="ui unstackable celled table">
+        <thead><tr><th>Proxy rule</th><th>Provider</th><th>Weakened by</th><th>Tags</th></tr></thead>
+        <tbody id="aaRows"><tr><td colspan="4">Loading...</td></tr></tbody>
+    </table>
+</div>
+<script>
+(function () {
+    function esc(s) { return $("<div>").text(s == null ? "" : String(s)).html(); }
+    function toast(m, ok) { if (window.msgbox) { msgbox(m, ok); } }
+    function load() {
+        $.get("/api/authaudit/get", function (d) {
+            $("#aaReq").prop("checked", d.RequireAll);
+            var v = d.Violations || [];
+            if (v.length) { $("#aaWarn").html("<b>" + v.length + " proxy rule(s) have no authentication:</b> " + v.map(esc).join(", ")).show(); } else { $("#aaWarn").hide(); }
+            $("#aaRows").html((d.Rows || []).map(function (r) {
+                var color = r.Method === "none" ? "negative" : (r.Weaknesses && r.Weaknesses.length ? "warning" : "");
+                return '<tr class="' + color + '"><td>' + esc(r.Name) + (r.Disabled ? " <i>(disabled)</i>" : "") + "</td><td>" + esc(r.Method) + "</td><td>" +
+                    ((r.Weaknesses || []).map(esc).join("<br>") || "-") + "</td><td>" + ((r.Tags || []).map(function (t) { return '<span class="ui mini label">' + esc(t) + "</span>"; }).join(" ")) + "</td></tr>";
+            }).join("") || '<tr><td colspan="4">No proxy rules.</td></tr>');
+        });
+    }
+    $("#aaRefresh").on("click", load);
+    $("#aaReq").on("change", function () {
+        $.cjax({ type: "POST", url: "/api/authaudit/setRequire", data: { enable: this.checked ? "true" : "false" }, success: load });
+    });
+    $("#aaTag").on("click", function () {
+        $.cjax({ type: "POST", url: "/api/authaudit/autotag", data: {}, success: function (d) {
+            if (d && d.error) { toast(d.error, false); } else { toast("Updated " + d.Changed + " rule(s)", true); load(); }
+        } });
+    });
+    load();
+})();
+</script>
