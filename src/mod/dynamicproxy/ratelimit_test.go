@@ -87,8 +87,8 @@ func TestHandleRateLimit_BareHeaderIPStillCounts(t *testing.T) {
 			if blocked == 0 {
 				t.Fatalf("%s: rate limit never fired, limiter failed open", headerName)
 			}
-			if got := router.rateLimitCounter.GetCount("203.0.113.99"); got != 10 {
-				t.Errorf("%s: expected 10 requests counted against 203.0.113.99, got %d", headerName, got)
+			if !router.rateLimitCounter.Has(pe.RootOrMatchingDomain, "203.0.113.99") || router.rateLimitCounter.Len() != 1 {
+				t.Errorf("%s: expected requests tracked only against 203.0.113.99", headerName)
 			}
 		})
 	}
@@ -139,8 +139,8 @@ func TestHandleRateLimit_SpoofedHeaderFromUntrustedPeerIgnored(t *testing.T) {
 	if blocked == 0 {
 		t.Fatal("spoofed CF-Connecting-IP allowed a client to bypass the rate limit")
 	}
-	if got := router.rateLimitCounter.GetCount("198.51.100.7"); got != 10 {
-		t.Errorf("expected all 10 requests counted against the real peer, got %d", got)
+	if !router.rateLimitCounter.Has(pe.RootOrMatchingDomain, "198.51.100.7") || router.rateLimitCounter.Len() != 1 {
+		t.Errorf("expected all requests tracked against the real peer only")
 	}
 }
 
@@ -159,7 +159,9 @@ func TestHandleRateLimit_DirectConnection(t *testing.T) {
 		}
 	}
 
-	if blocked != 8 {
-		t.Errorf("expected 8 of 10 requests blocked at limit 3, got %d", blocked)
+	//Token bucket: a limit of 3 req/s with burst 3 admits exactly 3 (the old
+	//counter admitted limit-1)
+	if blocked != 7 {
+		t.Errorf("expected 7 of 10 requests blocked at limit 3, got %d", blocked)
 	}
 }
