@@ -32,7 +32,7 @@ EN = set(json.load(open(os.path.join(ROOT, "src/web/locales/en.json"), encoding=
 SCRIPT = {"zh-CN": r"[一-鿿]", "zh-TW": r"[一-鿿]", "ja": r"[぀-ヿ一-鿿]", "ru": r"[Ѐ-ӿ]"}
 IGNORE = re.compile(r"^(Zoraxy|ACME|TLS|HTTPS?|OIDC|OAuth2?|WAF|CAPTCHA|TCP|UDP|DNS|IP|CIDR|SSO|API|JSON|YAML|Lua|Docker|"
                     r"Cloudflare|Turnstile|reCAPTCHA|Altcha|Friendly Captcha|GeoIP|zrok|Sablier|ECH|mTLS|Prometheus|"
-                    r"Let's Encrypt|Authentik|[A-Za-z0-9_.:/\-]+)$")
+                    r"Let's Encrypt|Authentik|SSO / OAuth2|OAuth 2\.0|IP / CIDR|reCAPTCHA v[23]|User Agent|[A-Za-z0-9_.:/\-]+)$")
 
 COLLECT = r"""
 () => {

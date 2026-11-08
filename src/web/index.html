@@ -945,7 +945,7 @@
             function recordRecentTab(tabID, $btn) {
                 if (!tabID || tabID === 'pluginContextWindow') return;
                 // Extract label (strip icon element text) and icon class
-                var label     = $btn.clone().children('i').remove().end().text().trim();
+                var label     = (window.i18n && i18n.originalText($btn[0])) || $btn.clone().children('i').remove().end().text().trim();
                 var iconClass = $btn.children('i').first().attr('class') || '';
                 var recent    = getRecentTabs().filter(function(t) { return t.tag !== tabID; });
                 recent.unshift({ tag: tabID, label: label, icon: iconClass });

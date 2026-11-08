@@ -1580,3 +1580,27 @@ Code: `src/mod/sablier` (config validation, HTTP client, gate with ready cache),
   followed, no environment proxy is used. Loopback and private addresses are allowed (Sablier normally runs next to the proxy). `AllowMetadataAddress` opts out.
 - Not validated: against a real Sablier server and real Docker / Swarm / Kubernetes providers. The fake Sablier in the tests follows the documented API
   (`X-Sablier-Session-Status`, `/api/strategies/{dynamic,blocking}`), so compare the "Check connection" button's URL with your Sablier version's docs.
+
+## Multi-language UI (i18n)
+
+Fork #66 (upstream #236) and #64 (upstream #166). There is no build step and the strings are English text inside ~60 HTML files, so
+translation is a **runtime layer**; how-to for contributors is in `docs/translating.md`, agreed terms in `src/web/locales/GLOSSARY.md`.
+
+* **Engine** `src/web/script/i18n.js` (included directly by `index.html`, `login.html`, three snippets; every other document gets it through a
+  `document.write` injection at the top of `script/utils.js`). Language: `localStorage["zoraxy.lang"]` (explicit choice) > server setting
+  `settings/uiLanguage` (`GET/POST /api/i18n/language`, so the choice follows the instance) > `navigator.languages` > English. Dictionary
+  `locales/<code>.json` (`/locales/` is served without authentication, the login page needs it) maps the normalised English text to the translation; keys with
+  `{0}` placeholders double as patterns, plus optional `rules` (regex, `$1`). Text nodes and `placeholder / title / aria-label / alt / label / data-content /
+  data-tooltip / button value` are translated; the originals are remembered in WeakMaps so switching back and forth never needs a reload.
+* **Performance rules** (a former MutationObserver caused lag): in English nothing runs and no observer exists; otherwise one observer on added /
+  changed nodes only, batched in `requestIdleCallback` with a 10 ms slice, our own writes are discarded with `takeRecords()` (no feedback loop), negative
+  lookups are cached, `script/style/code/pre/textarea/svg` and `[data-i18n-skip]` subtrees are skipped. `i18n.stats()` exposes `observing` and `lastApplyMs`.
+* **Live switch**: the picker (`select.i18n-picker`, top bar and Ingress page) calls `i18n.setLanguage()`; other documents (snippet iframes) follow through
+  the `storage` event and `postMessage`; `<html lang>` and `dir` follow. Snippets reuse the parent's compiled dictionary.
+* **Visitor pages**: `src/mod/i18n` negotiates `Accept-Language` (q-values, `zh-Hant`/`zh-TW`, `pt` -> `pt-BR`, English default) and holds the tables for the CAPTCHA
+  default texts and the built-in 403 / 404 / 521 pages. Branding text and operator templates always win; responses carry `Vary: Accept-Language`.
+* **Tools** `tools/i18n/extract.py` (catalogue `en.json`, `--check` in CI, `--missing`, coverage), `merge.py`, `scan.py` (Playwright coverage scan: visible text that is
+  still English with a locale enabled, `--snippets`, `--emit-extra`), `tools/ui-audit/audit.py --lang xx`, `tools/ui-smoke/smoke.py` (i18n scenario; `--i18n-only`).
+  Headless Chromium needs a CJK font for useful zh/ja screenshots (`apt-get download fonts-wqy-microhei`, `dpkg -x` into the font root).
+* **Gotchas**: never read UI text back from the DOM to decide logic or to store it (it may be translated; `i18n.originalText(el)` gives the English, used by the
+  "Recent" menu). Text split by inline markup is several nodes, so fragments such as "Click" / "to continue" cannot be translated on their own and stay English.

@@ -201,3 +201,9 @@ FriendlyCaptcha, counting SSO redirect failures in the auto-ban, per-user admin 
 - ✅ **Sablier** (fork #120 / upstream #564): native dynamic / blocking strategies per rule, ready cache, fail open / closed, SSRF-safe URL. 📋 Verified only against a fake Sablier.
 - ✅ **zrok** (fork #63 / upstream #136): supervised zrok CLI behind `-allow_external_tools` (shares, reserved names on 1.x, private access, backoff, redacted logs).
   📋 Verified only against a fake zrok binary; 📋 zrok agent mode and a Windows path.
+
+## Multi-language UI (`feat/i18n`)
+- ✅ Runtime i18n layer (no build step): dictionary keyed by the English text, language picker (top bar + Ingress page), server-side default (`/api/i18n/language`), instant switch, snippet iframes follow, `<html lang>`.
+- ✅ Locales (machine-assisted, `reviewed: false`): zh-CN (first class, ~95 %), zh-TW, es, de, fr, ja, pt-BR, ru (main screens). Glossary, extractor / `--check` CI job, coverage scan, `docs/translating.md`.
+- ✅ Visitor pages follow `Accept-Language`: CAPTCHA challenge / failed / blocked defaults and the built-in 403 / 404 / 521 pages.
+- 📋 Native-speaker review of every locale; more strings for the non-Chinese locales (long help texts, snippets); plural forms; RTL languages; translating `apidocs`, `tools/*.html` pages and plugin UIs; templating the login page server side.

@@ -64,3 +64,9 @@ Resource Monitor
 Route Debugger
 DNS Resolver
 Data-Shield Blocklist
+Inspects and logs what it would block, but never rejects anything. The safe way to start and to test new rules.
+Rejects requests whose anomaly score reaches the threshold with HTTP 403. Use after a detection-only period without false positives.
+Traceroute / Ping
+Traffic Management
+Base version {0} (build date unknown: not installed by the updater yet)
+Roll back: There is no previous binary to roll back to.

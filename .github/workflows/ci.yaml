@@ -51,6 +51,15 @@ jobs:
         run: staticcheck ./...
         working-directory: src
 
+  check-i18n:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+
+      - name: Check translations (catalogue up to date, no stale keys, placeholder parity)
+        run: python3 tools/i18n/extract.py --check
+
   check-example-plugins:
     runs-on: ubuntu-latest
     steps:

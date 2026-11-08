@@ -244,12 +244,15 @@
     }
     function stopObserver() { if (observer) { observer.disconnect(); observer = null; } queue.clear(); }
 
+    var lastApplyMs = 0;
     function applyAll() {
         var root = document.documentElement;
         if (!root) return;
+        var t0 = performance.now();
         walk(root);
         translateTitle();
         if (observer) observer.takeRecords();
+        lastApplyMs = performance.now() - t0;
     }
 
     // ---- language switching -------------------------------------------------------
@@ -357,9 +360,23 @@
         return t(s).replace(/\{(\d+)\}/g, function (m, n) { return args[+n] !== undefined ? args[+n] : m; });
     }
 
+    // The untranslated (English) text of an element, for code that stores UI labels (e.g. the "Recent" menu).
+    // Text inside <i> icons is skipped.
+    function originalText(el) {
+        var tw = document.createTreeWalker(el, 4), n, out = "";
+        while ((n = tw.nextNode())) {
+            if (n.parentNode && n.parentNode.nodeName === "I") continue;
+            var rec = textRec.get(n);
+            out += rec && rec.w === n.nodeValue ? rec.o : n.nodeValue;
+        }
+        return out.replace(/\s+/g, " ").trim();
+    }
+
     var api = {
+        originalText: originalText,
         languages: LANGS, setLanguage: setLanguage, mountPickers: mountPickers, apply: function (root) { if (lang !== "en") walk(root || document.documentElement); },
-        t: t, tf: tf, match: match, _c: null
+        t: t, tf: tf, match: match, _c: null,
+        stats: function () { return { lang: lang, observing: !!observer, queued: queue.size, lastApplyMs: lastApplyMs, patterns: patterns.length, strings: dict ? dict.size : 0 }; }
     };
     Object.defineProperty(api, "lang", { get: function () { return lang; }, enumerable: true });
     window.i18n = api;

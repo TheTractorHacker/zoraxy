@@ -22,6 +22,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--url", default=os.environ.get("ZORAXY_URL", "http://127.0.0.1:8000"))
 ap.add_argument("--out", default=os.environ.get("SMOKE_OUT", os.path.expanduser("~/ui-smoke-shots")))
 ap.add_argument("--no-page-sweep", action="store_true", help="skip the per-tab screenshot sweep (faster; for focused runs on a busy machine)")
+ap.add_argument("--i18n-only", action="store_true", help="run only the multi-language scenario")
 ap.add_argument("--allow", action="append", default=[], help="regex of messages whose failure is tolerated")
 args = ap.parse_args()
 os.makedirs(args.out, exist_ok=True)
@@ -396,6 +397,123 @@ def proxy_ux(pg, ctx):
         pg.screenshot(path=out("httprp-empty.png"))
 
 
+def i18n_checks(pg, ctx):
+    """Runtime translation layer: English is a no-op, zh-CN switch is fast, stable (no mutation feedback loop) and complete enough."""
+    current["page"] = "i18n"
+    pg.set_viewport_size({"width": 1366, "height": 800})
+    api = lambda path, data: pg.evaluate("""([p, d]) => new Promise(res => $.cjax({url: p, method: 'POST', data: d,
+        success: r => res(r), error: e => res({error: 'http ' + e.status})}))""", [path, data])
+    hosts = [f"i18n{i:02d}.smoke.invalid" for i in range(36)]
+    try:
+        pg.evaluate("localStorage.removeItem('zoraxy.lang')")
+        pg.goto(args.url + "/", wait_until="networkidle")
+        pg.wait_for_selector("#mainmenu .item")
+        for h in hosts:
+            api("/api/proxy/add", {"type": "host", "rootname": h, "ep": "127.0.0.1:9", "tls": "false", "tlsval": "false", "bypassGlobalTLS": "false"})
+        pg.evaluate("openTabById('httprp')")
+        pg.evaluate("listProxyEndpoints()")
+        settle(pg, 1200)
+        st = pg.evaluate("i18n.stats()")
+        if st["lang"] != "en" or st["observing"]:
+            fail("i18n", f"English mode must not observe the DOM: {st}")
+        if pg.locator("#httpProxyList tr").count() < 36:
+            fail("i18n", "expected 36 rules in the table for the performance check")
+        en_nav = pg.inner_text("#mainmenu a.item[tag=status]").strip()
+        en_title = pg.inner_text("#httprp h2, #httprp h1").strip() if pg.locator("#httprp h2, #httprp h1").count() else ""
+
+        # switch through the picker in the top bar
+        t0 = pg.evaluate("performance.now()")
+        pg.select_option(".menubar select.i18n-picker", "zh-CN")
+        pg.wait_for_function("i18n.lang === 'zh-CN' && i18n.stats().observing", timeout=5000)
+        total = pg.evaluate("performance.now()") - t0
+        st = pg.evaluate("i18n.stats()")
+        print(f"i18n: switch to zh-CN: apply {st['lastApplyMs']:.0f} ms main thread (wall {total:.0f} ms incl. dictionary load), "
+              f"{st['strings']} strings, {st['patterns']} patterns")
+        if st["lastApplyMs"] > 300:
+            fail("i18n", f"switching language took {st['lastApplyMs']:.0f} ms of main thread (> 300 ms) on the HTTP Proxy page with 36 rules")
+        settle(pg, 800)
+        nav = pg.inner_text("#mainmenu a.item[tag=status]").strip()
+        if nav == en_nav or "状态" not in nav:
+            fail("i18n", f"nav item not translated: {en_nav!r} -> {nav!r}")
+        if pg.evaluate("document.documentElement.lang") != "zh-CN":
+            fail("i18n", "<html lang> not updated")
+        if "代理" not in pg.inner_text("#httprp"):
+            fail("i18n", "HTTP Proxy page text did not change")
+        if pg.evaluate("document.title").startswith("Control Panel"):
+            fail("i18n", "document title not translated")
+        saved = pg.evaluate("fetch('/api/i18n/language').then(r => r.json())")
+        if saved.get("language") != "zh-CN":
+            fail("i18n", f"language choice was not saved on the server: {saved}")
+        if pg.evaluate("localStorage.getItem('zoraxy.lang')") != "zh-CN":
+            fail("i18n", "language choice not stored in localStorage")
+        pg.screenshot(path=os.path.join(args.out, "i18n-zh-CN-httprp.png"))
+
+        # no feedback loop: after settling, the DOM must be quiet (only count text/attribute churn caused by us)
+        pg.evaluate("""() => { window.__mut = 0; window.__mo = new MutationObserver(r => { window.__mut += r.filter(x => {
+            const el = x.target.nodeType === 1 ? x.target : x.target.parentElement;
+            if (!el || el.offsetParent === null) return false;   // hidden tabs rotate their own widgets (app store carousel)
+            return x.type === 'characterData' || (x.type === 'attributes' && ['placeholder','title','aria-label','alt','value','label'].includes(x.attributeName))
+            || (x.type === 'childList' && [...x.addedNodes].some(n => n.nodeType === 3)); }).length; });
+            window.__mo.observe(document.documentElement, {subtree: true, childList: true, characterData: true, attributes: true}); }""")
+        pg.wait_for_timeout(2500)
+        n = pg.evaluate("window.__mut")
+        pg.evaluate("window.__mo.disconnect()")
+        if n > 0:
+            fail("i18n", f"{n} text/attribute mutations after settling (feedback loop?)")
+        if pg.evaluate("i18n.stats().queued") != 0:
+            fail("i18n", "translation queue never drained")
+
+        # lazily loaded component + snippet iframe pick the language up
+        for tab in ("seccenter", "waf", "cert", "globalsettings"):
+            pg.evaluate("t => openTabById(t)", tab)
+            settle(pg, 900)
+        if "界面语言" not in pg.inner_text("#globalsettings"):
+            fail("i18n", "Ingress / settings page not translated (language picker label)")
+        pg.screenshot(path=os.path.join(args.out, "i18n-zh-CN-settings.png"))
+        pg.evaluate("openTabById('seccenter')")
+        settle(pg, 900)
+        pg.screenshot(path=os.path.join(args.out, "i18n-zh-CN-seccenter.png"))
+
+        # back to English: originals restored, observer gone
+        pg.select_option(".menubar select.i18n-picker", "en")
+        pg.wait_for_function("i18n.lang === 'en' && !i18n.stats().observing", timeout=5000)
+        pg.evaluate("openTabById('httprp')")
+        settle(pg, 700)
+        if pg.inner_text("#mainmenu a.item[tag=status]").strip() != en_nav:
+            fail("i18n", "English text not restored after switching back")
+        # German layout check
+        pg.select_option(".menubar select.i18n-picker", "de")
+        pg.wait_for_function("i18n.lang === 'de'", timeout=5000)
+        settle(pg, 900)
+        pg.screenshot(path=os.path.join(args.out, "i18n-de-httprp.png"))
+        check_horizontal(pg, "desktop")
+        pg.evaluate("openTabById('seccenter')")
+        settle(pg, 900)
+        pg.screenshot(path=os.path.join(args.out, "i18n-de-seccenter.png"))
+        # snippet standalone page in zh-CN picks the stored language and shares the engine
+        pg.evaluate("i18n.setLanguage('zh-CN')")
+        sp = ctx.new_page()
+        sp.on("pageerror", lambda e: fail("pageerror", str(e)))
+        sp.on("console", lambda m: m.type == "error" and fail("console.error", m.text + " " + m.location.get("url", "")))
+        sp.goto(args.url + "/snippet/notifications.html", wait_until="networkidle")
+        sp.wait_for_timeout(1200)
+        if sp.evaluate("document.documentElement.lang") != "zh-CN" or not sp.evaluate("/[\\u4e00-\\u9fff]/.test(document.body.innerText)"):
+            fail("i18n", "snippet page did not follow the stored language")
+        sp.close()
+    except Exception as ex:
+        fail("i18n", f"i18n flow failed: {' '.join(str(ex).split()[:40])}")
+        pg.screenshot(path=os.path.join(args.out, "i18n-failure.png"))
+    finally:
+        try:
+            pg.evaluate("i18n.setLanguage('en')")
+            api("/api/i18n/language", {"language": ""})
+            for h in hosts:
+                api("/api/proxy/del", {"ep": h})
+            pg.evaluate("localStorage.removeItem('zoraxy.lang')")
+        except Exception:
+            pass
+
+
 def main():
     with sync_playwright() as p:
         b = p.chromium.launch()
@@ -414,6 +532,10 @@ def main():
         if pg.evaluate("location.hash") != want:
             fail("quickstart", f"landed on {pg.evaluate('location.hash')}, expected {want} (quickstart state {qs})")
 
+        if args.i18n_only:
+            i18n_checks(pg, ctx)
+            b.close()
+            return
         tabs = pg.eval_on_selector_all("#mainmenu .item[tag]", "els => els.map(e => e.getAttribute('tag'))")
         tabs = list(dict.fromkeys(tabs))
         if args.no_page_sweep:
@@ -919,6 +1041,7 @@ def main():
             settle(pg, 500)
             check_horizontal(pg, "mobile")
             pg.screenshot(path=os.path.join(args.out, f"mobile-{t}.png"))
+        i18n_checks(pg, ctx)
         b.close()
 
 
