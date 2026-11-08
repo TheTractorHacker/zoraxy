@@ -9,6 +9,7 @@ import (
 	"golang.org/x/text/language"
 	"imuslab.com/zoraxy/mod/dynamicproxy/loadbalance"
 	"imuslab.com/zoraxy/mod/dynamicproxy/rewrite"
+	"imuslab.com/zoraxy/mod/utils"
 )
 
 /*
@@ -326,7 +327,7 @@ func (ep *ProxyEndpoint) Clone() *ProxyEndpoint {
 
 // Remove this proxy endpoint from running proxy endpoint list
 func (ep *ProxyEndpoint) Remove() error {
-	lookupHostname := strings.ToLower(ep.RootOrMatchingDomain)
+	lookupHostname := utils.NormalizeHostname(ep.RootOrMatchingDomain)
 	ep.parent.ProxyEndpoints.Delete(lookupHostname)
 	ep.parent.loadBalancer.StopHealthChecks(healthCheckKey(ep))
 	return nil
@@ -341,7 +342,7 @@ func (ep *ProxyEndpoint) IsEnabled() bool {
 // use prepare -> remove -> add if you change anything in the endpoint
 // that effects the proxy routing src / dest
 func (ep *ProxyEndpoint) UpdateToRuntime() {
-	lookupHostname := strings.ToLower(ep.RootOrMatchingDomain)
+	lookupHostname := utils.NormalizeHostname(ep.RootOrMatchingDomain)
 	ep.parent.ProxyEndpoints.Store(lookupHostname, ep)
 	ep.parent.syncHealthChecks(ep)
 }

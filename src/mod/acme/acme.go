@@ -186,6 +186,13 @@ func (a *ACMEHandler) ensureFreeChallengePort() {
 func (a *ACMEHandler) obtainCertLocked(domains []string, certificateName string, email string, caName string, caUrl string, skipTLS bool, useDNS bool, propagationTimeout int, dnsServers string, disableRecursiveNssCheck bool, disableAuthoritativeNssCheck bool, opts ObtainOptions) (bool, error) {
 	ctx := context.TODO()
 
+	// Internationalised names go to the CA, to the HTTP-01/DNS-01 challenge and into the certificate in
+	// their ASCII (punycode) form; "bücher.example" and "xn--bcher-kva.example" are the same identifier (upstream #458)
+	domains = utils.NormalizeHostnames(domains)
+	if len(domains) == 0 {
+		return false, errors.New("no valid domain given")
+	}
+
 	// Values remembered from the previous issuance of this certificate (renewal keeps them)
 	prevInfo, prevErr := LoadCertInfoJSON(a.certPath(certificateName + ".json"))
 	if prevErr != nil {
