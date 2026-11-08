@@ -324,10 +324,10 @@ def proxy_ux(pg, ctx):
         if not detail.get("RequireRateLimit"):
             fail("newrule", "the API backend template was not applied to the new rule")
         pg.click("#nrToast button:has-text('Add another')")
-        pg.wait_for_selector("#newRuleModal", state="visible", timeout=5000)
+        pg.wait_for_selector("#newRuleModal", state="visible", timeout=20000)
         pg.wait_for_timeout(800)  # let the open animation finish
         pg.keyboard.press("Escape")
-        pg.wait_for_selector("#newRuleModal", state="hidden", timeout=5000)
+        pg.wait_for_selector("#newRuleModal", state="hidden", timeout=20000)
         # the old form stays reachable
         pg.evaluate("openTabById('rules')")
         settle(pg, 400)

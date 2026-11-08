@@ -267,7 +267,7 @@
         var total = state.view.length, pages = Math.max(1, Math.ceil(total / state.pageSize));
         var from = total ? (state.page - 1) * state.pageSize + 1 : 0, to = Math.min(total, state.page * state.pageSize);
         var filtered = total !== state.list.length;
-        $("#ptCount").text(total ? ("Showing " + from + "-" + to + " of " + total + (filtered ? " (" + state.list.length + " in total)" : "") + " rule" + (total === 1 ? "" : "s")) : "");
+        $("#ptCount").text(total ? ("Showing " + from + "-" + to + " of " + total + " rule" + (total === 1 ? "" : "s") + (filtered ? " (" + state.list.length + " in total)" : "")) : "");
         $("#ptPager").toggle(total > 0 && (pages > 1 || total > PAGE_SIZES[0]));
         $("#ptPrev").prop("disabled", state.page <= 1);
         $("#ptNext").prop("disabled", state.page >= pages);
