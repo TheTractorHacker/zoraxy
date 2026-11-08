@@ -33,6 +33,11 @@ import (
 */
 
 func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if h.Parent.Option.Metrics.Enabled() {
+		var done func()
+		w, r, done = h.Parent.metricsBegin(w, r, nil)
+		defer done()
+	}
 	/*
 		Special Routing Rules and Redirection Routing
 	*/

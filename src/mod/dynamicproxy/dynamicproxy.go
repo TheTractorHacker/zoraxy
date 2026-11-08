@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"imuslab.com/zoraxy/mod/metrics"
 	"net"
 	"net/http"
 	"net/url"
@@ -356,6 +357,11 @@ func (router *Router) StartProxyService() error {
 // This is the common handler logic used by both port 80 listener and secondary listeners
 func (router *Router) handleNonTLSRequest(w http.ResponseWriter, r *http.Request, sep *ProxyEndpoint) {
 	proxyHandler := router.mux.(*ProxyHandler)
+	if router.Option.Metrics.Enabled() {
+		var done func()
+		w, r, done = router.metricsBegin(w, r, sep)
+		defer done()
+	}
 
 	//Same special routing / redirect / protection chain as the TLS handler
 	if proxyHandler.handleSpecialAndRedirect(w, r) {
@@ -447,6 +453,7 @@ func (router *Router) handleCaptchaGating(w http.ResponseWriter, r *http.Request
 
 	if r.URL.Path == captcha.VerifyPath {
 		captcha.HandleVerification(w, r, sep.CaptchaConfig, router.captchaSessionStore, clientIP)
+		router.recordCaptchaVerification(w, sep)
 		return true, false
 	}
 
@@ -470,6 +477,7 @@ func (router *Router) handleCaptchaGating(w http.ResponseWriter, r *http.Request
 	}
 
 	captcha.RenderChallenge(w, r, sep.CaptchaConfig, domain, router.Option.WebDirectory)
+	router.Option.Metrics.Event(metrics.EventCaptchaChallenge, sep.RootOrMatchingDomain, sessionReason)
 	return true, true
 }
 

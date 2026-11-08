@@ -9,6 +9,7 @@ package dynamicproxy
 */
 import (
 	_ "embed"
+	"imuslab.com/zoraxy/mod/metrics"
 	"net"
 	"net/http"
 	"strings"
@@ -95,6 +96,7 @@ type RouterOption struct {
 	LoadBalancer         *loadbalance.RouteManager  //Load balancer that handle load balancing of proxy target
 	PersistProxyEndpoint func(*ProxyEndpoint) error //Optional, called to save an endpoint config after a basic auth hash upgrade
 	PluginManager        *plugins.Manager           //Plugin manager for handling plugin routing
+	Metrics              *metrics.Registry          //Optional Prometheus metrics registry (nil or disabled = no overhead)
 
 	/* Timeouts */
 	ReadHeaderTimeout int64 //HTTP server read timeout in seconds

@@ -556,3 +556,27 @@ Plugins can act as middleware / WAF style filters. User-facing documentation is 
   on the admin router only (never register it on the plugin REST router). fail_closed needs manifest AND consent.
 - **Tests**: `go test -race ./mod/plugins/... ./mod/dynamicproxy/...`. `mod/plugins/hooks_test.go` uses `httptest` servers as fake
   plugin processes; `mod/dynamicproxy/plugin_hooks_test.go` drives `ProxyHandler.ServeHTTP` end to end.
+
+## Prometheus metrics
+
+Package `src/mod/metrics` (hand-rolled text exposition 0.0.4, no new dependency); glue in `src/metrics.go`;
+request hooks in `src/mod/dynamicproxy/metrics_hook.go`.
+
+* **Off by default.** `-metrics` records metrics and serves them on the admin API `GET /api/metrics` (admin auth, same as every
+  `/api/*` route). `-metrics_port :9090` (implies `-metrics`) additionally serves `GET /metrics` on a separate listener; protect it
+  with a bearer token: `-metrics_token`, env `ZORAXY_METRICS_TOKEN` or `{"token":"..."}` in `<conf>/metrics.json` (the flag is visible
+  in the process list, prefer env/file). A non-loopback listener without a token logs a warning. Disabled = one nil check + atomic load
+  per request; `/api/metrics` answers 503.
+* **Hooks** (all behind `Option.Metrics.Enabled()`): `ProxyHandler.ServeHTTP` and `handleNonTLSRequest` wrap the response writer
+  (Flusher, Hijacker and `Unwrap` are preserved) for status/bytes/duration/in-flight; `handleRateLimit`, `handleAccessRouting` and the
+  CAPTCHA gating count events. Upstream state, WAF counters, certificate expiry, cluster role and build info are pulled at scrape time.
+* **Cardinality:** `endpoint` is the configured rule name (`_default` for the default site), capped at 512 distinct values
+  (overflow folds into `__other__`), event vectors capped at 1024 series, WAF rules limited to the top 200. Paths, hosts from headers
+  and client IPs are never labels.
+* **Series:** `zoraxy_http_requests_total{endpoint,status_class,method}`, `zoraxy_http_request_duration_seconds` (histogram),
+  `zoraxy_http_requests_in_flight`, `zoraxy_http_request_bytes_total`, `zoraxy_http_response_bytes_total`,
+  `zoraxy_upstream_{up,in_flight,ewma_seconds,ejections_total}{endpoint,upstream}`, `zoraxy_waf_{events_total,rule_hits_total,blocked_total}`,
+  `zoraxy_captcha_{challenges,verified,failed}_total`, `zoraxy_ratelimit_rejected_total`, `zoraxy_access_blocked_total`,
+  `zoraxy_tls_certificate_expiry_days{certificate,cn}`, `zoraxy_build_info`, `zoraxy_uptime_seconds`, `zoraxy_cluster_role`,
+  `zoraxy_cluster_snapshot_version`.
+* **Tests:** `go test -race ./mod/metrics ./mod/dynamicproxy -run Metrics`.

@@ -87,4 +87,5 @@ Status: ✅ done · 🔧 in progress · 📋 planned
   that do not need endpoint tags.
 
 ## 9. Observability
-- 📋 Prometheus metrics endpoint, structured JSON access logs, per-upstream latency/error stats.
+- ✅ Prometheus metrics (`-metrics`, `-metrics_port`, `/api/metrics`, see DEVELOPMENT.md) incl. per-upstream health/in-flight/EWMA, WAF, CAPTCHA, rate limit and certificate expiry.
+- 📋 Structured JSON access logs.

@@ -231,6 +231,7 @@ func main() {
 	//Start the finalize sequences
 	finalSequence()
 	startCluster()
+	startMetrics()
 
 	var adminHandler http.Handler = entryMux
 	if webUICert != nil {
