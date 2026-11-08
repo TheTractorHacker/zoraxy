@@ -39,12 +39,24 @@ func mergeDailySummaryExports(exports []*statistic.DailySummaryExport) *statisti
 		RequestMethods:  make(map[string]int),
 		Downstreams:     make(map[string]int),
 		Upstreams:       make(map[string]int),
+		StatusCodes:     make(map[string]int),
+		Sites:           make(map[string]*statistic.SiteSummaryExport),
 	}
 
 	for _, export := range exports {
 		mergedExport.TotalRequest += export.TotalRequest
 		mergedExport.ErrorRequest += export.ErrorRequest
 		mergedExport.ValidRequest += export.ValidRequest
+		mergedExport.BlockedRequest += export.BlockedRequest
+		for key, value := range export.StatusCodes {
+			mergedExport.StatusCodes[key] += value
+		}
+		for site, se := range export.Sites {
+			if mergedExport.Sites[site] == nil {
+				mergedExport.Sites[site] = &statistic.SiteSummaryExport{}
+			}
+			mergedExport.Sites[site].Merge(se)
+		}
 
 		for key, value := range export.ForwardTypes {
 			mergedExport.ForwardTypes[key] += value

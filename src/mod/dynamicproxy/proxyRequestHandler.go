@@ -437,9 +437,11 @@ func (router *Router) logRequest(r *http.Request, succ bool, statusCode int, for
 				RequestMethod:                 r.Method,
 				Referer:                       r.Referer(),
 				UserAgent:                     r.UserAgent(),
-				RequestURL:                    r.Host + r.URL.EscapedPath(),
+				RequestURL:                    statistic.BuildStatURL(r.Host, r.URL.EscapedPath(), r.URL.RawQuery, router.Option.StatisticCollector.QueryMode()),
 				Target:                        originalHostname,
 				Upstream:                      upstreamHostname,
+				Site:                          endpoint.RootOrMatchingDomain,
+				Blocked:                       statistic.IsBlockedForwardType(forwardType),
 			}
 			router.Option.StatisticCollector.RecordRequest(requestInfo)
 		}()

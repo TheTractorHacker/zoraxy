@@ -223,6 +223,7 @@ func startupSequence() {
 		panic(err)
 	}
 	statisticCollector.SetAutoSave(STATISTIC_AUTO_SAVE_INTERVAL)
+	loadStatSettings()
 
 	//Start the static web server
 	staticWebServer = webserv.NewWebServer(&webserv.WebServerOptions{
