@@ -212,10 +212,14 @@ func startupSequence() {
 		Database: sysdb,
 	})
 
+	//Session cookie signing + at-rest encryption: the node UUID, or the cluster derived key so any HA node accepts the session
+	oauth2KeyMaterial := clusterMgr.KeyMaterial(nodeUUID, cluster.PurposeOAuth2Session)
 	oauth2Router = oauth2.NewOAuth2Router(&oauth2.OAuth2RouterOptions{
 		Logger:     SystemWideLogger,
 		Database:   sysdb,
-		SystemUUID: nodeUUID,
+		SystemUUID: oauth2KeyMaterial,
+		SharedKey:  oauth2KeyMaterial != nodeUUID,
+		InUse:      oauth2ProviderUsers,
 	})
 
 	zorxauth.DefaultConfigFolder = CONF_FOLDER + "/sso/zorxauth"
