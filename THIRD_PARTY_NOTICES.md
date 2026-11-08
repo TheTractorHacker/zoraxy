@@ -30,3 +30,9 @@ Notes required by the Apache License 2.0 section 4:
   (`src/mod/auth/sso/oauth2`). Already a transitive dependency; now a direct one.
 - **golang.org/x/oauth2** - BSD-3-Clause. OAuth 2.0 authorization code flow, PKCE helpers and token refresh.
 - **github.com/jellydator/ttlcache/v3** - MIT. Expiring in-memory session and login-state stores.
+
+## Advanced redirect regex
+
+- **github.com/dlclark/regexp2** v1.12.0 - MIT (licence text: its `LICENSE`). A .NET-style backtracking regular expression engine with
+  lookahead, lookbehind and backreferences, used only when an admin enables the "advanced regex" mode of the redirect rules
+  (`src/mod/dynamicproxy/redirection/advanced.go`). Every match runs under a hard timeout; MIT is compatible with AGPL-3.0.

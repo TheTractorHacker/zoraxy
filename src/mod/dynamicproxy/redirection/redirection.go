@@ -18,6 +18,7 @@ import (
 type RuleTable struct {
 	AllowRegex    bool     //Allow regular expression to be used in rule matching. Require up to O(n^m) time complexity
 	CaseSensitive bool     //Force case sensitive URL matching
+	AdvancedRegex bool     //With AllowRegex: match with the backtracking engine (lookahead / lookbehind) under a hard timeout, see advanced.go
 	configPath    string   //The location where the redirection rules is stored
 	rules         sync.Map //Store map[string]*RedirectRule for this reverse proxy instance
 	Logger        *logger.Logger
@@ -215,7 +216,13 @@ func (t *RuleTable) MatchRedirectRule(requestedURL string) *RedirectRule {
 
 		if t.AllowRegex {
 			//Regexp matching rule
-			matched, err := regexp.MatchString(keyStr, requestedURL)
+			var matched bool
+			var err error
+			if t.AdvancedRegex {
+				matched, err = advancedMatch(keyStr, requestedURL)
+			} else {
+				matched, err = regexp.MatchString(keyStr, requestedURL)
+			}
 			if err != nil {
 				//Something wrong with the regex?
 				t.log("Unable to match regex", err)

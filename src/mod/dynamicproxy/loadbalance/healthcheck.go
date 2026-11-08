@@ -180,6 +180,11 @@ func newProber(u *Upstream, hc ActiveHealthCheck) *prober {
 			//Upstreams that require a PROXY header would drop probes without one
 			tr.DialContext = dpcore.ProxyProtocolDialer((&net.Dialer{}).DialContext, u.ProxyProtocol)
 		}
+		if sock, ok := UnixSocketPath(u.OriginIpOrDomain); ok {
+			tr.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
+				return (&net.Dialer{}).DialContext(ctx, "unix", sock)
+			}
+		}
 		p.client = &http.Client{
 			Transport:     tr,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
@@ -228,7 +233,11 @@ func (p *prober) probe(ctx context.Context) error {
 		if p.u.ProxyProtocol == 1 || p.u.ProxyProtocol == 2 {
 			dial = dpcore.ProxyProtocolDialer(dial, p.u.ProxyProtocol)
 		}
-		conn, err := dial(ctx, "tcp", p.u.tcpAddress())
+		network, addr := "tcp", p.u.tcpAddress()
+		if sock, ok := UnixSocketPath(p.u.OriginIpOrDomain); ok {
+			network, addr = "unix", sock
+		}
+		conn, err := dial(ctx, network, addr)
 		if err != nil {
 			return err
 		}
@@ -239,7 +248,11 @@ func (p *prober) probe(ctx context.Context) error {
 	if p.u.RequireTLS {
 		scheme = "https://"
 	}
-	req, err := http.NewRequestWithContext(ctx, p.hc.Method, scheme+trimmedOrigin(p.u.OriginIpOrDomain)+p.hc.Path, nil)
+	hostPart := trimmedOrigin(p.u.OriginIpOrDomain)
+	if p.u.IsUnix() {
+		scheme, hostPart = "http://", "unix.socket"
+	}
+	req, err := http.NewRequestWithContext(ctx, p.hc.Method, scheme+hostPart+p.hc.Path, nil)
 	if err != nil {
 		return err
 	}

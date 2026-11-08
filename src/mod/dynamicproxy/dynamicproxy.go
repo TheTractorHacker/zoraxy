@@ -22,7 +22,6 @@ import (
 
 	"imuslab.com/zoraxy/mod/dynamicproxy/captcha"
 	"imuslab.com/zoraxy/mod/dynamicproxy/dpcore"
-	"imuslab.com/zoraxy/mod/netutils"
 	"imuslab.com/zoraxy/mod/pathmatch"
 )
 
@@ -256,43 +255,9 @@ func (router *Router) StartProxyService() error {
 
 		router.Running = true
 		router.syncAllHealthChecks()
-		if router.Option.Port != 80 && router.Option.ListenOnPort80 && !netutils.CheckIfPortOccupied(80) {
-			//Add a 80 to 443 redirector
-			httpServer := &http.Server{
-				Addr:              ":80",
-				Handler:           http.HandlerFunc(router.handlePort80Request),
-				ReadHeaderTimeout: time.Duration(router.Option.ReadHeaderTimeout) * time.Second,
-				WriteTimeout:      time.Duration(router.Option.WriteTimeout) * time.Second,
-				IdleTimeout:       time.Duration(router.Option.IdleTimeout) * time.Second,
-			}
-
-			router.Option.Logger.PrintAndLog("dprouter", "Starting HTTP-to-HTTPS redirector (port 80)", nil)
-
-			//Create a redirection stop channel
-			stopChan := make(chan bool)
-
-			//Start a blocking wait for shutting down the http to https redirection server
-			go func() {
-				<-stopChan
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				httpServer.Shutdown(ctx)
-				router.Option.Logger.PrintAndLog("dprouter", "HTTP to HTTPS redirection listener stopped", nil)
-			}()
-
-			//Start the http server that listens to port 80 and redirect to 443
-			go func() {
-				if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-					//Unable to startup port 80 listener. Handle shutdown process gracefully
-					stopChan <- true
-					// Disable port 80 listening to avoid terminating the whole process
-					router.Option.ListenOnPort80 = false
-					router.tlsRedirectStop = nil
-					router.Option.Logger.PrintAndLog("dprouter", "Could not start HTTP-to-HTTPS redirector (port 80); disabling port 80 listener", err)
-					return
-				}
-			}()
-			router.tlsRedirectStop = stopChan
+		if router.Option.ListenOnPort80 && router.HttpListenPort() != router.Option.Port {
+			//Add an HTTP (default :80) to HTTPS redirector, see httplistenaddr.go
+			router.startHttpListener()
 		}
 
 		//Start the TLS server
@@ -382,6 +347,7 @@ func (router *Router) handleNonTLSRequest(w http.ResponseWriter, r *http.Request
 	}
 	defer abuseDone()
 	w = router.pluginWrapResponse(w, r, sep) //plugin response stage, no-op without response plugins
+	w = router.opsBegin(w, r, sep)           //request vars + CORS / error page / bandwidth wrapper
 	if proxyHandler.runEndpointChain(w, r, sep, domainOnly) {
 		return
 	}
@@ -406,6 +372,7 @@ func (router *Router) handleNonTLSRequest(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	armOps(r)
 	selectedUpstream, err := router.loadBalancer.SelectUpstream(w, r, sep.ActiveOrigins, router.newSelectOptions(r, sep))
 	if err != nil {
 		serveProxyRequestError(w, 404, router, ErrorTemplateHostError)
@@ -740,6 +707,7 @@ func (router *Router) StopProxyService() error {
 	router.server = nil
 	router.tlsListener = nil
 	router.tlsRedirectStop = nil
+	router.httpListenerAddr = nil
 	router.rateLimterStop = nil
 	router.h3Server = nil
 	router.h3Conn = nil

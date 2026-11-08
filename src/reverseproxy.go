@@ -290,7 +290,8 @@ func ReverseProxyInit() {
 	sysdb.Read("settings", "listenP80", &listenOnPort80)
 	sysdb.Read("settings", "redirect", &forceHttpsRedirect)
 
-	listenOnPort80 = listenOnPort80 && !netutils.CheckIfPortOccupied(80)
+	httpListenAddr := loadHttpListenAddr() //see httplistenaddr_api.go (default ":80")
+	listenOnPort80 = listenOnPort80 && !httpListenPortOccupied(httpListenAddr)
 
 	if listenOnPort80 {
 		SystemWideLogger.Println("Port 80 listener enabled")
@@ -320,6 +321,7 @@ func ReverseProxyInit() {
 		TlsCipherProfile:   tlsCipherProfile,
 		NoCache:            developmentMode,
 		ListenOnPort80:     listenOnPort80,
+		HttpListenAddr:     httpListenAddr,
 		ForceHttpsRedirect: forceHttpsRedirect,
 		UseProxyProtocol:   useProxyProtocol,
 
@@ -364,6 +366,7 @@ func ReverseProxyInit() {
 
 	//Persist basic auth credential hashes upgraded from legacy SHA-512
 	dprouter.Option.PersistProxyEndpoint = SaveReverseProxyConfig
+	initOpsGlobals()
 	dynamicProxyRouter = dprouter
 
 	//Optional logging of default site requests (off unless enabled)
@@ -478,6 +481,12 @@ func ReverseProxyHandleAddEndpoint(w http.ResponseWriter, r *http.Request) {
 	endpoint = strings.TrimSpace(endpoint)
 
 	useTLS, _ := utils.PostBool(r, "tls")
+	if probe := (loadbalance.Upstream{OriginIpOrDomain: endpoint, RequireTLS: useTLS}); probe.IsUnix() {
+		if err := probe.ValidateTransportOptions(); err != nil {
+			utils.SendErrorResponse(w, err.Error())
+			return
+		}
+	}
 
 	//Bypass global TLS value / allow direct access from port 80?
 	useBypassGlobalTLS, _ := utils.PostBool(r, "bypassGlobalTLS")
@@ -726,6 +735,13 @@ func ReverseProxyHandleAddEndpoint(w http.ResponseWriter, r *http.Request) {
 			DisableWebSocket:               disableWebSocket,
 			WebsocketTimeout:               websocketTimeout,
 			EnableTimeoutRefreshOnActivity: enableTimeoutRefreshOnActivity,
+		}
+
+		if tplName, _ := utils.PostPara(r, "template"); strings.TrimSpace(tplName) != "" {
+			if err := applyRuleTemplateByName(&thisProxyEndpoint, strings.TrimSpace(tplName)); err != nil {
+				utils.SendErrorResponse(w, err.Error())
+				return
+			}
 		}
 
 		preparedEndpoint, err := dynamicProxyRouter.PrepareProxyRoute(&thisProxyEndpoint)
@@ -2061,7 +2077,7 @@ func HandleUpdatePort80Listener(w http.ResponseWriter, r *http.Request) {
 		}
 		if enabled {
 			//Check if port 80 is already used by other services
-			if netutils.CheckIfPortOccupied(80) && !dynamicProxyRouter.GetPort80ListenerState() {
+			if httpListenPortOccupied(loadHttpListenAddr()) && !dynamicProxyRouter.GetPort80ListenerState() {
 				utils.SendErrorResponse(w, "Port 80 is already used by other services")
 				return
 			}

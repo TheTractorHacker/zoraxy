@@ -18,6 +18,7 @@ require (
 	github.com/jellydator/ttlcache/v3 v3.4.0
 	github.com/likexian/whois v1.15.1
 	github.com/microcosm-cc/bluemonday v1.0.26
+	github.com/miekg/dns v1.1.73
 	github.com/moby/moby/client v0.3.0
 	github.com/pires/go-proxyproto v0.8.1
 	github.com/quic-go/quic-go v0.61.0
@@ -53,6 +54,7 @@ require (
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/corazawaf/libinjection-go v0.3.3 // indirect
+	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/dnsimple/dnsimple-go/v9 v9.1.1 // indirect
 	github.com/exoscale/egoscale/v3 v3.1.50 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.2 // indirect
@@ -193,7 +195,6 @@ require (
 	github.com/liquidweb/liquidweb-cli v0.7.0 // indirect
 	github.com/liquidweb/liquidweb-go v1.6.4 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
-	github.com/miekg/dns v1.1.73 // indirect
 	github.com/mimuret/golang-iij-dpf v0.9.1 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
@@ -249,5 +250,5 @@ require (
 	gopkg.in/ini.v1 v1.67.3 // indirect
 	gopkg.in/ns1/ns1-go.v2 v2.18.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
+	gopkg.in/yaml.v3 v3.0.1
 )

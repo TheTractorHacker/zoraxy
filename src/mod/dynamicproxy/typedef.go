@@ -87,6 +87,7 @@ type RouterOption struct {
 	TlsCipherProfile   TlsCipherProfile        //TLS cipher profile (see TlsCipherProfile enum and tlscipherprofile.go)
 	NoCache            bool                    //Force set Cache-Control: no-store
 	ListenOnPort80     bool                    //Enable port 80 http listener
+	HttpListenAddr     string                  //Plain HTTP listener address, empty = ":80" (see httplistenaddr.go)
 	ForceHttpsRedirect bool                    //Force redirection of http to https endpoint
 	UseProxyProtocol   bool                    //Enable PROXY protocol v1/v2 support for TLS listener
 
@@ -153,6 +154,7 @@ type Router struct {
 
 	tlsListener      net.Listener //TLS listener, handle SNI routing
 	tlsBehaviorMutex sync.RWMutex //Mutex for tlsBehavior map
+	httpListenerAddr net.Addr     //Bound address of the plain HTTP listener (nil if not running)
 	tlsRedirectStop  chan bool    //Stop channel for tls redirection server
 
 	rateLimterStop   chan bool                                                     //Stop channel for rate limiter
@@ -405,6 +407,7 @@ type ProxyEndpoint struct {
 	basicScope     []*compiledPathRule   `json:"-"` //Compiled basic auth scope prefixes
 	basicScopeErr  error                 `json:"-"`
 	Tags           []string              // Tags for the proxy endpoint
+	Ops            *OpsConfig            `json:",omitempty"` //Error pages, static responses, CORS, bandwidth limit (ops_config.go)
 }
 
 /*

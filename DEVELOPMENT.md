@@ -1225,3 +1225,79 @@ go test -timeout 500s ./...
 go test -race ./mod/abuse ./mod/botrules ./mod/access ./mod/auth/... ./mod/dynamicproxy/...
 ```
 UI: `tools/ui-smoke/smoke.py` now also opens every Security Center tab and the Access rule Options tab.
+## REST API and API tokens
+
+A stable, token authenticated subset of the management API lives under `/api/v1/` (code: `src/apiv1.go`,
+`src/mod/apitoken/`, spec `src/web/openapi.yaml`, docs page `/api/v1/docs`, UI `src/web/components/apitokens.html`
+under Others > API Tokens).
+
+- Tokens: `zrx_` + 256 bit random value, shown once at creation, stored only as SHA-256 hash (table `apitokens` in the
+  system database), compared in constant time. Scope `read` (GET/HEAD only) or `readwrite`; optional expiry and IP/CIDR
+  allow-list; revocable; last-used timestamp. Sent as `Authorization: Bearer <token>`.
+- `/api/v1/` is mounted on the entry mux in `main.go` (`mountAPIv1`), outside the cookie + CSRF stack, so no CSRF token is
+  needed for it. Bearer tokens are accepted ONLY there; every other route keeps cookie auth + CSRF unchanged. Token
+  management (`/api/apitoken/list|create|revoke|delete`) is registered on the normal admin router (cookie + CSRF).
+- Routes are thin wrappers: JSON body keys map 1:1 to the form parameters of the existing handlers, which are run through the
+  cluster edit guard using their legacy `/api/...` path. A route must be added to both `v1Routes` and `openapi.yaml`
+  (`TestAPIv1OpenAPIMatchesRoutes` enforces this). Never add token management or secret-returning routes to v1.
+- The client IP is the TCP peer address (forwarding headers are ignored); behind a reverse proxy, allow-list the proxy.
+- Token auth is rate limited (token bucket per token and per IP; 10 failed auths/minute per IP block that IP with 429) and
+  every use is audit logged (token name, method, route, IP, status; never the token or hash).
+## Proxy ops 2: plain HTTP listener address, network calculators, DNS responder
+
+**Plain HTTP listener address (upstream #909).** `RouterOption.HttpListenAddr` (default empty = `:80`, behaviour unchanged) sets where the optional plain-HTTP listener binds (`src/mod/dynamicproxy/httplistenaddr.go`). DB key `settings/httpListenAddr`. API `GET/POST /api/proxy/httpListenAddr` (`addr=host:port`, empty resets). Validation refuses a bad host/port, the management UI port (`-port`) and the HTTPS proxy port. A change restarts the proxy service. The existing "Enable HTTP server on port 80" toggle and the redirect toggle apply to whatever address is configured. UI: `components/globalsettings.html`.
+
+**Network calculators (upstream #504).** `src/mod/netcalc`: IPv4/CIDR and IPv6 calculators and range-to-CIDR, all constant-time big-integer arithmetic (a `::/0` query is free). `GET /api/tools/netcalc?q=...` (admin auth). UI: `components/netcalc.html` in the Network Tools "Calculators" tab.
+
+**DNS responder (upstream #769, opt-in).** `src/mod/dnsresponder`: UDP+TCP authoritative responder for proxy rule hostnames and aliases (wildcards by glob), built on `github.com/miekg/dns`. Off by default; must be bound to a specific IP (wildcard bind needs `allowAllInterfaces`); default port 5353; non-hosted names get REFUSED; optional forwarding only when `forwardEnabled` and the client is inside `allowedCidrs` (a `/0` is refused); ANY/AXFR refused; per-client token bucket (queries over the limit are dropped), UDP size cap, TCP timeouts and connection cap. Config in DB key `settings/dnsResponder`, API `GET/POST /api/tools/dnsresponder` (`config=<JSON>`), glue in `src/dnsresponder_glue.go`, UI `components/dnsresponder.html` ("DNS Responder" tab of Network Tools). It is a split-horizon helper, not a general DNS server; do not expose it to the internet.
+
+## Proxy behaviour and ops (`feat/proxy-ops-2`)
+
+All of it is opt-in; configs written by older versions load unchanged (`ProxyEndpoint.Ops` is omitted when unset).
+
+**Per rule `Ops`** (`mod/dynamicproxy/ops_config.go`, `ops_handlers.go`, `ops_bandwidth.go`; API `opsapi.go`; UI `snippet/opsEditor.html`)
+
+- `opsBegin` (called next to the plugin response wrapper on the TLS and non-TLS paths) attaches `{{request_id}}` /
+  `{{rule_name}}` / `{{client_ip}}` to the request context and wraps the `ResponseWriter` (`opsWriter`; Flush/Hijack/Unwrap kept).
+- **Error pages:** the status codes (400-599) chosen by the admin are replaced by an `html/template` page (`Status, StatusText,
+  RequestID, Host, Path, RuleName`; validated and test-rendered on save, max 64 KiB, HTML escaped). Interception happens in
+  `WriteHeader`; the original body is discarded, nothing is buffered. It only becomes active once the request is being proxied
+  (`armOps`), so auth challenges, CAPTCHA pages and access-list blocks are never replaced. Never replaced: `text/event-stream`,
+  `application/grpc` (request or response), `Grpc-Status`, `Trailer`, any request with `Upgrade` (WebSocket), CONNECT. Zoraxy's own
+  errors (521 unreachable, 404 DNS failure, 503 busy) are replaced too when listed. Rule mode: `inherit` (global default,
+  `/api/proxy/ops/globalerrors`, stored in `settings/globalErrorPages`), `off`, `on`.
+- **Static responses:** exact or segment-prefix path, methods (default GET+HEAD), status, content type, body, `Location`, extra headers.
+  `Public` ones are answered right after the access list (before client cert, path rules, WAF, rate limit, auth); the others after auth.
+- **CORS:** exact / `https://*.example.com` / `regex:` (RE2) / `*` origins. Preflights (OPTIONS + Origin + Access-Control-Request-Method)
+  are answered by the proxy after the access-list check and before authentication; a non matching origin, method or header gets 403.
+  Normal responses get ACAO/ACAC/ACEH and `Vary: Origin`; CORS headers set by the upstream are replaced. `*` with credentials is
+  refused at save time and again at runtime.
+- **Bandwidth:** token buckets per response and optionally shared per client IP, paced writes of at most 16 KiB with a flush after
+  each chunk; clock and sleep are injectable (tests use a fake clock). WebSocket traffic is not limited.
+- **Variables** (`rewrite/templatevars.go`): `{{host}} {{client_ip}} {{request_id}} {{rule_name}} {{external_ip}}` in custom header values,
+  redirect targets and static responses. Substituted values lose control characters and are capped at 256 characters; header names are
+  never expanded. `{{external_ip}}` is the access controller's public IP and is empty when `SkipPublicIPCheck` / offline.
+  Variables are deliberately not expanded in upstream addresses (SSRF).
+
+**Unix socket upstreams** (`loadbalance/unix.go`): origin `unix:/abs/clean/path.sock`; absolute, no `.`/`..`/`//`, no control characters,
+at most 104 bytes, no TLS/PROXY protocol/H2C. dpcore dials the socket; active health checks (HTTP and TCP mode) use it too.
+Not supported: WebSocket upgrades (502) and the passive uptime monitor (skipped).
+
+**Client attribute load balancing** (`loadbalance/clientrules.go`): `Config.ClientRules` is an ordered list of `{Name, CIDRs, Countries,
+Upstreams, Fallback any|deny}`. The first match restricts the candidates (after the health/draining filters) to the group and the
+configured algorithm runs inside it; a sticky session pointing outside the group is ignored. The country comes from
+`Option.GeodbStore` and is resolved lazily.
+
+**Advanced regex** (`redirection/advanced.go`): `RuleTable.AdvancedRegex` (`/api/redirect/advancedregex`, default off) matches redirect
+patterns with `github.com/dlclark/regexp2` (MIT) under a 50 ms match timeout, 500 character patterns and 4096 character inputs; a timeout
+counts as "no match".
+
+**Templates and bulk edit** (`ruletemplate.go`, `bulk.go`, API `bulkapi.go`): built in templates "Secure web app", "API backend",
+"WebSocket app", "Static site" plus custom ones in the `ruletemplates` DB table. `POST /api/proxy/add` accepts `template`. A template
+only sets what it lists (tags are added, headers merged) and never touches upstreams, domains or authentication.
+`POST /api/proxy/bulk {rules, action, params, dryrun}`: enable, disable, add_tags, remove_tags, set_waf, set_ratelimit, set_auth
+(`none` needs `Confirm`; otherwise only oauth2/zorxauth), apply_template, delete (needs `Confirm`). An invalid request changes nothing;
+otherwise each rule is applied independently on a copy and reported (partial updates). UI: `script/proxybulk.js`.
+
+Tests: `go test -race ./mod/dynamicproxy/...` (ops_test.go through `ProxyHandler.ServeHTTP`, bulk_test.go, unix_upstream_test.go,
+loadbalance/clientrules_test.go, redirection/advanced_test.go).

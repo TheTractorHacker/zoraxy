@@ -1,0 +1,122 @@
+<!-- Split-horizon DNS responder panel. Loaded into the Network Tools "DNS Responder" tab. API: /api/tools/dnsresponder -->
+<div id="dnsrPanel">
+    <div class="ui info message">
+        <div class="header">Split-horizon helper (off by default)</div>
+        <p>A tiny authoritative DNS server that answers <b>A / AAAA</b> (plus minimal NS / SOA) for the hostnames and aliases of your proxy rules, so LAN clients can resolve
+        your public names straight to this proxy. It is <b>not</b> a general DNS server: every other name is answered <code>REFUSED</code>.
+        Bind it to one specific LAN address (UDP and TCP, default port 5353; port 53 needs privileges). Wildcard rules such as <code>*.example.com</code> answer every matching name.
+        Per client rate limiting, response size limits and a TCP connection cap are always on.</p>
+    </div>
+
+    <div class="ui form">
+        <div class="field">
+            <div class="ui toggle checkbox" id="dnsrEnabled"><input type="checkbox"><label>Enable the DNS responder</label></div>
+        </div>
+        <div class="two fields">
+            <div class="field">
+                <label>Listen address (ip:port)</label>
+                <input type="text" id="dnsrListen" placeholder="192.168.1.2:5353">
+                <small>A specific IP address is required. Without a port, 5353 is used.</small>
+            </div>
+            <div class="field">
+                <label>Answer TTL (seconds)</label>
+                <input type="number" id="dnsrTtl" min="1" max="86400" value="60">
+            </div>
+        </div>
+        <div class="field">
+            <div class="ui checkbox" id="dnsrAll"><input type="checkbox"><label>I understand: allow listening on all interfaces (0.0.0.0 / ::)<br><small>Only needed for a wildcard listen address. Make sure the port is firewalled from the internet.</small></label></div>
+        </div>
+        <div class="two fields">
+            <div class="field">
+                <label>IPv4 returned for A queries</label>
+                <input type="text" id="dnsrV4" placeholder="empty = the listen address (if IPv4)">
+            </div>
+            <div class="field">
+                <label>IPv6 returned for AAAA queries</label>
+                <input type="text" id="dnsrV6" placeholder="empty = the listen address (if IPv6)">
+            </div>
+        </div>
+
+        <h4 class="ui dividing header">Forwarding of other names (optional)</h4>
+        <div class="field">
+            <div class="ui toggle checkbox" id="dnsrFwd"><input type="checkbox"><label>Forward non-hosted names to upstream resolvers<br><small>Only for clients inside the allowed CIDRs below, so this can never become an open resolver.</small></label></div>
+        </div>
+        <div class="two fields">
+            <div class="field">
+                <label>Upstream resolvers (one per line, ip or ip:port)</label>
+                <textarea id="dnsrUp" rows="3" placeholder="1.1.1.1&#10;9.9.9.9:53"></textarea>
+            </div>
+            <div class="field">
+                <label>Allowed client CIDRs (one per line)</label>
+                <textarea id="dnsrCidr" rows="3" placeholder="192.168.0.0/16&#10;fd00::/8"></textarea>
+            </div>
+        </div>
+
+        <h4 class="ui dividing header">Limits</h4>
+        <div class="four fields">
+            <div class="field"><label>Queries/s per client</label><input type="number" id="dnsrQps" min="1" max="10000" step="1"></div>
+            <div class="field"><label>Burst</label><input type="number" id="dnsrBurst" min="1" max="10000"></div>
+            <div class="field"><label>Max UDP size</label><input type="number" id="dnsrUdp" min="512" max="4096"></div>
+            <div class="field"><label>Max TCP connections</label><input type="number" id="dnsrConns" min="1" max="1024"></div>
+        </div>
+        <div class="field" style="max-width: 14em;"><label>TCP timeout (s)</label><input type="number" id="dnsrTcpTo" min="1" max="60"></div>
+
+        <button class="ui basic green button" id="dnsrSave"><i class="save icon"></i> Apply</button>
+        <button class="ui basic button" id="dnsrReload"><i class="refresh icon"></i> Refresh status</button>
+    </div>
+    <div class="ui message" id="dnsrStatus" style="margin-top:1em;"></div>
+</div>
+<script>
+(function(){
+    function lines(v){ return v.split(/[\n,]+/).map(function(x){return x.trim();}).filter(function(x){return x != "";}); }
+    function load(){
+        $.get("/api/tools/dnsresponder", function(d){
+            if (d.error != undefined){ $("#dnsrStatus").text(d.error); return; }
+            var c = d.config, s = d.status;
+            $("#dnsrEnabled").checkbox(c.enabled ? "set checked" : "set unchecked");
+            $("#dnsrAll").checkbox(c.allowAllInterfaces ? "set checked" : "set unchecked");
+            $("#dnsrFwd").checkbox(c.forwardEnabled ? "set checked" : "set unchecked");
+            $("#dnsrListen").val(c.listenAddr); $("#dnsrV4").val(c.ipv4); $("#dnsrV6").val(c.ipv6);
+            $("#dnsrTtl").val(c.ttl); $("#dnsrQps").val(c.rateLimitQps); $("#dnsrBurst").val(c.rateBurst);
+            $("#dnsrUdp").val(c.maxUdpSize); $("#dnsrConns").val(c.maxTcpConns); $("#dnsrTcpTo").val(c.tcpTimeoutSec);
+            $("#dnsrUp").val((c.upstreams || []).join("\n")); $("#dnsrCidr").val((c.allowedCidrs || []).join("\n"));
+            var box = $("#dnsrStatus").removeClass("green red").empty();
+            if (s.running){
+                box.addClass("green").text("Running on " + s.bound + " (UDP+TCP). Queries: " + s.stats.queries + ", answered: " + s.stats.answered +
+                    ", refused: " + s.stats.refused + ", forwarded: " + s.stats.forwarded + ", rate limited: " + s.stats.rateLimited);
+            }else if (s.error){
+                box.addClass("red").text("Not running: " + s.error);
+            }else{
+                box.text("Not running.");
+            }
+        });
+    }
+    $("#dnsrPanel .checkbox").checkbox();
+    $("#dnsrReload").on("click", load);
+    $("#dnsrSave").on("click", function(){
+        var cfg = {
+            enabled: $("#dnsrEnabled").checkbox("is checked"),
+            listenAddr: $("#dnsrListen").val().trim(),
+            allowAllInterfaces: $("#dnsrAll").checkbox("is checked"),
+            ipv4: $("#dnsrV4").val().trim(), ipv6: $("#dnsrV6").val().trim(),
+            ttl: parseInt($("#dnsrTtl").val()) || 0,
+            forwardEnabled: $("#dnsrFwd").checkbox("is checked"),
+            upstreams: lines($("#dnsrUp").val()), allowedCidrs: lines($("#dnsrCidr").val()),
+            rateLimitQps: parseFloat($("#dnsrQps").val()) || 0, rateBurst: parseInt($("#dnsrBurst").val()) || 0,
+            maxUdpSize: parseInt($("#dnsrUdp").val()) || 0, maxTcpConns: parseInt($("#dnsrConns").val()) || 0,
+            tcpTimeoutSec: parseInt($("#dnsrTcpTo").val()) || 0
+        };
+        $.cjax({
+            url: "/api/tools/dnsresponder",
+            method: "POST",
+            data: {config: JSON.stringify(cfg)},
+            success: function(data){
+                if (data.error != undefined){ msgbox(data.error, false, 6000); }
+                else { msgbox("DNS responder settings applied"); }
+                load();
+            }
+        });
+    });
+    load();
+})();
+</script>

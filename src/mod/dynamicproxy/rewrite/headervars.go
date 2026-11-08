@@ -42,7 +42,7 @@ func GetHeaderVariableValuesFromRequest(r *http.Request) map[string]string {
 // use for early exit when processing the headers
 func CustomHeadersIncludeDynamicVariables(userDefinedHeaders []*UserDefinedHeader) bool {
 	for _, header := range userDefinedHeaders {
-		if strings.Contains(header.Value, "$") {
+		if strings.Contains(header.Value, "$") || ContainsTemplateVars(header.Value) {
 			return true
 		}
 	}
@@ -63,6 +63,7 @@ func PopulateRequestHeaderVariables(r *http.Request, userDefinedHeaders []*UserD
 		for key, value := range vars {
 			thisHeader.Value = strings.ReplaceAll(thisHeader.Value, key, value)
 		}
+		thisHeader.Value = ExpandTemplateVars(r, thisHeader.Value)
 		populatedHeaders = append(populatedHeaders, thisHeader)
 	}
 	return populatedHeaders

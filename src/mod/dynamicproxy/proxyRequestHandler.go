@@ -134,6 +134,9 @@ func (router *Router) rewriteURL(rooturl string, requestURL string) string {
 // this prevents unnecessary external DNS lookup and connection, return true if swapped and request is already handled
 // by the loopback handler. Only continue if return is false
 func (h *ProxyHandler) upstreamHostSwap(w http.ResponseWriter, r *http.Request, selectedUpstream *loadbalance.Upstream, currentTarget *ProxyEndpoint) bool {
+	if selectedUpstream.IsUnix() {
+		return false //unix socket upstreams never loop back to a hostname rule
+	}
 	upstreamHostname := selectedUpstream.OriginIpOrDomain
 	if strings.Contains(upstreamHostname, ":") {
 		upstreamHostname = strings.Split(upstreamHostname, ":")[0]
@@ -156,6 +159,7 @@ func (h *ProxyHandler) upstreamHostSwap(w http.ResponseWriter, r *http.Request, 
 
 // Handle host request
 func (h *ProxyHandler) hostRequest(w http.ResponseWriter, r *http.Request, target *ProxyEndpoint) {
+	armOps(r)
 	r.Header.Set("X-Forwarded-Host", r.Host)
 	r.Header.Set("X-Forwarded-Server", "zoraxy-"+h.Parent.Option.HostUUID)
 	reqHostname := r.Host
@@ -264,6 +268,10 @@ func (h *ProxyHandler) hostWebSocketRequest(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "WebSocket connections are disabled for this endpoint", http.StatusForbidden)
 		return
 	}
+	if selectedUpstream.IsUnix() {
+		http.Error(w, "WebSocket is not supported on unix socket upstreams", http.StatusBadGateway)
+		return
+	}
 	//Handle WebSocket request. Forward the custom Upgrade header and rewrite origin
 	r.Header.Set("Zr-Origin-Upgrade", "websocket")
 	requestURL := r.URL.String()
@@ -300,6 +308,7 @@ func (h *ProxyHandler) hostWebSocketRequest(w http.ResponseWriter, r *http.Reque
 
 // Handle vdir type request
 func (h *ProxyHandler) vdirRequest(w http.ResponseWriter, r *http.Request, target *VirtualDirectoryEndpoint) {
+	armOps(r)
 	rewriteURL := h.Parent.rewriteURL(target.MatchingPath, r.RequestURI)
 	r.URL, _ = url.Parse(rewriteURL)
 	r.Header.Set("X-Forwarded-Host", r.Host)

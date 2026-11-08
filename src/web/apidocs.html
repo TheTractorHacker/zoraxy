@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zoraxy REST API</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:60rem;margin:0 auto;padding:1rem 1.2rem;color:#222;background:#fff}
+@media (prefers-color-scheme:dark){body{color:#ddd;background:#1b1c1d}a{color:#6cf}code,pre{background:#2a2b2c!important}}
+h1{margin-bottom:.2rem} .desc{white-space:pre-wrap}
+.op{border:1px solid #8884;border-radius:6px;margin:.6rem 0;padding:.5rem .8rem}
+.m{display:inline-block;min-width:4.5rem;font-weight:700;font-family:monospace}
+.GET{color:#1a7f37}.POST{color:#0969da}.PATCH{color:#9a6700}.DELETE{color:#cf222e}
+code,pre{background:#f3f3f3;padding:.1rem .3rem;border-radius:3px}
+pre{padding:.6rem;overflow:auto}
+.sm{opacity:.75}
+</style>
+</head>
+<body>
+<h1 id="t">Zoraxy REST API</h1>
+<p class="sm">Raw specification: <a href="openapi.yaml">openapi.yaml</a> / <a href="openapi.json">openapi.json</a></p>
+<div class="desc" id="d"></div>
+<h2>Example</h2>
+<pre>curl -H "Authorization: Bearer zrx_..." https://your-zoraxy:8000/api/v1/proxy-rules</pre>
+<h2>Endpoints</h2>
+<div id="ops">Loading...</div>
+<script>
+(function(){
+  function el(tag, cls, text){var e=document.createElement(tag); if(cls)e.className=cls; if(text!==undefined)e.textContent=text; return e;}
+  fetch("openapi.json").then(function(r){return r.json();}).then(function(spec){
+    document.getElementById("t").textContent = spec.info.title + " " + spec.info.version;
+    document.getElementById("d").textContent = spec.info.description || "";
+    var box = document.getElementById("ops"); box.textContent = "";
+    Object.keys(spec.paths).forEach(function(p){
+      Object.keys(spec.paths[p]).forEach(function(m){
+        if (["get","post","put","patch","delete"].indexOf(m) < 0) return;
+        var op = spec.paths[p][m], M = m.toUpperCase();
+        var d = el("div","op");
+        d.appendChild(el("span","m "+M,M));
+        d.appendChild(el("code","",p));
+        d.appendChild(el("div","",op.summary||""));
+        if (op.description) d.appendChild(el("div","sm",op.description));
+        box.appendChild(d);
+      });
+    });
+  }).catch(function(){ document.getElementById("ops").textContent = "Unable to load the specification."; });
+})();
+</script>
+</body>
+</html>

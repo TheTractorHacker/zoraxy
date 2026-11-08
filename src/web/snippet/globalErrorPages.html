@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="zoraxy.csrf.Token" content="{{.csrfToken}}">
+        <link rel="stylesheet" href="../script/semantic/semantic.min.css">
+        <script src="../script/jquery-3.6.0.min.js"></script>
+        <script src="../script/semantic/semantic.min.js"></script>
+        <script src="../script/utils.js"></script>
+    </head>
+    <body>
+        <link rel="stylesheet" href="../darktheme.css">
+        <script src="../script/darktheme.js"></script>
+        <br>
+        <div class="ui container">
+            <h3 class="ui header">Default error pages</h3>
+            <p>Used by every proxy rule that is set to "use the global default". A rule can override or switch this off in its own <i>Error Pages, Static Responses, CORS &amp; Bandwidth</i> editor.</p>
+            <div class="ui form">
+                <div class="field"><div class="ui toggle checkbox"><input type="checkbox" id="gepOn"><label>Replace upstream error responses with the page below</label></div></div>
+                <div class="field">
+                    <label>Status codes (comma separated, 400-599)</label>
+                    <input type="text" id="gepStatuses" placeholder="502, 503, 504">
+                    <small>Also applies to errors Zoraxy generates itself (521 upstream unreachable, 404 DNS failure, 503 busy). Event streams, gRPC and WebSocket upgrades are never replaced. Login challenges (401) and CAPTCHA pages are produced before proxying and are not affected.</small>
+                </div>
+                <div class="field">
+                    <label>Page template (HTML, empty = built in page)</label>
+                    <textarea id="gepTemplate" rows="9" style="font-family: monospace;"></textarea>
+                    <small>Variables: <code>{{.Status}}</code> <code>{{.StatusText}}</code> <code>{{.RequestID}}</code> <code>{{.Host}}</code> <code>{{.Path}}</code> <code>{{.RuleName}}</code> (HTML escaped, max 64 KiB)</small>
+                </div>
+                <div class="field"><label>Retry-After for 429 / 503 (seconds, 0 = none)</label><input type="number" id="gepRetry" min="0" max="86400" value="0"></div>
+                <button class="ui primary button" onclick="saveGlobal();"><i class="save icon"></i> Save</button>
+                <button class="ui basic button" onclick="preview();"><i class="eye icon"></i> Preview</button>
+                <div id="gepErr" class="ui red mini message" style="display:none;"></div>
+                <iframe id="gepPreview" sandbox="" style="width:100%; height:220px; border:1px solid #ccc; margin-top:0.6em; background:#fff;"></iframe>
+            </div>
+            <br><br>
+        </div>
+        <script>
+            $('.ui.checkbox').checkbox();
+            function load() {
+                $.get('/api/proxy/ops/globalerrors', function(c) {
+                    $('#gepOn').prop('checked', c.Mode === 'on');
+                    $('#gepStatuses').val((c.Statuses || []).join(', '));
+                    $('#gepTemplate').val(c.Template || '');
+                    $('#gepRetry').val(c.RetryAfterSeconds || 0);
+                });
+            }
+            function saveGlobal() {
+                let st = $('#gepStatuses').val().split(',').map(function(x){ return parseInt(x.trim(), 10); }).filter(function(x){ return !isNaN(x); });
+                let cfg = {Mode: $('#gepOn').is(':checked') ? 'on' : 'off', Statuses: st, Template: $('#gepTemplate').val(), RetryAfterSeconds: parseInt($('#gepRetry').val(), 10) || 0};
+                $.cjax({url: '/api/proxy/ops/globalerrors', method: 'POST', data: {config: JSON.stringify(cfg)}, success: function(r) {
+                    if (r && r.error) { parent.msgbox(r.error, false, 8000); } else { parent.msgbox('Saved', true); }
+                }});
+            }
+            function preview() {
+                $('#gepErr').hide();
+                $.cjax({url: '/api/proxy/ops/errorpreview', method: 'POST', data: {template: $('#gepTemplate').val(), status: 503}, success: function(r) {
+                    if (r && r.error) { $('#gepErr').text(r.error).show(); return; }
+                    $('#gepPreview').attr('srcdoc', r.html);
+                }});
+            }
+            load();
+        </script>
+    </body>
+</html>

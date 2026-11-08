@@ -14,6 +14,7 @@ import (
 	"imuslab.com/zoraxy/mod/info/hardwareinfo"
 	"imuslab.com/zoraxy/mod/ipscan"
 	"imuslab.com/zoraxy/mod/netstat"
+	"imuslab.com/zoraxy/mod/netcalc"
 	"imuslab.com/zoraxy/mod/netutils"
 	"imuslab.com/zoraxy/mod/tlscert"
 	"imuslab.com/zoraxy/mod/utils"
@@ -69,6 +70,7 @@ func RegisterHTTPProxyAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/proxy/setIncoming", HandleIncomingPortSet)
 	authRouter.HandleFunc("/api/proxy/useHttpsRedirect", HandleUpdateHttpsRedirect)
 	authRouter.HandleFunc("/api/proxy/listenPort80", HandleUpdatePort80Listener)
+	authRouter.HandleFunc("/api/proxy/httpListenAddr", HandleHttpListenAddr)
 	authRouter.HandleFunc("/api/proxy/requestIsProxied", HandleManagementProxyCheck)
 	authRouter.HandleFunc("/api/proxy/developmentMode", HandleDevelopmentModeChange)
 	authRouter.HandleFunc("/api/proxy/sanitiseClientIP", HandleSanitiseClientIPChange)
@@ -175,6 +177,8 @@ func RegisterRedirectionAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/redirect/edit", handleEditRedirectionRule)
 	authRouter.HandleFunc("/api/redirect/toggle", handleToggleRedirectionRuleEnable)
 	authRouter.HandleFunc("/api/redirect/regex", handleToggleRedirectRegexpSupport)
+	authRouter.HandleFunc("/api/redirect/advancedregex", handleRedirectAdvancedRegex)
+	authRouter.HandleFunc("/api/redirect/advancedregex/check", handleRedirectAdvancedRegexCheck)
 	authRouter.HandleFunc("/api/redirect/case_sensitive", handleToggleRedirectCaseSensitivity)
 }
 
@@ -317,6 +321,8 @@ func RegisterStaticWebServerAPIs(authRouter *auth.RouterDef) {
 
 // Register the APIs for Network Utilities functions
 func RegisterNetworkUtilsAPIs(authRouter *auth.RouterDef) {
+	authRouter.HandleFunc("/api/tools/netcalc", netcalc.HandleNetCalc)
+	authRouter.HandleFunc("/api/tools/dnsresponder", HandleDNSResponder)
 	authRouter.HandleFunc("/api/tools/ipscan", ipscan.HandleIpScan)
 	authRouter.HandleFunc("/api/tools/portscan", ipscan.HandleScanPort)
 	authRouter.HandleFunc("/api/tools/traceroute", netutils.HandleTraceRoute)
@@ -443,7 +449,9 @@ func initAPIs(targetMux *http.ServeMux) {
 	RegisterAuthAPIs(requireAuth, targetMux)
 	RegisterHTTPProxyAPIs(authRouter)
 	RegisterWAFAPIs(authRouter)
+	RegisterBulkAPIs(authRouter)
 	RegisterNetworkingAPIs(authRouter)
+	RegisterOpsAPIs(authRouter)
 	RegisterTLSAPIs(authRouter)
 	RegisterAuthenticationHandlerAPIs(authRouter)
 	RegisterZorxAuthUserManagementAPIs(authRouter)
@@ -459,6 +467,7 @@ func initAPIs(targetMux *http.ServeMux) {
 	RegisterMetricsAPIs(authRouter)
 	RegisterACMEAndAutoRenewerAPIs(authRouter)
 	RegisterStaticWebServerAPIs(authRouter)
+	RegisterAPIv1(authRouter)
 	RegisterPluginAPIs(authRouter)
 	RegisterAbuseAPIs(authRouter)
 	RegisterSecurityAPIs(authRouter)

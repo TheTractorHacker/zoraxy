@@ -201,6 +201,9 @@ func GetUptimeTargetsFromReverseProxyRules(dp *dynamicproxy.Router) []*uptime.Ta
 		}
 		isMultipleUpstreams := len(target.ActiveOrigins) > 1
 		for i, origin := range target.ActiveOrigins {
+			if origin.IsUnix() {
+				continue //the passive uptime monitor cannot reach unix socket upstreams; use the active health check
+			}
 			url := "http://" + origin.OriginIpOrDomain
 			protocol := "http"
 			if origin.RequireTLS {

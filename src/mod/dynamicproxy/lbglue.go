@@ -25,6 +25,16 @@ func (router *Router) newSelectOptions(r *http.Request, ep *ProxyEndpoint) *load
 		ClientIP: func() string {
 			return router.GetClientIPForEndpoint(r, ep)
 		},
+		ClientCountry: func() string {
+			if router.Option.GeodbStore == nil {
+				return ""
+			}
+			info, err := router.Option.GeodbStore.ResolveCountryCodeFromIP(router.GetClientIPForEndpoint(r, ep))
+			if err != nil || info == nil {
+				return ""
+			}
+			return info.CountryIsoCode
+		},
 	}
 }
 

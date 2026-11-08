@@ -233,7 +233,7 @@
                     <th class="details-view">Authentication</th>
                     <th>Virtual Directory</th>
                     <th class="no-sort">Tags</th>
-                    <th class="no-sort" style="width:100px; cursor: default !important;"></th>
+                    <th class="no-sort" style="width:160px; cursor: default !important;"></th>
                 </tr>
             </thead>
             <tbody id="httpProxyList">
@@ -569,6 +569,7 @@
                             <br>
                             <button class="ui basic compact small button editPathRulesBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="ui teal road icon"></i> Path Rules</button>
                             <button class="ui basic compact small button editNetworkingBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="ui teal id card icon"></i> Client Certificates, Peers &amp; Secondary TLS</button>
+                            <button class="ui basic compact small button editOpsBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="ui orange magic icon"></i> Error Pages, Static Responses, CORS &amp; Bandwidth</button>
                             <div class="ui divider"></div>
                             <!-- Block Common Exploits -->
                             <label><b>Exploits Prevention</b></label>
@@ -1174,7 +1175,7 @@
                             ${subd.AuthenticationProvider.AuthMethod == 0x0 && !subd.RequireRateLimit?`<small style="opacity: 0.3; pointer-events: none; user-select: none;">No Special Settings</small>`:""}
                         </td> -->
                         <td class="center aligned ignoremw" editable="true" datatype="action" data-label="">
-                            <button title="Edit Proxy Rule" class="ui circular small basic icon button editBtn inlineEditActionBtn" onclick='editEndpoint("${(subd.RootOrMatchingDomain).hexEncode()}")'><i class="ellipsis vertical icon"></i></button>
+                            <button title="Edit Proxy Rule" class="ui small blue basic button editBtn inlineEditActionBtn" onclick='editEndpoint("${(subd.RootOrMatchingDomain).hexEncode()}")'><i class="edit icon"></i> Edit</button>
                             <button title="Remove Proxy Rule" class="ui circular mini red basic icon button inlineEditActionBtn" onclick='deleteEndpoint("${(subd.RootOrMatchingDomain).hexEncode()}")'><i class="trash icon"></i></button>
                         </td>
                     </tr>`);
@@ -2450,6 +2451,9 @@
         editor.find(".editNetworkingBtn").off("click").on("click", function(){
             editNetworkingOptions(uuid);
         });
+        editor.find(".editOpsBtn").off("click").on("click", function(){
+            showEditorSideWrapper("snippet/opsEditor.html?t=" + Date.now() + "#" + encodeURIComponent(JSON.stringify({ept: "host", ep: uuid})));
+        });
         editor.find(".editSsoExceptionsBtn").off("click").on("click", function(){
             editSsoExceptions(uuid);
         });
@@ -2939,3 +2943,4 @@
     }
         
 </script>
+<script src="script/proxybulk.js"></script>

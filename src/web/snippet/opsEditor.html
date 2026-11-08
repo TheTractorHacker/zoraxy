@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <!-- Notes: This should be opened in its original path -->
+        <meta charset="utf-8">
+        <meta name="zoraxy.csrf.Token" content="{{.csrfToken}}">
+        <link rel="stylesheet" href="../script/semantic/semantic.min.css">
+        <script src="../script/jquery-3.6.0.min.js"></script>
+        <script src="../script/semantic/semantic.min.js"></script>
+        <script src="../script/utils.js"></script>
+    </head>
+    <body>
+        <link rel="stylesheet" href="../darktheme.css">
+        <script src="../script/darktheme.js"></script>
+        <br>
+        <div class="ui container">
+            <h3 class="ui header">Error pages, static responses, CORS and bandwidth</h3>
+            <p>Per proxy rule options, all <b>off</b> until configured. Everything is saved with one button at the bottom.</p>
+
+            <div class="ui top attached tabular menu" id="opsTabs">
+                <a class="item active" data-tab="errp">Error pages</a>
+                <a class="item" data-tab="stat">Static responses</a>
+                <a class="item" data-tab="cors">CORS</a>
+                <a class="item" data-tab="bw">Bandwidth</a>
+            </div>
+
+            <!-- Error pages -->
+            <div class="ui bottom attached tab segment active" data-tab="errp">
+                <div class="ui form">
+                    <div class="field">
+                        <label>Mode</label>
+                        <select id="epMode">
+                            <option value="inherit">Use the global default (Ingress settings)</option>
+                            <option value="off">Off for this rule</option>
+                            <option value="on">Custom for this rule</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Status codes to replace (comma separated, 400-599)</label>
+                        <input type="text" id="epStatuses" placeholder="502, 503, 504">
+                        <small>When the upstream answers with one of these codes, or Zoraxy itself fails (no upstream, timeout: 521, 404 for a DNS failure, 503 when busy), the page below is sent instead of the original body. Streaming (event-stream), gRPC and WebSocket upgrade responses are never replaced.</small>
+                    </div>
+                    <div class="field">
+                        <label>Page template (HTML, leave empty for the built in page)</label>
+                        <textarea id="epTemplate" rows="8" style="font-family: monospace;" placeholder="<h1>{{.Status}} {{.StatusText}}</h1>"></textarea>
+                        <small>Variables: <code>{{.Status}}</code> <code>{{.StatusText}}</code> <code>{{.RequestID}}</code> <code>{{.Host}}</code> <code>{{.Path}}</code> <code>{{.RuleName}}</code>. Values are HTML escaped. Maximum 64 KiB.</small>
+                    </div>
+                    <div class="field">
+                        <label>Retry-After for 429 / 503 (seconds, 0 = none)</label>
+                        <input type="number" id="epRetry" min="0" max="86400" value="0">
+                    </div>
+                    <button class="ui basic button" onclick="previewErrorPage();"><i class="eye icon"></i> Preview</button>
+                    <span class="ui mini input"><select id="epPreviewStatus"><option>502</option><option>503</option><option>504</option><option>404</option><option>500</option></select></span>
+                    <div id="epPreviewError" class="ui red mini message" style="display:none;"></div>
+                    <iframe id="epPreview" sandbox="" style="width:100%; height:220px; border:1px solid #ccc; margin-top:0.6em; background:#fff;"></iframe>
+                    <div class="field" style="margin-top:0.8em;">
+                        <div class="ui checkbox"><input type="checkbox" id="opsExposeId"><label>Send an <code>X-Request-Id</code> response header (also shown on error pages as <code>{{.RequestID}}</code>)</label></div>
+                    </div>
+                    <div class="field">
+                        <div class="ui checkbox"><input type="checkbox" id="opsForwardId"><label>Forward <code>X-Request-Id</code> to the upstream</label></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Static responses -->
+            <div class="ui bottom attached tab segment" data-tab="stat">
+                <p>Answered by Zoraxy without contacting the upstream, e.g. <code>/robots.txt</code>, <code>/.well-known/security.txt</code>, <code>/healthz</code>. Body and header values accept <code>{{host}}</code> <code>{{client_ip}}</code> <code>{{request_id}}</code> <code>{{rule_name}}</code> <code>{{external_ip}}</code>.</p>
+                <div style="overflow-x:auto;">
+                <table class="ui very compact celled table" id="staticTable">
+                    <thead><tr><th>Path</th><th>Match</th><th>Status</th><th>Content type</th><th>Body</th><th>Location</th><th>Extra headers (Name: value per line)</th><th>Public</th><th></th></tr></thead>
+                    <tbody></tbody>
+                </table>
+                </div>
+                <button class="ui basic mini button" onclick="addStatic();"><i class="plus icon"></i> Add static response</button>
+                <div class="ui basic message"><b>Public</b> responses are served before the client certificate, WAF, rate limit and authentication checks (the access list still applies) - use for health checks and robots.txt. Others are served after authentication. Defaults to GET and HEAD, status 200.</div>
+            </div>
+
+            <!-- CORS -->
+            <div class="ui bottom attached tab segment" data-tab="cors">
+                <div class="ui form">
+                    <div class="field"><div class="ui toggle checkbox"><input type="checkbox" id="corsEnabled"><label>Handle CORS in the proxy (preflight requests are answered without contacting the upstream)</label></div></div>
+                    <div class="field">
+                        <label>Allowed origins (one per line)</label>
+                        <textarea id="corsOrigins" rows="4" placeholder="https://app.example.com&#10;https://*.example.com&#10;regex:https://dev[0-9]+\.example\.org&#10;*"></textarea>
+                        <small>Exact origin, a single <code>*</code> sub-domain wildcard, <code>regex:</code> (RE2) or <code>*</code> for any origin. <code>*</code> cannot be combined with credentials.</small>
+                    </div>
+                    <div class="two fields">
+                        <div class="field"><label>Allowed methods (comma separated)</label><input type="text" id="corsMethods" placeholder="GET, HEAD, POST"></div>
+                        <div class="field"><label>Allowed request headers (empty = any requested, <code>*</code> = any)</label><input type="text" id="corsHeaders" placeholder="Content-Type, Authorization"></div>
+                    </div>
+                    <div class="two fields">
+                        <div class="field"><label>Exposed response headers</label><input type="text" id="corsExpose" placeholder="X-Total-Count"></div>
+                        <div class="field"><label>Preflight max age (seconds, 0 = omit)</label><input type="number" id="corsMaxAge" min="0" max="86400" value="600"></div>
+                    </div>
+                    <div class="field"><div class="ui checkbox"><input type="checkbox" id="corsCreds"><label>Allow credentials (cookies, Authorization); the matching origin is echoed and <code>Vary: Origin</code> is added</label></div></div>
+                </div>
+                <div class="ui basic message">CORS headers set by the upstream are replaced by this policy. Requests from origins that do not match get no CORS headers; their preflight is answered with 403.</div>
+            </div>
+
+            <!-- Bandwidth -->
+            <div class="ui bottom attached tab segment" data-tab="bw">
+                <div class="ui form">
+                    <div class="two fields">
+                        <div class="field"><label>Limit per connection (KiB/s, 0 = unlimited)</label><input type="number" id="bwConn" min="0" value="0"></div>
+                        <div class="field"><label>Limit per client IP, shared by all its connections (KiB/s, 0 = unlimited)</label><input type="number" id="bwClient" min="0" value="0"></div>
+                    </div>
+                </div>
+                <div class="ui basic message">Limits the speed of responses sent to clients (like nginx <code>limit_rate</code>). Streaming still works but is paced. WebSocket traffic is not limited. Minimum 1 KiB/s.</div>
+            </div>
+
+            <br>
+            <button class="ui primary button" onclick="saveOps();"><i class="save icon"></i> Save</button>
+            <br><br>
+        </div>
+
+        <script>
+            let editingEndpoint = {};
+            if (window.location.hash.length > 1) {
+                try { editingEndpoint = JSON.parse(decodeURIComponent(window.location.hash.substr(1))); } catch (ex) { console.log("bad hash", ex); }
+            }
+            $('#opsTabs .item').tab();
+            $('.ui.checkbox').checkbox();
+            let loaded = {};
+
+            function csv(id) { return $(id).val().split(',').map(function(x){ return x.trim(); }).filter(function(x){ return x; }); }
+            function lines(id) { return $(id).val().split('\n').map(function(x){ return x.trim(); }).filter(function(x){ return x; }); }
+
+            function staticRow(s) {
+                s = s || {Path: "/", MatchMode: "exact", Status: 200, ContentType: "text/plain; charset=utf-8", Body: "", Location: "", Headers: [], Public: true};
+                let tr = $('<tr class="srow"></tr>');
+                tr.append($('<td></td>').append($('<input type="text" class="sPath" style="width:9em">').val(s.Path)));
+                let m = $('<select class="sMode"><option value="exact">exact</option><option value="prefix">prefix</option></select>').val(s.MatchMode || "exact");
+                tr.append($('<td></td>').append(m));
+                tr.append($('<td></td>').append($('<input type="number" class="sStatus" style="width:5em">').val(s.Status || 200)));
+                tr.append($('<td></td>').append($('<input type="text" class="sCT" style="width:9em">').val(s.ContentType || "")));
+                tr.append($('<td></td>').append($('<textarea class="sBody" rows="2" style="width:12em"></textarea>').val(s.Body || "")));
+                tr.append($('<td></td>').append($('<input type="text" class="sLoc" style="width:9em">').val(s.Location || "")));
+                tr.append($('<td></td>').append($('<textarea class="sHdr" rows="2" style="width:12em"></textarea>').val((s.Headers || []).map(function(h){ return h.Name + ": " + h.Value; }).join("\n"))));
+                tr.append($('<td></td>').append($('<input type="checkbox" class="sPub">').prop("checked", !!s.Public)));
+                tr.append($('<td></td>').append($('<button class="ui red basic mini icon button" title="Remove"><i class="trash icon"></i></button>').on("click", function(){ tr.remove(); })));
+                $('#staticTable tbody').append(tr);
+            }
+            function addStatic() { staticRow(); }
+
+            function collectOps() {
+                let ops = {};
+                let mode = $('#epMode').val();
+                let st = csv('#epStatuses').map(function(x){ return parseInt(x, 10); }).filter(function(x){ return !isNaN(x); });
+                if (mode !== "inherit" || st.length || $('#epTemplate').val()) {
+                    ops.ErrorPages = {Mode: mode, Statuses: st, Template: $('#epTemplate').val(), RetryAfterSeconds: parseInt($('#epRetry').val(), 10) || 0};
+                    if (loaded.ErrorPages && loaded.ErrorPages.StatusTemplates) { ops.ErrorPages.StatusTemplates = loaded.ErrorPages.StatusTemplates; }
+                }
+                ops.StaticResponses = [];
+                $('#staticTable tbody tr').each(function(){
+                    let r = $(this);
+                    let hdrs = [];
+                    r.find('.sHdr').val().split('\n').forEach(function(l){
+                        let i = l.indexOf(':');
+                        if (i > 0) { hdrs.push({Name: l.substr(0, i).trim(), Value: l.substr(i + 1).trim()}); }
+                    });
+                    ops.StaticResponses.push({Path: r.find('.sPath').val().trim(), MatchMode: r.find('.sMode').val(), Status: parseInt(r.find('.sStatus').val(), 10) || 200,
+                        ContentType: r.find('.sCT').val().trim(), Body: r.find('.sBody').val(), Location: r.find('.sLoc').val().trim(), Headers: hdrs, Public: r.find('.sPub').is(':checked')});
+                });
+                ops.CORS = {Enabled: $('#corsEnabled').is(':checked'), AllowedOrigins: lines('#corsOrigins'), AllowedMethods: csv('#corsMethods'), AllowedHeaders: csv('#corsHeaders'),
+                    ExposeHeaders: csv('#corsExpose'), AllowCredentials: $('#corsCreds').is(':checked'), MaxAgeSeconds: parseInt($('#corsMaxAge').val(), 10) || 0};
+                let bc = Math.round((parseFloat($('#bwConn').val()) || 0) * 1024), bp = Math.round((parseFloat($('#bwClient').val()) || 0) * 1024);
+                if (bc > 0 || bp > 0) { ops.Bandwidth = {BytesPerSecond: bc, PerClientBytesPerSecond: bp}; }
+                ops.ExposeRequestID = $('#opsExposeId').is(':checked');
+                ops.ForwardRequestID = $('#opsForwardId').is(':checked');
+                return ops;
+            }
+
+            function saveOps() {
+                $.cjax({
+                    url: '/api/proxy/ops/set', method: 'POST',
+                    data: {ep: editingEndpoint.ep, config: JSON.stringify(collectOps())},
+                    success: function(resp) {
+                        if (resp && resp.error) { parent.msgbox(resp.error, false, 8000); } else { parent.msgbox("Saved", true); }
+                    }
+                });
+            }
+
+            function previewErrorPage() {
+                $('#epPreviewError').hide();
+                $.cjax({
+                    url: '/api/proxy/ops/errorpreview', method: 'POST',
+                    data: {template: $('#epTemplate').val(), status: $('#epPreviewStatus').val()},
+                    success: function(resp) {
+                        if (resp && resp.error) { $('#epPreviewError').text(resp.error).show(); return; }
+                        $('#epPreview').attr('srcdoc', resp.html);
+                    }
+                });
+            }
+
+            function loadOps() {
+                $.get('/api/proxy/ops/get?ep=' + encodeURIComponent(editingEndpoint.ep), function(resp) {
+                    if (resp && resp.error) { parent.msgbox(resp.error, false, 8000); return; }
+                    let o = resp.Ops || {};
+                    loaded = o;
+                    let ep = o.ErrorPages || {};
+                    $('#epMode').val(ep.Mode || "inherit");
+                    $('#epStatuses').val((ep.Statuses || []).join(", "));
+                    $('#epTemplate').val(ep.Template || "");
+                    $('#epRetry').val(ep.RetryAfterSeconds || 0);
+                    (o.StaticResponses || []).forEach(staticRow);
+                    let c = o.CORS || {};
+                    $('#corsEnabled').prop("checked", !!c.Enabled);
+                    $('#corsOrigins').val((c.AllowedOrigins || []).join("\n"));
+                    $('#corsMethods').val((c.AllowedMethods || []).join(", "));
+                    $('#corsHeaders').val((c.AllowedHeaders || []).join(", "));
+                    $('#corsExpose').val((c.ExposeHeaders || []).join(", "));
+                    $('#corsCreds').prop("checked", !!c.AllowCredentials);
+                    $('#corsMaxAge').val(c.MaxAgeSeconds === undefined ? 600 : c.MaxAgeSeconds);
+                    let b = o.Bandwidth || {};
+                    $('#bwConn').val((b.BytesPerSecond || 0) / 1024);
+                    $('#bwClient').val((b.PerClientBytesPerSecond || 0) / 1024);
+                    $('#opsExposeId').prop("checked", !!o.ExposeRequestID);
+                    $('#opsForwardId').prop("checked", !!o.ForwardRequestID);
+                });
+            }
+            loadOps();
+        </script>
+    </body>
+</html>

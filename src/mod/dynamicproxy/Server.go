@@ -65,6 +65,7 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		defer abuseDone()
 		w = h.Parent.pluginWrapResponse(w, r, sep) //plugin response stage, no-op without response plugins
+		w = h.Parent.opsBegin(w, r, sep)           //request vars + CORS / error page / bandwidth wrapper (ops_handlers.go)
 		if h.runEndpointChain(w, r, sep, domainOnly) {
 			return
 		}
@@ -298,6 +299,11 @@ func (h *ProxyHandler) runEndpointChain(w http.ResponseWriter, r *http.Request, 
 		return true
 	}
 
+	//CORS preflight and public static responses (robots.txt, health checks ...) are answered before the heavier checks
+	if h.handleCORSPreflight(w, r, sep) || h.handleStaticResponses(w, r, sep, true) {
+		return true
+	}
+
 	//Networking: client certificate policy (mTLS) and path scoped rules, see clientcert.go / pathrules.go
 	if h.enforceClientCert(w, r, sep) || h.handlePathRules(w, r, sep) || h.handleHeaderRules(w, r, sep) || h.handleBotRules(w, r, sep) {
 		return true
@@ -345,6 +351,11 @@ func (h *ProxyHandler) runEndpointChain(w http.ResponseWriter, r *http.Request, 
 	//Validate auth (basic auth or SSO auth)
 	if handleAuthProviderRouting(sep, w, r, h) {
 		//Request handled by subroute
+		return true
+	}
+
+	//Static responses that sit behind authentication
+	if h.handleStaticResponses(w, r, sep, false) {
 		return true
 	}
 
