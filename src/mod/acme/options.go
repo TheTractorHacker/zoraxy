@@ -1,7 +1,9 @@
 package acme
 
 import (
+	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"time"
 )
@@ -111,3 +113,15 @@ var (
 	errNoDomains         = errors.New("could not read the domains of this certificate")
 	errExternallyManaged = errors.New("this certificate is managed externally (uploaded, mapped directory or CSR) and cannot be renewed by ACME")
 )
+
+// SaveCertInfoJSON writes certificate metadata (the <name>.json next to <name>.pem).
+func SaveCertInfoJSON(filename string, info *CertificateInfoJSON, mode os.FileMode) error {
+	js, err := json.Marshal(info)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filename, js, mode); err != nil {
+		return err
+	}
+	return os.Chmod(filename, mode)
+}

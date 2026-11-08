@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"imuslab.com/zoraxy/mod/offline"
 	"net/http"
 	"net/mail"
 	"os"
@@ -100,7 +101,7 @@ func NewAutoRenewer(config string, certFolder string, renewCheckInterval int64, 
 		thisRenewer.StartAutoRenewTicker()
 
 		//Check and renew certificate on startup
-		go thisRenewer.CheckAndRenewCertificates()
+		go thisRenewer.backgroundCheck()
 	}
 
 	return &thisRenewer, nil
@@ -108,6 +109,17 @@ func NewAutoRenewer(config string, certFolder string, renewCheckInterval int64, 
 
 func (a *AutoRenewer) Logf(message string, err error) {
 	a.Logger.PrintAndLog("cert-renew", message, err)
+}
+
+// backgroundCheck is the unattended renew run (start-up and ticker). Offline mode skips it, an
+// administrator pressing "renew now" still works.
+func (a *AutoRenewer) backgroundCheck() {
+	if offline.Enabled() {
+		a.Logf("Offline mode: scheduled certificate renewal skipped (use Renew now to renew explicitly)", nil)
+		return
+	}
+	a.Logf("Check and renew certificates in progress", nil)
+	a.CheckAndRenewCertificates()
 }
 
 func (a *AutoRenewer) StartAutoRenewTicker() {
@@ -128,8 +140,7 @@ func (a *AutoRenewer) StartAutoRenewTicker() {
 			case <-done:
 				return
 			case <-ticker.C:
-				a.Logf("Check and renew certificates in progress", nil)
-				a.CheckAndRenewCertificates()
+				a.backgroundCheck()
 			}
 		}
 	}(a)

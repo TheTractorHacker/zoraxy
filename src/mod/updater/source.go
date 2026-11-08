@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"imuslab.com/zoraxy/mod/offline"
 	"io"
 	"net/http"
 	"net/url"
@@ -45,6 +46,9 @@ func (s *source) checkURL(raw string) error {
 }
 
 func (s *source) get(ctx context.Context, rawurl string) (*http.Response, error) {
+	if err := offline.Check(); err != nil {
+		return nil, err
+	}
 	if err := s.checkURL(rawurl); err != nil {
 		return nil, err
 	}

@@ -10,6 +10,7 @@ package geodb
 
 import (
 	"errors"
+	"imuslab.com/zoraxy/mod/offline"
 	"io"
 	"log"
 	"math/rand"
@@ -278,6 +279,9 @@ func jitteredInterval(baseInterval time.Duration) time.Duration {
 // folder. The downloaded files are validated before they replace the current
 // dataset, so a failed or corrupted download will not break the existing one
 func DownloadGeoDBUpdateToPath(externalGeoDBStoragePath string) error {
+	if err := offline.Check(); err != nil {
+		return err
+	}
 	if externalGeoDBStoragePath == "" {
 		externalGeoDBStoragePath = DefaultExternalGeoDBFolder
 	}

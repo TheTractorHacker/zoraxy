@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"imuslab.com/zoraxy/mod/offline"
 	"io"
 	"net"
 	"net/http"
@@ -116,6 +117,9 @@ func isLocalhostListening() (isListening bool, err error) {
 
 // Step 2
 func getPublicIPAddress() (string, error) {
+	if err := offline.Check(); err != nil {
+		return "", err
+	}
 	resp, err := http.Get("http://checkip.amazonaws.com/")
 	if err != nil {
 		return "", err
