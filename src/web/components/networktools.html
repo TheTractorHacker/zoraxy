@@ -572,6 +572,7 @@ function updateMDNSListForWoL(){
     });
     $("#mdnsResultForWoL").html("");
     $.get("/api/mdns/list", function(data){
+        if (!Array.isArray(data)) { return; } //mDNS disabled (-mdns=false) answers with an error object
         data.forEach(thisServer => {
             if (thisServer.MacAddr.length > 0){
                 for (var i = 0; i < thisServer.MacAddr.length; i++){

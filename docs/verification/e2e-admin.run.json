@@ -1,0 +1,12 @@
+[
+ {
+  "scenario": "api-autoban-manual-remote-token",
+  "issues": [
+   "22"
+  ],
+  "status": "PASS",
+  "evidence": "manual ban/unban, remote token (generate, bad token 401, remote ban/unban, revoke), and detector-driven auto-ban of a 404 flood verified with real traffic (rerun: tools/e2e-admin/run.sh --only api-autoban-manual-remote-token)",
+  "commits": [],
+  "notes": ""
+ }
+]
