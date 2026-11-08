@@ -67,6 +67,7 @@
             cursor: grabbing;
         }
 
+        /* the grid lives outside the transformed container so panning never re-rasterises it */
         #diagram-pan-container {
             position: absolute;
             top: 0;
@@ -75,13 +76,13 @@
             will-change: transform;
         }
 
+        /* The grid is painted on the wrapper (viewport sized, moved with background-position)
+           instead of a 20000 x 20000 px layer that had to be tiled and composited on every pan. */
         #grid-bg {
             position: absolute;
-            top: -5000px;
-            left: -5000px;
-            width: 20000px;
-            height: 20000px;
+            inset: 0;
             pointer-events: none;
+            will-change: transform;
             background-image:
                 linear-gradient(rgba(128,128,128,0.12) 1.5px, transparent 1.5px),
                 linear-gradient(90deg, rgba(128,128,128,0.12) 1.5px, transparent 1.5px);
@@ -233,13 +234,18 @@
             stroke: var(--node-disabled-border);
         }
 
-        .flow-dash {
-            fill: none;
-            stroke-linecap: round;
-            opacity: 0.9;
-            stroke-dasharray: 1 20;
-            animation: flowDash 1.4s linear infinite;
+        /* The moving dashes are drawn on #flow-canvas (see drawFlow). A CSS stroke-dashoffset animation
+           repaints the whole SVG on the main thread every frame: 73% of a core with a few dozen rules. */
+        #flow-canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            will-change: transform; /* own compositor layer: a new frame must not repaint the grid / controls */
         }
+
+        #btn-anim.off i { opacity: 0.45; }
 
         .flow-dash-internet {
             stroke: #ffffff;
@@ -311,10 +317,11 @@
     <div id="loadingMsg" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:200;"><i class="spinner loading icon"></i> Loading traffic data...</div>
     <div id="noDataMsg" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:200;display:none;"><i class="info circle icon"></i> No proxy rules found.</div>
     <div id="diagram-wrapper">
+        <div id="grid-bg"></div>
         <div id="diagram-pan-container">
-            <div id="grid-bg"></div>
             <svg id="diagram-canvas"></svg>
         </div>
+        <canvas id="flow-canvas"></canvas>
         <div id="zoom-controls">
             <button class="zoom-btn" id="btn-zoom-out" title="Zoom out">&#8722;</button>
             <div class="zoom-divider"></div>
@@ -322,7 +329,9 @@
             <div class="zoom-divider"></div>
             <button class="zoom-btn" id="btn-zoom-in" title="Zoom in">&#43;</button>
             <div class="zoom-divider"></div>
-            <button class="zoom-btn" id="btn-refresh" title="Refresh" onclick="loadDiagram()"><i class="refresh icon" style="color:#21ba45; font-size:13px;"></i></button>
+            <button class="zoom-btn" id="btn-refresh" title="Refresh" onclick="loadDiagram(true)"><i class="refresh icon" style="color:#21ba45; font-size:13px;"></i></button>
+            <div class="zoom-divider"></div>
+            <button class="zoom-btn" id="btn-anim" title="Pause animation"><i class="pause icon" style="font-size:11px;"></i></button>
             <div class="zoom-divider"></div>
             <button class="zoom-btn" id="btn-rotate" title="Rotate layout"><i class="redo alternate icon" style="font-size:12px;"></i></button>
             <div class="zoom-divider"></div>
@@ -348,6 +357,8 @@
     const CANVAS_PADDING_Y = 24;
     const MIN_EDGE_W = 1.2;
     const MAX_EDGE_W = 10;
+    const MAX_ANIMATED_EDGES = 40;
+    let flowAnim = [];
     const ANIM_SPEEDS = [2.2, 1.8, 1.4, 1.1, 0.8]; // seconds, index by traffic tier
 
     /* Zoom & Pan State */
@@ -407,8 +418,7 @@
         const rx = 8;
         g.appendChild(svgEl("rect", {
             x, y, width: PROXY_W, height: PROXY_H,
-            rx, ry: rx,
-            filter: "url(#shadow)"
+            rx, ry: rx
         }));
 
         // Domain label
@@ -444,8 +454,7 @@
         const rx = 8;
         g.appendChild(svgEl("rect", {
             x, y, width: UPSTREAM_W, height: UPSTREAM_H,
-            rx, ry: rx,
-            filter: "url(#shadow)"
+            rx, ry: rx
         }));
 
         // TLS badge
@@ -482,8 +491,7 @@
         // Circle background
         const circle = svgEl("circle", {
             cx, cy, r,
-            fill: "var(--internet-fill)",
-            filter: "url(#shadow)"
+            fill: "var(--internet-fill)"
         });
         g.appendChild(circle);
 
@@ -539,20 +547,16 @@
         });
         g.appendChild(base);
 
-        // Animated dashes on top
-        if (count > 0) {
-            const dashClass = colorClass.includes("internet") ? "flow-dash flow-dash-internet" : "flow-dash flow-dash-upstream";
-            const dash = svgEl("path", {
-                d,
-                class: dashClass,
-                "stroke-width": Math.max(strokeW * 0.55, 1.2),
+        // Moving dashes: drawn on the canvas overlay, only for the busiest edges
+        if (count > 0 && edgeIndex < MAX_ANIMATED_EDGES) {
+            flowAnim.push({
+                path: new Path2D(d),
+                // control points bound the curve: used to skip edges that are scrolled out of view
+                x0: Math.min(x1, x2), x1: Math.max(x1, x2), y0: Math.min(y1, y2), y1: Math.max(y1, y2),
+                width: Math.max(strokeW * 0.55, 1.2),
+                period: parseFloat(animDuration(count, maxCount)),
+                phase: (edgeIndex * 0.17) % 1.4
             });
-            const dur = animDuration(count, maxCount);
-            // Stagger animations by edge index so they don't all move in sync
-            const delay = (edgeIndex * 0.17) % 1.4;
-            dash.style.animationDuration = dur;
-            dash.style.animationDelay = `-${delay}s`;
-            g.appendChild(dash);
         }
 
         return g;
@@ -562,6 +566,7 @@
     function renderDiagram(data) {
         const svg = document.getElementById("diagram-canvas");
         svg.innerHTML = "";
+        flowAnim = [];
 
         const proxies = data.proxies || [];
 
@@ -595,10 +600,6 @@
         // Build SVG defs: drop-shadow filter
         const defs = svgEl("defs");
 
-        const filter = svgEl("filter", { id: "shadow", x: "-20%", y: "-20%", width: "140%", height: "140%" });
-        const feShadow = svgEl("feDropShadow", { dx: "0", dy: "2", stdDeviation: "3", "flood-opacity": "0.10" });
-        filter.appendChild(feShadow);
-        defs.appendChild(filter);
 
         svg.appendChild(defs);
 
@@ -754,15 +755,27 @@
     }
 
     /* Fetch traffic map from API and trigger diagram render */
-    function loadDiagram() {
-        document.getElementById("loadingMsg").style.display = "block";
-        document.getElementById("diagram-canvas").style.display = "none";
-        document.getElementById("noDataMsg").style.display = "none";
+    let _lastJSON = "";
+    let _onScreen = true;
+    function loadDiagram(manual) {
+        if (_firstLoad || manual === true) {
+            document.getElementById("loadingMsg").style.display = "block";
+            document.getElementById("diagram-canvas").style.display = "none";
+            document.getElementById("noDataMsg").style.display = "none";
+        }
 
         $.get("/api/stats/trafficmap", function(data) {
             document.getElementById("loadingMsg").style.display = "none";
+            // the periodic refresh only rebuilds the SVG when the numbers changed
+            const sig = JSON.stringify(data);
+            if (sig === _lastJSON && !_firstLoad) {
+                document.getElementById("diagram-canvas").style.display = "block";
+                return;
+            }
+            _lastJSON = sig;
             _lastData = data;
             renderDiagram(data);
+            requestFlowDraw();
             if (_firstLoad) {
                 _firstLoad = false;
                 recenterDiagram();
@@ -792,6 +805,7 @@
         if (_lastData) {
             renderDiagram(_lastData);
             recenterDiagram();
+            requestFlowDraw();
         } else {
             loadDiagram();
         }
@@ -818,6 +832,11 @@
     function applyTransform() {
         const container = document.getElementById("diagram-pan-container");
         container.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+        const grid = document.getElementById("grid-bg");
+        const gs = 40 * zoom;
+        grid.style.backgroundSize = gs + "px " + gs + "px";
+        grid.style.backgroundPosition = (panX % gs) + "px " + (panY % gs) + "px";
+        requestFlowDraw();
         document.getElementById("zoom-label").textContent = Math.round(zoom * 100) + "%";
     }
 
@@ -948,7 +967,107 @@
     updateRotateButton();
     applyTransform();
     loadDiagram();
-    setInterval(loadDiagram, 30000);
+    setInterval(function () {
+        // no network and no re-render while the diagram is not on screen (other tab, hidden iframe)
+        if (document.hidden || !_onScreen) return;
+        loadDiagram();
+    }, 30000);
+
+    /* Animation control: user toggle (persisted), parent page message, off-screen and hidden tab */
+    let _animOn = true;
+    try { _animOn = localStorage.getItem("zoraxy_trafficflow_anim") !== "off"; } catch (e) {}
+    const _flowCanvas = document.getElementById("flow-canvas");
+    const _flowCtx = _flowCanvas.getContext("2d");
+    var _flowPending = false, _flowTimer = null, _flowW = 0, _flowH = 0; // var: applyTransform() calls requestFlowDraw() before this line runs
+    const FLOW_FPS = 8; // stop-motion style flow; every extra frame costs a full repaint of the iframe
+
+    // The canvas size is only re-read when the wrapper was resized (reading clientWidth on every
+    // frame forces a synchronous layout).
+    var _flowDirtySize = true;
+    function sizeFlowCanvas() {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        if (_flowDirtySize) {
+            _flowDirtySize = false;
+            const w = _wrapper.clientWidth, h = _wrapper.clientHeight;
+            if (w !== _flowW || h !== _flowH) {
+                _flowW = w; _flowH = h;
+                _flowCanvas.width = Math.max(1, Math.round(w * dpr));
+                _flowCanvas.height = Math.max(1, Math.round(h * dpr));
+            }
+        }
+        return dpr;
+    }
+
+    /* Draw the dashes at animation time t (seconds) in the current pan / zoom */
+    function drawFlow(t) {
+        const dpr = sizeFlowCanvas();
+        const ctx = _flowCtx;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, _flowCanvas.width, _flowCanvas.height);
+        if (flowAnim.length === 0) return;
+        ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, dpr * panX, dpr * panY);
+        ctx.strokeStyle = "rgba(255,255,255,0.9)";
+        ctx.lineCap = "round";
+        ctx.setLineDash([1, 20]);
+        // visible region in diagram coordinates
+        const vx0 = -panX / zoom - 4, vy0 = -panY / zoom - 4;
+        const vx1 = vx0 + _flowW / zoom + 8, vy1 = vy0 + _flowH / zoom + 8;
+        for (const a of flowAnim) {
+            if (a.x1 < vx0 || a.x0 > vx1 || a.y1 < vy0 || a.y0 > vy1) continue;
+            ctx.lineWidth = a.width;
+            // same motion as the old keyframes: dash offset 40 -> 0 over one period
+            ctx.lineDashOffset = 40 * (1 - ((t + a.phase) / a.period) % 1);
+            ctx.stroke(a.path);
+        }
+    }
+
+    function flowRunning() { return _animOn && _onScreen && !document.hidden; }
+
+    function requestFlowDraw() {
+        // pan / zoom: redraw once per frame; the animation timer keeps its own cadence
+        if (_flowPending) return;
+        _flowPending = true;
+        requestAnimationFrame(() => { _flowPending = false; drawFlow(flowRunning() ? performance.now() / 1000 : 0); });
+    }
+
+    function startFlowLoop() {
+        if (_flowTimer) { clearInterval(_flowTimer); _flowTimer = null; }
+        if (flowRunning()) {
+            _flowTimer = setInterval(() => drawFlow(performance.now() / 1000), 1000 / FLOW_FPS);
+        } else {
+            requestFlowDraw();
+        }
+    }
+    new ResizeObserver(() => { _flowDirtySize = true; requestFlowDraw(); }).observe(_wrapper);
+
+    function applyAnim() {
+        document.body.classList.toggle("anim-paused", !_animOn || !_onScreen || document.hidden);
+        startFlowLoop();
+        const b = document.getElementById("btn-anim");
+        b.classList.toggle("off", !_animOn);
+        b.title = _animOn ? "Pause animation" : "Resume animation";
+        b.querySelector("i").className = (_animOn ? "pause" : "play") + " icon";
+    }
+    document.getElementById("btn-anim").addEventListener("click", e => {
+        e.stopPropagation();
+        _animOn = !_animOn;
+        try { localStorage.setItem("zoraxy_trafficflow_anim", _animOn ? "on" : "off"); } catch (err) {}
+        applyAnim();
+    });
+    window.addEventListener("message", e => {
+        if (e.origin !== window.location.origin || !e.data || e.data.type !== "zoraxy-diagram") return;
+        if (typeof e.data.anim === "boolean") { _animOn = e.data.anim; applyAnim(); }
+    });
+    document.addEventListener("visibilitychange", applyAnim);
+    if (window.IntersectionObserver) {
+        new IntersectionObserver(entries => {
+            const was = _onScreen;
+            _onScreen = entries[entries.length - 1].isIntersecting;
+            applyAnim();
+            if (_onScreen && !was) loadDiagram();
+        }).observe(document.getElementById("diagram-wrapper"));
+    }
+    applyAnim();
     </script>
 </body>
 </html>

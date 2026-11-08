@@ -695,6 +695,7 @@
     }
     
     /* UI Element Initialization */
+    let accordionInitRetries = 0;
     function initAdvanceSettingsAccordion(){
         function hasClickEvent(element) {
             var events = $._data(element, "events");
@@ -702,7 +703,9 @@
         }
 
          $("#advanceProxyRules").accordion();
-        if (!hasClickEvent($("#advanceProxyRules"))){
+        // $._data needs the DOM element, not the jQuery object (the old check was always false and
+        // re-initialised the widgets every 300 ms forever, which kept the whole UI busy)
+        if (!hasClickEvent($("#advanceProxyRules")[0]) && accordionInitRetries++ < 5){
             // Not sure why sometime the accordion events are not binding
             // to the DOM element. This makes sure the element is binded
             // correctly by checking it again after 300ms
@@ -711,6 +714,10 @@
             $("#mitigationAction").parent().dropdown();
             setTimeout(function(){
                 initAdvanceSettingsAccordion();
+            }, 300);
+        }
+    }
+    initAdvanceSettingsAccordion();
             }, 300);
         }
     }
