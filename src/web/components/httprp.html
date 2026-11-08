@@ -601,6 +601,12 @@
                                     req / sec / IP
                                 </label>
                             </div>
+                            <div class="ui small right labeled fluid input" style="margin-top: 0.4em;">
+                                <input type="number" class="RateLimitBurst" value="0" min="0" >
+                                <label class="ui basic label">
+                                    burst (0 = same as rate)
+                                </label>
+                            </div>
                             <div class="ui divider"></div>
                             <!-- CAPTCHA Gating -->
                             <div class="ui checkbox" style="margin-top: 0.4em;">
@@ -1544,6 +1550,7 @@
         let authProviderType = $(editor).find(".authProviderPicker input[type='radio']:checked").val();
         let requireRateLimit = $(editor).find(".RequireRateLimit")[0].checked;
         let rateLimit = $(editor).find(".RateLimit").val();
+        let rateLimitBurst = $(editor).find(".RateLimitBurst").val();
         let bypassGlobalTLS = $(editor).find(".BypassGlobalTLS")[0].checked;
         let enableConnectSupport = $(editor).find(".EnableConnectSupport")[0].checked;
         let enableUpgradeForwarding = $(editor).find(".EnableUpgradeForwarding")[0].checked;
@@ -1600,6 +1607,7 @@
                 "blockAICrawlers": blockAICrawlers,
                 "mitigationAction": mitigationAction,
                 "ratenum" :rateLimit,
+                "rateburst": rateLimitBurst,
                 "captcha": requireCaptcha,
                 "captchaProvider": captchaProvider,
                 "captchaSiteKey": captchaSiteKey,
@@ -2391,6 +2399,27 @@
             saveProxyInlineEdit(uuid);
         });
         editor.find(".RateLimit").val(subd.RateLimit).on("change", rateLimitChangeEvent);
+
+        // Rate limit burst (0 = same as the rate)
+        editor.find(".RateLimitBurst").off("change");
+        editor.find(".RateLimitBurst").val(subd.RateLimitBurst || 0).on("change", function() {
+            let parsed = parseInt(String($(this).val()).trim(), 10);
+            if (isNaN(parsed) || parsed < 0) {
+                msgbox("Rate limit burst must be >= 0", false);
+                $(this).val(subd.RateLimitBurst || 0);
+                return;
+            }
+            subd.RateLimitBurst = parsed;
+            saveProxyInlineEdit(uuid);
+        });
+        if (subd.RequireRateLimit) {
+            editor.find(".RateLimitBurst").parent().removeClass("disabled");
+        } else {
+            editor.find(".RateLimitBurst").parent().addClass("disabled");
+        }
+        editor.find(".RequireRateLimit").on("change", function() {
+            editor.find(".RateLimitBurst").parent().toggleClass("disabled", !$(this).is(":checked"));
+        });
 
         // CAPTCHA Gating
         if (subd.RequireCaptcha) {

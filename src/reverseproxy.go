@@ -529,6 +529,12 @@ func ReverseProxyHandleAddEndpoint(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	proxyRateLimitBurst, err := rateLimitBurstFromRequest(r, 0)
+	if err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
+	}
+
 	// CAPTCHA Gating
 	captchaConfig, err := parseCaptchaConfigFromRequest(r)
 	if err != nil {
@@ -681,6 +687,7 @@ func ReverseProxyHandleAddEndpoint(w http.ResponseWriter, r *http.Request) {
 			// Rate Limit
 			RequireRateLimit: requireRateLimit,
 			RateLimit:        int64(proxyRateLimit),
+			RateLimitBurst:   proxyRateLimitBurst,
 			// CAPTCHA Gating
 			RequireCaptcha: requireCaptcha,
 			CaptchaConfig:  captchaConfig,
@@ -873,6 +880,12 @@ func ReverseProxyHandleEditEndpoint(w http.ResponseWriter, r *http.Request) {
 		proxyRateLimit = 1000
 	}
 
+	proxyRateLimitBurst, err := rateLimitBurstFromRequest(r, -1) //-1 = not given, keep the stored value
+	if err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
+	}
+
 	// CAPTCHA Gating
 	captchaConfig, err := parseCaptchaConfigFromRequest(r)
 	if err != nil {
@@ -947,6 +960,9 @@ func ReverseProxyHandleEditEndpoint(w http.ResponseWriter, r *http.Request) {
 
 	newProxyEndpoint.RequireRateLimit = requireRateLimit
 	newProxyEndpoint.RateLimit = proxyRateLimit
+	if proxyRateLimitBurst >= 0 {
+		newProxyEndpoint.RateLimitBurst = proxyRateLimitBurst
+	}
 	newProxyEndpoint.RequireCaptcha = requireCaptcha
 	newProxyEndpoint.CaptchaConfig = captchaConfig
 	newProxyEndpoint.UseStickySession = useStickySession
