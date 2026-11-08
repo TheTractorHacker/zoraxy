@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -32,6 +33,46 @@ type source struct {
 	repo, apiBase string
 	client        *http.Client
 	allowHTTP     bool
+	token         func() string // optional GitHub token; only ever sent to the API host
+}
+
+// RateLimitError is returned when GitHub refuses a request because the unauthenticated
+// (or token) rate limit was used up.
+type RateLimitError struct {
+	ResetAt       time.Time // zero when GitHub did not say
+	Authenticated bool      // the request carried a token
+}
+
+func (e *RateLimitError) Error() string {
+	msg := "GitHub rate limit reached"
+	if !e.ResetAt.IsZero() {
+		msg += ", try again at " + e.ResetAt.Local().Format("15:04")
+	} else {
+		msg += ", try again later"
+	}
+	if !e.Authenticated {
+		msg += " (a GitHub token in the update settings raises the limit)"
+	}
+	return msg
+}
+
+// rateLimited inspects a non-OK response and returns a *RateLimitError if it is one.
+func rateLimited(resp *http.Response, authenticated bool, now time.Time) *RateLimitError {
+	if resp.StatusCode != http.StatusForbidden && resp.StatusCode != http.StatusTooManyRequests {
+		return nil
+	}
+	remaining := resp.Header.Get("X-RateLimit-Remaining")
+	retryAfter := resp.Header.Get("Retry-After")
+	if resp.StatusCode == http.StatusForbidden && remaining != "0" && retryAfter == "" {
+		return nil //an ordinary 403, not a rate limit
+	}
+	e := &RateLimitError{Authenticated: authenticated}
+	if n, err := strconv.ParseInt(retryAfter, 10, 64); err == nil && n >= 0 {
+		e.ResetAt = now.Add(time.Duration(n) * time.Second)
+	} else if n, err := strconv.ParseInt(resp.Header.Get("X-RateLimit-Reset"), 10, 64); err == nil && n > 0 {
+		e.ResetAt = time.Unix(n, 0)
+	}
+	return e
 }
 
 func (s *source) checkURL(raw string) error {
@@ -45,37 +86,83 @@ func (s *source) checkURL(raw string) error {
 	return nil
 }
 
-func (s *source) get(ctx context.Context, rawurl string) (*http.Response, error) {
+// do performs a GET without judging the status code.
+func (s *source) do(ctx context.Context, rawurl string, hdr map[string]string) (*http.Response, bool, error) {
 	if err := offline.Check(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if err := s.checkURL(rawurl); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawurl, nil)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "zoraxy-updater")
+	for k, v := range hdr {
+		req.Header.Set(k, v)
+	}
+	authed := false
+	if s.token != nil {
+		// The token goes to the API host only, never to asset download hosts.
+		if tok := s.token(); tok != "" && sameHost(rawurl, s.apiBase) {
+			req.Header.Set("Authorization", "Bearer "+tok)
+			authed = true
+		}
+	}
 	resp, err := s.client.Do(req)
+	return resp, authed, err
+}
+
+func sameHost(a, b string) bool {
+	ua, err1 := url.Parse(a)
+	ub, err2 := url.Parse(b)
+	return err1 == nil && err2 == nil && ua.Host == ub.Host && ua.Scheme == ub.Scheme
+}
+
+func (s *source) get(ctx context.Context, rawurl string) (*http.Response, error) {
+	resp, authed, err := s.do(ctx, rawurl, nil)
 	if err != nil {
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
+		if rl := rateLimited(resp, authed, time.Now()); rl != nil {
+			return nil, rl
+		}
 		return nil, fmt.Errorf("GET %s: HTTP %d", rawurl, resp.StatusCode)
 	}
 	return resp, nil
 }
 
-// releases lists the most recent non-draft releases.
-func (s *source) releases(ctx context.Context) ([]Release, error) {
-	resp, err := s.get(ctx, fmt.Sprintf("%s/repos/%s/releases?per_page=30", strings.TrimRight(s.apiBase, "/"), s.repo))
+// fetchReleases downloads the raw release list. If etag is not empty it is sent as
+// If-None-Match; notModified is true on a 304 (which GitHub does not count against the rate limit).
+func (s *source) fetchReleases(ctx context.Context, etag string, now time.Time) (body []byte, newETag string, notModified bool, err error) {
+	hdr := map[string]string{}
+	if etag != "" {
+		hdr["If-None-Match"] = etag
+	}
+	resp, authed, err := s.do(ctx, fmt.Sprintf("%s/repos/%s/releases?per_page=30", strings.TrimRight(s.apiBase, "/"), s.repo), hdr)
 	if err != nil {
-		return nil, err
+		return nil, "", false, err
 	}
 	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusNotModified:
+		return nil, etag, true, nil
+	case http.StatusOK:
+		b, err := io.ReadAll(io.LimitReader(resp.Body, 8*maxSmallAsset))
+		return b, resp.Header.Get("ETag"), false, err
+	}
+	if rl := rateLimited(resp, authed, now); rl != nil {
+		return nil, "", false, rl
+	}
+	return nil, "", false, fmt.Errorf("GET releases: HTTP %d", resp.StatusCode)
+}
+
+// parseReleases decodes a GitHub release list, skipping drafts.
+func parseReleases(body []byte) ([]Release, error) {
 	var raw []struct {
 		Tag        string    `json:"tag_name"`
 		Name       string    `json:"name"`
@@ -90,7 +177,7 @@ func (s *source) releases(ctx context.Context) ([]Release, error) {
 			URL  string `json:"browser_download_url"`
 		} `json:"assets"`
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 8*maxSmallAsset)).Decode(&raw); err != nil {
+	if err := json.Unmarshal(body, &raw); err != nil {
 		return nil, fmt.Errorf("decoding release list: %w", err)
 	}
 	var out []Release

@@ -11,42 +11,42 @@ import (
 )
 
 // Updater Core logic
-func runUpdateRoutineWithVersion(fromVersion int, toVersion int) {
+func runUpdateRoutineWithVersion(confDir string, fromVersion int, toVersion int) {
 	if fromVersion == 307 && toVersion == 308 {
 		//Updating from v3.0.7 to v3.0.8
-		err := v308.UpdateFrom307To308()
+		err := v308.UpdateFrom307To308(confDir)
 		if err != nil {
 			panic(err)
 		}
 	} else if fromVersion == 314 && toVersion == 315 {
 		//Updating from v3.1.4 to v3.1.5
-		err := v315.UpdateFrom314To315()
+		err := v315.UpdateFrom314To315(confDir)
 		if err != nil {
 			panic(err)
 		}
 	} else if fromVersion == 321 && toVersion == 322 {
 		//Updating from v3.2.1 to v3.2.2
-		err := v322.UpdateFrom321To322()
+		err := v322.UpdateFrom321To322(confDir)
 		if err != nil {
 			panic(err)
 		}
 	} else if fromVersion == 333 && toVersion == 334 {
 		//Updating from v3.3.3 to v3.3.4
 		//Migrate legacy default.* cert files to name-based fallback system
-		if err := v334.UpdateFrom333To334(); err != nil {
+		if err := v334.UpdateFrom333To334(confDir); err != nil {
 			fmt.Println("Warning: fallback cert migration failed (non-fatal):", err)
 		}
 	} else if fromVersion == 334 && toVersion == 335 {
 		//Updating from v3.3.4 to v3.3.5
 		//Migrate ACME cert JSON: recursive_ns → disable_recursive_nss_check
-		if err := v335.UpdateFrom334To335(); err != nil {
+		if err := v335.UpdateFrom334To335(confDir); err != nil {
 			fmt.Println("Warning: ACME NSs check config migration failed (non-fatal):", err)
 		}
 	} else if fromVersion == 335 && toVersion == 335 {
 		//v3.3.5-rc1 → v3.3.5-rc2: probe and re-run migration if needed
-		if v335.ProbeNSCheckMigrationNeeded() {
+		if v335.ProbeNSCheckMigrationNeeded(confDir) {
 			fmt.Println("Probing v3.3.5 NSs check config migration...")
-			if err := v335.UpdateFrom334To335(); err != nil {
+			if err := v335.UpdateFrom334To335(confDir); err != nil {
 				fmt.Println("Warning: ACME NSs check config migration failed (non-fatal):", err)
 			}
 		}

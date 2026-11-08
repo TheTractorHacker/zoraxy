@@ -1027,6 +1027,66 @@
         coloredRegionCodes = newColoredCodes;
     }
 
+    //jsVectorMap computes its scale from the container size; created while the container is hidden
+    //(another tab on top, or the map row hidden) it logs "scale(NaN)". So the map is only created once
+    //#worldMap is visible and has a size, and a ResizeObserver creates it later when that happens.
+    let worldMapObserver = undefined;
+    function worldMapHasSize(){
+        let el = document.getElementById("worldMap");
+        return !!el && el.clientWidth > 0 && el.clientHeight > 0;
+    }
+    //updateSize() on a hidden (zero size) container makes jsVectorMap compute scale(NaN)
+    function updateWorldMapSize(){
+        if (worldMap != undefined && worldMapHasSize()){
+            worldMap.updateSize();
+        }
+    }
+    function createWorldMapWhenVisible(){
+        if (worldMap != undefined){ return; }
+        if (!worldMapHasSize()){
+            if (worldMapObserver == undefined && window.ResizeObserver){
+                worldMapObserver = new ResizeObserver(function(){
+                    if (worldMapHasSize()){
+                        if (worldMap == undefined){
+                            createWorldMapWhenVisible();
+                        }else{
+                            updateWorldMapSize();
+                        }
+                    }
+                });
+                worldMapObserver.observe(document.getElementById("worldMap"));
+            }
+            return;
+        }
+        worldMap = new jsVectorMap({
+                selector: "#worldMap",
+                map: "world",
+                zoomButtons: false,
+                zoomOnScroll: false,
+                regionsSelectable: false,
+                backgroundColor: "transparent",
+                regionStyle: {
+                    initial: {
+                        fill: mapDefaultFill,
+                        fillOpacity: 1,
+                        stroke: "#ffffff",
+                        strokeWidth: 1,
+                    },
+                    hover: {
+                        fillOpacity: 0.8,
+                    }
+                },
+                onRegionTooltipShow: function(event, tooltip, code){
+                    let name = getCountryName(code);
+                    if (name == ""){ name = code; }
+                    let count = currentMapValues[code] || 0;
+                    tooltip.text(name + ": " + abbreviateNumber(count) + " visitor" + (count == 1 ? "" : "s"), false);
+                }
+            });
+        //Regions are only available once the map has finished its initial render
+        setTimeout(function(){ applyMapColors(currentMapValues); }, 50);
+    }
+
     function updateVisitorLocations(){
         $.get("/api/stats/countries", function(data){
             if (!data || data.error != undefined){
@@ -1057,33 +1117,7 @@
             currentMapValues = mapValues;
 
             if (worldMap == undefined){
-                worldMap = new jsVectorMap({
-                    selector: "#worldMap",
-                    map: "world",
-                    zoomButtons: false,
-                    zoomOnScroll: false,
-                    regionsSelectable: false,
-                    backgroundColor: "transparent",
-                    regionStyle: {
-                        initial: {
-                            fill: mapDefaultFill,
-                            fillOpacity: 1,
-                            stroke: "#ffffff",
-                            strokeWidth: 1,
-                        },
-                        hover: {
-                            fillOpacity: 0.8,
-                        }
-                    },
-                    onRegionTooltipShow: function(event, tooltip, code){
-                        let name = getCountryName(code);
-                        if (name == ""){ name = code; }
-                        let count = currentMapValues[code] || 0;
-                        tooltip.text(name + ": " + abbreviateNumber(count) + " visitor" + (count == 1 ? "" : "s"), false);
-                    }
-                });
-                //Regions are only available once the map has finished its initial render
-                setTimeout(function(){ applyMapColors(currentMapValues); }, 50);
+                createWorldMapWhenVisible();
             }else{
                 applyMapColors(currentMapValues);
             }
@@ -1449,7 +1483,9 @@
                 }
             });
             if (worldMap != undefined){
-                worldMap.updateSize();
+                updateWorldMapSize();
+            }else if (currentMapValues && Object.keys(currentMapValues).length > 0){
+                createWorldMapWhenVisible();
             }
         }, 300);
     }
@@ -1457,7 +1493,7 @@
     //jsVectorMap does not auto-resize its SVG on window/container resize
     window.addEventListener('resize', function(){
         if (worldMap != undefined){
-            worldMap.updateSize();
+            updateWorldMapSize();
         }
     });
 </script>

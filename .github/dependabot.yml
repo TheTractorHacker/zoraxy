@@ -14,3 +14,13 @@ updates:
       day: "saturday"
       timezone: "Europe/Berlin"
       time: "05:00"
+
+  # Go modules (the module lives in src/)
+  - package-ecosystem: "gomod"
+    directory: "/src"
+    schedule:
+      interval: "weekly"
+      day: "saturday"
+      timezone: "Europe/Berlin"
+      time: "05:30"
+    open-pull-requests-limit: 5

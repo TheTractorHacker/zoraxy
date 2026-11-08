@@ -147,7 +147,7 @@ func startupSequence() {
 	pluginApiKeyManager = auth.NewAPIKeyManager()
 
 	//Create a TLS certificate manager
-	tlsCertManager, err = tlscert.NewManager(CONF_CERT_STORE, SystemWideLogger)
+	tlsCertManager, err = tlscert.NewManagerWithTmp(CONF_CERT_STORE, TMP_FOLDER, SystemWideLogger)
 	if err != nil {
 		panic(err)
 	}

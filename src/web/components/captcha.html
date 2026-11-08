@@ -28,7 +28,7 @@
 <div class="standardContainer" id="captchaPage">
     <div class="ui basic segment">
         <h2><i class="shield alternate icon"></i> CAPTCHA / Bot check</h2>
-        <p>Make visitors prove they are human before they reach a proxy rule. Pick a provider (Cloudflare Turnstile, Google reCAPTCHA or the
+        <p>Make visitors prove they are human before they reach a proxy rule. Pick a provider (Cloudflare Turnstile, Google reCAPTCHA, Friendly Captcha or the
             self-hosted Altcha), then customise how the challenge, failure and blocked pages look. The challenge also backs the
             <b>Challenge</b> action of the Security Center bot rules and the country challenge. Previews use the provider's public test
             keys and verify nothing.</p>
@@ -95,6 +95,7 @@
                                 <option value="0">Cloudflare Turnstile</option>
                                 <option value="1">Google reCAPTCHA</option>
                                 <option value="2">Altcha (self-hosted)</option>
+                                <option value="3">Friendly Captcha (site key = sitekey, secret key = API key)</option>
                             </select>
                         </div>
                         <div class="field cpKeyField"><label>Site key (public)</label>
@@ -112,6 +113,15 @@
                                     <select id="cpRecaptchaVersion" class="ui fluid dropdown"><option value="v2">v2 (checkbox)</option><option value="v3">v3 (invisible score)</option></select></div>
                                 <div class="field cpV3Only"><label>Minimum score (0.0 - 1.0)</label>
                                     <input type="number" id="cpRecaptchaScore" min="0" max="1" step="0.1" value="0.5"></div>
+                            </div>
+                        </div>
+                        <div class="cpProviderFriendly" style="display:none">
+                            <div class="field"><label>Friendly Captcha endpoint</label>
+                                <select id="cpFriendlyEndpoint" class="ui fluid dropdown">
+                                    <option value="global">Global (global.frcapi.com)</option>
+                                    <option value="eu">EU (eu.frcapi.com, dedicated EU endpoint)</option>
+                                </select>
+                                <div class="cpHelp">Must match the application's endpoint in the Friendly Captcha dashboard. The widget and the server verification both use it.</div>
                             </div>
                         </div>
                         <div class="field">
@@ -277,11 +287,12 @@
 (function () {
     "use strict";
     var PAGE = $("#captchaPage");
-    var PROVIDERS = { 0: "Cloudflare Turnstile", 1: "Google reCAPTCHA", 2: "Altcha" };
+    var PROVIDERS = { 0: "Cloudflare Turnstile", 1: "Google reCAPTCHA", 2: "Altcha", 3: "Friendly Captcha" };
     var TEST_KEYS = {
         0: { site: "1x00000000000000000000AA", secret: "1x0000000000000000000000000000000AA" },
         1: { site: "6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI", secret: "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe" },
         2: { site: "", secret: "" }
+        // Friendly Captcha publishes no pass-all keys: create a throw-away application in its dashboard
     };
     var STARTER = `<!DOCTYPE html>
 <html lang="en" data-theme="{{.Theme}}">
@@ -420,14 +431,29 @@
         var v = $("#cpRecaptchaVersion").val();
         var isGlobal = target && target.kind === "global";
         $(".cpProviderRecaptcha").toggle(p === "1");
+        $(".cpProviderFriendly").toggle(p === "3");
         $(".cpV3Only").toggle(p === "1" && v === "v3");
         $(".cpV2Only").toggle(p === "1" && v !== "v3");
         $(".cpTurnstileSeg").toggle(!isGlobal && p === "0");
         $(".cpRecaptchaSeg").toggle(!isGlobal && p === "1");
         $(".cpKeyField").toggle(p !== "2");
-        $("#cpSecretLabel").text(p === "2" ? "HMAC key (secret)" : "Secret key (private)");
-        $("#cpSecretHelp").text(p === "2" ? "Altcha runs on this server: any long random string works as HMAC key. No account needed." : "Kept on the server and only used to verify the token with the provider.");
-        $("#cpTestKeys").closest(".field").toggle(p !== "2" || true);
+        $("#cpSecretLabel").text(p === "2" ? "HMAC key (secret)" : (p === "3" ? "API key (secret)" : "Secret key (private)"));
+        $("#cpSecretHelp").text(p === "2" ? "Altcha runs on this server: any long random string works as HMAC key. No account needed." :
+            (p === "3" ? "The Friendly Captcha API key of the application. Kept on the server and only used to verify the solution." : "Kept on the server and only used to verify the token with the provider."));
+        // Friendly Captcha has no published test keys; the other providers do (Altcha gets a random key)
+        $("#cpTestKeys").closest(".field").toggle(p !== "3");
+    }
+    // The selects are wrapped by Fomantic dropdowns, which do not follow a programmatic .val():
+    // refresh the displayed text of every one of them after the form was filled.
+    var populating = false;
+    function syncDropdowns() {
+        populating = true;
+        try {
+            $("#cpForm select").each(function () {
+                var $d = $(this).closest(".ui.dropdown");
+                if ($d.length) { $d.dropdown("set selected", $(this).val()); }
+            });
+        } finally { populating = false; }
     }
     function fillForm(cfg) {
         cfg = cfg || {};
@@ -470,6 +496,7 @@
         $(".cpNumText").each(function (i) { $(this).text(isGlobal ? ["1.", "2.", "3."][i] : ["3.", "4.", "6."][i]); });
         $("#cpEnable").prop("checked", isGlobal ? true : (enable || !!(ruleObj && ruleObj.RequireCaptcha)));
         $("#cpProvider").val(String(cfg.Provider || 0));
+        $("#cpFriendlyEndpoint").val(cfg.FriendlyEndpoint === "eu" ? "eu" : "global");
         $("#cpSiteKey").val(cfg.SiteKey || "");
         $("#cpSecretKey").val(cfg.SecretKey || "").attr("type", "password");
         $("#cpRecaptchaVersion").val(cfg.RecaptchaVersion || "v2");
@@ -478,6 +505,7 @@
         setSession(cfg.SessionDuration || 3600);
         fillForm(cfg);
         updateProviderUI();
+        syncDropdowns();
         previewStale = {};
         $("#cpSaveHint").text(isGlobal ? "Applies to every rule on this node, for the fields a rule leaves empty." : "");
         setDirty(false);
@@ -503,6 +531,7 @@
         var isGlobal = target && target.kind === "global";
         f.captchaProvider = isGlobal ? "0" : $("#cpProvider").val();
         f.captchaRecaptchaVersion = $("#cpRecaptchaVersion").val();
+        f.captchaFriendlyEndpoint = $("#cpFriendlyEndpoint").val() || "global";
         f.domain = isGlobal ? "" : (target && target.ep) || "";
         f.page = previewPage;
         f.applyDefault = isGlobal ? "" : "true";
@@ -555,6 +584,7 @@
             payload.captchaSecretKey = $("#cpSecretKey").val().trim();
             payload.captchaSessionDuration = sessionSeconds();
             payload.captchaRecaptchaVersion = $("#cpRecaptchaVersion").val();
+            payload.captchaFriendlyEndpoint = $("#cpFriendlyEndpoint").val() || "global";
             payload.captchaRecaptchaScore = $("#cpRecaptchaScore").val();
             payload.captchaPathPrefixes = $("#cpPaths").val();
             if (payload.captchaProvider !== "2" && (!payload.captchaSiteKey || !payload.captchaSecretKey)) {
@@ -601,9 +631,9 @@
         }, 100);
     });
     $("#cpForm").on("input change", "input, select, textarea", function () {
-        if (!target) { return; }
+        if (!target || populating) { return; }
         setDirty(true);
-        if (this.id === "cpProvider" || this.id === "cpRecaptchaVersion") { updateProviderUI(); }
+        if (this.id === "cpProvider" || this.id === "cpRecaptchaVersion" || this.id === "cpFriendlyEndpoint") { updateProviderUI(); }
         if (this.id === "cpSessNum" || this.id === "cpSessUnit") { updateSessionHuman(); }
         refreshPreview();
     });

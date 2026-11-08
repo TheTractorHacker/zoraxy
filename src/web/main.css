@@ -992,7 +992,7 @@ body.darkTheme .menudivider{
     border-radius: 0.6em;
     padding: 1.4em;
     position: fixed;
-    z-index: 999;
+    z-index: 1100; /* above the modal dimmer (1000): tours walk through dialogs */
     width: 380px;
     display:none;
     border: 1px solid rgb(230, 230, 230);
@@ -1056,7 +1056,7 @@ body.darkTheme .menudivider{
     width: 300px;
     height: 200px;
     pointer-events: none;
-    z-index: 199;
+    z-index: 1090;
     border-radius: 0.6em;
     box-shadow: 0 0 0 max(100vh, 100vw) rgba(0, 0, 0, .3);
 }

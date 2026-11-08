@@ -1580,3 +1580,39 @@ Code: `src/mod/sablier` (config validation, HTTP client, gate with ready cache),
   followed, no environment proxy is used. Loopback and private addresses are allowed (Sablier normally runs next to the proxy). `AllowMetadataAddress` opts out.
 - Not validated: against a real Sablier server and real Docker / Swarm / Kubernetes providers. The fake Sablier in the tests follows the documented API
   (`X-Sablier-Session-Status`, `/api/strategies/{dynamic,blocking}`), so compare the "Check connection" button's URL with your Sablier version's docs.
+
+## CodeQL and Dependabot (fork #146 / upstream #741)
+
+`.github/workflows/codeql.yml` runs CodeQL (`security-extended` queries) for Go, JavaScript/TypeScript and the
+GitHub Actions workflows on pushes and pull requests to `dev`/`main` and weekly. Permissions are `contents: read`
+plus `security-events: write` on the analyze job only; every action is pinned to a commit SHA (comment = tag).
+`.github/dependabot.yml` covers `github-actions` and `gomod` (`/src`).
+
+**These only run once GitHub Actions is enabled on the fork** (Settings > Actions); until then nothing is scanned.
+Results appear under Security > Code scanning. To bump a pin: `gh api repos/github/codeql-action/commits/<tag> --jq .sha`
+(prefer tags that are at least two weeks old).
+
+## Remaining items batch (`fix/remaining-items`)
+
+* **Config migrations follow `-conf`.** `update.RunConfigUpdateInDir(confDir, from, to)` is the entry point; the old
+  `RunConfigUpdate(from, to)` is a wrapper for `./conf`. All migrations (`v308`..`v335`), the `conf/version` file, the localhost
+  fallback certificate and cert export zip (`-tmp`, `tlscert.NewManagerWithTmp`) and the web SSH helper use the configured folders.
+  The updater page no longer blocks "Update database" for a custom `-conf`. At start-up a warning is logged when a relative default
+  folder (`./conf`, `./tmp`, `./log`, `./plugins`, `./www`) still exists while a different folder is configured (stray data from the old
+  behaviour: check it and remove it by hand; Zoraxy never deletes it).
+* **Updater: cache, ETag, rate limit.** The release list is cached for 10 minutes in `conf/updater/releases-cache.json` (with its ETag);
+  *Check for updates* sends `If-None-Match`, so an unchanged list is a 304 that does not count against the GitHub quota. A rate-limit
+  answer (HTTP 403/429 with `x-ratelimit-remaining: 0` or `Retry-After`) becomes HTTP 429 from `/api/updater/check` with
+  "GitHub rate limit reached, try again at HH:MM" and no further request is made until the reset. An optional GitHub token
+  (Update page, `POST /api/updater/setToken`) is stored in `conf/updater/github_token` (0600), sent only to the API host and never returned.
+  Starting an update always revalidates (never trusts the cache).
+* **Same tag is the same build.** A release that is re-published under the tag already installed (later published-at) is "up to date"; before
+  it was offered and then refused by the signed build number check (fork #269, `TestForwardOnly` flake). Test fixtures use a fixed clock.
+* **Rule templates UI.** HTTP Proxy page > *Templates* (also "Manage templates" in the New proxy rule dialog): create, edit, clone and delete custom
+  templates with a live preview from `POST /api/proxy/templates/preview` (server side validation and the exact changes against a fresh rule or
+  a chosen rule; nothing is saved). Template JSON only contains the settings that were filled in.
+* **Quick Start tours** use the HTTP Proxy page and the New proxy rule dialog (`before` hook in `tourStepFactory` opens the dialog; the tour
+  layers sit above the dialog dimmer).
+* **Status map** is created only once its container has a size (ResizeObserver / tab activation), so jsVectorMap no longer logs `scale(NaN)`.
+  `tools/ui-smoke` fails on any console error and has regression steps for the map, the tour, the template manager, FriendlyCaptcha and the Recent block.
+* **openapi.yaml** has a "Not part of the token API" section; `TestAPIv1OpenAPIMatchesRoutes` proves every path in the YAML is routed and vice versa.

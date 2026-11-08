@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"net/http"
 	"strconv"
 	"strings"
@@ -56,7 +57,7 @@ func HandleCreateProxySession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//Create a new proxy instance
-	instance, err := webSshManager.NewSSHProxy("./tmp/gotty")
+	instance, err := webSshManager.NewSSHProxy(filepath.Join(TMP_FOLDER, "gotty"))
 	if err != nil {
 		utils.SendErrorResponse(w, strings.ReplaceAll(err.Error(), "\\", "/"))
 		return

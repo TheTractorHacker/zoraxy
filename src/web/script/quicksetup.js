@@ -39,6 +39,8 @@ function tourStepFactory(config){
         if (config.ignoreVisiableCheck == undefined){
             config.ignoreVisiableCheck = false;
         }
+
+        let renderStep = function(){
         
         if (config.element == undefined || (!$(config.element).is(":visible") && !config.ignoreVisiableCheck)){
             //No focused element in this step.
@@ -100,9 +102,37 @@ function tourStepFactory(config){
         if (config.callback != undefined){
             config.callback();
         }
+        };
 
-       
+        //before: prepare the page (e.g. open the New proxy rule dialog) and give it time to appear
+        if (config.before != undefined){
+            config.before();
+            setTimeout(renderStep, config.beforeDelay || 450);
+        }else{
+            renderStep();
+        }
     }
+}
+
+//Helpers for the tours that walk through the "New proxy rule" dialog (script/newrule.js)
+function tourOpenNewRuleDialog(domain, upstream){
+    if (typeof openNewRuleDialog != "function"){
+        return;
+    }
+    if ($("#newRuleModal").hasClass("visible") && domain == undefined){
+        return; //already open (going back / forward between dialog steps)
+    }
+    openNewRuleDialog({domain: domain || "", upstream: upstream || ""});
+}
+
+function tourCloseNewRuleDialog(){
+    if ($("#newRuleModal").length > 0 && ($("#newRuleModal").hasClass("visible") || $("#newRuleModal").hasClass("active"))){
+        $("#newRuleModal").modal("hide");
+    }
+}
+
+function tourSetNewRuleTls(on){
+    $("#nrTlsOn").prop("checked", on).trigger("change");
 }
 
 //Hide the side warpper in tour mode and prevent body from restoring to
@@ -198,6 +228,7 @@ function previousTourStep(){
 
 //End tour and reset everything
 function endTourFocus(){
+    tourCloseNewRuleDialog();
     $(".tourFocusObject").removeClass("tourFocusObject");
     $(".serviceOption.active").removeClass("active");
     currentQuickSetupClass = "";
@@ -280,28 +311,28 @@ var tourSteps = {
         tourStepFactory({
             title: "🌐 Add DNS Record for WebDAV",
             desc: `Before creating the proxy rule, add a DNS <b>A</b> or <b>CNAME</b> record for your chosen WebDAV subdomain (e.g. <code>webdav.example.com</code>) pointing to your Zoraxy server's public IP address — just like you did for your root domain.
-            <br><br>Once the DNS record is in place, fill in the subdomain in the <b>Matching Keyword / Domain</b> field.`,
-            tab: "rules",
-            element: "#rules .field[tourstep='matchingkeyword']",
-            scrollto: "#rules .field[tourstep='matchingkeyword']",
-            pos: "bottomright",
-            callback: function(){
+            <br><br>The <b>New proxy rule</b> dialog on the HTTP Proxy page is open with an example domain filled in. Replace it with your WebDAV subdomain.`,
+            tab: "httprp",
+            before: function(){
                 let webdavPort = $("#webdav_port").val() || "5488";
-                $("#rules .field[tourstep='matchingkeyword'] input").val("webdav.example.com");
-                $("#rules .field[tourstep='targetdomain'] input").val("127.0.0.1:" + webdavPort);
-            }
+                tourOpenNewRuleDialog("webdav.example.com", "127.0.0.1:" + webdavPort);
+            },
+            element: "#nrFDomain",
+            pos: "bottomright",
         }),
         tourStepFactory({
             title: "💾 Save the WebDAV Proxy Rule",
-            desc: `The target destination has been pre-filled to <code>127.0.0.1:5488</code> (adjust if you changed the WebDAV port). Click <b>"Create Endpoint"</b> to save the rule.
+            desc: `The upstream has been pre-filled to <code>127.0.0.1:5488</code> (adjust it if you changed the WebDAV port). Click <b>"Create rule"</b> to save the rule.
             <br><br>Once saved, you can connect to <code>https://webdav.example.com</code> using any WebDAV-compatible client such as WinSCP, Cyberduck, or Windows "Map Network Drive".`,
-            element: "#rules div[tourstep='newProxyRule']",
-            scrollto: "#rules div[tourstep='newProxyRule']",
-            pos: "topright",
+            before: function(){ tourOpenNewRuleDialog(); },
+            element: "#nrCreate",
+            pos: "bottomright",
         }),
         tourStepFactory({
             title: "🎉 WebDAV Server Setup Completed!",
             desc: `You should now be able to visit your domain and see the static web server contents show up in your browser.`,
+            before: function(){ tourCloseNewRuleDialog(); },
+            beforeDelay: 350,
             tab: "webserv",
             element: "",
             pos: "center",
@@ -354,61 +385,75 @@ var tourSteps = {
         }),
         tourStepFactory({
             title: "➕ Create New Proxy Rule",
-            desc: `Next, you can now move on to create a proxy rule that reverse proxy your new subdomain in Zoraxy. You can easily add new rules using the "New Proxy Rule" web form.`,
-            tab: "rules",
-            pos: "topright"
-        }),
-        tourStepFactory({
-            title: "🌐 Matching Keyword / Domain",
-            desc: `Fill in your new subdomain in the "Matching Keyword / Domain" field.<br> e.g. sub.example.com`,
-            element: "#rules .field[tourstep='matchingkeyword']",
+            desc: `Next, open the <b>HTTP Proxy</b> page and press <b>New proxy rule</b> (keyboard shortcut: <b>n</b>). A short dialog asks only for what is needed to send a domain to a server.`,
+            tab: "httprp",
+            before: function(){ tourCloseNewRuleDialog(); },
+            beforeDelay: 350,
+            element: "#ptNewRule",
             pos: "bottomright"
         }),
         tourStepFactory({
-            title: "🖥️ Target IP Address or Domain Name with port",
-            desc: `Fill in the Reverse Proxy Destination. e.g. localhost:8080 or 192.168.1.100:9096. <br><br>Please make sure your web services is accessible by Zoraxy.`,
-            element: "#rules .field[tourstep='targetdomain']",
+            title: "🌐 Domain",
+            desc: `Fill in your new subdomain in the <b>Domain</b> field.<br> e.g. sub.example.com`,
+            tab: "httprp",
+            before: function(){ tourOpenNewRuleDialog(); tourSetNewRuleTls(false); },
+            element: "#nrFDomain",
             pos: "bottomright"
         }),
         tourStepFactory({
-            title: "🔐 Proxy Target require TLS Connection",
-            desc: `If your upstream service only accept https connection, select this option.`,
-            element: "#rules .field[tourstep='requireTLS']",
-            pos: "bottomright",
-           
+            title: "🖥️ Upstream (where the app runs)",
+            desc: `Fill in the server the domain should be sent to, e.g. localhost:8080 or 192.168.1.100:9096. <br><br>Please make sure your web service is reachable by Zoraxy. <b>Test connection</b> checks it and detects whether it speaks HTTPS.`,
+            before: function(){ tourOpenNewRuleDialog(); tourSetNewRuleTls(false); },
+            element: "#nrFUp",
+            pos: "bottomright"
         }),
         tourStepFactory({
-            title: "🔓 Ignore TLS Validation Error",
-            desc: `Some open source projects like Proxmox or NextCloud use self-signed certificate to serve its web UI. If you are proxying services like that, enable this option. `,
-            element: "#rules #advanceProxyRules .field[tourstep='skipTLSValidation']",
-            scrollto: "#rules #advanceProxyRules",
-            pos: "bottomright",
-            ignoreVisiableCheck: true,
-            callback: function(){
-                $("#advanceProxyRules").accordion();
-                if (!$("#rules #advanceProxyRules .content").is(":visible")){
-                    //Open up the advance config menu
-                    $("#rules #advanceProxyRules .title")[0].click()
-                }
-            }
+            title: "🔐 Upstream uses HTTPS",
+            desc: `If your upstream service only accepts https connections, switch this on. The connection test sets it for you when it detects HTTPS.`,
+            before: function(){ tourOpenNewRuleDialog(); tourSetNewRuleTls(false); },
+            element: "#nrTls",
+            pos: "bottomright"
+        }),
+        tourStepFactory({
+            title: "🔓 Ignore Certificate Errors",
+            desc: `Some open source projects like Proxmox or NextCloud use a self-signed certificate to serve their web UI. If you are proxying a service like that, enable this option.`,
+            before: function(){ tourOpenNewRuleDialog(); tourSetNewRuleTls(true); },
+            element: "#nrSkipBox",
+            pos: "bottomright"
+        }),
+        tourStepFactory({
+            title: "🧩 Template",
+            desc: `A template pre-selects sensible options for the kind of service you proxy (for example a web app, an API or a media server). You can also create your own templates and change everything later.`,
+            before: function(){ tourOpenNewRuleDialog(); tourSetNewRuleTls(false); },
+            element: "#nrTplGrid",
+            pos: "bottomright"
+        }),
+        tourStepFactory({
+            title: "⚙️ More Options",
+            desc: `Tags, access rule, rate limit, uptime monitor and a few security switches live here. Need basic auth, custom headers or WebSocket tuning? Use <b>Open the full form</b> (Advanced Rule Form) or edit the rule after creating it.`,
+            before: function(){ tourOpenNewRuleDialog(); $("#nrMore").prop("open", true); },
+            element: "#nrMore",
+            pos: "bottomright"
         }),
         tourStepFactory({
             title: "💾 Save New Proxy Rule",
-            desc: `Now, click "Create Endpoint" to add this reverse proxy rule to runtime.`,
-            element: "#rules div[tourstep='newProxyRule']",
-            scrollto: "#rules div[tourstep='newProxyRule']",
-            pos: "topright",
+            desc: `Now, click <b>"Create rule"</b> to add this reverse proxy rule.`,
+            before: function(){ tourOpenNewRuleDialog(); $("#nrMore").prop("open", false); },
+            element: "#nrCreate",
+            pos: "bottomright"
         }),
         tourStepFactory({
             title: "🎉 New Proxy Rule Setup Completed!",
-            desc: `You can continue to add more subdomains or alias domain using this web form. To view the created reverse proxy rules, you can navigate to the HTTP Proxy tab.`,
-            element: "#rules",
-            tab: "rules",
+            desc: `You can add more subdomains or alias domains the same way. Created rules are listed on the HTTP Proxy page, where you can edit them at any time.`,
+            tab: "httprp",
+            before: function(){ tourCloseNewRuleDialog(); },
+            beforeDelay: 350,
+            element: "#ptNewRule",
             pos: "bottomright",
         }),
         tourStepFactory({
             title: "🌲 HTTP Proxy List",
-            desc: `In this tab, you will see all the created HTTP proxy rules and edit them if needed. You should see your newly created HTTP proxy rule in the above list. <Br><Br>
+            desc: `In this tab, you will see all the created HTTP proxy rules and edit them if needed. You should see your newly created HTTP proxy rule in the list. <Br><Br>
                     This is the end of this tour. If you want further documentation on how to setup access control filters or load balancer, check out our Github Wiki page.`,
             element: "#httprp",
             tab: "httprp",

@@ -45,6 +45,12 @@ type fakeGitHub struct {
 	mu       sync.Mutex
 	releases []fakeRelease
 	hits     map[string]int
+	// optional behaviour for the release list endpoint
+	useETag  bool
+	fail     int         // when non-zero answer the list with this status
+	failHdr  http.Header // headers sent with the failure
+	notMod   int         // number of 304 answers given
+	lastAuth string      // Authorization header of the latest request
 }
 
 func newFakeGitHub(t *testing.T) *fakeGitHub {
@@ -79,8 +85,18 @@ func sumsFor(name string, bin []byte) []byte {
 func (g *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 	g.mu.Lock()
 	g.hits[r.URL.Path]++
+	g.lastAuth = r.Header.Get("Authorization")
 	rels := append([]fakeRelease(nil), g.releases...)
+	fail, failHdr, useETag := g.fail, g.failHdr, g.useETag
 	g.mu.Unlock()
+	if r.URL.Path == "/repos/o/r/releases" && fail != 0 {
+		for k, v := range failHdr {
+			w.Header()[k] = v
+		}
+		w.WriteHeader(fail)
+		w.Write([]byte(`{"message":"API rate limit exceeded"}`))
+		return
+	}
 	if r.URL.Path == "/repos/o/r/releases" {
 		var out []map[string]any
 		for _, fr := range rels {
@@ -105,7 +121,20 @@ func (g *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		// a draft that must be ignored
 		out = append(out, map[string]any{"tag_name": "v9.9.9", "draft": true, "published_at": time.Now().UTC().Format(time.RFC3339)})
-		json.NewEncoder(w).Encode(out)
+		body, _ := json.Marshal(out)
+		if useETag {
+			sum := sha256.Sum256(body)
+			tag := `W/"` + hex.EncodeToString(sum[:8]) + `"`
+			w.Header().Set("ETag", tag)
+			if r.Header.Get("If-None-Match") == tag {
+				g.mu.Lock()
+				g.notMod++
+				g.mu.Unlock()
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+		}
+		w.Write(body)
 		return
 	}
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/dl/"), "/")
@@ -225,8 +254,11 @@ func (f *fixture) build(mut func(*Config)) {
 	f.m = New(cfg)
 }
 
+// fixtureEpoch is a fixed clock for release dates, so ordering never depends on wall-clock timing.
+var fixtureEpoch = time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+
 func (f *fixture) release(tag string, pre bool, age time.Duration, bin string) fakeRelease {
-	return fakeRelease{Tag: tag, Prerelease: pre, Published: time.Now().Add(-age), Binary: []byte(bin)}
+	return fakeRelease{Tag: tag, Prerelease: pre, Published: fixtureEpoch.Add(-age), Binary: []byte(bin)}
 }
 
 func (f *fixture) readExe() string {

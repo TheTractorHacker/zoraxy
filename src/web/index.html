@@ -978,6 +978,11 @@
                 return $item;
             }
 
+            // True for menu entries that sit outside every collapsible group (no tab_group)
+            function isAlwaysVisibleTab(tabID) {
+                return $('#mainmenu > .item').not('[tab_group]').filter(function() { return this.getAttribute('tag') === tabID; }).length > 0;
+            }
+
             function renderRecentItems() {
                 var $container = $('#group-recent');
                 $container.empty();
@@ -993,8 +998,10 @@
 
                 // Recent items, excluding anything already pinned, capped at the
                 // display limit.
+                // Top level items (Quick Start, Status) are always listed right below the
+                // Recent block, so repeating them there would only duplicate them.
                 var recent = getRecentTabs().filter(function(t) {
-                    return pinnedTags.indexOf(t.tag) === -1;
+                    return pinnedTags.indexOf(t.tag) === -1 && !isAlwaysVisibleTab(t.tag);
                 }).slice(0, RECENT_DISPLAY_MAX);
 
                 recent.forEach(function(tab) {
@@ -1017,5 +1024,6 @@
         </script>
         <script src="script/uxkit.js"></script>
         <script src="script/newrule.js"></script>
+        <script src="script/ruletemplates.js"></script>
     </body>
 </html>
