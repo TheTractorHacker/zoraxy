@@ -324,7 +324,7 @@ func (ws *WebServer) Close() {
 // SetCustomCredentials sets custom username and password for WebDAV
 func (ws *WebServer) SetCustomCredentials(username, password string) error {
 	// Hash the password
-	hashedPassword := auth.Hash(password)
+	hashedPassword := auth.HashPasswordWithProfile(password, auth.ProfileBasicAuth)
 	
 	// Save username and hashed password to database
 	err := ws.option.Sysdb.Write("webserv", "webdavCustomUsername", username)

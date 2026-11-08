@@ -2,6 +2,7 @@ package webserv
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"net/http"
@@ -73,7 +74,9 @@ func (wd *WebDAVServer) basicAuthMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// validateCustomCredentials validates custom WebDAV credentials
+// validateCustomCredentials validates custom WebDAV credentials. Passwords are
+// stored as salted argon2id; a legacy unsalted SHA-512 hash still verifies and is
+// transparently re-stored as argon2id after a successful login.
 func (wd *WebDAVServer) validateCustomCredentials(username, password string) bool {
 	// Get stored username and hashed password from database
 	var storedUsername string
@@ -89,14 +92,20 @@ func (wd *WebDAVServer) validateCustomCredentials(username, password string) boo
 		return false
 	}
 
-	// Check if username matches
-	if username != storedUsername {
+	// Check if username matches (constant time)
+	if subtle.ConstantTimeCompare([]byte(username), []byte(storedUsername)) != 1 {
 		return false
 	}
 
-	// Hash the provided password and compare with stored hash
-	hashedPassword := auth.Hash(password)
-	return hashedPassword == storedPasswordHash
+	ok, needsRehash := auth.VerifyPassword(password, storedPasswordHash, auth.ProfileBasicAuth)
+	if !ok {
+		return false
+	}
+	if needsRehash {
+		//Best effort: a failed write simply retries on the next login
+		_ = wd.options.Sysdb.Write("webserv", "webdavCustomPasswordHash", auth.HashPasswordWithProfile(password, auth.ProfileBasicAuth))
+	}
+	return true
 }
 
 // Start starts the WebDAV server
