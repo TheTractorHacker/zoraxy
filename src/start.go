@@ -102,6 +102,7 @@ func startupSequence() {
 	}
 
 	initWAFAuditLog() //WAF JSON audit log, see wafapi.go
+	initSiteLogs()    //Optional per-site request logs, see sitelogapi.go
 
 	LogViewer = logviewer.NewLogViewer(&logviewer.ViewerOption{
 		RootFolder: *path_logFile,

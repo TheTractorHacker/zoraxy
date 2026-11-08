@@ -410,7 +410,11 @@ func (router *Router) logRequest(r *http.Request, succ bool, statusCode int, for
 	// e.g. Redirection matching rule
 	if endpoint == nil || !endpoint.DisableLogging {
 		// log the http request to file
-		router.Option.Logger.LogHTTPRequest(r, forwardType, statusCode, originalHostname, upstreamHostname, clientIP)
+		siteKey := ""
+		if endpoint != nil {
+			siteKey = endpoint.RootOrMatchingDomain
+		}
+		router.Option.Logger.LogHTTPRequestSite(siteKey, r, forwardType, statusCode, originalHostname, upstreamHostname, clientIP)
 	}
 
 	if endpoint == nil || router.Option.StatisticCollector == nil {
