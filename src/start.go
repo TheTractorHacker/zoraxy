@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/netip"
 	"os"
@@ -381,6 +382,11 @@ func startupSequence() {
 		ZoraxyPort = int(ZoraxyAddrPort.Port())
 	} else {
 		SystemWideLogger.PrintAndLog("plugin-manager", fmt.Sprintf("Could not set port for plugin communication (webUI/-port); fallback to default port '%d'", ZoraxyPort), err)
+	}
+
+	if webUILoopbackListener != nil {
+		//Web UI is HTTPS: plugins call back over the plain HTTP loopback-only listener
+		ZoraxyPort = webUILoopbackListener.Addr().(*net.TCPAddr).Port
 	}
 
 	pluginManager = plugins.NewPluginManager(&plugins.ManagerOptions{
