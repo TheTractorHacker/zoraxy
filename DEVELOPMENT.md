@@ -143,7 +143,7 @@ The management web UI is plain HTTP by default (`-webui_tls=off`, unchanged beha
 Details:
 
 - HTTPS is served on the same `-port`. Plain HTTP requests to that port get a `308` redirect to `https://`.
-- Plugins keep using plain HTTP: when TLS is on, Zoraxy opens an extra loopback-only (`127.0.0.1`, random port) HTTP listener and passes that port as `ZoraxyPort` to plugins.
+- Plugins keep using plain HTTP: when TLS is on, Zoraxy opens an extra loopback-only (`127.0.0.1`, random port) HTTP listener and passes that port as `ZoraxyPort` to plugins. That listener serves **only** `/plugin/` (everything else is 404), so the admin UI/API is never reachable over plain HTTP.
 - Session and CSRF cookies get the `Secure` flag when TLS is on.
 - `-webui_hsts` additionally sends `Strict-Transport-Security` (off by default; avoid with self-signed certificates).
 - The HTTPS URL and certificate SHA-256 fingerprint are printed at startup; compare it with what your browser shows when trusting the certificate.
