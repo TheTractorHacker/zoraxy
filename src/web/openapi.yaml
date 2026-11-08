@@ -18,6 +18,18 @@ info:
     Request bodies are flat JSON objects whose keys are the parameter names used
     by the corresponding admin UI call (`/api/proxy/add`, `/api/proxy/edit`);
     values may be strings, numbers or booleans. Errors use `{"error": "..."}`.
+
+    ## Not part of the token API
+
+    This document lists the complete `/api/v1` surface; nothing else accepts a
+    token. Everything the admin panel does beyond it is cookie + CSRF only and is
+    deliberately not exposed here, for example: CAPTCHA settings and page
+    branding (`/api/proxy/captcha/*`), proxy rule templates (`/api/proxy/templates/*`),
+    the updater (`/api/updater/*`), API token management (`/api/apitoken/*`),
+    configuration backup and restore, certificate upload and ACME, cluster and fleet
+    management, SSO / OAuth2 providers, scripting, plugins, and user or role
+    administration. Create or change those objects in the admin panel; the
+    proxy-rule endpoints below carry the common rule fields only.
 servers:
   - url: /
 security:
