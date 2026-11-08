@@ -153,6 +153,7 @@ func init() {
 	RegisterScope(&fileScope{name: "pathrules", label: "Path blocking rules", roots: []string{"rules"}, kind: "json"})
 	RegisterScope(&fileScope{name: "streamproxy", label: "Stream proxy rules", roots: []string{"streamproxy"}, kind: "json"})
 	RegisterScope(&fileScope{name: "acme", label: "ACME configuration", roots: []string{"acme_conf.json"}, kind: "json"})
+	RegisterScope(&fileScope{name: "waf", label: "Central WAF policy and profiles", roots: []string{"waf_central.json"}, kind: "json"})
 	RegisterScope(&fileScope{name: "certs", label: "Certificates (private keys are sent to nodes)", roots: []string{certRoot}, kind: "raw"})
 }
 

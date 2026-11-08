@@ -900,7 +900,7 @@ type fakeScope struct {
 	failCommit        bool
 }
 
-func (f *fakeScope) Name() string  { return "waf" }
+func (f *fakeScope) Name() string  { return "extdb" }
 func (f *fakeScope) Label() string { return "WAF" }
 func (f *fakeScope) OwnsPath(p string) bool {
 	return strings.HasPrefix(p, "waf:")
@@ -929,10 +929,10 @@ func (f *fakeScope) Apply(env *ScopeEnv, items []FileEntry, prev []string) (*Sco
 func TestPluggableScope(t *testing.T) {
 	fs := &fakeScope{}
 	RegisterScope(fs)
-	defer UnregisterScope("waf")
+	defer UnregisterScope("extdb")
 	e := newFleetEnv(t)
 	n := e.addNode("node-a", "g1")
-	e.setGroup("g1", []string{"waf"})
+	e.setGroup("g1", []string{"extdb"})
 	e.publish("g1", StrategyImmediate)
 	if err := n.sync(t); err != nil {
 		t.Fatal(err)
@@ -1196,5 +1196,44 @@ func TestEditGuardForManagedObjects(t *testing.T) {
 	}
 	if do("GET", "/api/redirect/list", "") != 200 {
 		t.Fatal("reads must pass")
+	}
+}
+
+// The central WAF policy and profiles live in <conf>/waf_central.json; the hub
+// can push them to nodes with the built-in "waf" scope.
+func TestWAFScopeSyncsCentralPolicy(t *testing.T) {
+	found := false
+	for _, si := range ScopeList() {
+		if si.Name == "waf" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal(`built-in "waf" scope is not registered`)
+	}
+	e := newFleetEnv(t)
+	n := e.addNode("node-a", "g1")
+	e.setGroup("g1", []string{"waf"})
+	mustWrite(t, e.dir, "waf_central.json", `{"Policy":{"Enabled":true,"Mode":"detection_only"},"Profiles":[]}`)
+	mustWrite(t, n.dir, "proxy/local.config", `{"keep":1}`) // local, unmanaged: must survive
+	e.publish("g1", StrategyImmediate)
+	if err := n.sync(t); err != nil {
+		t.Fatal(err)
+	}
+	if got := fileAt(n.dir, "waf_central.json"); !strings.Contains(got, "detection_only") {
+		t.Fatalf("node did not receive the central WAF policy: %q", got)
+	}
+	if fileAt(n.dir, "proxy/local.config") == "<missing>" {
+		t.Fatal("unmanaged local proxy rule was touched by the waf scope")
+	}
+	// A node outside the group must not receive it.
+	other := e.addNode("node-b", "g2")
+	e.setGroup("g2", []string{"proxy"})
+	e.publish("g2", StrategyImmediate)
+	if err := other.sync(t); err != nil {
+		t.Fatal(err)
+	}
+	if fileAt(other.dir, "waf_central.json") != "<missing>" {
+		t.Fatal("node in another group received the WAF policy")
 	}
 }
