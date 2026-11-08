@@ -162,3 +162,8 @@ FriendlyCaptcha, counting SSO redirect failures in the auto-ban, per-user admin 
 - ✅ `{{host}}` `{{client_ip}}` `{{request_id}}` `{{rule_name}}` `{{external_ip}}` in headers, redirects, static responses; rule templates; bulk edit (upstream #370 #826 #877 #924).
 - ✅ API tokens + `/api/v1` + OpenAPI (upstream #382 #714 #996), response bandwidth limit (upstream #1208), plain HTTP listener address (#909), IP calculators (#504), opt-in split-horizon DNS responder (#769).
 - 📋 UI editor for custom rule templates (API exists), bandwidth limit for WebSocket traffic.
+## UI performance, Status page, Visitors (`feat/ui-perf-status-visitors`)
+- ✅ Idle admin UI CPU cut (endless accordion re-init loop, background polling of hidden pages, MutationObserver scans, canvas traffic map); `tools/ui-perf`.
+- ✅ Status page: KPI cards with skeletons, traffic over time chart, upstream / certificate / alert lists, latest visitors, traffic map hide / pause.
+- ✅ Visitors list (per IP, recent visits, Cloudflare aware, retention, export, purge, per IP delete, optional new-country notification).
+- 📋 Visitors: city level GeoIP, per-host retention, hourly history chart on the Status page, virtualised rows for very large pages.

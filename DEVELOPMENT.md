@@ -1301,3 +1301,36 @@ otherwise each rule is applied independently on a copy and reported (partial upd
 
 Tests: `go test -race ./mod/dynamicproxy/...` (ops_test.go through `ProxyHandler.ServeHTTP`, bulk_test.go, unix_upstream_test.go,
 loadbalance/clientrules_test.go, redirection/advanced_test.go).
+
+## UI performance, Status page and Visitors (feat/ui-perf-status-visitors)
+
+### UI performance probe (`tools/ui-perf/perf.py`)
+Starts (or attaches to) a throw-away `-noauth -dev` instance, seeds 30 proxy rules and ~600 proxied requests (behind a "trusted CDN",
+with `CF-Connecting-IP` / `X-Forwarded-For`), then measures every menu page with CDP: main-thread CPU % over an idle window
+(`ThreadTime`, immune to a loaded machine), long tasks, layout / style recalcs per second, timers per second, rAF callbacks,
+network requests per 10 s, JS heap growth, DOM nodes, click-to-second-paint latency of typical interactions and the frame rate while
+dragging the traffic map. `--profile N --only PAGE` prints a CPU profile, `--prep JS` runs JavaScript first (to test a suspect).
+```bash
+PY=$HOME/ui-test-tools/py.sh
+$PY tools/ui-perf/perf.py --spawn ./zoraxy --web src/web --port 28781 --json perf.json
+$PY tools/ui-perf/perf.py --url http://127.0.0.1:28781 --no-seed --only status --profile 10
+```
+Findings and fixes: `rules.html` re-initialised its accordion every 300 ms forever (`$._data` got a jQuery object, so the check never
+passed), which kept mutating the DOM and re-triggered the `uxkit.js` MutationObserver (full `document.body` scan each time);
+all ~30 page components polled in the background while hidden (`script/perfkit.js` now skips interval ticks of pages that are not
+the active tab or when the browser tab is hidden); the traffic map repainted a big SVG every frame with CSS `stroke-dashoffset`
+animation and SVG drop-shadow filters (the dashes are now drawn on a canvas at 8 fps, paused while hidden / off screen / user paused /
+idle for 45 s, the grid is a viewport sized background). `uxkit.js` scans only the added nodes.
+
+### Visitors (`src/mod/visitors`, `src/visitorsapi.go`, `components/visitors.html`)
+* One aggregate per client IP (first / last seen, hits, blocked hits, country, top 16 hosts, top 12 paths, last UA / path / status,
+  `via` = direct | cloudflare | proxy and the header the address came from, 30 daily counters) plus a ring buffer of the last N visits.
+* Hot path: `Tracker.Record` is a settings check, the exclusion checks and a non-blocking channel send (queue 8192, drops are counted).
+  A single writer goroutine owns the map. `go test -bench . ./mod/visitors` compares it with a global mutex map.
+* Attribution uses `GetClientIPForEndpoint`; `visitors.Attribute` only labels a hit "cloudflare" / "proxy" when the resolved client differs from
+  the TCP peer, so a forged `CF-Connecting-IP` from an untrusted peer is ignored and the hit is recorded as direct under the peer address.
+* Honours the statistics exclusion list and "exclude blocked", and the per rule "disable statistics collection".
+* Persistence: `conf/visitors.json.gz` (atomic replace) every 5 min when dirty and on shutdown. Settings in sysdb table `visitors`:
+  `Enabled` (default on), `MaxIPs` 20000, `MaxAgeDays` 90, `MaxVisits` 5000, `KeepQuery` off, `NotifyNewCountry` off (event `visitor.new_country`).
+* API: `GET /api/visitors/{summary,list,recent,detail,export,settings}`, `POST /api/visitors/{settings,delete,purge}`. CSV export neutralises formula injection.
+* Country only (the embedded GeoIP database has no city data; no network lookups).
