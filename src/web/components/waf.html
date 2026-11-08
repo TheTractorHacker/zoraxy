@@ -1,0 +1,535 @@
+<div class="standardContainer">
+    <div class="ui basic segment">
+        <h2>Web Application Firewall</h2>
+        <p>Central management of the WAF (Coraza + OWASP Core Rule Set). The global policy applies to every proxy rule that is set to
+            <b>Inherit</b>; rules can instead pick a profile, a fixed mode, or keep their own custom configuration.
+            The global policy is <b>off</b> by default, so nothing changes until you enable it.</p>
+    </div>
+
+    <div class="ui top attached tabular menu" id="wafTabs">
+        <a class="item active" data-tab="waf-policy">Policy</a>
+        <a class="item" data-tab="waf-profiles">Profiles</a>
+        <a class="item" data-tab="waf-exclusions">Exclusions</a>
+        <a class="item" data-tab="waf-events">Events</a>
+        <a class="item" data-tab="waf-rules">Rules reference</a>
+        <a class="item" data-tab="waf-coverage">Coverage</a>
+    </div>
+
+    <!-- Policy -->
+    <div class="ui bottom attached tab segment active" data-tab="waf-policy">
+        <div class="ui form" id="wafPolicyForm">
+            <div class="field">
+                <div class="ui toggle checkbox" id="wafpEnabledBox">
+                    <input type="checkbox" id="wafpEnabled">
+                    <label>Enable the global WAF policy for rules that inherit it</label>
+                </div>
+            </div>
+            <div class="three fields">
+                <div class="field">
+                    <label>Default mode</label>
+                    <select class="ui dropdown" id="wafpMode">
+                        <option value="detection_only">Detection only (log, never block)</option>
+                        <option value="block">Block</option>
+                        <option value="off">Off</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Paranoia level</label>
+                    <select class="ui dropdown" id="wafpParanoia">
+                        <option value="1">1 - Low false positives (recommended)</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4 - Strictest</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Anomaly score threshold</label>
+                    <input type="number" id="wafpThreshold" min="1" value="5">
+                </div>
+            </div>
+            <div class="two fields">
+                <div class="field">
+                    <label>Body inspection limit (KiB)</label>
+                    <input type="number" id="wafpBodyLimit" min="1" value="128">
+                </div>
+                <div class="field">
+                    <label>&nbsp;</label>
+                    <div class="ui checkbox" id="wafpOverrideBox">
+                        <input type="checkbox" id="wafpOverride">
+                        <label>Allow proxy rules to override paranoia level and threshold</label>
+                    </div>
+                </div>
+            </div>
+            <div class="field">
+                <label>Global custom rules (SecLang)</label>
+                <textarea id="wafpCustomRules" rows="4" style="font-family:monospace;" placeholder='SecRule REQUEST_HEADERS:X-Evil "@streq yes" "id:1000001,phase:1,deny,status:403,msg:custom"'></textarea>
+                <small>Run before profile and proxy rule rules. Validated on save. Use IDs above 1000000.</small>
+            </div>
+            <div class="two fields">
+                <div class="field">
+                    <label>Trusted paths (skip the WAF)</label>
+                    <textarea id="wafpTrustedPaths" rows="4" style="font-family:monospace;" placeholder="/health&#10;=/ping&#10;static.example.com /assets/"></textarea>
+                    <small>One per line: <code>[HOST] PATH</code>. PATH is a prefix; start it with <code>=</code> for an exact match. HOST may be <code>*.example.com</code>.
+                        <code>/.well-known/acme-challenge/</code> (GET/HEAD) is always trusted. Paths with <code>//</code>, <code>/./</code>, <code>..</code> or encoded characters are never trusted, only inspected. Matching is case sensitive.</small>
+                </div>
+                <div class="field">
+                    <label>Allowed client IPs (skip the WAF)</label>
+                    <textarea id="wafpAllowedIPs" rows="4" style="font-family:monospace;" placeholder="192.0.2.10&#10;10.0.0.0/8"></textarea>
+                    <small>One IP or CIDR per line. Uses the client IP resolved with the trusted proxy settings.</small>
+                </div>
+            </div>
+            <button class="ui basic green button" onclick="wafSavePolicy(this);"><i class="save icon"></i> Save policy</button>
+            <small style="opacity:0.7; margin-left:1em;">Applies immediately to every proxy rule without a restart. Invalid rules reject the save.</small>
+        </div>
+    </div>
+
+    <!-- Profiles -->
+    <div class="ui bottom attached tab segment" data-tab="waf-profiles">
+        <p>Profiles bundle a mode, tuning and exclusions. A proxy rule that uses a profile follows it: editing a profile updates all of them at once. Built-in profiles are read-only; clone one to customise it.</p>
+        <div style="overflow-x:auto;">
+            <table class="ui compact celled small table">
+                <thead><tr><th>Name</th><th>Mode</th><th>Paranoia</th><th>Threshold</th><th>Used by</th><th>Actions</th></tr></thead>
+                <tbody id="wafProfilesBody"></tbody>
+            </table>
+        </div>
+        <button class="ui basic small button" onclick="wafEditProfile(null);"><i class="plus icon"></i> New profile</button>
+        <div class="ui segment" id="wafProfileEditor" style="display:none;">
+            <h4 id="wafProfileEditorTitle">Profile</h4>
+            <div class="ui form">
+                <div class="two fields">
+                    <div class="field"><label>Name</label><input type="text" id="wafprName" maxlength="40"></div>
+                    <div class="field"><label>Description</label><input type="text" id="wafprDesc" maxlength="300"></div>
+                </div>
+                <div class="three fields">
+                    <div class="field"><label>Mode</label>
+                        <select class="ui dropdown" id="wafprMode">
+                            <option value="detection_only">Detection only</option>
+                            <option value="block">Block</option>
+                            <option value="off">Off</option>
+                        </select>
+                    </div>
+                    <div class="field"><label>Paranoia level (0 = global)</label><input type="number" id="wafprParanoia" min="0" max="4" value="0"></div>
+                    <div class="field"><label>Threshold (0 = global)</label><input type="number" id="wafprThreshold" min="0" value="0"></div>
+                </div>
+                <div class="field"><label>Excluded rule IDs</label><input type="text" id="wafprExcluded" placeholder="942100, 949000-949999"></div>
+                <div class="field"><label>Path scoped exclusions</label><textarea id="wafprPathEx" rows="3" placeholder="/api/search 942100,942200&#10;=/login 920420"></textarea></div>
+                <div class="field"><label>Custom rules (SecLang)</label><textarea id="wafprRules" rows="4" style="font-family:monospace;"></textarea></div>
+                <button class="ui basic green button" id="wafprSave" onclick="wafSaveProfile(this);"><i class="save icon"></i> Save profile</button>
+                <button class="ui basic button" onclick="$('#wafProfileEditor').hide();">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Exclusions -->
+    <div class="ui bottom attached tab segment" data-tab="waf-exclusions">
+        <p>Rules disabled for every proxy rule that uses the central WAF (inherit, fixed mode or profile). Proxy rule and profile exclusions are added on top of these. Proxy rules on <i>custom</i> keep their own settings.</p>
+        <div class="ui form">
+            <div class="field">
+                <label>Excluded rule IDs (everywhere)</label>
+                <input type="text" id="wafpExcluded" placeholder="942100, 949000-949999">
+                <small>Comma separated rule IDs or ranges. See the <a href="#" onclick="$('#wafTabs .item[data-tab=waf-rules]').click();return false;">Rules reference</a>.</small>
+            </div>
+            <div class="field">
+                <label>Path scoped exclusions</label>
+                <textarea id="wafpPathEx" rows="5" style="font-family:monospace;" placeholder="/api/search 942100,942200&#10;=/login 920420"></textarea>
+                <small>One per line: <code>PATH RULEID,RULEID</code>. Prefix match; start the path with <code>=</code> for an exact match.</small>
+            </div>
+            <button class="ui basic green button" onclick="wafSavePolicy(this);"><i class="save icon"></i> Save exclusions</button>
+        </div>
+    </div>
+
+    <!-- Events -->
+    <div class="ui bottom attached tab segment" data-tab="waf-events">
+        <div id="wafSummary" class="ui small statistics" style="margin-bottom:1em;"></div>
+        <div id="wafHourly" style="display:flex; align-items:flex-end; gap:2px; height:48px; margin-bottom:0.3em;"></div>
+        <small style="opacity:0.7;">Events per hour (last 48 hours, red = blocked)</small>
+        <div class="ui stackable two column grid" style="margin-top:0.5em;">
+            <div class="column"><b>Top rules</b><div id="wafTopRules" class="ui list"></div></div>
+            <div class="column"><b>Top client IPs</b><div id="wafTopIPs" class="ui list"></div></div>
+        </div>
+        <div class="ui divider"></div>
+        <div class="ui form">
+            <div class="six fields">
+                <div class="field"><label>Proxy rule</label><select class="ui dropdown" id="wafevEndpoint"><option value="">All</option></select></div>
+                <div class="field"><label>Rule ID</label><input type="text" id="wafevRule" placeholder="942100"></div>
+                <div class="field"><label>Action</label>
+                    <select class="ui dropdown" id="wafevAction"><option value="">All</option><option value="blocked">Blocked</option><option value="detected">Detected</option></select>
+                </div>
+                <div class="field"><label>Client IP</label><input type="text" id="wafevIP"></div>
+                <div class="field"><label>Time</label>
+                    <select class="ui dropdown" id="wafevSince">
+                        <option value="1">Last hour</option><option value="24" selected>Last 24 hours</option><option value="168">Last 7 days</option><option value="0">Everything buffered</option>
+                    </select>
+                </div>
+                <div class="field"><label>&nbsp;</label>
+                    <button class="ui basic icon button" onclick="wafLoadEvents();" title="Refresh"><i class="sync icon"></i></button>
+                    <div class="ui checkbox" style="margin-left:0.5em;"><input type="checkbox" id="wafevAuto"><label>Live</label></div>
+                </div>
+            </div>
+        </div>
+        <small style="opacity:0.7;">Held in memory (last 1000 events across all proxy rules, cleared on restart). The full audit trail is in the <code>zr-waf_*.log</code> files in the log folder.</small>
+        <div style="overflow-x:auto; margin-top:0.6em;">
+            <table class="ui compact very basic small table">
+                <thead><tr><th>Time</th><th>Proxy rule</th><th>Client</th><th>Request</th><th>Result</th><th>Rules / exclude</th></tr></thead>
+                <tbody id="wafEventsBody"><tr><td colspan="6"><small>No events</small></td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Rules reference -->
+    <div class="ui bottom attached tab segment" data-tab="waf-rules">
+        <div class="ui fluid icon input" style="margin-bottom:0.8em;">
+            <input type="text" id="wafRuleSearch" placeholder="Search by rule ID, description or category">
+            <i class="search icon"></i>
+        </div>
+        <div style="overflow-x:auto; max-height:600px; overflow-y:auto;">
+            <table class="ui compact very basic small table">
+                <thead><tr><th>ID</th><th>Description</th><th>Category</th><th>Paranoia</th><th>Severity</th></tr></thead>
+                <tbody id="wafRulesBody"></tbody>
+            </table>
+        </div>
+        <small style="opacity:0.7;">Rules of the embedded OWASP Core Rule Set (request phase). Rule 949110 is the anomaly score evaluation that decides blocking.</small>
+    </div>
+
+    <!-- Coverage -->
+    <div class="ui bottom attached tab segment" data-tab="waf-coverage">
+        <p>The effective WAF of every proxy rule and where it comes from. <i>/</i> is the default site. Use the endpoint editor's WAF tab to edit a <i>custom</i> configuration.</p>
+        <div style="overflow-x:auto;">
+            <table class="ui compact celled small table">
+                <thead><tr><th>Proxy rule</th><th>Effective mode</th><th>Source</th><th>Change</th></tr></thead>
+                <tbody id="wafCoverageBody"></tbody>
+            </table>
+        </div>
+        <button class="ui basic small button" onclick="wafLoadCoverage();"><i class="sync icon"></i> Refresh</button>
+    </div>
+</div>
+
+<script>
+(function(){
+    var wafPolicy = null;
+    var wafProfiles = [];
+    var wafAutoTimer = null;
+    var wafRuleCache = null;
+
+    function esc(t){ return $("<div>").text(t == null ? "" : String(t)).html(); }
+    function fail(data){ if (data && data.error != undefined){ msgbox(data.error, false, 6000); return true; } return false; }
+    function post(url, data, ok, bad){
+        $.cjax({url: url, method: "POST", data: data,
+            success: function(d){ if (!fail(d)){ if (ok) ok(d); } else if (bad) bad(); },
+            error: function(){ msgbox("Request failed", false, 4000); if (bad) bad(); }});
+    }
+    function modeLabel(m){
+        if (m == "block") return '<span style="color:#21ba45;font-weight:bold;">Block</span>';
+        if (m == "detection_only") return '<span style="color:#f2711c;font-weight:bold;">Detection only</span>';
+        return '<span style="opacity:0.6;">Off</span>';
+    }
+
+    /* ---------- path exclusion text helpers ---------- */
+    function pathExToText(list){
+        return (list || []).map(function(p){ return (p.Exact ? "=" : "") + p.Path + " " + (p.RuleIDs || []).join(","); }).join("\n");
+    }
+    function textToPathEx(text){
+        var out = [];
+        text.split("\n").forEach(function(line){
+            line = line.trim();
+            if (line == "") return;
+            var parts = line.split(/\s+/);
+            if (parts.length < 2) throw new Error("Invalid path exclusion line: " + line);
+            var exact = parts[0].charAt(0) == "=";
+            out.push({Path: exact ? parts[0].substring(1) : parts[0], Exact: exact,
+                RuleIDs: parts.slice(1).join("").split(",").filter(function(x){ return x != ""; })});
+        });
+        return out;
+    }
+    function trustedToText(list){
+        return (list || []).map(function(t){ return (t.Host ? t.Host + " " : "") + (t.Exact ? "=" : "") + t.Path; }).join("\n");
+    }
+    function textToTrusted(text){
+        var out = [];
+        text.split("\n").forEach(function(line){
+            line = line.trim();
+            if (line == "") return;
+            var parts = line.split(/\s+/), host = "", p = parts[0];
+            if (parts.length == 2){ host = parts[0]; p = parts[1]; }
+            else if (parts.length > 2) throw new Error("Invalid trusted path line: " + line);
+            var exact = p.charAt(0) == "=";
+            out.push({Host: host, Path: exact ? p.substring(1) : p, Exact: exact});
+        });
+        return out;
+    }
+    function lines(text){ return text.split("\n").map(function(x){ return x.trim(); }).filter(function(x){ return x != ""; }); }
+    function ids(text){ return text.split(/[\s,]+/).filter(function(x){ return x != ""; }); }
+
+    /* ---------- policy + exclusions ---------- */
+    function loadPolicy(){
+        $.get("/api/waf/policy", function(p){
+            if (fail(p)) return;
+            wafPolicy = p;
+            $("#wafpEnabled").prop("checked", !!p.Enabled);
+            $("#wafpMode").val(p.DefaultMode || "detection_only");
+            $("#wafpParanoia").val(String(p.ParanoiaLevel || 1));
+            $("#wafpThreshold").val(p.InboundThreshold || 5);
+            $("#wafpBodyLimit").val(Math.round((p.MaxBodyBytes || 131072) / 1024));
+            $("#wafpOverride").prop("checked", !!p.AllowEndpointOverride);
+            $("#wafpCustomRules").val(p.CustomRules || "");
+            $("#wafpTrustedPaths").val(trustedToText(p.TrustedPaths));
+            $("#wafpAllowedIPs").val((p.AllowedIPs || []).join("\n"));
+            $("#wafpExcluded").val((p.ExcludedRuleIDs || []).join(", "));
+            $("#wafpPathEx").val(pathExToText(p.PathExclusions));
+        });
+    }
+    window.wafSavePolicy = function(btn){
+        var pol;
+        try {
+            pol = {
+                Enabled: $("#wafpEnabled").prop("checked"),
+                DefaultMode: $("#wafpMode").val(),
+                ParanoiaLevel: parseInt($("#wafpParanoia").val()),
+                InboundThreshold: parseInt($("#wafpThreshold").val()) || 5,
+                MaxBodyBytes: (parseInt($("#wafpBodyLimit").val()) || 128) * 1024,
+                AllowEndpointOverride: $("#wafpOverride").prop("checked"),
+                CustomRules: $("#wafpCustomRules").val(),
+                TrustedPaths: textToTrusted($("#wafpTrustedPaths").val()),
+                AllowedIPs: lines($("#wafpAllowedIPs").val()),
+                ExcludedRuleIDs: ids($("#wafpExcluded").val()),
+                PathExclusions: textToPathEx($("#wafpPathEx").val())
+            };
+        } catch (e){ msgbox(e.message, false, 5000); return; }
+        $(btn).addClass("loading");
+        $.cjax({url: "/api/waf/policy", method: "POST", data: {policy: JSON.stringify(pol)},
+            success: function(d){
+                $(btn).removeClass("loading");
+                if (!fail(d)){ msgbox("WAF policy saved and applied"); loadPolicy(); wafLoadCoverage(); }
+            },
+            error: function(){ $(btn).removeClass("loading"); msgbox("Request failed", false, 4000); }});
+    };
+
+    /* ---------- profiles ---------- */
+    function loadProfiles(){
+        $.get("/api/waf/profiles", function(list){
+            if (fail(list)) return;
+            wafProfiles = list || [];
+            var body = $("#wafProfilesBody").empty();
+            wafProfiles.forEach(function(p, i){
+                var used = (p.UsedBy || []);
+                var actions = '<a href="#" class="wafPrClone" data-i="' + i + '">Clone</a>';
+                if (!p.BuiltIn){
+                    actions = '<a href="#" class="wafPrEdit" data-i="' + i + '">Edit</a> | ' + actions +
+                        ' | <a href="#" class="wafPrDel" data-i="' + i + '" style="color:#db2828;">Delete</a>';
+                } else {
+                    actions = '<a href="#" class="wafPrView" data-i="' + i + '">View</a> | ' + actions;
+                }
+                body.append('<tr><td><b>' + esc(p.Name) + '</b>' + (p.BuiltIn ? ' <span class="ui mini label">built-in</span>' : '') +
+                    '<br><small style="opacity:0.7;">' + esc(p.Description) + '</small></td><td>' + modeLabel(p.Mode) +
+                    '</td><td>' + (p.ParanoiaLevel || "global") + '</td><td>' + (p.InboundThreshold || "global") +
+                    '</td><td>' + (used.length ? esc(used.join(", ")) : '<small style="opacity:0.6;">unused</small>') + '</td><td>' + actions + '</td></tr>');
+            });
+            body.find(".wafPrEdit").on("click", function(e){ e.preventDefault(); wafEditProfile(wafProfiles[$(this).data("i")]); });
+            body.find(".wafPrView").on("click", function(e){ e.preventDefault(); wafEditProfile(wafProfiles[$(this).data("i")]); });
+            body.find(".wafPrClone").on("click", function(e){
+                e.preventDefault();
+                var src = wafProfiles[$(this).data("i")];
+                var name = window.prompt ? window.prompt("Name of the new profile", src.Name + " copy") : null;
+                if (!name){ name = src.Name + " copy"; }
+                post("/api/waf/profile/clone", {from: src.Name, name: name}, function(){ msgbox("Profile cloned"); loadProfiles(); });
+            });
+            body.find(".wafPrDel").on("click", function(e){
+                e.preventDefault();
+                var p = wafProfiles[$(this).data("i")];
+                var self = $(this);
+                if (!self.data("armed")){ self.data("armed", true).text("Click again to delete"); setTimeout(function(){ self.data("armed", false).text("Delete"); }, 4000); return; }
+                post("/api/waf/profile/delete", {name: p.Name}, function(){ msgbox("Profile deleted"); loadProfiles(); wafLoadCoverage(); });
+            });
+        });
+    }
+    var wafEditingNew = true;
+    window.wafEditProfile = function(p){
+        wafEditingNew = (p == null);
+        var ro = p && p.BuiltIn;
+        p = p || {Name: "", Description: "", Mode: "detection_only", ParanoiaLevel: 0, InboundThreshold: 0};
+        $("#wafProfileEditorTitle").text(wafEditingNew ? "New profile" : (ro ? "Built-in profile (read-only)" : "Edit profile"));
+        $("#wafprName").val(p.Name).prop("disabled", !wafEditingNew);
+        $("#wafprDesc").val(p.Description || "");
+        $("#wafprMode").val(p.Mode || "detection_only");
+        $("#wafprParanoia").val(p.ParanoiaLevel || 0);
+        $("#wafprThreshold").val(p.InboundThreshold || 0);
+        $("#wafprExcluded").val((p.ExcludedRuleIDs || []).join(", "));
+        $("#wafprPathEx").val(pathExToText(p.PathExclusions));
+        $("#wafprRules").val(p.CustomRules || "");
+        $("#wafProfileEditor").find("input,select,textarea").prop("disabled", !!ro);
+        if (!wafEditingNew) $("#wafprName").prop("disabled", true);
+        $("#wafprSave").toggle(!ro);
+        $("#wafProfileEditor").show();
+    };
+    window.wafSaveProfile = function(btn){
+        var prof;
+        try {
+            prof = {
+                Name: $("#wafprName").val().trim(), Description: $("#wafprDesc").val(), Mode: $("#wafprMode").val(),
+                ParanoiaLevel: parseInt($("#wafprParanoia").val()) || 0,
+                InboundThreshold: parseInt($("#wafprThreshold").val()) || 0,
+                ExcludedRuleIDs: ids($("#wafprExcluded").val()),
+                PathExclusions: textToPathEx($("#wafprPathEx").val()),
+                CustomRules: $("#wafprRules").val()
+            };
+        } catch (e){ msgbox(e.message, false, 5000); return; }
+        $(btn).addClass("loading");
+        $.cjax({url: "/api/waf/profile/save", method: "POST", data: {profile: JSON.stringify(prof), create: wafEditingNew},
+            success: function(d){
+                $(btn).removeClass("loading");
+                if (!fail(d)){ msgbox("Profile saved and applied to all proxy rules using it"); $("#wafProfileEditor").hide(); loadProfiles(); wafLoadCoverage(); }
+            },
+            error: function(){ $(btn).removeClass("loading"); msgbox("Request failed", false, 4000); }});
+    };
+
+    /* ---------- events ---------- */
+    function loadEndpointFilter(cb){
+        $.get("/api/waf/coverage", function(cov){
+            if (fail(cov)) return;
+            var sel = $("#wafevEndpoint"), cur = sel.val();
+            sel.empty().append('<option value="">All</option>');
+            (cov || []).forEach(function(c){ sel.append($("<option>").val(c.Endpoint).text(c.Endpoint)); });
+            sel.val(cur || "");
+            if (cb) cb();
+        });
+    }
+    function topList(sel, items){
+        var el = $(sel).empty();
+        if (!items || !items.length){ el.html('<small style="opacity:0.6;">none</small>'); return; }
+        items.forEach(function(it){
+            el.append('<div class="item"><b>' + esc(it.key) + '</b> <span style="opacity:0.7;">x' + it.count + '</span></div>');
+        });
+    }
+    window.wafLoadEvents = function(){
+        var hours = parseInt($("#wafevSince").val());
+        var q = {limit: 300};
+        if ($("#wafevEndpoint").val()) q.endpoint = $("#wafevEndpoint").val();
+        if ($("#wafevRule").val().trim()) q.rule = $("#wafevRule").val().trim();
+        if ($("#wafevAction").val()) q.action = $("#wafevAction").val();
+        if ($("#wafevIP").val().trim()) q.ip = $("#wafevIP").val().trim();
+        if (hours > 0) q.since = Math.floor(Date.now() / 1000) - hours * 3600;
+        $.get("/api/waf/summary?hours=" + (hours > 0 ? hours : 168), function(s){
+            if (fail(s)) return;
+            var sum = s.summary, st = s.stats;
+            $("#wafSummary").html(
+                '<div class="statistic"><div class="value">' + sum.events + '</div><div class="label">Events</div></div>' +
+                '<div class="statistic"><div class="value" style="color:#db2828;">' + sum.blocked + '</div><div class="label">Blocked</div></div>' +
+                '<div class="statistic"><div class="value" style="color:#f2711c;">' + sum.detected + '</div><div class="label">Detected</div></div>' +
+                '<div class="statistic"><div class="value">' + st.total + '</div><div class="label">Since start</div></div>');
+            topList("#wafTopRules", sum.top_rules);
+            topList("#wafTopIPs", sum.top_client_ips);
+            var byHour = {};
+            (st.per_hour || []).forEach(function(h){ byHour[h.hour] = h; });
+            var now = Math.floor(Date.now() / 3600000) * 3600, max = 1, cols = [];
+            for (var i = 47; i >= 0; i--){
+                var h = byHour[now - i * 3600] || {total: 0, blocked: 0};
+                max = Math.max(max, h.total); cols.push(h);
+            }
+            $("#wafHourly").html(cols.map(function(h){
+                var ht = Math.round(h.total / max * 44);
+                var bl = Math.round(h.blocked / max * 44);
+                return '<div title="' + h.total + ' events, ' + h.blocked + ' blocked" style="flex:1;min-width:2px;display:flex;flex-direction:column;justify-content:flex-end;height:46px;">' +
+                    '<div style="height:' + Math.max(ht - bl, 0) + 'px;background:#f2711c;"></div><div style="height:' + bl + 'px;background:#db2828;"></div>' +
+                    (h.total == 0 ? '<div style="height:1px;background:rgba(128,128,128,.4);"></div>' : '') + '</div>';
+            }).join(""));
+        });
+        $.get("/api/waf/events?" + $.param(q), function(events){
+            if (fail(events)) return;
+            var body = $("#wafEventsBody").empty();
+            if (!events || !events.length){ body.html('<tr><td colspan="6"><small>No events</small></td></tr>'); return; }
+            events.forEach(function(ev){
+                var rules = (ev.rules || []).filter(function(r){ return r.id != 949110; }).map(function(r){
+                    var a = 'data-rule="' + esc(r.id) + '" data-ep="' + esc(ev.endpoint) + '" data-path="' + esc(ev.path) + '"';
+                    return '<div><b>' + esc(r.id) + '</b> ' + esc(r.msg) + '<br><small>exclude: ' +
+                        '<a href="#" class="wafX" data-scope="global" ' + a + '>globally</a> | ' +
+                        '<a href="#" class="wafX" data-scope="endpoint" ' + a + '>for this proxy rule</a> | ' +
+                        '<a href="#" class="wafX" data-scope="path" ' + a + '>for this path</a></small></div>';
+                }).join("");
+                var result = ev.action == "blocked" ? '<span style="color:#db2828;">blocked</span>'
+                    : (ev.would_block ? '<span style="color:#f2711c;">detected (would block)</span>' : 'detected');
+                body.append('<tr><td>' + esc(new Date(ev.time).toLocaleString()) + '</td><td>' + esc(ev.endpoint) +
+                    (ev.source ? '<br><small style="opacity:0.6;">' + esc(ev.source) + '</small>' : '') + '</td><td>' + esc(ev.client_ip) +
+                    '</td><td style="word-break:break-all;"><b>' + esc(ev.method) + '</b> ' + esc(ev.uri) +
+                    '<br><small style="opacity:0.6;">ID ' + esc(ev.txid) + '</small></td><td>' + result + '</td><td>' + rules + '</td></tr>');
+            });
+            body.find(".wafX").on("click", function(e){
+                e.preventDefault();
+                var a = $(this), scope = a.data("scope");
+                var data = {scope: scope, ruleid: a.attr("data-rule"), rootname: a.attr("data-ep")};
+                if (scope == "path") data.path = a.attr("data-path");
+                post("/api/waf/exclude", data, function(){
+                    msgbox("Rule " + data.ruleid + " excluded (" + scope + ")");
+                    loadPolicy();
+                });
+            });
+        });
+    };
+    $("#wafevAuto").on("change", function(){
+        if (wafAutoTimer){ clearInterval(wafAutoTimer); wafAutoTimer = null; }
+        if ($(this).prop("checked")){
+            wafAutoTimer = setInterval(function(){
+                if (!document.getElementById("wafEventsBody")){ clearInterval(wafAutoTimer); wafAutoTimer = null; return; }
+                if ($("#wafevAuto").is(":visible")) wafLoadEvents();
+            }, 5000);
+        }
+    });
+
+    /* ---------- rules reference ---------- */
+    function renderRules(){
+        var q = $("#wafRuleSearch").val().toLowerCase().trim();
+        var body = $("#wafRulesBody").empty(), n = 0;
+        (wafRuleCache || []).forEach(function(r){
+            if (q && (String(r.id) + " " + r.msg + " " + r.category).toLowerCase().indexOf(q) < 0) return;
+            if (n++ > 400) return;
+            body.append('<tr><td><b>' + r.id + '</b></td><td>' + esc(r.msg) + '</td><td>' + esc(r.category) + '</td><td>' + (r.paranoia || "") + '</td><td>' + esc(r.severity || "") + '</td></tr>');
+        });
+        if (n > 400) body.append('<tr><td colspan="5"><small>Showing the first 400 matches, refine the search.</small></td></tr>');
+    }
+    function loadRules(){
+        if (wafRuleCache){ renderRules(); return; }
+        $.get("/api/waf/rules", function(list){ if (fail(list)) return; wafRuleCache = list || []; renderRules(); });
+    }
+    $("#wafRuleSearch").on("input", renderRules);
+
+    /* ---------- coverage ---------- */
+    window.wafLoadCoverage = function(){
+        $.get("/api/waf/profiles", function(profs){
+            var plist = (!profs || profs.error) ? [] : profs;
+            $.get("/api/waf/coverage", function(cov){
+                if (fail(cov)) return;
+                var body = $("#wafCoverageBody").empty();
+                (cov || []).forEach(function(c, i){
+                    var cur = c.Source == "profile" ? "profile:" + c.Profile : c.Source;
+                    var opts = [["inherit", "Inherit global policy"], ["off", "Off"], ["detection_only", "Detection only"], ["block", "Block"]];
+                    plist.forEach(function(p){ opts.push(["profile:" + p.Name, "Profile: " + p.Name]); });
+                    opts.push(["custom", "Custom (edit in rule editor)"]);
+                    var sel = '<select class="ui compact dropdown wafCovSel" data-ep="' + esc(c.Endpoint) + '">' + opts.map(function(o){
+                        var on = (o[0].toLowerCase() == cur.toLowerCase()) ? " selected" : "";
+                        return '<option value="' + esc(o[0]) + '"' + on + '>' + esc(o[1]) + '</option>';
+                    }).join("") + '</select>';
+                    body.append('<tr><td><b>' + esc(c.Endpoint) + '</b>' + (c.IsRoot ? ' <small>(default site)</small>' : '') + '</td><td>' + modeLabel(c.Mode) +
+                        '</td><td>' + esc(c.Origin) + (c.Warning ? '<br><small style="color:#f2711c;">' + esc(c.Warning) + '</small>' : '') + '</td><td>' + sel + '</td></tr>');
+                });
+                body.find(".wafCovSel").on("change", function(){
+                    var v = $(this).val(), ep = $(this).data("ep");
+                    var data = {rootname: ep, source: v};
+                    if (v.indexOf("profile:") == 0){ data.source = "profile"; data.profile = v.substring(8); }
+                    post("/api/waf/endpoint/set", data, function(){ msgbox("WAF source updated for " + ep); wafLoadCoverage(); loadProfiles(); }, wafLoadCoverage);
+                });
+            });
+        });
+    };
+
+    /* ---------- tabs ---------- */
+    $("#wafTabs .item").tab({
+        onVisible: function(tab){
+            if (tab == "waf-policy" || tab == "waf-exclusions") loadPolicy();
+            else if (tab == "waf-profiles") loadProfiles();
+            else if (tab == "waf-events") loadEndpointFilter(wafLoadEvents);
+            else if (tab == "waf-rules") loadRules();
+            else if (tab == "waf-coverage") wafLoadCoverage();
+        }
+    });
+    loadPolicy();
+})();
+</script>

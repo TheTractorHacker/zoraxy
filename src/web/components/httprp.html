@@ -824,6 +824,29 @@
                     <div class="rpconfig_content" rpcfg="waf" style="display:none;">
                         <div class="ui segment wafEditor">
                             <h4><i class="shield alternate icon"></i> Web Application Firewall</h4>
+                            <div class="ui form wafSourceForm" style="margin-bottom:1em;">
+                                <div class="two fields">
+                                    <div class="field">
+                                        <label>WAF source</label>
+                                        <select class="ui dropdown wafSource">
+                                            <option value="inherit">Inherit the global WAF policy</option>
+                                            <option value="off">Off for this rule</option>
+                                            <option value="detection_only">Detection only (global tuning)</option>
+                                            <option value="block">Block (global tuning)</option>
+                                            <option value="profile">Use a profile</option>
+                                            <option value="custom">Custom (settings below)</option>
+                                        </select>
+                                    </div>
+                                    <div class="field wafProfileField" style="display:none;">
+                                        <label>Profile</label>
+                                        <select class="ui dropdown wafProfileSel"></select>
+                                    </div>
+                                </div>
+                                <small class="wafSourceInfo" style="opacity:0.7;display:block;margin-bottom:0.6em;"></small>
+                                <button class="ui basic small green button wafSourceSaveBtn"><i class="save icon"></i> Apply source</button>
+                                <small style="opacity:0.7;margin-left:0.6em;">Global policy, profiles, exclusions and coverage are managed on the <b>Security &gt; WAF</b> page.</small>
+                            </div>
+                            <div class="wafCustomOnly">
                             <p style="opacity:0.7;">Inspects requests with the OWASP Core Rule Set (via Coraza) before they reach the upstream. Start with <b>Detection only</b>, review the events below, add exclusions for false positives, then switch to <b>Block</b>.</p>
                             <div class="ui form">
                                 <div class="two fields">
@@ -873,6 +896,7 @@
                                     <small>Validated when saved; a syntax error rejects the save. Use rule IDs above 1000000. Include, file operators and engine/audit directives are not allowed.</small>
                                 </div>
                                 <button class="ui basic small green button wafSaveBtn"><i class="save icon"></i> Save WAF settings</button>
+                            </div>
                             </div>
                         </div>
                         <div class="ui segment">
@@ -2663,6 +2687,46 @@
         let box = editor.find(".wafEditor");
         let cfg = subd.WAF || {};
         let ep = subd.RootOrMatchingDomain;
+
+        /* Central WAF source selector: inherit / off / mode / profile / custom */
+        let curSource = subd.WAFSource || (subd.WAF ? "custom" : "inherit");
+        let srcSel = box.find(".wafSource"), profSel = box.find(".wafProfileSel");
+        function refreshSourceUI(){
+            let v = srcSel.val();
+            box.find(".wafProfileField").toggle(v == "profile");
+            box.find(".wafCustomOnly").toggle(v == "custom");
+            box.find(".wafSourceSaveBtn").toggle(v != "custom");
+            box.find(".wafSourceInfo").text({
+                inherit: "Follows the global WAF policy (off until it is enabled on the WAF page).",
+                off: "No WAF inspection for this proxy rule.",
+                detection_only: "Logs matches, never blocks. Paranoia, exclusions and rules come from the global policy.",
+                block: "Blocks matching requests. Paranoia, exclusions and rules come from the global policy.",
+                profile: "Mode and tuning come from the selected profile; editing the profile updates this rule.",
+                custom: "This rule keeps its own complete WAF configuration, independent of the global policy."
+            }[v] || "");
+        }
+        srcSel.val(curSource);
+        $.get("/api/waf/profiles", function(list){
+            profSel.empty();
+            (list || []).forEach(function(p){ profSel.append($("<option>").val(p.Name).text(p.Name + (p.BuiltIn ? " (built-in)" : ""))); });
+            if (subd.WAFProfile) profSel.val(subd.WAFProfile);
+        });
+        srcSel.off("change").on("change", refreshSourceUI);
+        refreshSourceUI();
+        box.find(".wafSourceSaveBtn").off("click").on("click", function(){
+            let btn = $(this).addClass("loading");
+            let data = {rootname: subd.RootOrMatchingDomain, source: srcSel.val()};
+            if (data.source == "profile") data.profile = profSel.val();
+            $.cjax({
+                url: "/api/waf/endpoint/set", method: "POST", data: data,
+                success: function(r){
+                    btn.removeClass("loading");
+                    if (r.error != undefined){ msgbox(r.error, false, 6000); }
+                    else { msgbox("WAF source updated"); }
+                },
+                error: function(){ btn.removeClass("loading"); msgbox("Request failed", false, 4000); }
+            });
+        });
         box.find(".wafMode").val(cfg.Mode || "off");
         box.find(".wafParanoia").val(String(cfg.ParanoiaLevel || 1));
         box.find(".wafThreshold").val(cfg.InboundThreshold || 5);

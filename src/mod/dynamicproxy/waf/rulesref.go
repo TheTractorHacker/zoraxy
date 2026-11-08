@@ -73,8 +73,8 @@ func loadRuleRef() {
 			if m := reRuleMsg.FindStringSubmatch(line); m != nil {
 				msg = m[1]
 			}
-			if msg == "" {
-				continue // bookkeeping rule
+			if msg == "" || id < 910000 {
+				continue // bookkeeping / setup rule
 			}
 			info := RuleInfo{ID: id, Message: msg, Category: category}
 			if m := reRuleSev.FindStringSubmatch(line); m != nil {
