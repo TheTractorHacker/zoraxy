@@ -32,6 +32,10 @@ and return a boolean indicate if the request is written to http.ResponseWriter
 - false: the request is not handled (usually means auth ok), continue to the next handler
 */
 func handleAuthProviderRouting(sep *ProxyEndpoint, w http.ResponseWriter, r *http.Request, h *ProxyHandler) bool {
+	if sep == nil || sep.AuthenticationProvider == nil {
+		//No provider configured, same as AuthMethodNone
+		return false
+	}
 	requestHostname := r.Host
 
 	switch sep.AuthenticationProvider.AuthMethod {

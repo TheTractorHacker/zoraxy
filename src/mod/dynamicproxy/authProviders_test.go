@@ -6,6 +6,16 @@ import (
 	"testing"
 )
 
+// An endpoint with a nil AuthenticationProvider must be treated as
+// AuthMethodNone instead of panicking (fork #167).
+func TestHandleAuthProviderRoutingNilProvider(t *testing.T) {
+	sep := &ProxyEndpoint{RootOrMatchingDomain: "nil.local"}
+	r := httptest.NewRequest("GET", "http://nil.local/", nil)
+	if handleAuthProviderRouting(sep, httptest.NewRecorder(), r, &ProxyHandler{}) {
+		t.Fatal("nil provider must behave as no authentication")
+	}
+}
+
 // newBasicAuthEndpoint builds a minimal basic auth endpoint carrying the given exception rules.
 func newBasicAuthEndpoint(rules ...*BasicAuthExceptionRule) *ProxyEndpoint {
 	return &ProxyEndpoint{
