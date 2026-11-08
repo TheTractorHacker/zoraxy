@@ -53,7 +53,7 @@ type Controller struct {
 	TrustedProxies    sync.Map // with structure of map[string]TrustedProxy
 	ProxyAccessRule   *sync.Map
 	Options           *Options
-	CountryResolver   func(ip string) (string, error) //Optional override of the GeoDB lookup (tests)
+	CountryResolver   func(ip string) (string, error) `json:"-"` //Optional override of the GeoDB lookup (tests)
 
 	//Internal
 	publicIpTicker     *time.Ticker

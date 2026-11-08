@@ -1128,7 +1128,7 @@
                             ${authDisplay}
                         </td>
                         <td data-label="" editable="true" datatype="vdir" style="${vdIsEmpty?"text-align: center;":""}">${vdList}</td>
-                        <td data-label="tags" payload="${encodeURIComponent(JSON.stringify(subd.Tags))}" datatype="tags" style="${tagListEmpty?"text-align: center;":""}">
+                        <td data-label="tags" payload="${encodeURIComponent(JSON.stringify(subd.Tags || []))}" datatype="tags" style="${tagListEmpty?"text-align: center;":""}">
                             <div class="tags-list">
                             ${tagList}
                             </div>
@@ -1917,6 +1917,9 @@
             let host = $(this).find("td[data-label='']").text().toLowerCase();
             let tagElements = $(this).find("td[data-label='tags']");
             let tags = tagElements.attr("payload");
+            if (tags === undefined) {
+                return; //placeholder row (e.g. "no proxy rules"), not a host entry
+            }
             tags = JSON.parse(decodeURIComponent(tags));
             if ((host.includes(searchInput) || searchInput === "") && (tags.includes(selectedTag) || selectedTag === "")) {
                 $(this).show();

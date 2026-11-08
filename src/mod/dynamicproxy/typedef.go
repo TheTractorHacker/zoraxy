@@ -96,7 +96,7 @@ type RouterOption struct {
 	StatisticCollector   *statistic.Collector       //Statistic collector for storing stats on incoming visitors
 	WebDirectory         string                     //The static web server directory containing the templates folder
 	LoadBalancer         *loadbalance.RouteManager  //Load balancer that handle load balancing of proxy target
-	PersistProxyEndpoint func(*ProxyEndpoint) error //Optional, called to save an endpoint config after a basic auth hash upgrade
+	PersistProxyEndpoint func(*ProxyEndpoint) error `json:"-"` //Optional, called to save an endpoint config after a basic auth hash upgrade
 	PluginManager        *plugins.Manager           //Plugin manager for handling plugin routing
 	Metrics              *metrics.Registry          //Optional Prometheus metrics registry (nil or disabled = no overhead)
 
