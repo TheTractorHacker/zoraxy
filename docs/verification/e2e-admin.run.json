@@ -1,11 +1,12 @@
 [
  {
-  "scenario": "api-per-site-log-files",
+  "scenario": "api-sablier-gate-and-test",
   "issues": [
-   "596"
+   "120",
+   "564"
   ],
-  "status": "PASS",
-  "evidence": "per-site log: default off, enabling one rule in json mode writes only that rule's file under log/sites/<rule>/ with just its requests (rerun: tools/e2e-admin/run.sh --only api-per-site-log-files)",
+  "status": "FAIL",
+  "evidence": "exception: RuntimeError: out of ports | , in main\n    ev = s[\"fn\"]()\n  File \"/home/sysadmin/src/zoraxy/.claude/worktrees/agent-ae51ac1f5e06dcbe5/tools/e2e-admin/scenarios/s08_platform.py\", line 72, in sablier\n    with Env(\"sab\") as e:\n         ~~~^^^^^^^\n  File \"/home/sysadmin/src/zoraxy/.claude/worktrees/agent-ae51ac1f5e06dcbe5/tools/e2e-admin/scenarios/common.py\", line 14, in __init__\n    self.pport = alloc_port()\n                 ~~~~~~~~~~^^\n  File \"/home/sysadmin/src/zoraxy/.claude/worktrees/agent-ae51ac1f5e06dcbe5/tools/e2e-admin/lib.py\", line 29, in alloc_port\n    raise RuntimeError(\"out of ports\")\nRuntimeError: out of ports\n (rerun: tools/e2e-admin/run.sh --only api-sablier-gate-and-test)",
   "commits": [],
   "notes": ""
  }
