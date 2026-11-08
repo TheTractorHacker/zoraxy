@@ -601,6 +601,12 @@
                                     req / sec / IP
                                 </label>
                             </div>
+                            <div class="ui small right labeled fluid input" style="margin-top: 0.4em;">
+                                <input type="number" class="RateLimitBurst" value="0" min="0" >
+                                <label class="ui basic label">
+                                    burst (0 = same as rate)
+                                </label>
+                            </div>
                             <div class="ui divider"></div>
                             <!-- CAPTCHA Gating -->
                             <div class="ui checkbox" style="margin-top: 0.4em;">
@@ -635,6 +641,7 @@
                                     <textarea class="CaptchaPathPrefixes" rows="3" placeholder="/form&#10;/api" style="width: 100%; resize: vertical;"></textarea>
                                     <small style="opacity:0.7;">Leave empty to protect all paths on this endpoint. One prefix per line, comma or semicolon is also supported.</small>
                                 </div>
+                                <button class="ui basic compact small button editCaptchaExceptionsBtn" style="margin-top: 0.8em;"><i class="ui yellow shield alternate icon"></i> CAPTCHA Exceptions</button>
                                 <!-- Google reCAPTCHA specific settings -->
                                 <div class="googleRecaptchaSettings" style="margin-top: 0.8em; display: none;">
                                     <label>reCAPTCHA Version</label>
@@ -1544,6 +1551,7 @@
         let authProviderType = $(editor).find(".authProviderPicker input[type='radio']:checked").val();
         let requireRateLimit = $(editor).find(".RequireRateLimit")[0].checked;
         let rateLimit = $(editor).find(".RateLimit").val();
+        let rateLimitBurst = $(editor).find(".RateLimitBurst").val();
         let bypassGlobalTLS = $(editor).find(".BypassGlobalTLS")[0].checked;
         let enableConnectSupport = $(editor).find(".EnableConnectSupport")[0].checked;
         let enableUpgradeForwarding = $(editor).find(".EnableUpgradeForwarding")[0].checked;
@@ -1600,6 +1608,7 @@
                 "blockAICrawlers": blockAICrawlers,
                 "mitigationAction": mitigationAction,
                 "ratenum" :rateLimit,
+                "rateburst": rateLimitBurst,
                 "captcha": requireCaptcha,
                 "captchaProvider": captchaProvider,
                 "captchaSiteKey": captchaSiteKey,
@@ -1667,6 +1676,14 @@
         showEditorSideWrapper("snippet/zorxAuthExceptionEditor.html?t=" + Date.now() + "#" + payload);
     }
 
+
+    function editCaptchaExceptions(uuid){
+        let payload = encodeURIComponent(JSON.stringify({
+            ept: "host",
+            ep: uuid
+        }));
+        showEditorSideWrapper("snippet/captchaExceptionEditor.html?t=" + Date.now() + "#" + payload);
+    }
 
     function quickEditVdir(uuid){
         openTabById("vdir");
@@ -2350,6 +2367,10 @@
             editZorxAuthExceptions(uuid);
         });
 
+        editor.find(".editCaptchaExceptionsBtn").off("click").on("click", function(){
+            editCaptchaExceptions(uuid);
+        });
+
         // Rate limit: load with .val() so the shared modal shows each proxy's saved value (#1107)
         editor.find(".RateLimit").off("change");
         editor.find(".RequireRateLimit").off("change");
@@ -2391,6 +2412,27 @@
             saveProxyInlineEdit(uuid);
         });
         editor.find(".RateLimit").val(subd.RateLimit).on("change", rateLimitChangeEvent);
+
+        // Rate limit burst (0 = same as the rate)
+        editor.find(".RateLimitBurst").off("change");
+        editor.find(".RateLimitBurst").val(subd.RateLimitBurst || 0).on("change", function() {
+            let parsed = parseInt(String($(this).val()).trim(), 10);
+            if (isNaN(parsed) || parsed < 0) {
+                msgbox("Rate limit burst must be >= 0", false);
+                $(this).val(subd.RateLimitBurst || 0);
+                return;
+            }
+            subd.RateLimitBurst = parsed;
+            saveProxyInlineEdit(uuid);
+        });
+        if (subd.RequireRateLimit) {
+            editor.find(".RateLimitBurst").parent().removeClass("disabled");
+        } else {
+            editor.find(".RateLimitBurst").parent().addClass("disabled");
+        }
+        editor.find(".RequireRateLimit").on("change", function() {
+            editor.find(".RateLimitBurst").parent().toggleClass("disabled", !$(this).is(":checked"));
+        });
 
         // CAPTCHA Gating
         if (subd.RequireCaptcha) {

@@ -116,14 +116,16 @@ func NewAccessController(options *Options) (*Controller, error) {
 		options.PublicIpCheckInterval = 12 * 60 * 60 //12 hours
 	}
 	thisController.ServerPublicIP = "127.0.0.1"
-	go func() {
-		err = thisController.UpdatePublicIP()
-		if err != nil {
-			options.Logger.PrintAndLog("access", "Unable to update public IP address", err)
-		}
+	if !options.SkipPublicIPCheck {
+		go func() {
+			err := thisController.UpdatePublicIP()
+			if err != nil {
+				options.Logger.PrintAndLog("access", "Unable to update public IP address", err)
+			}
 
-		thisController.StartPublicIPUpdater()
-	}()
+			thisController.StartPublicIPUpdater()
+		}()
+	}
 	return &thisController, nil
 }
 

@@ -6,6 +6,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -24,11 +25,18 @@ func TestSignVerifyRoundtrip(t *testing.T) {
 	os.WriteFile(filepath.Join(dist, "zoraxy_linux_arm64"), []byte("bin-b"), 0o755)
 	os.WriteFile(filepath.Join(dist, "README"), []byte("ignored"), 0o644)
 
-	if err := signDist(dist, priv, pub); err != nil {
+	if err := signDist(dist, priv, pub, "v3.3.6-x.1", 7); err != nil {
 		t.Fatal(err)
 	}
 	if err := verifyDist(dist, pub); err != nil {
 		t.Fatal(err)
+	}
+	sums, _ := os.ReadFile(filepath.Join(dist, "SHA256SUMS"))
+	if !strings.HasPrefix(string(sums), "# zoraxy-release tag=v3.3.6-x.1 build=7 upstream=3.3.6\n") {
+		t.Fatalf("missing header: %q", sums)
+	}
+	if signDist(dist, priv, pub, "", 7) == nil || signDist(dist, priv, pub, "v3.3.6", 0) == nil {
+		t.Fatal("tag and build must be required")
 	}
 	// tamper with a binary
 	os.WriteFile(filepath.Join(dist, "zoraxy_linux_arm64"), []byte("evil"), 0o755)
@@ -42,7 +50,7 @@ func TestSignVerifyRoundtrip(t *testing.T) {
 	if verifyDist(dist, pub2) == nil {
 		t.Fatal("wrong key verified")
 	}
-	if signDist(dist, priv, pub2) == nil {
+	if signDist(dist, priv, pub2, "v3.3.6-x.1", 7) == nil {
 		t.Fatal("sign must flag a key/pub mismatch")
 	}
 }

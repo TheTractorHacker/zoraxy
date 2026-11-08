@@ -5,8 +5,12 @@
 //
 // Modes:
 //
-//	sign    (default)  go run tools/sign_release.go -dist DIR -key PRIVATE.pem [-pub PUBLIC.pem]
-//	        Writes DIR/SHA256SUMS (sha256sum format, over every zoraxy_* file in DIR)
+//	sign    (default)  go run tools/sign_release.go -dist DIR -key PRIVATE.pem -tag vX.Y.Z[-topic.N] -build N [-pub PUBLIC.pem]
+//	        Writes DIR/SHA256SUMS (sha256sum format, over every zoraxy_* file in DIR,
+//	        preceded by the signed header line
+//	        "# zoraxy-release tag=<tag> build=<n> upstream=<X.Y.Z>" that binds the
+//	        release tag and a monotonically increasing build number so an old signed
+//	        release cannot be replayed as a downgrade; `sha256sum -c` ignores it)
 //	        and DIR/SHA256SUMS.sig (raw 64 byte ed25519 signature over the exact
 //	        bytes of SHA256SUMS), then re-verifies its own output.
 //	verify             go run tools/sign_release.go -verify -dist DIR -pub PUBLIC.pem
@@ -31,6 +35,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -44,6 +49,8 @@ func main() {
 	dist := flag.String("dist", "", "directory containing the zoraxy_* release binaries")
 	keyPath := flag.String("key", os.Getenv("ZORAXY_RELEASE_KEY"), "path to the ed25519 private key (PKCS#8 PEM); default $ZORAXY_RELEASE_KEY")
 	pubPath := flag.String("pub", "", "path to the ed25519 public key (SPKI PEM) used to verify")
+	tag := flag.String("tag", "", "release tag the signature is bound to, e.g. v3.3.6-topic.1 (must equal the GitHub release tag)")
+	build := flag.Int("build", 0, "monotonically increasing build number (must exceed the previous release's)")
 	verify := flag.Bool("verify", false, "verify an existing dist directory instead of signing")
 	genkey := flag.Bool("genkey", false, "generate a key pair: -genkey PRIVATE.pem PUBLIC.pem")
 	flag.Parse()
@@ -59,7 +66,7 @@ func main() {
 	case *verify:
 		err = verifyDist(*dist, *pubPath)
 	default:
-		err = signDist(*dist, *keyPath, *pubPath)
+		err = signDist(*dist, *keyPath, *pubPath, *tag, *build)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -154,7 +161,16 @@ func fileSum(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-func signDist(dist, keyPath, pubPath string) error {
+var upstreamRe = regexp.MustCompile(`^v?(\d+\.\d+\.\d+)`)
+
+func signDist(dist, keyPath, pubPath, tag string, build int) error {
+	m := upstreamRe.FindStringSubmatch(tag)
+	if m == nil {
+		return errors.New("-tag is required and must look like v3.3.6 or v3.3.6-topic.1")
+	}
+	if build <= 0 {
+		return errors.New("-build is required and must be a positive, increasing number")
+	}
 	if dist == "" {
 		return errors.New("-dist is required")
 	}
@@ -177,6 +193,7 @@ func signDist(dist, keyPath, pubPath string) error {
 	}
 	sort.Strings(names)
 	var sums strings.Builder
+	fmt.Fprintf(&sums, "# zoraxy-release tag=%s build=%d upstream=%s\n", tag, build, m[1])
 	for _, n := range names {
 		h, err := fileSum(filepath.Join(dist, n))
 		if err != nil {
@@ -237,9 +254,17 @@ func verifyWith(dist string, pub ed25519.PublicKey) error {
 		return errors.New("bad signature over " + sumsName)
 	}
 	n := 0
+	first := true
 	for _, line := range strings.Split(string(sums), "\n") {
 		f := strings.Fields(line)
 		if len(f) == 0 {
+			continue
+		}
+		if first {
+			first = false
+			if !strings.HasPrefix(line, "# zoraxy-release tag=") || !strings.Contains(line, " build=") {
+				return errors.New(sumsName + " has no signed release header")
+			}
 			continue
 		}
 		if len(f) != 2 {

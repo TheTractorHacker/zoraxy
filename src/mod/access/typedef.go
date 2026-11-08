@@ -19,6 +19,7 @@ type Options struct {
 
 	/* Public IP monitoring */
 	PublicIpCheckInterval int64 //in Seconds
+	SkipPublicIPCheck     bool  //Never look up the public IP (tests / offline use); ServerPublicIP stays 127.0.0.1
 }
 
 type AccessRule struct {

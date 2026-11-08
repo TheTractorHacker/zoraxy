@@ -31,6 +31,9 @@ type fakeRelease struct {
 	NoSig        bool // omit SHA256SUMS.sig asset
 	NoBinary     bool // omit the platform asset
 	ArchAssets   []string
+	Build        int    // signed build number (0 = default 1000)
+	SignedTag    string // tag written into the signed header (default: Tag)
+	NoHeader     bool   // legacy SHA256SUMS without the release header
 }
 
 type fakeGitHub struct {
@@ -115,6 +118,17 @@ func (g *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		sums := sumsFor(testAsset, fr.Binary)
+		if !fr.NoHeader {
+			st, b := fr.SignedTag, fr.Build
+			if st == "" {
+				st = fr.Tag
+			}
+			if b == 0 {
+				b = 1000
+			}
+			pt, _ := ParseTag(st)
+			sums = append([]byte(fmt.Sprintf("# zoraxy-release tag=%s build=%d upstream=%s\n", st, b, pt.BaseVersion())), sums...)
+		}
 		key := g.priv
 		if fr.WrongKey {
 			key = g.other

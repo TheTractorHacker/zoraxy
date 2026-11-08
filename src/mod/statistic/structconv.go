@@ -1,6 +1,9 @@
 package statistic
 
-import "sync"
+import (
+	"sync"
+	"sync/atomic"
+)
 
 type DailySummaryExport struct {
 	TotalRequest int64 //Total request of the day
@@ -32,10 +35,15 @@ func SyncMapToMapStringInt(syncMap *sync.Map) map[string]int {
 }
 
 func DailySummaryToExport(summary DailySummary) DailySummaryExport {
+	return dailySummaryToExport(&summary)
+}
+
+// dailySummaryToExport converts a live summary, reading the counters atomically
+func dailySummaryToExport(summary *DailySummary) DailySummaryExport {
 	export := DailySummaryExport{
-		TotalRequest:    summary.TotalRequest,
-		ErrorRequest:    summary.ErrorRequest,
-		ValidRequest:    summary.ValidRequest,
+		TotalRequest:    atomic.LoadInt64(&summary.TotalRequest),
+		ErrorRequest:    atomic.LoadInt64(&summary.ErrorRequest),
+		ValidRequest:    atomic.LoadInt64(&summary.ValidRequest),
 		ForwardTypes:    make(map[string]int),
 		RequestOrigin:   make(map[string]int),
 		RequestClientIp: make(map[string]int),
@@ -100,6 +108,6 @@ func DailySummaryExportToSummary(export DailySummaryExport) DailySummary {
 
 // External object function call
 func (c *Collector) GetExportSummary() *DailySummaryExport {
-	exportFormatDailySummary := DailySummaryToExport(*c.DailySummary)
+	exportFormatDailySummary := dailySummaryToExport(c.GetCurrentDailySummary())
 	return &exportFormatDailySummary
 }

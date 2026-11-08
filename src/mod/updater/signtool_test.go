@@ -36,7 +36,7 @@ func TestSignToolRoundtrip(t *testing.T) {
 		}
 	}
 	run("-genkey", priv, pubPath)
-	run("-dist", dist, "-key", priv, "-pub", pubPath)
+	run("-dist", dist, "-key", priv, "-pub", pubPath, "-tag", "v3.3.6-x.1", "-build", "12")
 
 	pemBytes, _ := os.ReadFile(pubPath)
 	pub, err := ParsePublicKeyPEM(pemBytes)
@@ -44,6 +44,12 @@ func TestSignToolRoundtrip(t *testing.T) {
 	sums, _ := os.ReadFile(filepath.Join(dist, "SHA256SUMS"))
 	sig, _ := os.ReadFile(filepath.Join(dist, "SHA256SUMS.sig"))
 	must(t, VerifySums(pub, sums, sig))
+	if _, err := CheckSumsHeader(sums, "v3.3.6-x.1", 11); err != nil {
+		t.Fatalf("header from sign tool rejected: %v", err)
+	}
+	if _, err := CheckSumsHeader(sums, "v3.3.6-x.1", 12); err == nil {
+		t.Fatal("equal build accepted")
+	}
 	want, err := SumFor(sums, "zoraxy_linux_amd64")
 	must(t, err)
 	if len(want) != 64 {

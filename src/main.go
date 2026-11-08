@@ -244,7 +244,7 @@ func main() {
 		}
 		// Plugins talk to Zoraxy over plain HTTP on a loopback-only port
 		go func() {
-			if err := http.Serve(webUILoopbackListener, entryMux); err != nil {
+			if err := http.Serve(webUILoopbackListener, newPluginLoopbackHandler(pluginAPIMux)); err != nil {
 				SystemWideLogger.PrintAndLog("webui", "Plugin loopback listener stopped", err)
 			}
 		}()

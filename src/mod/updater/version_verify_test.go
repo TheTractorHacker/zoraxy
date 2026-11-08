@@ -164,3 +164,29 @@ func TestVerify(t *testing.T) {
 		t.Error("malformed hash accepted")
 	}
 }
+
+func TestSumsHeader(t *testing.T) {
+	good := []byte(FormatSumsHeader(SumsHeader{Tag: "v3.3.6-x.1", Build: 5, Upstream: "3.3.6"}) + "\n" + string(sumsFor("zoraxy_linux_amd64", []byte("b"))))
+	if _, err := CheckSumsHeader(good, "v3.3.6-x.1", 4); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SumFor(good, "zoraxy_linux_amd64"); err != nil {
+		t.Fatalf("header must not break SumFor: %v", err)
+	}
+	for name, c := range map[string]struct {
+		in    []byte
+		tag   string
+		build int
+	}{
+		"no header":      {sumsFor("zoraxy_linux_amd64", []byte("b")), "v3.3.6-x.1", 0},
+		"wrong tag":      {good, "v3.3.7", 0},
+		"build equal":    {good, "v3.3.6-x.1", 5},
+		"build lower":    {good, "v3.3.6-x.1", 6},
+		"bad build":      {[]byte("# zoraxy-release tag=v1 build=x upstream=1.0.0\n"), "v1", 0},
+		"missing fields": {[]byte("# zoraxy-release upstream=1.0.0\n"), "v1", 0},
+	} {
+		if _, err := CheckSumsHeader(c.in, c.tag, c.build); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+}

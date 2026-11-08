@@ -34,13 +34,20 @@ Attach exactly these files to a GitHub release (all produced by `tools/build_rel
 | file | content |
 | --- | --- |
 | `zoraxy_linux_amd64`, `zoraxy_linux_arm64`, `zoraxy_linux_arm` (GOARM=6), `zoraxy_linux_386`, `zoraxy_linux_riscv64`, `zoraxy_linux_mipsle` | static binaries, `CGO_ENABLED=0 go build -trimpath -ldflags "-s -w"` |
-| `SHA256SUMS` | `sha256sum` format list of the binaries |
+| `SHA256SUMS` | `sha256sum` format list of the binaries, preceded by the signed header line `# zoraxy-release tag=<tag> build=<n> upstream=<ver>` (ignored by `sha256sum -c`) |
 | `SHA256SUMS.sig` | raw 64-byte ed25519 signature over the exact bytes of `SHA256SUMS` |
 
 The updater verifies, in this order: the signature of `SHA256SUMS` with the public key embedded in the binary
 (`src/mod/updater/release_pubkey.pem`), then the SHA-256 of the downloaded binary against the signed
 `SHA256SUMS`. Anything else is rejected and the running binary is never touched. The binary must also run
 `-version` successfully and report the release's upstream version before it is installed.
+
+**Anti-replay (downgrade protection).** The signed header binds the release tag and a monotonically increasing
+build number. The updater refuses a `SHA256SUMS` whose header is missing, whose `tag` differs from the GitHub
+release it fetched, or whose `build` is not greater than the build recorded in `conf/updater/installed.json` for the
+running binary (unknown/unrecorded installs count as build 0). Releases signed before this scheme (no header) can
+no longer be installed by the in-app updater. Always pass the exact GitHub tag to the release script and keep the
+build number increasing: `tools/build_release.sh -t v3.3.6-topic.1 [-b N]` (default build = current unix time).
 
 ### Signing key
 
@@ -65,8 +72,8 @@ The updater verifies, in this order: the signature of `SHA256SUMS` with the publ
 (cd src && go vet ./... && go test ./...)
 
 # 2. cross-compile (Linux amd64, arm64, arm v6, 386, riscv64, mipsle), sign, and self-verify
-tools/build_release.sh                       # key: $ZORAXY_RELEASE_KEY or ~/.zoraxy-release-key/private.pem
-tools/build_release.sh -k /path/to/private.pem -o /tmp/zoraxy-dist   # explicit key / output dir
+tools/build_release.sh -t <tag>               # key: $ZORAXY_RELEASE_KEY or ~/.zoraxy-release-key/private.pem
+tools/build_release.sh -t <tag> -k /path/to/private.pem -o /tmp/zoraxy-dist   # explicit key / output dir
 
 # 3. create a GitHub release (tag like v3.3.5-rc5-grpcfix.1, tick "pre-release" for the beta channel)
 #    and attach every file in dist/:  gh release create <tag> dist/* --title ... --notes ...
@@ -136,7 +143,7 @@ The management web UI is plain HTTP by default (`-webui_tls=off`, unchanged beha
 Details:
 
 - HTTPS is served on the same `-port`. Plain HTTP requests to that port get a `308` redirect to `https://`.
-- Plugins keep using plain HTTP: when TLS is on, Zoraxy opens an extra loopback-only (`127.0.0.1`, random port) HTTP listener and passes that port as `ZoraxyPort` to plugins.
+- Plugins keep using plain HTTP: when TLS is on, Zoraxy opens an extra loopback-only (`127.0.0.1`, random port) HTTP listener and passes that port as `ZoraxyPort` to plugins. That listener serves **only** `/plugin/` (everything else is 404), so the admin UI/API is never reachable over plain HTTP.
 - Session and CSRF cookies get the `Secure` flag when TLS is on.
 - `-webui_hsts` additionally sends `Strict-Transport-Security` (off by default; avoid with self-signed certificates).
 - The HTTPS URL and certificate SHA-256 fingerprint are printed at startup; compare it with what your browser shows when trusting the certificate.
