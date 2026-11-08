@@ -95,7 +95,7 @@ func (h *ProxyHandler) handleBasicAuthRouting(w http.ResponseWriter, r *http.Req
 // basicAuthExceptionMatched reports whether the request is exempt from basic auth
 // by one of the configured exception rules.
 func basicAuthExceptionMatched(pe *ProxyEndpoint, r *http.Request) bool {
-	if pe == nil || pe.AuthenticationProvider == nil {
+	if pe == nil || pe.AuthenticationProvider == nil || pathForcesAuth(r) {
 		return false
 	}
 	requestTarget := pathmatch.RequestTarget(r)
@@ -207,6 +207,9 @@ func (h *ProxyHandler) handleZorxAuth(w http.ResponseWriter, r *http.Request, se
 // one of the configured exception rules. It takes the rule slice directly so it
 // can be exercised without a configured SSO agent.
 func zorxAuthExceptionMatched(rules []*ZorxAuthExceptionRule, r *http.Request) bool {
+	if pathForcesAuth(r) {
+		return false //a path rule requires authentication for this path
+	}
 	requestTarget := pathmatch.RequestTarget(r)
 	normalizedPath := pathmatch.CleanRequestPath(requestTarget)
 	for _, rule := range rules {

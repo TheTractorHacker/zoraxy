@@ -114,3 +114,13 @@ Status: ✅ done · 🔧 in progress · 📋 planned
 - 🔧 GeoIP (#1334): Malaysian IPv6 prefixes are pinned by an overrides table. 📋 Switch to a maintained dataset (licence decision) and
   regenerate `geoipv4.csv` / `geoipv6.csv`; `tools` updater still downloads the deprecated npm package.
 - 📋 Whitelist lookup still scans linearly (same index idea as the blacklist). 📋 h2c: apply the response-header timeout.
+
+## 11. Networking (`feat/networking-1`)
+- ✅ Per-rule client certificate authentication (mTLS): request / require / require_and_verify, CA bundle, allow and block lists, identity headers (upstream #442). 📋 CRL / OCSP revocation.
+- ✅ Upstream mTLS (client certificate from the certificate store) and PROXY protocol v1/v2 towards HTTP upstreams. 📋 WebSocket/CONNECT paths, per-visitor address behind a CDN, stream proxy.
+- ✅ TLS on secondary listening ports (upstream #1042).
+- ✅ Path scoped allow / deny / require-auth / rate-limit rules with normalised matching and CIDR/country scopes (upstream #238, #726).
+- ✅ "Direct TCP peer must be in this CIDR set" per rule (upstream #761).
+- ✅ Opt-in rate limited logging of default site requests (upstream #578).
+- ✅ Run plugins as an unprivileged OS user, `-plugin_user` / `-plugin_group` (upstream #760). 📋 Per-plugin user, automatic ownership fix.
+- ✅ Network diagnostics: DNS lookup, TLS certificate inspector, HTTP request tester with metadata address guard.

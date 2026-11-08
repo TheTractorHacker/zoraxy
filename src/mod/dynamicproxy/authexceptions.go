@@ -262,7 +262,7 @@ func ValidateAuthExceptionRule(rule *AuthExceptionRule) error {
 
 // externalAuthExempt reports whether the request bypasses Forward Auth / OAuth2 for this endpoint
 func (router *Router) externalAuthExempt(sep *ProxyEndpoint, r *http.Request) bool {
-	if sep == nil || sep.AuthenticationProvider == nil || len(sep.AuthenticationProvider.ExternalAuthExceptionRules) == 0 {
+	if sep == nil || sep.AuthenticationProvider == nil || len(sep.AuthenticationProvider.ExternalAuthExceptionRules) == 0 || pathForcesAuth(r) {
 		return false
 	}
 	return AuthExceptionMatched(sep.AuthenticationProvider.ExternalAuthExceptionRules, r, router.GetClientIPForEndpoint(r, sep))

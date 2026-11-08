@@ -428,6 +428,20 @@
                                     <input type="checkbox" class="disableKeepAliveCheckbox" ${upstream.DisableKeepAlive?"checked":""}>
                                     <label>Disable connection reuse (keep-alive)<br><small>Open a new connection for every request. Use for upstreams that close the connection after each response (intermittent 502 / 521). Slower; leave off otherwise.</small></label>
                                 </div>
+                                <div style="margin-top: 0.8em;">
+                                    <label><b>PROXY protocol</b></label>
+                                    <select class="proxyProtocolSelect" style="display:block; margin-top: 0.3em;">
+                                        <option value="0" ${!upstream.ProxyProtocol?"selected":""}>Off</option>
+                                        <option value="1" ${upstream.ProxyProtocol==1?"selected":""}>Version 1 (text)</option>
+                                        <option value="2" ${upstream.ProxyProtocol==2?"selected":""}>Version 2 (binary)</option>
+                                    </select>
+                                    <small>Send a PROXY header with the connecting client address at the start of every connection to this upstream (HAProxy / nginx <code>accept-proxy</code>, Traefik). Needs a new connection per request, so it is slower. Not used for WebSocket upgrades.</small>
+                                </div>
+                                <div style="margin-top: 0.8em;">
+                                    <label><b>Client certificate (upstream mTLS)</b></label>
+                                    <div class="ui mini fluid input" style="margin-top: 0.3em;"><input type="text" class="upstreamClientCert" placeholder="name of a certificate in the certificate store" value="${upstream.ClientCertName?upstream.ClientCertName:""}"></div>
+                                    <small>Presented when this HTTPS upstream asks for a client certificate. Name of a certificate pair (<code>name.pem</code> + <code>name.key</code>) from the TLS / SSL certificates page. Only applies when "Require TLS" is on.</small>
+                                </div>
                                 
                             </div>
                         </div>
@@ -574,6 +588,8 @@
                 originalSettings.Draining = $(upstream).find(".drainingCheckbox")[0].checked;
                 originalSettings.DisableKeepAlive = $(upstream).find(".disableKeepAliveCheckbox")[0].checked;
                 originalSettings.H2C = $(upstream).find(".h2cCheckbox")[0].checked;
+                originalSettings.ProxyProtocol = parseInt($(upstream).find(".proxyProtocolSelect").val()) || 0;
+                originalSettings.ClientCertName = $(upstream).find(".upstreamClientCert").val().trim();
 
                 //console.log(originalSettings);
                 return originalSettings;

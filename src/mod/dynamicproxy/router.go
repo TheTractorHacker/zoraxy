@@ -71,6 +71,9 @@ func (router *Router) PrepareProxyRoute(endpoint *ProxyEndpoint) (*ProxyEndpoint
 	// Initialize the exploit detector for this endpoint
 	endpoint.InitializeExploitDetector()
 
+	// Compile the networking options (client certificates, path rules, allowed peers). Errors fail closed at request time.
+	endpoint.initNetworkOptions()
+
 	// Compile the WAF. Invalid custom rules reject the save here.
 	if err := endpoint.initializeWAF(router.WAFState()); err != nil {
 		return nil, errors.New("WAF configuration error: " + err.Error())

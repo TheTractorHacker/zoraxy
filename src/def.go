@@ -117,6 +117,8 @@ var (
 	path_logFile   = flag.String("log", "./log", "Log folder path")
 	path_webserver = flag.String("webroot", "./www", "Static web server root folder. Only allow change in start paramters")
 	path_plugin    = flag.String("plugin", "./plugins", "Plugin folder path")
+	plugin_user    = flag.String("plugin_user", "", "Run plugin processes as this OS user (name or uid, Unix only, Zoraxy must run as root). Default: same user as Zoraxy")
+	plugin_group   = flag.String("plugin_group", "", "Group for plugin processes started with -plugin_user (name or gid). Default: the user's primary group")
 
 	/* Maintaince & Development Function Flags */
 	geoDbUpdate       = flag.Bool("update_geoip", false, "Download the latest GeoIP data and exit")

@@ -70,6 +70,8 @@ type ReverseProxy struct {
 	// the TLS ClientHello (crypto/tls, per RFC 6066). See NewDynamicProxyCore.
 	useRequestHostAsSNI bool
 
+	proxyProtocol bool //send the client address to the PROXY protocol dialer through the request context
+
 	//Appended by Zoraxy project
 
 }
@@ -110,6 +112,9 @@ type DpcoreOptions struct {
 	UpstreamTLSServerName   string        //Override the TLS SNI / cert verification hostname for HTTPS upstreams. Empty = derive from the upstream address
 	H2C                     bool          //Speak HTTP/2 over cleartext (prior knowledge) to a plain http:// upstream, for gRPC backends (#1029)
 	DisableKeepAlive        bool          //Do not reuse upstream connections (one connection per request), for upstreams that close after every response (#1343)
+
+	ProxyProtocolVersion int                                                         //0 = off, 1 or 2: send a PROXY protocol header on every upstream connection (disables connection reuse), see proxyproto.go
+	ClientCertificate    func(*tls.CertificateRequestInfo) (*tls.Certificate, error) //Client certificate presented to HTTPS upstreams (upstream mTLS), nil = none
 }
 
 // sniServerName normalizes a host value into a usable TLS SNI ServerName.
@@ -171,6 +176,7 @@ func NewDynamicProxyCore(target *url.URL, prepender string, dpcOptions *DpcoreOp
 			cfg.ServerName = ""
 			useRequestHostAsSNI = true
 		}
+		applyUpstreamClientCert(cfg, dpcOptions.ClientCertificate)
 		thisTransporter.TLSClientConfig = cfg
 	}
 
@@ -187,6 +193,7 @@ func NewDynamicProxyCore(target *url.URL, prepender string, dpcOptions *DpcoreOp
 		Verbal:              dpcOptions.DevelopmentMode,
 		Transport:           roundTripper,
 		useRequestHostAsSNI: useRequestHostAsSNI,
+		proxyProtocol:       dpcOptions.ProxyProtocolVersion == 1 || dpcOptions.ProxyProtocolVersion == 2,
 	}
 }
 func joinURLPath(a, b *url.URL) (path, rawpath string) {
@@ -315,6 +322,14 @@ func newBaseTransport(opts *DpcoreOptions) *http.Transport {
 		DisableKeepAlives:     opts.DisableKeepAlive,
 	}
 
+	if opts.ProxyProtocolVersion == 1 || opts.ProxyProtocolVersion == 2 {
+		//One connection per request, each starting with its own PROXY header
+		tr.DisableKeepAlives = true
+		tr.ForceAttemptHTTP2 = false
+		tr.Proxy = nil
+		tr.DialContext = proxyProtocolDialer(tr.DialContext, opts.ProxyProtocolVersion)
+	}
+
 	if opts.ResponseHeaderTimeout > 0 {
 		tr.ResponseHeaderTimeout = time.Duration(opts.ResponseHeaderTimeout) * time.Millisecond
 	}
@@ -333,6 +348,9 @@ func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request, rrr 
 	outreq := req.Clone(req.Context())
 	ctx, cancel := context.WithCancel(req.Context())
 	defer cancel()
+	if p.proxyProtocol {
+		ctx = withProxySource(ctx, req.RemoteAddr) //read by the PROXY protocol dialer
+	}
 	outreq = outreq.WithContext(ctx)
 
 	p.Director(outreq)

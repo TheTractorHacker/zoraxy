@@ -78,6 +78,17 @@
             </div>
         </div>
 
+        <!-- Optional logging of default site requests (upstream #578) -->
+        <div class="ui form" style="margin-bottom: 1em;">
+            <div class="field">
+                <div class="ui toggle checkbox" id="logDefaultSiteBox">
+                    <input type="checkbox" id="logDefaultSite">
+                    <label>Log requests that hit the default site (unknown host, 404 page, secondary ports)<br>
+                        <small>Off by default. Log lines are rate limited (a short burst, then a few per second, with a count of skipped lines) so scanners cannot fill the disk. Applies immediately, no need to press Apply Changes.</small>
+                    </label>
+                </div>
+            </div>
+        </div>
         <button class="ui basic button" onclick="setProxyRoot(this)"><i class="green checkmark icon" ></i> Apply Changes</button>
         <button class="ui basic button" onclick="initRootInfo()"><i class="refresh icon" ></i> Reset</button>
         <br>
@@ -85,6 +96,29 @@
 </div>
 <script>
     var currentDefaultSiteOption = 0; //For enum see typedef.go
+    //Default site request logging switch
+    $.get("/api/proxy/defaultsite/logging", function(data){
+        if (data && data.enabled != undefined){
+            $("#logDefaultSite").prop("checked", data.enabled);
+        }
+    });
+    $("#logDefaultSiteBox").checkbox({
+        onChange: function(){
+            let enabled = $("#logDefaultSite").is(":checked");
+            $.cjax({
+                url: "/api/proxy/defaultsite/logging",
+                method: "POST",
+                data: {enable: enabled},
+                success: function(data){
+                    if (data && data.error != undefined){
+                        msgbox(data.error, false, 5000);
+                    }else{
+                        msgbox("Default site logging " + (enabled ? "enabled" : "disabled"), true);
+                    }
+                }
+            });
+        }
+    });
     $("#advanceRootSettings").accordion();
 
     //Handle toggle events of option radio boxes

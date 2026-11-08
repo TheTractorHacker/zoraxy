@@ -108,6 +108,8 @@ func ReverseProxyUpstreamAdd(w http.ResponseWriter, r *http.Request) {
 	disableKeepAlive, _ := utils.PostBool(r, "nokeepalive")
 	useH2C, _ := utils.PostBool(r, "h2c")
 	preactivate, _ := utils.PostBool(r, "active")
+	proxyProto, _ := utils.PostInt(r, "proxyproto") //0 off, 1 / 2 = PROXY protocol version
+	clientCertName, _ := utils.PostPara(r, "clientcert")
 
 	//Create a new upstream object
 	newUpstream := loadbalance.Upstream{
@@ -120,6 +122,12 @@ func ReverseProxyUpstreamAdd(w http.ResponseWriter, r *http.Request) {
 		RespTimeout:              int64(respTimeout),
 		DisableKeepAlive:         disableKeepAlive,
 		H2C:                      useH2C,
+		ProxyProtocol:            proxyProto,
+		ClientCertName:           strings.TrimSpace(clientCertName),
+	}
+	if err := newUpstream.ValidateTransportOptions(); err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
 	}
 
 	//Add the new upstream to endpoint
@@ -188,6 +196,11 @@ func ReverseProxyUpstreamUpdate(w http.ResponseWriter, r *http.Request) {
 	//Overwrite the new value into the old upstream
 	err = json.Unmarshal([]byte(payload), &newUpstream)
 	if err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
+	}
+
+	if err := newUpstream.ValidateTransportOptions(); err != nil {
 		utils.SendErrorResponse(w, err.Error())
 		return
 	}

@@ -145,6 +145,7 @@ func startupSequence() {
 	if err != nil {
 		panic(err)
 	}
+	initUpstreamClientCertLoader() //client certificates for mTLS towards upstreams
 	//Forget the stored ACME DNS provider / credentials when a certificate is deleted (upstream #1193)
 	tlsCertManager.OnCertRemoved = func(name string) {
 		for _, suffix := range []string{"_dns_provider", "_dns_credentials", "_dns_servers"} {
@@ -408,6 +409,8 @@ func startupSequence() {
 		Logger:             SystemWideLogger,
 		PluginGroupsConfig: CONF_PLUGIN_GROUPS,
 		APIKeyManager:      pluginApiKeyManager,
+		RunAsUser:          *plugin_user,
+		RunAsGroup:         *plugin_group,
 		ZoraxyPort:         ZoraxyPort,
 		CSRFTokenGen: func(r *http.Request) string {
 			return csrf.Token(r)
