@@ -276,7 +276,11 @@ func (router *Router) StartProxyService() error {
 			var finalListener net.Listener
 			if router.Option.UseProxyProtocol {
 				// Wrapper Proxy Protocol v1/v2
-				finalListener = proxyproto.NewDefaultListener(ln)
+				var trustedCheck func(string) bool
+				if router.Option.AccessController != nil {
+					trustedCheck = router.Option.AccessController.IsTrustedProxy
+				}
+				finalListener = proxyproto.NewDefaultListener(ln).WithSourceChecker(proxyProtocolSourceChecker(trustedCheck))
 				router.Option.Logger.PrintAndLog("dprouter", "PROXY protocol v1/v2 enabled for TLS listener", nil)
 			} else {
 				// Use direct TCP listener without PROXY protocol
@@ -931,4 +935,24 @@ func (router *Router) handlePort80Request(w http.ResponseWriter, r *http.Request
 
 	}
 
+}
+
+// proxyProtocolSourceChecker decides whether the peer of a new connection may announce a client address with a
+// PROXY header: trusted proxies, and loopback / private / link-local peers (a load balancer next to Zoraxy).
+// Headers from any other peer are consumed but ignored, so an internet client cannot choose its own address.
+func proxyProtocolSourceChecker(isTrusted func(ip string) bool) proxyproto.SourceChecker {
+	return func(a net.Addr) (bool, error) {
+		host, _, err := net.SplitHostPort(a.String())
+		if err != nil {
+			host = a.String()
+		}
+		ip := net.ParseIP(host)
+		if ip == nil {
+			return false, nil
+		}
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() {
+			return true, nil
+		}
+		return isTrusted != nil && isTrusted(ip.String()), nil
+	}
 }

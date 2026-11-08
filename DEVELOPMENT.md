@@ -1639,3 +1639,18 @@ translation is a **runtime layer**; how-to for contributors is in `docs/translat
   Headless Chromium needs a CJK font for useful zh/ja screenshots (`apt-get download fonts-wqy-microhei`, `dpkg -x` into the font root).
 * **Gotchas**: never read UI text back from the DOM to decide logic or to store it (it may be translated; `i18n.originalText(el)` gives the English, used by the
   "Recent" menu). Text split by inline markup is several nodes, so fragments such as "Click" / "to continue" cannot be translated on their own and stay English.
+## End-to-end verification (`tools/e2e`, data plane)
+
+Real end-to-end checks of the proxy features. Every scenario starts a throw-away Zoraxy (own conf/db/tmp dir, `-noauth -dev`, admin and proxy listener on ports 28810-28999, plain HTTP mode unless TLS is needed), local backends (echo, slow/aborting raw sockets, WebSocket echo, unix socket, h2c/gRPC-style Go helper, fake OIDC IdP with RS256 tokens, fake Authelia/outpost, fake Sablier, fake Turnstile/reCAPTCHA/Friendly siteverify, the example filter plugin), configures through the same HTTP API calls the admin UI makes (the New rule dialog is driven with Playwright in one scenario) and sends real requests to the proxy listener. Results: `docs/verification/e2e-dataplane.{json,md}` (built by `tools/e2e/matrix.py` from the last run plus `tools/e2e/matrix_meta.json`).
+
+```bash
+tools/e2e/run.sh --list                        # scenarios and fork issue numbers
+tools/e2e/run.sh --only waf,captcha_altcha     # name or prefix, comma separated
+PY=$HOME/ui-test-tools/py.sh tools/e2e/run.sh  # whole suite, a few minutes; playwright is only needed for ui_*
+tools/e2e/run.sh --no-build --only core        # reuse the binary in $TMPDIR/zoraxy-e2e-bin (or ZORAXY_BIN=...)
+python3 tools/e2e/matrix.py                    # refresh docs/verification after a full run
+```
+
+Needs `go`, `python3` (3.10+), `openssl`. A scenario prints PASS, FAIL with the reason, or NOT-TESTABLE; exit code 1 on any FAIL. Writers: `lib.py` (`Zoraxy`, `Backend`, `FakeHTTPS`, `http_req`, `scenario`), `ws.py` (RFC 6455), `fakes.py` (OIDC IdP), `helpers/` (Go: h2c server/client, ECH and TLS client; built on demand from the module cache). Third-party HTTPS APIs are faked by starting Zoraxy with `HTTPS_PROXY` pointing at a local CONNECT proxy and `SSL_CERT_FILE` at the fake CA, so the real binary talks to what it believes is `challenges.cloudflare.com`. Source addresses `127.0.0.x` give distinct clients (Linux). The harness waits for "Dynamic Reverse Proxy service started" before API calls that restart the listener.
+
+Bugs found while writing it (each has a Go regression test): `TE: trailers` stripped towards gRPC upstreams, CAPTCHA protected prefixes skipped by `;param` paths, PROXY protocol headers believed from any peer, Network Tools JS error when mDNS is disabled.

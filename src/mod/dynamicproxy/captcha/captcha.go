@@ -308,7 +308,9 @@ func pathPrefixMatch(requestPath string, pathPrefix string) bool {
 		return true
 	}
 
-	return pathmatch.RequestPathWithinPrefix(requestPath, normalizedPrefix)
+	// Restrictive match: any reading of the path counts, including the one servlet containers use (";param" dropped)
+	return pathmatch.RequestPathWithinPrefix(requestPath, normalizedPrefix) ||
+		pathmatch.RequestPathWithinPrefix(pathmatch.StripPathParams(requestPath), normalizedPrefix)
 }
 
 // ShouldEnforcePath returns true when CAPTCHA should apply to the request path.
