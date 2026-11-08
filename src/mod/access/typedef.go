@@ -38,6 +38,11 @@ type AccessRule struct {
 	BlackListContryCode  *map[string]string
 	BlackListIP          *map[string]string
 
+	/* Optional extras, all default off (see ruleextra.go) */
+	SortOrder            int                `json:",omitempty"` //Manual position in the rule list (0 = not ordered)
+	DropOnBlock          bool               `json:",omitempty"` //Close the connection of blocked clients without any HTTP response
+	ChallengeCountryCode *map[string]string `json:",omitempty"` //Countries that get the endpoint CAPTCHA instead of being blocked
+
 	parent  *Controller
 	blIndex atomic.Value // *blacklistIndex, compiled IP blacklist lookup (see blacklist_index.go)
 }

@@ -43,6 +43,7 @@
                 <a class="accesscontrol item active" data-tab="tab_blacklist"><i class="ui red circle times icon"></i> Blacklist</a>
                 <a class="accesscontrol item" data-tab="tab_whitelist"><i class="ui green check circle icon"></i> Whitelist</a>
                 <a class="accesscontrol item" data-tab="tab_quickban"><i class="ui red ban icon"></i> Quick Ban</a>
+                <a class="accesscontrol item" data-tab="tab_options"><i class="ui cog icon"></i> Options</a>
             </div>
 
             <!-- Blacklist Conguration Menu-->
@@ -720,6 +721,8 @@
                 </table>
                 <div class="pagination"></div>
             </div>
+            <!-- Optional rule settings: ordering, duplicate, drop connection, challenge countries -->
+            <div class="ui bottom attached tab segment" data-tab="tab_options" id="accessOptionsPane"></div>
         </div>  
     </div>
 </div>
@@ -727,6 +730,7 @@
     /*
         Access Control
     */
+   $("#accessOptionsPane").load("./components/access_options.html");
    var currentEditingAccessRule = "default"; //ID of the current editing access rule
    var currentListOfAccessRules = [];
   
@@ -836,6 +840,7 @@
         $("#accessRuleDesc").text(desc);
 
         initBlackWhitelistTables();
+        if (window.accessOptionsRefresh) { window.accessOptionsRefresh(); }
     }
     
     //Load all the black white lists
