@@ -8,6 +8,7 @@
     <div class="ui top attached tabular menu">
         <a class="nettools item active bluefont" data-tab="tab1">Discovery</a>
         <a class="nettools item bluefont" data-tab="tab2">Connection</a>
+        <a class="nettools item bluefont" data-tab="tab3">Diagnostics</a>
     </div>
 
     <div class="ui bottom attached tab segment nettoolstab active" data-tab="tab1">
@@ -163,7 +164,127 @@
         </table>
         <button class="ui basic button" onclick="listWoL();"><i class="ui green refresh icon"></i> Refresh</button>
     </div>
+
+    <!-- Diagnostics: DNS lookup, TLS certificate inspector, HTTP request tester -->
+    <div class="ui bottom attached tab segment nettoolstab" data-tab="tab3">
+        <div class="ui basic message">
+            These tools make <b>Zoraxy</b> connect to the host you enter (admin only). Connections to cloud metadata and link-local addresses (<code>169.254.0.0/16</code>, <code>168.63.129.16</code>, <code>fd00:ec2::254</code>, <code>100.100.100.200</code>) are refused unless you tick the box below.
+            <div class="ui checkbox" style="margin-left: 1em;"><input type="checkbox" id="diagAllowMetadata"><label>Allow metadata / link-local addresses</label></div>
+        </div>
+
+        <h3 class="ui header">DNS Lookup</h3>
+        <div class="ui form">
+            <div class="fields">
+                <div class="six wide field"><label>Host</label><input type="text" id="diagDnsHost" placeholder="example.com" onkeypress="if(event.keyCode === 13) { diagDns(); }"></div>
+                <div class="six wide field"><label>DNS server (optional IP)</label><input type="text" id="diagDnsServer" placeholder="1.1.1.1"></div>
+                <div class="four wide field"><label>&nbsp;</label><button class="ui basic fluid button" onclick="diagDns();"><i class="search icon"></i> Lookup</button></div>
+            </div>
+        </div>
+        <div style="overflow-x:auto;"><table class="ui celled unstackable compact table" id="diagDnsResult" style="display:none;"><thead><tr><th>Type</th><th>Records</th></tr></thead><tbody></tbody></table></div>
+
+        <div class="ui divider"></div>
+        <h3 class="ui header">TLS Certificate Inspector</h3>
+        <div class="ui form">
+            <div class="fields">
+                <div class="six wide field"><label>Host</label><input type="text" id="diagTlsHost" placeholder="example.com" onkeypress="if(event.keyCode === 13) { diagTls(); }"></div>
+                <div class="three wide field"><label>Port</label><input type="number" id="diagTlsPort" value="443" min="1" max="65535"></div>
+                <div class="four wide field"><label>SNI (optional)</label><input type="text" id="diagTlsSni" placeholder="same as host"></div>
+                <div class="three wide field"><label>&nbsp;</label><button class="ui basic fluid button" onclick="diagTls();"><i class="certificate icon"></i> Inspect</button></div>
+            </div>
+        </div>
+        <div id="diagTlsResult"></div>
+
+        <div class="ui divider"></div>
+        <h3 class="ui header">HTTP Request Tester</h3>
+        <div class="ui form">
+            <div class="fields">
+                <div class="nine wide field"><label>URL</label><input type="text" id="diagHttpUrl" placeholder="https://example.com/" onkeypress="if(event.keyCode === 13) { diagHttp(); }"></div>
+                <div class="three wide field"><label>Method</label><select id="diagHttpMethod" class="ui dropdown"><option>GET</option><option>HEAD</option><option>OPTIONS</option></select></div>
+                <div class="four wide field"><label>&nbsp;</label><button class="ui basic fluid button" onclick="diagHttp();"><i class="exchange icon"></i> Send</button></div>
+            </div>
+            <div class="inline fields">
+                <div class="field"><div class="ui checkbox"><input type="checkbox" id="diagHttpFollow" checked><label>Follow redirects (max 10)</label></div></div>
+                <div class="field"><div class="ui checkbox"><input type="checkbox" id="diagHttpSkipVerify"><label>Ignore TLS certificate errors</label></div></div>
+            </div>
+        </div>
+        <div style="overflow-x:auto;"><table class="ui celled unstackable compact table" id="diagHttpResult" style="display:none;"><thead><tr><th>#</th><th>URL</th><th>Status</th><th>Remote</th><th>DNS</th><th>Connect</th><th>TLS</th><th>First byte</th><th>Total</th></tr></thead><tbody></tbody></table></div>
+    </div>
 </div>
+
+<script>
+    // Diagnostics tab (DNS lookup / TLS inspector / HTTP tester). All output is inserted with .text() (remote data is untrusted)
+    function diagCommon(){
+        return $("#diagAllowMetadata").is(":checked") ? {allowmetadata: "true"} : {};
+    }
+    function diagCell(text){ return $("<td></td>").text(text); }
+
+    function diagDns(){
+        let host = $("#diagDnsHost").val().trim();
+        if (host == ""){ msgbox("Enter a host name", false); return; }
+        $.get("/api/tools/dns", {host: host, server: $("#diagDnsServer").val().trim()}, function(data){
+            if (data.error != undefined){ msgbox(data.error, false); return; }
+            let tbody = $("#diagDnsResult tbody").empty();
+            data.forEach(function(r){
+                let td = $("<td></td>");
+                if (r.Records.length == 0){
+                    td.append($("<span style='color:#999;'></span>").text(r.Error ? r.Error : "none"));
+                }
+                r.Records.forEach(function(rec){ td.append($("<div></div>").append($("<code></code>").text(rec))); });
+                tbody.append($("<tr></tr>").append(diagCell(r.Type), td));
+            });
+            $("#diagDnsResult").show();
+        });
+    }
+
+    function diagTls(){
+        let host = $("#diagTlsHost").val().trim();
+        if (host == ""){ msgbox("Enter a host name", false); return; }
+        let params = Object.assign({host: host, port: $("#diagTlsPort").val(), sni: $("#diagTlsSni").val().trim()}, diagCommon());
+        $("#diagTlsResult").empty().append($("<div class='ui active inline loader'></div>"));
+        $.get("/api/tools/tlsinspect", params, function(data){
+            let box = $("#diagTlsResult").empty();
+            if (data.error != undefined){
+                box.append($("<div class='ui red message'></div>").text(data.error));
+                return;
+            }
+            let summary = $("<div class='ui message'></div>").addClass(data.Verified ? "positive" : "warning");
+            summary.append($("<div></div>").text(data.Version + " / " + data.CipherSuite + (data.ALPN ? " / " + data.ALPN : "") + " (handshake " + data.HandshakeMS + " ms, " + data.Address + ")"));
+            summary.append($("<div></div>").text(data.Verified ? "Certificate chain is trusted for " + data.ServerName : "Not trusted: " + data.VerifyError));
+            if (!data.HostnameOK){ summary.append($("<div></div>").text("The certificate does not cover " + data.ServerName)); }
+            box.append(summary);
+            (data.Chain || []).forEach(function(c, i){
+                let t = $("<table class='ui definition compact unstackable table'></table>");
+                function row(k, v){ t.append($("<tr></tr>").append($("<td></td>").text(k), $("<td></td>").text(v))); }
+                row("Certificate " + (i + 1), c.Subject);
+                row("Issuer", c.Issuer + (c.SelfSigned ? " (self signed)" : ""));
+                row("Valid", c.NotBefore + " to " + c.NotAfter + " (" + c.DaysLeft + " days left)");
+                if (c.DNSNames && c.DNSNames.length) row("DNS names", c.DNSNames.join(", "));
+                if (c.IPAddresses && c.IPAddresses.length) row("IP addresses", c.IPAddresses.join(", "));
+                row("Key / signature", c.KeyAlgorithm + " / " + c.SigAlgorithm);
+                row("Serial", c.SerialHex);
+                row("SHA-256", c.SHA256);
+                box.append($("<div style='overflow-x:auto;'></div>").append(t));
+            });
+        });
+    }
+
+    function diagHttp(){
+        let url = $("#diagHttpUrl").val().trim();
+        if (url == ""){ msgbox("Enter a URL", false); return; }
+        let params = Object.assign({url: url, method: $("#diagHttpMethod").val(), follow: $("#diagHttpFollow").is(":checked"), skipverify: $("#diagHttpSkipVerify").is(":checked")}, diagCommon());
+        $.get("/api/tools/httptest", params, function(data){
+            if (data.error != undefined){ msgbox(data.error, false); return; }
+            let tbody = $("#diagHttpResult tbody").empty();
+            data.Hops.forEach(function(h, i){
+                let status = h.Error ? h.Error : (h.Status + (h.Location ? " -> " + h.Location : ""));
+                tbody.append($("<tr></tr>").append(diagCell(i + 1), diagCell(h.URL), diagCell(status), diagCell(h.RemoteAddr || ""),
+                    diagCell(h.DNSMS + " ms"), diagCell(h.ConnectMS + " ms"), diagCell(h.TLSVersion ? (h.TLSMS + " ms " + h.TLSVersion) : "-"),
+                    diagCell(h.TTFBMS + " ms"), diagCell(h.TotalMS + " ms")));
+            });
+            $("#diagHttpResult").show();
+        });
+    }
+</script>
 
 <script>
     // Activate the default tab
