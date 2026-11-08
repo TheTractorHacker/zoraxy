@@ -81,6 +81,14 @@ func handleBlocklistImport(w http.ResponseWriter, r *http.Request, dryRun bool) 
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, blocklistImportMaxUpload+(1<<20))
+	//The admin UI posts FormData (multipart). utils.PostPara only reads urlencoded bodies, so parse the
+	//multipart form first; its fields then show up in r.Form for PostPara as well.
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		if err := r.ParseMultipartForm(8 << 20); err != nil {
+			sendErr(w, "invalid upload: "+err.Error())
+			return
+		}
+	}
 	ruleID, _ := utils.PostPara(r, "id")
 	if ruleID == "" {
 		ruleID = "default"
