@@ -189,6 +189,9 @@
                             <a class="item" tag="cluster" tab_group="others">
                                 <i class="simplistic server icon"></i> Cluster / HA
                             </a>
+                            <a class="item" tag="fleet" tab_group="others">
+                                <i class="simplistic sitemap icon"></i> Fleet
+                            </a>
                             <a class="item" tag="updater" tab_group="others">
                                 <i class="simplistic download icon"></i> Update
                             </a>
@@ -213,6 +216,7 @@
                 </div>
             </div>
             <div class="contentWindow">
+                <div id="fleetManagedBanner" class="ui info message" style="display:none; margin:0.5em 1em 0;"><i class="lock icon"></i> Managed by hub <b id="fleetManagedHub"></b>: the objects of the managed scopes are read-only on this node, node local objects stay editable. <a href="#" onclick="$('[tag=fleet]').first().click(); return false;">Fleet</a></div>
                 <div id="clusterFollowerBanner" class="ui warning message" style="display:none; margin:0.5em 1em 0;"><i class="lock icon"></i> This node is a cluster follower: proxy rules, redirects, access rules, stream proxies and ACME settings are managed by the primary and read-only here. <a href="#" onclick="$('[tag=cluster]').first().click(); return false;">Cluster / HA</a></div>
                 <!-- Quick Start -->
                 <div id="qstart" class="functiontab" target="quickstart.html"></div>
@@ -287,6 +291,9 @@
 
                 <!-- Cluster / HA -->
                 <div id="cluster" class="functiontab" target="cluster.html"></div>
+
+                <!-- Fleet (central management) -->
+                <div id="fleet" class="functiontab" target="fleet.html"></div>
 
                 <!-- Updater -->
                 <div id="updater" class="functiontab" target="updater.html"></div>
@@ -917,6 +924,7 @@
             $(document).ready(function(){
                 $.ajax({url: "./api/cluster/status", method: "GET", success: function(s){
                     if (s && s.readOnly) $("#clusterFollowerBanner").show();
+                    if (s && s.fleet && s.fleet.managed) { $("#fleetManagedHub").text(s.fleet.hubHost || ""); $("#fleetManagedBanner").show(); }
                 }});
             });
         </script>

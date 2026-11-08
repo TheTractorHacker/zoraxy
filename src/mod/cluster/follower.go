@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
@@ -32,6 +33,14 @@ type followerStatus struct {
 	LastResult     string `json:"lastResult"` //applied, unchanged, error
 	CertsSynced    bool   `json:"certsSynced"`
 	RejectedHash   string `json:"rejectedHash,omitempty"` //snapshot that prevented a clean start
+
+	// Fleet (central management) node state
+	AttemptHash string              `json:"attemptHash,omitempty"` //bundle of the latest apply attempt
+	ManagedHash string              `json:"managedHash,omitempty"` //hash of the managed files as applied (local drift check)
+	Managed     map[string][]string `json:"managed,omitempty"`     //scope -> keys owned by the hub
+	FleetScopes []string            `json:"fleetScopes,omitempty"`
+	Conflicts   []Conflict          `json:"conflicts,omitempty"`
+	FleetGroup  string              `json:"fleetGroup,omitempty"`
 }
 
 func (m *Manager) followerStateFile() string {
@@ -72,6 +81,7 @@ func (m *Manager) Status() FollowerStatus {
 }
 
 type followerRunner struct {
+	role   string
 	cancel context.CancelFunc
 	done   chan struct{}
 }
@@ -81,24 +91,33 @@ func (r *followerRunner) stop() {
 	<-r.done
 }
 
-// reconcileFollower starts or stops the poll loop to match the role.
+// reconcileFollower starts, stops or switches the background loop to match
+// the role: the poll loop (follower), the fleet node loop (node) or the hub
+// rollout ticker (hub).
 func (m *Manager) reconcileFollower() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	want := m.cfg.Role == RoleFollower
-	if !want && m.followerRun != nil {
+	role := m.cfg.Role
+	want := role == RoleFollower || role == RoleNode || role == RoleHub
+	if m.followerRun != nil && (!want || m.followerRun.role != role) {
 		old := m.followerRun
 		m.followerRun = nil
 		go old.stop()
-		return
 	}
 	if want && m.followerRun == nil {
 		ctx, cancel := context.WithCancel(context.Background())
-		r := &followerRunner{cancel: cancel, done: make(chan struct{})}
+		r := &followerRunner{role: role, cancel: cancel, done: make(chan struct{})}
 		m.followerRun = r
 		go func() {
 			defer close(r.done)
-			m.pollLoop(ctx)
+			switch role {
+			case RoleNode:
+				m.fleetLoop(ctx)
+			case RoleHub:
+				m.hub.run(ctx)
+			default:
+				m.pollLoop(ctx)
+			}
 		}()
 	}
 }
@@ -125,17 +144,23 @@ func (m *Manager) httpClient(cfg Config) *http.Client {
 	if m.opt.HTTPClient != nil {
 		return m.opt.HTTPClient
 	}
+	return newPinnedClient(cfg.PrimaryFingerprint)
+}
+
+// newPinnedClient builds the HTTP client for talking to a primary or hub.
+// With a fingerprint the server's leaf certificate must match it (this is
+// how self-signed admin certificates from -webui_tls are trusted); without
+// one the normal certificate verification applies.
+func newPinnedClient(pin string) *http.Client {
 	tc := &tls.Config{MinVersion: tls.VersionTLS12}
-	if cfg.PrimaryFingerprint != "" {
-		// Pin the primary admin certificate (self-signed admin HTTPS).
-		pin := cfg.PrimaryFingerprint
+	if pin != "" {
 		tc.InsecureSkipVerify = true
 		tc.VerifyPeerCertificate = func(raw [][]byte, _ [][]*x509.Certificate) error {
 			if len(raw) == 0 {
 				return errors.New("no certificate presented")
 			}
 			sum := sha256.Sum256(raw[0])
-			if hex.EncodeToString(sum[:]) != pin {
+			if subtle.ConstantTimeCompare([]byte(hex.EncodeToString(sum[:])), []byte(pin)) != 1 {
 				return errors.New("primary certificate does not match the pinned fingerprint")
 			}
 			return nil
@@ -282,21 +307,33 @@ func (m *Manager) applySnapshot(env *Envelope, payload *Payload, force bool) (st
 		return "", fmt.Errorf("apply failed, previous configuration kept: %w", err)
 	}
 
+	return m.finishApply(applied, toApply.Roots, payload.ContentHash, env.Version, func(st *followerStatus) {
+		st.AppliedVersion = env.Version
+		st.AppliedHash = payload.ContentHash
+		st.AppliedAt = m.opt.Now().Unix()
+		st.CertsSynced = payload.IncludesCerts
+	}, nil, fmt.Sprintf("applied snapshot version %d (%d files)", env.Version, len(payload.Files)))
+}
+
+// finishApply persists the new state, then reloads the process. It is shared
+// by the legacy follower and the Fleet node. Any failure rolls the files (and
+// via undo, non file state) back to what they were before the apply.
+func (m *Manager) finishApply(applied *Applied, roots []string, hash string, version int64, mutate func(*followerStatus), undo func(), logMsg string) (string, error) {
 	// Persist the new state first so the restart that Reload triggers sees it.
 	m.mu.Lock()
 	old := m.status
-	m.status.AppliedVersion = env.Version
-	m.status.AppliedHash = payload.ContentHash
-	m.status.AppliedAt = m.opt.Now().Unix()
-	m.status.CertsSynced = payload.IncludesCerts
+	mutate(&m.status)
 	m.saveStatusLocked()
 	m.mu.Unlock()
 
 	if m.opt.Reload != nil {
-		m.writePending(pendingApply{BackupDir: applied.BackupDir, Roots: toApply.Roots, Hash: payload.ContentHash, Version: env.Version, PrevStatus: old})
+		m.writePending(pendingApply{BackupDir: applied.BackupDir, Roots: roots, Hash: hash, Version: version, PrevStatus: old})
 		if err := m.opt.Reload(); err != nil {
 			m.MarkHealthy()
 			rbErr := applied.Rollback()
+			if undo != nil {
+				undo()
+			}
 			m.mu.Lock()
 			m.status = old
 			m.saveStatusLocked()
@@ -307,7 +344,7 @@ func (m *Manager) applySnapshot(env *Envelope, payload *Payload, force bool) (st
 			return "", fmt.Errorf("reload failed, rolled back to previous configuration: %w", err)
 		}
 	}
-	m.opt.Logf("[cluster] applied snapshot version %d (%d files)", env.Version, len(payload.Files))
+	m.opt.Logf("[cluster] %s", logMsg)
 	return "applied", nil
 }
 

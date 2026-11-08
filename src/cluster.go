@@ -53,6 +53,9 @@ func initCluster() {
 		AllowLocalEdits: *clusterAllowLocalEdit,
 		Reload:          clusterReload,
 		Validate:        validateClusterPayload,
+		Actor:           fleetActor,
+		Stats:           fleetNodeStats,
+		HubFingerprint:  func() string { return webUIFingerprint },
 		Logf: func(format string, a ...any) {
 			if SystemWideLogger != nil {
 				SystemWideLogger.Println(fmt.Sprintf(format, a...))
@@ -146,4 +149,11 @@ func RegisterClusterAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/cluster/generateSecret", clusterMgr.HandleGenerateSecret)
 	authRouter.HandleFunc("/api/cluster/syncNow", clusterMgr.HandleSyncNow)
 	authRouter.HandleFunc("/api/cluster/nodes", clusterMgr.HandleNodes)
+	// Fleet (central management): hub admin API and node side join/leave/info
+	authRouter.HandleFunc(cluster.FleetAPIPrefix, clusterMgr.HandleFleetHub)
+	authRouter.HandleFunc("/api/fleet/node/info", clusterMgr.HandleFleetNodeInfo)
+	authRouter.HandleFunc("/api/fleet/node/probe", clusterMgr.HandleFleetProbe)
+	authRouter.HandleFunc("/api/fleet/node/join", clusterMgr.HandleFleetJoin)
+	authRouter.HandleFunc("/api/fleet/node/leave", clusterMgr.HandleFleetLeave)
+	authRouter.HandleFunc("/api/fleet/node/syncNow", clusterMgr.HandleFleetNodeSync)
 }

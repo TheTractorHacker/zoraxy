@@ -736,3 +736,166 @@ Report: `docs/triage/sweep-1.md|json`. Developer notes for the fixes on `fix/bug
   returns on a missing destination; vdir edit keeps `Disabled`.
 - **Stream proxy**: `connCopy` always releases its wait group and closes both sockets on error; PROXY headers pick TCPv4/TCPv6 (UDPv4/UDPv6) from the
   addresses; rejected clients are closed after 300 ms in a goroutine so the accept loop never sleeps.
+
+## Central management (Fleet)
+
+Fleet turns one Zoraxy into a management hub for several others. It extends `src/mod/cluster` (files `fleet_*.go`, page
+`web/components/fleet.html`, glue `src/fleet.go`); the legacy shared-secret primary/follower mode above is unchanged, still works with
+its `conf/cluster.json` and flags, and is labelled "Legacy shared-secret mode" on the Cluster / HA page. A node uses one mode:
+`standalone`, legacy `primary`/`follower`, or Fleet `hub`/`node`. Everything is inert until the hub role is enabled.
+
+**What the hub can do, and what it cannot.** The hub publishes immutable, versioned configuration and can ask a node to "sync now".
+A node pulls a bundle, validates it, applies it atomically (stage, backup, rename, local rollback, boot guard) and reports. There
+is **no remote command execution** of any kind: no shell, no plugin install, no update trigger, no file path chosen by the hub. A
+bundle can only contain files of the allow-listed roots (`proxy`, `redirect`, `access`, `rules`, `streamproxy`, `trusted_proxies.json`,
+`acme_conf.json`, optionally `certs`) and items of registered scopes. Admin accounts, `sys.uuid`, `conf/webui` (admin TLS keys), updater
+state, `cluster.json`, node keys and logs are never exported or accepted.
+
+### Data model and files
+
+| File (in `conf/.cluster/`, all 0600) | Side | Content |
+|---|---|---|
+| `fleet-hub.json` | hub | hub id, settings, nodes (with node keys), groups (scopes, variables, stable version, latest rollout), join token hashes, version index |
+| `fleet-hub.key` | hub | random 32 byte key; seals stored versions (AES-256-GCM + HMAC, the snapshot format) |
+| `fleet/versions/<n>.zcs` | hub | immutable sealed config versions; secrets inside are encrypted at rest |
+| `fleet-audit.jsonl` | hub | audit log (who, when, what; never keys, tokens or variable values) |
+| `fleet-node.json` | node | hub id and this node's key. Never logged, never synced |
+| `follower.json` | node | applied version/hash, managed keys per scope, conflicts (shared with the legacy follower state) |
+
+`conf/cluster.json` only gains the roles `hub` and `node` (for a node `primaryUrl` / `primaryFingerprint` hold the hub URL and pin).
+
+### Enrollment and per node credentials
+
+1. Hub: Fleet, "Join nodes", create a token: single use, 1 minute to 24 h, optional node name and group preselected. Token format
+   `zj1.<id>.<secret>`; only a SHA-256 of the secret is stored; compared in constant time; unknown id, wrong secret, used, revoked and
+   expired all answer the same 401. `POST /api/fleet/join` is rate limited to 10 per minute per client IP and audited.
+2. Node: Fleet, enter the hub admin URL and token. For https the node first connects and shows the hub certificate's SHA-256
+   fingerprint; the admin compares it with the one on the hub's "Join nodes" tab (`-webui_tls` certs) and confirms; the pin is stored and
+   used for every later request (`newPinnedClient`). A self-signed hub certificate without a pin, and a plain `http` URL without an
+   explicit confirmation, are refused.
+3. The hub answers with a random 32 byte node key (hex). From then on every request carries the existing HMAC bearer token
+   (`zxc1:ts:node:nonce:mac`, bound to method and path, +-60 s, single use) computed with that node's own key. The config bundle is
+   sealed with the node key too, so a bundle for node A cannot be read or forged with node B's key.
+4. Revoke: `nodeRevoke` marks the node revoked; its tokens stop working on the next request (all failures look the same). Rotation:
+   `nodeRotate` stages a new key which is delivered inside the next sealed bundle; when the node authenticates with the new key the
+   hub drops the old one. A leaked old key stays valid only until the node's next sync. Re-enrol a revoked node with a new token.
+5. Leave (node): role back to standalone, key deleted, managed files stay as ordinary local config.
+
+### Scopes (`Scope` registry, `fleet_scope.go`)
+
+```go
+type Scope interface {
+    Name() string; Label() string
+    Export(env *ScopeEnv, sel Selection) ([]FileEntry, error)   // hub: items of this scope
+    Validate(items []FileEntry) error                           // hub at publish AND node before applying
+    Apply(env *ScopeEnv, items []FileEntry, prevManaged []string) (*ScopePlan, error) // node: final files + Commit/Undo hooks
+    OwnsPath(p string) bool
+}
+cluster.RegisterScope(s) // replaces by name
+```
+
+Built in (file based): `proxy` (merge mode, tag filter), `redirect`, `access` (access rules + trusted proxies), `pathrules`,
+`streamproxy`, `acme`, `certs` (off by default, hub setting "capture certificates"). The scope list is chosen per group and can be
+overridden per node. **No scope selected means nothing is managed** (a fresh group changes nothing).
+
+- Whole-root scopes mirror the hub (local additions in that root are removed).
+- `proxy` merges: hub rules are installed, rules the hub published before and no longer publishes are removed, **node local rules
+  are never touched**. A local rule with the same file key as a hub rule is replaced (hub wins) and reported as a conflict (node UI,
+  heartbeat, hub drawer). Optionally only rules carrying given tags (case insensitive `Tags` of the rule) are managed.
+- A scope that is switched off stops being managed; its files stay as local config.
+- Non file scopes (the Central WAF policy and profiles in the settings DB): implement `Scope`, exchange items with paths prefixed
+  `"<scope>:"` (such items travel in `FleetMeta.Extra`), persist in `ScopePlan.Commit` (runs after the files are installed, before the
+  reload) and revert in `ScopePlan.Undo` when the reload fails. `TestPluggableScope` shows the shape with a fake `waf` scope. After
+  `feat/central-waf` merges, add a `wafScope` in `src/` and `cluster.RegisterScope(...)` from an `init()`; nothing else changes.
+- The node UI shows a "Managed by hub" banner; `GuardLocalEdits` answers 403 to writes against managed scopes' APIs and against managed
+  proxy rules (matched on the `ep`, `rootname`, `domain` form field), local rules stay editable. This is a UX guard; the authority is the
+  apply step (hub wins on the next sync).
+
+### Variables
+
+Managed JSON files may contain `{{node.NAME}}`. Names `[a-z][a-z0-9_]{0,31}`; values are limited to `A-Za-z0-9 . _ : / @ + - [ ]` (max
+253), so a value cannot close a JSON string, add keys or inject braces. Built in: `{{node.id}}`, `{{node.name}}`, `{{node.group}}`
+(sanitised). Order: group variables, overridden by node variables. A malformed `{{node.` placeholder fails the capture; the publish
+preflight dry-runs every node (all placeholders defined, result is valid JSON and still passes scope validation) and refuses the whole
+publish otherwise; the node re-validates and refuses a bundle with a bad value or missing variable (nothing is applied). Certificates
+are never templated. The hub itself should not proxy templated rules (it would read the raw placeholder).
+
+### Versions, rollout, rollback
+
+"Publish" captures the hub's current files into a new version (identical captures are not duplicated), keeps the newest N (default 10;
+versions a group still uses are never pruned), then starts a rollout for a group:
+
+- **immediate**: the group's stable version becomes the new one.
+- **manual**: nothing changes until "Approve".
+- **canary**: one node (chosen or the first online) is pointed at the new version, the rest stay on the stable one. The hub watches the
+  canary's heartbeats. It must report the new bundle hash applied and `health: ok` (router running, from the same logic as
+  `/.zoraxy/health`) for "healthy for N s" (heartbeats late by more than 90 s restart the period). It then promotes, or with "hold
+  for approval" waits for you. Failure halts the rollout and points the canary back at the stable version: reported apply error for
+  that bundle, unhealthy longer than the grace period (30 s default), did not apply within the timeout (300 s default), offline
+  more than 5 min after applying, or the canary was revoked/removed. The first ever publish to a group has no earlier version to go
+  back to (the reason says so; node-local rollback still protects a failed apply).
+- Rollback is "publish an older version" (Groups tab: roll back to the version before, Versions tab: any kept version) with the same
+  strategies. The diff view lists added/removed/changed objects per scope with contents of small non-certificate files.
+
+Nodes apply with the legacy follower machinery (`finishApply`): stage, backup, rename, reload (Zoraxy restarts itself), pending marker
+and boot guard that restores the backup when the new files stop the node from starting; a failed reload or scope `Commit` rolls back
+immediately. `Tick` is driven by a 5 s timer and by every heartbeat; the state machine is a pure function of heartbeats and an
+injectable clock (`TestCanary*`).
+
+### Dashboard, telemetry, audit
+
+Nodes send a heartbeat every 20 s (hub configurable) with bounded numbers only: uptime, health, active rule count, soonest certificate
+expiry, strictest WAF mode, cumulative request / 5xx / WAF event counters, applied version and hash, last apply result, whether managed
+files were edited locally (drift), conflicts. The hub derives per minute rates (a counter reset is handled) and aggregates totals,
+error rate, WAF events and drifting nodes from those; nothing per request is shipped. Status: online (heartbeat < 90 s, healthy, last
+apply ok), degraded (90 s to 5 min, unhealthy, or last apply failed), offline (> 5 min), never-seen, revoked. Drift = applied bundle hash
+differs from the node's desired hash, or managed files changed on the node. The audit log (Fleet, Audit log) records token creation,
+joins (also denied ones, with the source IP), revocations, rotations, scope/variable changes (variable names only), captures, rollouts,
+halts, promotions, approvals, settings.
+
+### Threat model
+
+| Threat | Mitigation |
+|---|---|
+| Stolen node key | affects that node only (per node keys); revoke/rotate; bundles for other nodes are sealed with other keys |
+| Stolen join token | single use, <= 24 h, hash at rest, revocable, rate limited, audited; a used token is useless |
+| Network attacker | https + pinned fingerprint confirmed at join; bundles are encrypted and signed anyway; tokens bound to method/path/time/node, single use, +-60 s; plain http is refused unless explicitly accepted (still no secret config in clear) |
+| Replay | per-hub verifier remembers token MACs for the window; stale timestamps rejected |
+| Brute force | constant time compares, uniform 401, per IP rate limits (join 10/min, sync 240/min) |
+| Hostile or compromised hub | cannot execute code; can only change the scopes it manages on that node (still powerful: a proxy rule can point traffic anywhere, treat the hub as the most sensitive host, like the admin password). Node validates paths (allow-list roots), JSON, scope schemas, variable charset |
+| Secret exposure | captcha keys, basic auth hashes, certificate keys live inside sealed versions; hub key file 0600; node key file 0600; nothing secret is logged or audited |
+| Injection through variables | strict charset, JSON re-validation, preflight dry run on the hub, re-check on the node |
+| Admin API abuse | `/api/fleet/hub/*` is behind the admin session and CSRF like every admin API; the unauthenticated endpoints answer 404 unless the role is hub |
+
+Residual risks: the hub holds every node key and all published secrets (protect it like the admin account, restrict its admin port with
+the firewall); a node trusts its hub completely for the managed scopes; clocks must be within 60 s (NTP); heartbeat telemetry is
+self-reported by the node.
+
+### Setup walkthrough (hub VM + N proxy VMs, systemd)
+
+1. Same Zoraxy build on all VMs, each with its own `conf` / `sys.db` (no copying `conf` between VMs: `sys.uuid` is the node id).
+2. NTP on every VM (`timedatectl status` shows "System clock synchronized: yes"); skew over 60 s breaks authentication.
+3. Firewall: nodes need outbound TCP to the hub admin port (default 8000); the hub's admin port must accept the nodes' addresses only.
+   Nodes need no inbound port for Fleet (they poll). Start the hub with `-webui_tls auto` (self-signed) or provide a CA certificate.
+4. Hub: Fleet, "Enable hub role". Create a group (e.g. `edge-eu`) with its managed scopes (start with `proxy`), optional tags and
+   variables. Build the proxy rules on the hub like on any Zoraxy.
+5. Join nodes: hub, Join nodes, create a token (name and group preselected). Node: Fleet, hub URL `https://<hub>:8000`, token, "Check
+   hub certificate", compare the fingerprint with the hub tab, Join. The node appears on the hub within a heartbeat.
+6. Per node variables (drawer), then Groups and rollout, Publish: try canary with the group's smallest node first.
+7. systemd: nothing special; `Restart=always` is what lets the boot guard roll a bad bundle back. Apply restarts the process (about 3 s).
+
+### Manual verification checklist (hub + 2 throwaway VMs)
+
+- [ ] Enable hub; create group; token with preselected name; join node A over https with the fingerprint confirmed; wrong fingerprint is refused.
+- [ ] The same token a second time, an expired token and a revoked token are all refused.
+- [ ] Join node B. Both appear online with version, uptime, health, rule count, WAF mode; req/min moves under load.
+- [ ] Publish `proxy` immediately: both nodes get the hub's rules after a restart; a node-local rule created beforehand is still there and editable; hub rules show the banner and cannot be edited on the node (403).
+- [ ] Create a local rule with a hub rule's name before publishing: it is replaced and listed as a conflict.
+- [ ] Add `{{node.upstream_ip}}` to a hub rule: publish is refused until each node has a value; then each node gets its own upstream. A value containing a quote is rejected.
+- [ ] Canary: publish a change; only A changes; after the healthy period B follows. Publish a rule with an invalid upstream on a throwaway node and watch the canary halt and return to the stable version.
+- [ ] Break A's health (stop its router): canary halts, group stays on the stable version.
+- [ ] Roll back from the Versions tab; diff shows the change.
+- [ ] Edit a managed file on node A by hand: drift icon on the hub.
+- [ ] Rotate A's key: A keeps syncing; the old key no longer authenticates. Revoke B: B's next sync fails immediately and the hub shows it revoked.
+- [ ] Audit log lists every action above with who and when.
+- [ ] Legacy: another pair in primary/follower mode keeps working and says "Legacy shared-secret mode".

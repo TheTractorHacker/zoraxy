@@ -219,6 +219,10 @@ func main() {
 	//Cluster sync endpoints authenticate with an HMAC bearer token (404 unless role=primary)
 	entryMux.Handle(cluster.SnapshotPath, clusterMgr.SyncHandler())
 	entryMux.Handle(cluster.HeartbeatPath, clusterMgr.SyncHandler())
+	//Fleet hub endpoints (join token / per node key authentication, 404 unless role=hub)
+	entryMux.Handle(cluster.FleetJoinPath, clusterMgr.FleetHandler())
+	entryMux.Handle(cluster.FleetConfigPath, clusterMgr.FleetHandler())
+	entryMux.Handle(cluster.FleetHeartbeatPath, clusterMgr.FleetHandler())
 
 	// Start the reverse proxy server in go routine
 	go func() {
@@ -236,6 +240,7 @@ func main() {
 
 	var adminHandler http.Handler = entryMux
 	if webUICert != nil {
+		webUIFingerprint = webUICert.Fingerprint
 		if *webUIHSTS {
 			adminHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.TLS != nil {

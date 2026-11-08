@@ -1,0 +1,460 @@
+<div class="standardContainer" id="fleetPage">
+    <div class="ui basic segment">
+        <h2>Fleet</h2>
+        <p>Central management of several Zoraxy nodes from one hub. The hub publishes versioned configuration for the scopes you
+            choose; nodes pull it with their own credentials and keep everything else local. The hub can only publish
+            configuration and ask a node to sync: <b>it can never run commands on a node</b>.</p>
+    </div>
+    <div class="ui divider"></div>
+    <div id="flMsg" class="ui small message" style="display:none;"></div>
+
+    <!-- standalone: choose -->
+    <div id="flStandalone" style="display:none;">
+        <div class="ui two column stackable grid">
+            <div class="column"><div class="ui segment">
+                <h3><i class="sitemap icon"></i> Make this node the hub</h3>
+                <p>This Zoraxy becomes the management console. Its own configuration is the source that is published to the nodes.
+                    Keep proxy rules that use <code>{{node.name}}</code> style variables on the hub only if the hub does not proxy them itself.</p>
+                <button class="ui primary basic button" id="flBecomeHub">Enable hub role</button>
+            </div></div>
+            <div class="column"><div class="ui segment">
+                <h3><i class="plug icon"></i> Join a fleet</h3>
+                <div class="ui form">
+                    <div class="field"><label>Hub admin URL</label><input type="text" id="flJoinUrl" placeholder="https://10.0.0.10:8000"></div>
+                    <div class="field"><label>Join token</label><input type="text" id="flJoinToken" autocomplete="off" placeholder="zj1.xxxxxxxx.xxxxxxxx..."></div>
+                    <div id="flProbeBox" class="ui small info message" style="display:none;"></div>
+                    <button class="ui basic button" id="flProbeBtn">1. Check hub certificate</button>
+                    <button class="ui primary basic button" id="flJoinBtn" disabled>2. Join</button>
+                </div>
+            </div></div>
+        </div>
+        <div id="flLegacyNote" class="ui small warning message" style="display:none;margin-top:1em;">This node uses the legacy shared-secret cluster (Cluster / HA page). Switch it to standalone there before joining a fleet.</div>
+    </div>
+
+    <!-- node -->
+    <div id="flNode" style="display:none;">
+        <div class="ui segment">
+            <h3><i class="lock icon"></i> Managed by <span id="flNodeHub"></span></h3>
+            <table class="ui very basic compact table"><tbody id="flNodeBody"></tbody></table>
+            <div id="flNodeConflicts" class="ui small warning message" style="display:none;"></div>
+            <button class="ui basic button" id="flNodeSync"><i class="sync icon"></i> Sync now</button>
+            <button class="ui basic red button" id="flNodeLeave">Leave fleet</button>
+            <p style="color:grey;margin-top:0.8em;">Objects of the managed scopes are read-only here. Leaving keeps the current files as ordinary local configuration.</p>
+        </div>
+    </div>
+
+    <!-- hub -->
+    <div id="flHub" style="display:none;">
+        <div class="ui small statistics" id="flAgg" style="margin-bottom:1em;"></div>
+        <div class="ui secondary pointing menu" id="flTabs">
+            <a class="item active" data-tab="nodes">Nodes</a>
+            <a class="item" data-tab="groups">Groups and rollout</a>
+            <a class="item" data-tab="versions">Versions</a>
+            <a class="item" data-tab="tokens">Join nodes</a>
+            <a class="item" data-tab="audit">Audit log</a>
+            <a class="item" data-tab="settings">Settings</a>
+        </div>
+
+        <div class="fltab" data-tab="nodes">
+            <div style="overflow-x:auto;">
+            <table class="ui compact selectable celled table">
+                <thead><tr><th>Node</th><th>Group</th><th>Status</th><th>Version</th><th>Uptime</th><th>Health</th><th>Rules</th><th>Cert expiry</th><th>WAF</th><th>Req/min</th><th>5xx/min</th><th>Config</th><th></th></tr></thead>
+                <tbody id="flNodes"></tbody>
+            </table>
+            </div>
+            <div id="flDrawer" class="ui segment" style="display:none;">
+                <h3 id="flDrawerTitle"></h3>
+                <div class="ui two column stackable grid">
+                    <div class="column">
+                        <h4>Variables</h4>
+                        <p style="color:grey;">JSON object, for example <code>{"upstream_ip":"10.0.0.5"}</code>. Used as <code>{{node.upstream_ip}}</code> in managed config. Allowed characters: letters, digits and . _ : / @ + - [ ]</p>
+                        <textarea id="flNodeVars" rows="4" style="width:100%;font-family:monospace;"></textarea>
+                        <button class="ui tiny basic button" id="flSaveVars">Save variables</button>
+                        <h4>Scopes for this node</h4>
+                        <div class="ui checkbox"><input type="checkbox" id="flNodeInherit"><label>Inherit from the group</label></div>
+                        <div id="flNodeScopes"></div>
+                        <div class="ui tiny input" style="margin-top:0.4em;"><input type="text" id="flNodeTags" placeholder="proxy tags (comma separated)"></div>
+                        <button class="ui tiny basic button" id="flSaveNodeScopes">Save scopes</button>
+                    </div>
+                    <div class="column">
+                        <h4>Apply history</h4>
+                        <table class="ui very basic compact table"><tbody id="flHist"></tbody></table>
+                        <h4>Last errors</h4>
+                        <div id="flErrs" style="font-family:monospace;font-size:0.9em;"></div>
+                        <h4>Local objects replaced by the hub</h4>
+                        <div id="flConf"></div>
+                    </div>
+                </div>
+                <button class="ui tiny basic button" id="flDrawerClose">Close</button>
+            </div>
+        </div>
+
+        <div class="fltab" data-tab="groups" style="display:none;">
+            <h3>Rollouts</h3>
+            <div id="flRollouts"></div>
+            <h3>Publish</h3>
+            <div class="ui form">
+                <div class="four fields">
+                    <div class="field"><label>Group</label><select id="flPubGroup" class="ui dropdown"></select></div>
+                    <div class="field"><label>Strategy</label>
+                        <select id="flPubStrategy" class="ui dropdown">
+                            <option value="immediate">Immediate (all nodes)</option>
+                            <option value="canary">Canary (one node first)</option>
+                            <option value="manual">Manual approval</option>
+                        </select></div>
+                    <div class="field canaryOnly"><label>Canary node (optional)</label><select id="flPubCanary" class="ui dropdown"></select></div>
+                    <div class="field canaryOnly"><label>Healthy for (s)</label><input type="number" id="flPubHealthy" value="60" min="5" max="3600"></div>
+                </div>
+                <div class="inline fields canaryOnly">
+                    <div class="field"><div class="ui checkbox"><input type="checkbox" id="flPubHold"><label>Wait for my approval after the canary is healthy</label></div></div>
+                </div>
+                <div class="field"><input type="text" id="flPubNote" placeholder="Note for this version (optional)"></div>
+                <button class="ui primary basic button" id="flPublishBtn"><i class="upload icon"></i> Publish this hub's current configuration</button>
+            </div>
+            <h3 style="margin-top:2em;">Groups</h3>
+            <table class="ui compact celled table"><thead><tr><th>Group</th><th>Managed scopes</th><th>Variables</th><th>Stable version</th><th></th></tr></thead><tbody id="flGroups"></tbody></table>
+            <div class="ui segment">
+                <h4 id="flGroupFormTitle">New group</h4>
+                <div class="ui form">
+                    <div class="field"><label>Name</label><input type="text" id="flGName" placeholder="edge-eu"></div>
+                    <div class="field"><label>Managed scopes (nothing outside these is ever touched on the nodes)</label><div id="flGScopes"></div></div>
+                    <div class="field"><label>Only proxy rules with these tags (empty = all)</label><input type="text" id="flGTags" placeholder="edge, public"></div>
+                    <div class="field"><label>Group variables (JSON)</label><textarea id="flGVars" rows="3" style="font-family:monospace;"></textarea></div>
+                    <button class="ui primary basic button" id="flGSave">Save group</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="fltab" data-tab="versions" style="display:none;">
+            <button class="ui basic button" id="flCapture"><i class="camera icon"></i> Capture current configuration</button>
+            <table class="ui compact celled table"><thead><tr><th>Version</th><th>Created</th><th>By</th><th>Note</th><th>Scopes</th><th></th></tr></thead><tbody id="flVersions"></tbody></table>
+            <div id="flDiff" class="ui segment" style="display:none;"></div>
+        </div>
+
+        <div class="fltab" data-tab="tokens" style="display:none;">
+            <h3>Add a node</h3>
+            <p>Create a one time join token (single use, short lived). On the new node open Fleet, enter this hub's admin URL and the token.</p>
+            <div class="ui form">
+                <div class="four fields">
+                    <div class="field"><label>Valid for (minutes)</label><input type="number" id="flTokMin" value="15" min="1" max="1440"></div>
+                    <div class="field"><label>Node name (optional)</label><input type="text" id="flTokName"></div>
+                    <div class="field"><label>Group (optional)</label><input type="text" id="flTokGroup" placeholder="default"></div>
+                    <div class="field"><label>&nbsp;</label><button class="ui primary basic button" id="flTokCreate">Create token</button></div>
+                </div>
+            </div>
+            <div id="flTokShow" class="ui positive message" style="display:none;">
+                <div class="header">Join token (shown once)</div>
+                <code id="flTokText" style="word-break:break-all;"></code>
+                <p style="margin-top:0.6em;">Hub admin certificate fingerprint to compare on the node: <code id="flHubFp" style="word-break:break-all;">-</code></p>
+            </div>
+            <table class="ui compact celled table"><thead><tr><th>Id</th><th>State</th><th>Expires</th><th>Name</th><th>Group</th><th>Created by</th><th>Used by</th><th></th></tr></thead><tbody id="flTokens"></tbody></table>
+        </div>
+
+        <div class="fltab" data-tab="audit" style="display:none;">
+            <table class="ui compact celled table"><thead><tr><th>Time</th><th>Who</th><th>Action</th><th>Target</th><th>Detail</th></tr></thead><tbody id="flAudit"></tbody></table>
+        </div>
+
+        <div class="fltab" data-tab="settings" style="display:none;">
+            <div class="ui form">
+                <div class="three fields">
+                    <div class="field"><label>Versions to keep</label><input type="number" id="flSetKeep" min="2" max="100"></div>
+                    <div class="field"><label>Heartbeat interval (s)</label><input type="number" id="flSetHb" min="5" max="300"></div>
+                    <div class="field"><label>Canary unhealthy grace (s)</label><input type="number" id="flSetGrace" min="5" max="600"></div>
+                </div>
+                <div class="field"><div class="ui checkbox"><input type="checkbox" id="flSetCerts"><label>Include certificates and private keys in captured versions (needed for the certificates scope; stored encrypted)</label></div></div>
+                <button class="ui primary basic button" id="flSetSave">Save settings</button>
+            </div>
+            <div class="ui small message" style="margin-top:1.5em;">
+                <p>Run NTP on the hub and every node: tokens are only valid within 60 seconds of the clock. Turn on the admin HTTPS
+                    (<code>-webui_tls</code>) and join over https with the certificate fingerprint confirmed.</p>
+                <button class="ui basic red button" id="flBecomeStandalone">Turn the hub role off</button>
+            </div>
+        </div>
+    </div>
+    <br><br>
+</div>
+
+<script>
+(function(){
+    let ov = null, info = null, timer = null, openNode = null, probedFp = null, editGroup = "";
+    function esc(s){ return $("<div>").text(s == null ? "" : String(s)).html(); }
+    function ts(u){ return u ? new Date(u * 1000).toLocaleString() : "-"; }
+    function ago(u){ if (!u) return "never"; let d = Math.max(0, Math.floor(Date.now()/1000 - u)); return d < 90 ? d + "s ago" : d < 5400 ? Math.round(d/60) + "m ago" : Math.round(d/3600) + "h ago"; }
+    function dur(s){ if (!s) return "-"; return s < 3600 ? Math.round(s/60) + "m" : s < 172800 ? Math.round(s/3600) + "h" : Math.round(s/86400) + "d"; }
+    function msg(text, bad){
+        $("#flMsg").removeClass("positive negative").addClass(bad ? "negative" : "positive").text(text).show();
+        setTimeout(function(){ $("#flMsg").fadeOut(); }, 7000);
+    }
+    function fail(xhr){ msg((xhr && xhr.responseJSON && xhr.responseJSON.error) || (xhr && xhr.statusText) || "request failed", true); }
+    function post(url, data, ok){
+        $.cjax({method: "POST", url: url, data: data, success: function(d){
+            if (d && d.error) { msg(d.error, true); return; }
+            ok && ok(d);
+        }, error: fail});
+    }
+    function hub(action, data, ok){ post("./api/fleet/hub/" + action, data || {}, function(d){ ok ? ok(d) : msg("Done"); loadHub(); }); }
+    function checks(sel, target, chosen){
+        let h = "";
+        (ov.scopes || []).forEach(function(s){
+            h += "<div class='ui checkbox' style='margin-right:1em;'><input type='checkbox' value='" + esc(s.name) + "' " + (chosen.indexOf(s.name) >= 0 ? "checked" : "") + "><label>" + esc(s.label) + "</label></div>";
+        });
+        $(target).html(h);
+    }
+    function picked(target){ return $(target + " input:checked").map(function(){ return this.value; }).get().join(","); }
+
+    /* ---------------- standalone / node ---------------- */
+    function renderInfo(i){
+        info = i;
+        $("#flStandalone, #flNode, #flHub").hide();
+        if (i.role == "hub") { $("#flHub").show(); loadHub(); return; }
+        if (i.role == "node") {
+            let f = i.fleet || {};
+            $("#flNode").show();
+            $("#flNodeHub").text(f.hubHost || "hub");
+            $("#flNodeBody").html(
+                "<tr><td>Group</td><td>" + esc(f.group) + "</td></tr>" +
+                "<tr><td>Managed scopes</td><td>" + esc((f.scopes || []).join(", ") || "none yet") + "</td></tr>" +
+                "<tr><td>Managed proxy rules</td><td>" + esc((f.managedProxyRules || []).join(", ") || "-") + "</td></tr>" +
+                "<tr><td>Applied version</td><td>" + esc(f.appliedVersion || "-") + "</td></tr>" +
+                "<tr><td>Last result</td><td>" + esc(f.lastResult || "-") + " (" + ts(f.lastSuccessAt) + ")</td></tr>" +
+                "<tr><td>Last error</td><td style='color:" + (f.lastError ? "#c00" : "grey") + "'>" + esc(f.lastError || "none") + "</td></tr>" +
+                "<tr><td>Hub certificate</td><td>" + (f.insecureTransport ? "<span style='color:#c00'>plain http, not encrypted</span>" : f.pinned ? "pinned" : "verified by CA") + "</td></tr>");
+            $("#flNodeConflicts").toggle(!!(f.conflicts && f.conflicts.length)).html("Local objects replaced by the hub (hub wins): " + esc((f.conflicts || []).map(function(c){ return c.key; }).join(", ")));
+            return;
+        }
+        $("#flStandalone").show();
+        $("#flLegacyNote").toggle(!!i.legacy);
+        $("#flBecomeHub, #flJoinBtn, #flProbeBtn").prop("disabled", !!i.legacy);
+    }
+    function loadInfo(){ $.ajax({url: "./api/fleet/node/info", method: "GET", success: renderInfo, error: fail}); }
+
+    $("#flBecomeHub").on("click", function(){
+        if (!confirm("Turn this Zoraxy into a Fleet hub?")) return;
+        post("./api/cluster/config", {role: "hub"}, function(){ loadInfo(); });
+    });
+    $("#flBecomeStandalone").on("click", function(){
+        if (!confirm("Turn the hub role off? Nodes keep their current configuration but stop receiving updates.")) return;
+        post("./api/cluster/config", {role: "standalone"}, function(){ loadInfo(); });
+    });
+    $("#flProbeBtn").on("click", function(){
+        post("./api/fleet/node/probe", {hubUrl: $("#flJoinUrl").val()}, function(p){
+            probedFp = p.https ? p.fingerprint : "";
+            let t;
+            if (!p.https) t = "<b style='color:#c00'>This URL is plain http: the token and the node key would be sent unencrypted.</b> Use https if you can.";
+            else t = "Hub certificate (" + esc(p.subject || "unknown subject") + ") SHA-256 fingerprint:<br><code style='word-break:break-all;'>" + esc(p.fingerprint) + "</code><br>" +
+                (p.trustedByCA ? "It is signed by a trusted CA." : "It is self-signed or not trusted by a CA.") +
+                " <b>Compare it with the fingerprint shown on the hub (Join nodes tab) before you join.</b> It will be pinned.";
+            $("#flProbeBox").html(t).show();
+            $("#flJoinBtn").prop("disabled", false);
+        });
+    });
+    $("#flJoinBtn").on("click", function(){
+        let plain = probedFp === "";
+        if (plain && !confirm("Join over plain http? The join token and node key are not encrypted on the wire.")) return;
+        post("./api/fleet/node/join", {hubUrl: $("#flJoinUrl").val(), token: $("#flJoinToken").val(), fingerprint: probedFp || "", allowHttp: plain ? "true" : "false"}, function(){
+            $("#flJoinToken").val(""); msg("Joined the fleet"); loadInfo();
+        });
+    });
+    $("#flJoinUrl").on("input", function(){ probedFp = null; $("#flJoinBtn").prop("disabled", true); $("#flProbeBox").hide(); });
+    $("#flNodeSync").on("click", function(){ post("./api/fleet/node/syncNow", {}, function(){ msg("Synced"); loadInfo(); }); });
+    $("#flNodeLeave").on("click", function(){
+        if (confirm("Leave the fleet? The current files stay as local configuration.")) post("./api/fleet/node/leave", {}, function(){ loadInfo(); });
+    });
+
+    /* ---------------- hub ---------------- */
+    function loadHub(){
+        $.ajax({url: "./api/fleet/hub/overview", method: "GET", success: function(d){
+            if (d && d.error) { msg(d.error, true); return; }
+            ov = d; renderHub();
+        }, error: fail});
+    }
+    function stBadge(s){
+        let c = {online: "green", degraded: "orange", offline: "red", revoked: "grey", "never-seen": "grey"}[s] || "grey";
+        return "<span class='ui " + c + " mini label'>" + esc(s) + "</span>";
+    }
+    function renderHub(){
+        let a = ov.aggregate, n = a.nodes || {};
+        $("#flAgg").html(
+            "<div class='statistic'><div class='value'>" + (n.online || 0) + "/" + ov.nodes.length + "</div><div class='label'>online</div></div>" +
+            "<div class='statistic'><div class='value'>" + Math.round(a.reqPerMin) + "</div><div class='label'>requests / min</div></div>" +
+            "<div class='statistic'><div class='value'>" + (a.errorRate * 100).toFixed(1) + "%</div><div class='label'>5xx rate</div></div>" +
+            "<div class='statistic'><div class='value'>" + Math.round(a.wafPerMin) + "</div><div class='label'>WAF events / min</div></div>" +
+            "<div class='statistic'><div class='value'>" + a.endpoints + "</div><div class='label'>active rules</div></div>" +
+            "<div class='statistic'><div class='value' style='color:" + (a.drifting ? "#c60" : "inherit") + "'>" + a.drifting + "</div><div class='label'>drifting</div></div>");
+        let rows = "";
+        ov.nodes.forEach(function(x){
+            let days = x.certExpiry ? Math.floor((x.certExpiry - ov.now) / 86400) : null;
+            rows += "<tr data-id='" + esc(x.id) + "' class='flRow'><td><b>" + esc(x.name) + "</b><div style='color:grey;font-size:0.85em;'>" + esc(x.addr || x.id) + "</div></td>" +
+                "<td>" + esc(x.group) + "</td><td>" + stBadge(x.status) + (x.keyRotating ? " <i class='sync icon' title='key rotation pending'></i>" : "") + "<div style='color:grey;font-size:0.85em;'>" + ago(x.lastSeen) + "</div></td>" +
+                "<td>" + esc(x.version || "-") + "</td><td>" + dur(x.uptime) + "</td>" +
+                "<td>" + (x.health == "ok" ? "<i class='green check icon'></i>" : x.health ? "<i class='red times icon'></i>" + esc(x.health) : "-") + "</td>" +
+                "<td>" + esc(x.endpoints) + "</td><td style='color:" + (days != null && days < 14 ? "#c00" : "inherit") + "'>" + (days == null ? "-" : days + " d") + "</td>" +
+                "<td>" + esc(x.wafMode || "-") + "</td><td>" + Math.round(x.reqPerMin) + "</td><td>" + Math.round(x.errPerMin) + "</td>" +
+                "<td>v" + esc(x.appliedVersion || 0) + (x.desiredVersion ? " / v" + x.desiredVersion : "") +
+                (x.drift ? " <i class='orange exclamation triangle icon' title='" + esc(x.driftReason) + "'></i>" : x.desiredVersion ? " <i class='green check icon'></i>" : "") + "</td>" +
+                "<td class='flActs'>" + (x.status == "revoked" ? "" :
+                    "<button class='ui mini basic icon button' data-act='nodeSync' title='Sync now'><i class='sync icon'></i></button>" +
+                    "<button class='ui mini basic icon button' data-act='nodeRotate' title='Rotate node key'><i class='key icon'></i></button>" +
+                    "<button class='ui mini basic icon button' data-act='nodeGroup' title='Change group'><i class='exchange icon'></i></button>" +
+                    "<button class='ui mini basic red icon button' data-act='nodeRevoke' title='Revoke'><i class='ban icon'></i></button>") +
+                "<button class='ui mini basic icon button' data-act='nodeRemove' title='Remove'><i class='trash icon'></i></button></td></tr>";
+        });
+        $("#flNodes").html(rows || "<tr><td colspan='13'>No nodes yet. Create a join token on the Join nodes tab.</td></tr>");
+        if (openNode) drawer(openNode, true);
+
+        // groups
+        let g = "", opts = "";
+        ov.groups.forEach(function(x){
+            opts += "<option>" + esc(x.name) + "</option>";
+            g += "<tr><td><b>" + esc(x.name) + "</b></td><td>" + esc((x.sel.scopes || []).join(", ") || "nothing managed") + (x.sel.proxyTags && x.sel.proxyTags.length ? "<div style='color:grey;'>tags: " + esc(x.sel.proxyTags.join(", ")) + "</div>" : "") +
+                "</td><td>" + esc(Object.keys(x.vars || {}).join(", ") || "-") + "</td><td>" + (x.desired ? "v" + x.desired : "none published") +
+                "</td><td><button class='ui mini basic button' data-g='edit' data-name='" + esc(x.name) + "'>Edit</button><button class='ui mini basic red button' data-g='del' data-name='" + esc(x.name) + "'>Delete</button>" +
+                (x.desired && x.rollout && x.rollout.prevVersion ? "<button class='ui mini basic orange button' data-g='rollback' data-name='" + esc(x.name) + "'>Roll back</button>" : "") + "</td></tr>";
+        });
+        $("#flGroups").html(g || "<tr><td colspan='5'>No groups yet</td></tr>");
+        let keepSel = $("#flPubGroup").val();
+        $("#flPubGroup").html(opts).val(keepSel || $("#flPubGroup option:first").val());
+        fillCanary();
+        if ($("#flGScopes").children().length == 0) checks(ov.scopes, "#flGScopes", []);
+
+        // rollouts
+        let r = "";
+        ov.groups.forEach(function(x){
+            let o = x.rollout; if (!o) return;
+            let col = {complete: "green", halted: "red", aborted: "grey", canary: "blue", pending_approval: "orange", awaiting_promotion: "orange"}[o.state] || "grey";
+            r += "<div class='ui segment'><span class='ui " + col + " label'>" + esc(o.state.replace("_", " ")) + "</span> <b>" + esc(x.name) + "</b> v" + o.version + " (" + esc(o.strategy) + ", from v" + o.prevVersion + ") " +
+                (o.canaryNode ? "canary: " + esc(o.canaryNode) : "") + "<div style='color:grey;'>" + esc(o.reason || "") + " - " + ts(o.stateAt) + " by " + esc(o.by) + "</div>" +
+                ((o.state == "pending_approval" || o.state == "awaiting_promotion") ? "<button class='ui mini primary button' data-r='approve' data-name='" + esc(x.name) + "'>Approve</button>" : "") +
+                ((o.state == "pending_approval" || o.state == "awaiting_promotion" || o.state == "canary") ? "<button class='ui mini basic red button' data-r='abort' data-name='" + esc(x.name) + "'>Abort</button>" : "") + "</div>";
+        });
+        $("#flRollouts").html(r || "<p style='color:grey;'>Nothing published yet.</p>");
+
+        // versions
+        let v = "";
+        ov.versions.slice().reverse().forEach(function(x, i, arr){
+            let prev = arr[i + 1] ? arr[i + 1].id : 0;
+            v += "<tr><td>v" + x.id + "</td><td>" + ts(x.createdAt) + "</td><td>" + esc(x.createdBy) + "</td><td>" + esc(x.note) + "</td><td>" + esc((x.scopes || []).join(", ")) +
+                "</td><td><button class='ui mini basic button' data-v='diff' data-a='" + prev + "' data-b='" + x.id + "'>What changed</button>" +
+                "<button class='ui mini basic orange button' data-v='roll' data-b='" + x.id + "'>Publish this version</button></td></tr>";
+        });
+        $("#flVersions").html(v || "<tr><td colspan='6'>No versions yet</td></tr>");
+
+        // tokens
+        let t = "";
+        ov.tokens.forEach(function(x){
+            t += "<tr><td>" + esc(x.id) + "</td><td>" + esc(x.state) + "</td><td>" + ts(x.expiresAt) + "</td><td>" + esc(x.nodeName || "-") + "</td><td>" + esc(x.group || "-") +
+                "</td><td>" + esc(x.createdBy) + "</td><td>" + esc(x.usedBy || "-") + "</td><td>" + (x.state == "open" ? "<button class='ui mini basic red button' data-t='" + esc(x.id) + "'>Revoke</button>" : "") + "</td></tr>";
+        });
+        $("#flTokens").html(t || "<tr><td colspan='8'>No tokens</td></tr>");
+        if (!$("#flSetKeep").is(":focus")) {
+            $("#flSetKeep").val(ov.settings.keepVersions); $("#flSetHb").val(ov.settings.heartbeatSecs);
+            $("#flSetGrace").val(ov.settings.healthGraceSec); $("#flSetCerts").prop("checked", !!ov.settings.captureCerts);
+        }
+    }
+    function fillCanary(){
+        let g = $("#flPubGroup").val(), o = "<option value=''>automatic</option>";
+        ov.nodes.forEach(function(n){ if (n.group == g && n.status != "revoked") o += "<option value='" + esc(n.id) + "'>" + esc(n.name) + "</option>"; });
+        $("#flPubCanary").html(o);
+    }
+    $("#flPubGroup").on("change", fillCanary);
+    $("#flPubStrategy").on("change", function(){ $(".canaryOnly").toggle($(this).val() == "canary"); }).trigger("change");
+
+    function drawer(id, keep){
+        let x = ov.nodes.filter(function(n){ return n.id == id; })[0];
+        if (!x) { $("#flDrawer").hide(); openNode = null; return; }
+        openNode = id;
+        $("#flDrawerTitle").text(x.name + " (" + x.id + ") - " + x.status);
+        if (!keep) {
+            $("#flNodeVars").val(JSON.stringify(x.vars || {}, null, 1));
+            $("#flNodeInherit").prop("checked", !x.override);
+            checks(ov.scopes, "#flNodeScopes", (x.override && x.override.scopes) || []);
+            $("#flNodeTags").val(((x.override && x.override.proxyTags) || []).join(", "));
+        }
+        $("#flHist").html((x.history || []).slice().reverse().map(function(h){ return "<tr><td>" + ts(h.at) + "</td><td>v" + h.version + "</td><td>" + esc(h.result) + "</td><td>" + esc(h.error) + "</td></tr>"; }).join("") || "<tr><td>none</td></tr>");
+        $("#flErrs").html((x.errors || []).slice().reverse().map(function(h){ return esc(ts(h.at) + "  " + h.error); }).join("<br>") || "none");
+        $("#flConf").text((x.conflicts || []).map(function(c){ return c.scope + ": " + c.key; }).join(", ") || "none");
+        $("#flDrawer").show();
+    }
+    $("#flNodes").on("click", "tr.flRow", function(e){
+        if ($(e.target).closest(".flActs").length) return;
+        drawer($(this).attr("data-id"));
+    });
+    $("#flNodes").on("click", "[data-act]", function(){
+        let id = $(this).closest("tr").attr("data-id"), act = $(this).data("act");
+        if (act == "nodeRevoke") { if (!confirm("Revoke this node? Its credentials stop working immediately.")) return; }
+        if (act == "nodeRemove") { if (!confirm("Remove this node from the hub?")) return; }
+        if (act == "nodeRotate") { if (!confirm("Rotate the node key? The node picks the new key up at its next sync.")) return; }
+        let data = {id: id};
+        if (act == "nodeGroup") { let g = prompt("New group name:"); if (!g) return; data.group = g; }
+        hub(act, data);
+    });
+    $("#flDrawerClose").on("click", function(){ $("#flDrawer").hide(); openNode = null; });
+    $("#flSaveVars").on("click", function(){ hub("nodeVars", {id: openNode, vars: $("#flNodeVars").val()}); });
+    $("#flSaveNodeScopes").on("click", function(){
+        hub("nodeScopes", {id: openNode, inherit: $("#flNodeInherit").is(":checked") ? "true" : "false", scopes: picked("#flNodeScopes"), tags: $("#flNodeTags").val()});
+    });
+
+    $("#flGroups").on("click", "[data-g]", function(){
+        let name = $(this).data("name"), a = $(this).data("g");
+        let g = ov.groups.filter(function(x){ return x.name == name; })[0];
+        if (a == "del") { if (confirm("Delete group " + name + "?")) hub("groupDelete", {name: name}); return; }
+        if (a == "rollback") { if (confirm("Roll " + name + " back to the version it ran before?")) hub("rollback", {group: name, strategy: "immediate"}, function(){ msg("Rolled back"); }); return; }
+        $("#flGroupFormTitle").text("Edit group " + name);
+        $("#flGName").val(name); $("#flGTags").val(((g.sel.proxyTags) || []).join(", "));
+        $("#flGVars").val(JSON.stringify(g.vars || {}, null, 1));
+        checks(ov.scopes, "#flGScopes", g.sel.scopes || []);
+        $("#flGName")[0].scrollIntoView();
+    });
+    $("#flGSave").on("click", function(){
+        hub("groupSet", {name: $("#flGName").val(), scopes: picked("#flGScopes"), tags: $("#flGTags").val(), vars: $("#flGVars").val()}, function(){ msg("Group saved"); });
+    });
+    $("#flPublishBtn").on("click", function(){
+        let s = $("#flPubStrategy").val();
+        hub("publish", {group: $("#flPubGroup").val(), strategy: s, canaryNode: $("#flPubCanary").val(), healthySeconds: $("#flPubHealthy").val(),
+            hold: $("#flPubHold").is(":checked") ? "true" : "false", note: $("#flPubNote").val()}, function(){ msg("Published (" + s + ")"); });
+    });
+    $("#flRollouts").on("click", "[data-r]", function(){ hub($(this).data("r"), {group: $(this).data("name")}); });
+    $("#flCapture").on("click", function(){ hub("capture", {note: "manual capture"}, function(d){ msg(d.created ? "Captured v" + d.version : "Nothing changed since v" + d.version); }); });
+    $("#flVersions").on("click", "[data-v]", function(){
+        let b = $(this).data("b"), a = $(this).data("a");
+        if ($(this).data("v") == "roll") {
+            let g = $("#flPubGroup").val();
+            if (confirm("Publish v" + b + " to group " + g + " now?")) hub("publish", {group: g, version: b, strategy: "immediate", note: "re-publish v" + b}, function(){ msg("Published v" + b); });
+            return;
+        }
+        $.ajax({url: "./api/fleet/hub/diff?a=" + a + "&b=" + b, success: function(d){
+            if (d && d.error) { msg(d.error, true); return; }
+            let h = "<h4>v" + (a || "(empty)") + " to v" + b + "</h4>";
+            (d || []).forEach(function(x){
+                h += "<div><span class='ui " + (x.change == "added" ? "green" : x.change == "removed" ? "red" : "orange") + " mini label'>" + x.change + "</span> " + esc(x.scope) + " / " + esc(x.path) + "</div>";
+                if (x.change == "changed" && (x.old || x.new)) h += "<pre style='font-size:0.8em;overflow:auto;background:#f6f6f6;padding:4px;'>- " + esc(x.old) + "\n+ " + esc(x.new) + "</pre>";
+            });
+            $("#flDiff").html(h + ((d || []).length ? "" : "<p>No differences.</p>")).show();
+        }, error: fail});
+    });
+    $("#flTokCreate").on("click", function(){
+        hub("tokenCreate", {minutes: $("#flTokMin").val(), name: $("#flTokName").val(), group: $("#flTokGroup").val()}, function(d){
+            $("#flTokText").text(d.token); $("#flTokShow").show();
+            $.ajax({url: "./api/fleet/hub/joinInfo", success: function(j){ $("#flHubFp").text(j.tlsFingerprint || "none (admin port is plain http)"); }});
+        });
+    });
+    $("#flTokens").on("click", "[data-t]", function(){ hub("tokenRevoke", {id: $(this).data("t")}); });
+    $("#flSetSave").on("click", function(){
+        hub("settings", {keepVersions: $("#flSetKeep").val(), heartbeatSecs: $("#flSetHb").val(), healthGraceSec: $("#flSetGrace").val(), captureCerts: $("#flSetCerts").is(":checked") ? "true" : "false"}, function(){ msg("Saved"); });
+    });
+    $("#flTabs .item").on("click", function(){
+        $("#flTabs .item").removeClass("active"); $(this).addClass("active");
+        let t = $(this).data("tab");
+        $(".fltab").hide(); $(".fltab[data-tab=" + t + "]").show();
+        if (t == "audit") $.ajax({url: "./api/fleet/hub/audit", success: function(d){
+            $("#flAudit").html((d || []).map(function(a){ return "<tr><td>" + ts(a.at) + "</td><td>" + esc(a.actor) + "</td><td>" + esc(a.action) + "</td><td>" + esc(a.target) + "</td><td>" + esc(a.detail) + "</td></tr>"; }).join("") || "<tr><td colspan='5'>Empty</td></tr>");
+        }, error: fail});
+    });
+
+    loadInfo();
+    timer = setInterval(function(){
+        if (!document.getElementById("fleetPage")) { clearInterval(timer); return; }
+        if ($("#fleet").is(":visible")) loadInfo();
+    }, 10000);
+})();
+</script>
