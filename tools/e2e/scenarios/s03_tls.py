@@ -168,3 +168,31 @@ def secondary_port_tls():
             return "secondary :%d plain -> TLS (cert CN sp.test) -> plain again" % sec
     finally:
         shutil.rmtree(d, ignore_errors=True)
+
+
+@scenario("tls_sni_certificate_selection", ["core"])
+def tls_sni_certificate_selection():
+    """The certificate served follows the SNI: exact name file, SAN multi-domain cert, wildcard cert, preferred-certificate
+    override, and the default certificate for unknown names."""
+    d = tempfile.mkdtemp(prefix="zx-sni-")
+    try:
+        ca = make_ca(d)
+        a = make_leaf(d, "a.test", ca)
+        multi = make_leaf(d, "m1.test", ca, san="DNS:m1.test,DNS:m2.test", name="multi")
+        wild = make_leaf(d, "*.wild.test", ca, san="DNS:*.wild.test,DNS:wild.test", name="wild")
+        pref = make_leaf(d, "preferred.test", ca, name="pref")
+        with Zoraxy(tls=True, certs=[("a.test", a[0], a[1]), ("multi", multi[0], multi[1]), ("wild", wild[0], wild[1]), ("pref", pref[0], pref[1])]) as z, Backend(name="app") as b:
+            for h in ("a.test", "m2.test", "x.wild.test", "unknown.test", "pinned.test"):
+                z.add_rule(h, b.addr)
+            cn = lambda sni: helper_json("tls-client", "-addr", "127.0.0.1:%d" % z.proxy, "-sni", sni).get("peer_cn")
+            got = {sni: cn(sni) for sni in ("a.test", "m2.test", "x.wild.test", "unknown.test")}
+            check(got["a.test"] == "a.test", "exact certificate: %s" % got)
+            check(got["m2.test"] == "m1.test", "SAN certificate not selected for m2.test: %s" % got)
+            check(got["x.wild.test"] == "*.wild.test", "wildcard certificate not selected: %s" % got)
+            check(got["unknown.test"] not in ("a.test", "m1.test", "*.wild.test"), "unknown SNI served a site certificate: %s" % got)
+            z.api("/api/cert/setPreferredCertificate", domain="pinned.test", certname="pref")
+            got["pinned.test"] = cn("pinned.test")
+            check(got["pinned.test"] == "preferred.test", "preferred certificate override ignored: %s" % got)
+            return "served CN per SNI: %s" % got
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
