@@ -106,6 +106,7 @@ func ReverseProxyUpstreamAdd(w http.ResponseWriter, r *http.Request) {
 	skipTlsValidation, _ := utils.PostBool(r, "tlsval")
 	bpwsorg, _ := utils.PostBool(r, "bpwsorg")
 	disableKeepAlive, _ := utils.PostBool(r, "nokeepalive")
+	useH2C, _ := utils.PostBool(r, "h2c")
 	preactivate, _ := utils.PostBool(r, "active")
 
 	//Create a new upstream object
@@ -118,6 +119,7 @@ func ReverseProxyUpstreamAdd(w http.ResponseWriter, r *http.Request) {
 		MaxConn:                  maxConn,
 		RespTimeout:              int64(respTimeout),
 		DisableKeepAlive:         disableKeepAlive,
+		H2C:                      useH2C,
 	}
 
 	//Add the new upstream to endpoint

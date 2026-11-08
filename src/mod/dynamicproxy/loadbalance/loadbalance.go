@@ -59,6 +59,10 @@ type Upstream struct {
 	//For upstreams that close the connection after every response; default off keeps pooling
 	DisableKeepAlive bool
 
+	//Speak HTTP/2 over cleartext (h2c, prior knowledge) to this plain http:// upstream, for gRPC backends
+	//such as NetBird. Ignored when RequireTLS is set. Default off
+	H2C bool
+
 	//Optional runtime controls, all zero values keep the historical behavior
 	MaxInFlight int                //Maximum concurrent in-flight requests to this upstream, 0 = unlimited
 	Draining    bool               //Receive no new requests (sticky sessions are re-assigned), in-flight requests finish normally
