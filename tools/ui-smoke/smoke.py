@@ -21,6 +21,7 @@ from playwright.sync_api import sync_playwright
 ap = argparse.ArgumentParser()
 ap.add_argument("--url", default=os.environ.get("ZORAXY_URL", "http://127.0.0.1:8000"))
 ap.add_argument("--out", default=os.environ.get("SMOKE_OUT", os.path.expanduser("~/ui-smoke-shots")))
+ap.add_argument("--no-page-sweep", action="store_true", help="skip the per-tab screenshot sweep (faster; for focused runs on a busy machine)")
 ap.add_argument("--allow", action="append", default=[], help="regex of messages whose failure is tolerated")
 args = ap.parse_args()
 os.makedirs(args.out, exist_ok=True)
@@ -120,6 +121,8 @@ def main():
 
         tabs = pg.eval_on_selector_all("#mainmenu .item[tag]", "els => els.map(e => e.getAttribute('tag'))")
         tabs = list(dict.fromkeys(tabs))
+        if args.no_page_sweep:
+            tabs = []
         print(f"{len(tabs)} tabs: {tabs}")
         for theme in ("light", "dark"):
             is_dark = pg.evaluate("document.body.classList.contains('darkTheme')")
@@ -351,7 +354,7 @@ def main():
 
             # two rules, bound to the two providers
             for host, pid in ((hostA, "idpa"), (hostB, "idpb")):
-                r = api("/api/proxy/add", {"type": "host", "rootname": host, "ep": "127.0.0.1:9", "tls": False, "tlsval": False, "bypassGlobalTLS": False})
+                r = api("/api/proxy/add", {"type": "host", "rootname": host, "ep": "127.0.0.1:9", "tls": False, "tlsval": False, "bypassGlobalTLS": True})
                 r = r if isinstance(r, dict) else {}
             api("/api/proxy/edit", {"rootname": hostA, "authprovider": 3, "oauth2provider": "idpa"})
 
@@ -370,7 +373,8 @@ def main():
             opts = pg.eval_on_selector_all(".oauth2ProviderSelect option", "els => els.map(e => e.value)")
             if "idpa" not in opts or "idpb" not in opts:
                 fail("rule-provider", f"provider dropdown lacks the configured providers: {opts}")
-            pg.select_option(".oauth2ProviderSelect", "idpb")
+            pg.select_option(".oauth2ProviderSelect", "idpb")  # change event = inline save, the editor re-renders afterwards
+            settle(pg, 1200)
             pg.fill(".oauth2RuleGroups", "staff")
             pg.press(".oauth2RuleGroups", "Tab")  # blur = change event = inline save
             settle(pg, 900)
@@ -413,6 +417,7 @@ def main():
                 c = http.client.HTTPConnection("127.0.0.1", proxy_port, timeout=8)
                 c.request("GET", path, headers={"Host": host})
                 resp = c.getresponse()
+                resp.read(200)
                 return resp.status, resp.getheader("Location") or ""
             for host, idp, pid in ((hostA, idps[0], "idpa"), (hostB, idps[1], "idpb")):
                 st, loc = first_hop(host)
@@ -424,10 +429,11 @@ def main():
                     print(f"  {host} -> {loc.split('?')[0]} (ok)")
             # an exempt path works for both providers
             for host in (hostA, hostB):
-                api("/api/proxy/auth/exceptions/add", {"ep": host, "type": 0, "pattern": "/webhook", "mode": "prefix"})
+                added = api("/api/proxy/auth/sso/exceptions/add", {"ep": host, "type": 0, "pattern": "/webhook", "mode": "prefix"})
+                pg.wait_for_timeout(500)
                 st, loc = first_hop(host, "/webhook/x")
                 if st == 302 and "authorize" in loc:
-                    fail("rule-routing", f"{host}: exempt path was sent to sign-in")
+                    fail("rule-routing", f"{host}: exempt path was sent to sign-in (add result {added})")
         except Exception as ex:
             fail("sso-providers", f"flow failed: {' '.join(str(ex).split()[:40])}")
             pg.screenshot(path=os.path.join(args.out, "sso-providers-failure.png"))

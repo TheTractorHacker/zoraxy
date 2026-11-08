@@ -111,7 +111,7 @@
 
             function loadSsoExceptionRules() {
                 if (!editingEndpoint.ep) return;
-                $.get('/api/proxy/auth/exceptions/list?ep=' + encodeURIComponent(editingEndpoint.ep), function(data) {
+                $.get('/api/proxy/auth/sso/exceptions/list?ep=' + encodeURIComponent(editingEndpoint.ep), function(data) {
                     if (data.error != undefined) {
                         parent.msgbox(data.error, false, 5000);
                         return;
@@ -166,7 +166,7 @@
                     data.cidr = cidr;
                 }
                 $.cjax({
-                    url: '/api/proxy/auth/exceptions/add',
+                    url: '/api/proxy/auth/sso/exceptions/add',
                     method: 'POST',
                     data: data,
                     success: function(resp) {
@@ -192,7 +192,7 @@
                     data.cidr = rule.CIDR;
                 }
                 $.cjax({
-                    url: '/api/proxy/auth/exceptions/delete',
+                    url: '/api/proxy/auth/sso/exceptions/delete',
                     method: 'POST',
                     data: data,
                     success: function(resp) {

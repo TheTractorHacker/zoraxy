@@ -1337,3 +1337,7 @@ without the record rebuilds a non refreshable session from it; afterwards the br
 
 **CAPTCHA path exceptions** (`captcha/exceptions.go`). `ExceptionRule.MatchMode` `""|prefix|exact|regex` and `CaseInsensitive` (both `omitempty`). exact/regex match the whole path and only
 canonical request targets (`pathmatch.CanonicalPath`, shared with the SSO exceptions); the legacy prefix mode is unchanged. API `/api/proxy/captcha/exceptions/add|delete` takes `mode`, `nocase`.
+
+**Route fix.** The Forward Auth / OAuth2 exception API was registered on the same URLs as the basic auth exception API (`/api/proxy/auth/exceptions/*`), so the
+router dropped it (duplicate endpoint warning) and the SSO exception editor talked to the basic auth handler ("Invalid matching prefix given"). It now lives at
+`/api/proxy/auth/sso/exceptions/list|add|delete` (found by the UI smoke test).
