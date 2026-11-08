@@ -6,6 +6,7 @@ require (
 	github.com/armon/go-radix v1.0.0
 	github.com/c0va23/go-proxyprotocol v0.9.1
 	github.com/go-acme/lego/v5 v5.5.2
+	github.com/go-jose/go-jose/v4 v4.1.5
 	github.com/go-ping/ping v1.1.0
 	github.com/go-webauthn/webauthn v0.17.4
 	github.com/google/uuid v1.6.0
@@ -151,7 +152,6 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-errors/errors v1.0.1 // indirect
-	github.com/go-jose/go-jose/v4 v4.1.5 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
