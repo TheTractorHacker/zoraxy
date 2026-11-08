@@ -31,6 +31,8 @@ Status: ✅ done · 🔧 in progress · 📋 planned
   SANs for hostname, localhost and local IPs) stored under `conf/webui/`, or a user-supplied cert, or any
   cert managed by Zoraxy/ACME. Plain-HTTP requests on the same port get redirected to HTTPS. Secure cookies
   and HSTS when enabled. Plugins keep a loopback channel so nothing breaks.
+- ✅ Bulk IP blocklist / whitelist import (paste, TXT/CSV upload, https URL with SSRF protection, dry run report,
+  scheduled refresh of URL sources that only replaces the entries it added; upstream #512 / #661).
 - 📋 Admin login hardening: rate limiting / lockout on login, optional TOTP for the admin account.
 
 ## 3. Bot protection and CAPTCHA pages

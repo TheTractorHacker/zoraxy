@@ -177,6 +177,7 @@ func RegisterAccessRuleAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/access/create", handleCreateAccessRule)
 	authRouter.HandleFunc("/api/access/remove", handleRemoveAccessRule)
 	authRouter.HandleFunc("/api/access/update", handleUpadateAccessRule)
+	RegisterBlocklistImportAPIs(authRouter)
 	/* Blacklist */
 	authRouter.HandleFunc("/api/blacklist/list", handleListBlacklisted)
 	authRouter.HandleFunc("/api/blacklist/country/add", handleCountryBlacklistAdd)

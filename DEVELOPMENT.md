@@ -580,3 +580,28 @@ request hooks in `src/mod/dynamicproxy/metrics_hook.go`.
   `zoraxy_tls_certificate_expiry_days{certificate,cn}`, `zoraxy_build_info`, `zoraxy_uptime_seconds`, `zoraxy_cluster_role`,
   `zoraxy_cluster_snapshot_version`.
 * **Tests:** `go test -race ./mod/metrics ./mod/dynamicproxy -run Metrics`.
+
+## Bulk IP blocklist import
+
+Package `src/mod/access/blocklistimport` (parser, fetcher, source manager + scheduler), additive helpers in
+`src/mod/access/bulk.go` (`BulkEditIPList`: one copy, one swap, one config write instead of one per entry), admin API in
+`src/blocklistimport.go`, UI in `src/web/components/access.html` ("Bulk import" accordion on the IP blacklist and whitelist tabs).
+
+* **Formats:** one entry per line, IPv4 / IPv6 / CIDR. `#` or `;` at line start = comment; text after the address (whitespace, `,`, `;`,
+  `#` separated) is the comment, so the first column of a CSV works. Entries are canonicalised (`10.1.2.3/8` -> `10.0.0.0/8`, `/32` ->
+  host, IPv4-mapped IPv6 -> IPv4). `/0`, `0.0.0.0`, `::`, scope ids and wildcards are rejected (use CIDR). Duplicates (inside the input
+  and against the list) and invalid lines are reported with line numbers; counts are exact, the lists are capped at 500 each.
+  Limits: 1M entries, 4 KiB per line, 32 MiB per upload/download. Comments are stripped of markup (parts of the UI render them raw).
+* **Dry run:** `POST /api/access/import/preview` returns the same report as `/apply` without changing anything.
+* **URL sources:** https only, no credentials in the URL, no proxy. Every connection (also each redirect hop, max 3, https only) is
+  resolved by our own dialer which refuses the target if ANY answer is non-public (loopback, RFC1918, link-local incl. 169.254.169.254,
+  CGNAT, ULA, multicast, NAT64/6to4, IPv4-mapped...) and then dials the validated IP directly (no DNS rebinding window). 30 s total
+  timeout, 32 MiB cap, comments in remote files are ignored.
+* **Scheduled refresh:** sources live in `<conf>/blocklist_sources.json` (id, rule, list, url, interval 15 min - 7 days, state). Entries a
+  source adds carry the comment prefix `[src:<id>] `; a refresh removes only entries carrying exactly that prefix and no longer in the
+  download, adds new ones, and leaves everything else (manual entries, other sources, entries that were added manually first) alone.
+  A download with zero valid entries never wipes a source (`ErrWouldEmpty`); errors keep the old entries and are shown in the UI.
+  Caveat: the tag is a comment convention, an admin typing `[src:<id>]` by hand could make an entry refreshable.
+* **Performance:** 200k entries parse and import in about a second (3 s under -race) (test: `TestLargeImport200k`). Request-time matching is the job of the
+  `mod/access` lookup (`IsIPBlacklisted`); the admin UI renders at most 1000 rows of a list (rest still enforced).
+* **Tests:** `go test -race ./mod/access/... ` (SSRF tests use an httptest TLS server plus a stub resolver / dialer).
