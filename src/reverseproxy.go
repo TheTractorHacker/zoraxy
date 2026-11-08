@@ -257,6 +257,8 @@ func ReverseProxyInit() {
 		return
 	}
 
+	//Persist basic auth credential hashes upgraded from legacy SHA-512
+	dprouter.Option.PersistProxyEndpoint = SaveReverseProxyConfig
 	dynamicProxyRouter = dprouter
 	// Signal that the router is ready
 	select {
@@ -465,7 +467,7 @@ func ReverseProxyHandleAddEndpoint(w http.ResponseWriter, r *http.Request) {
 		for _, credObj := range preProcessCredentials {
 			basicAuthCredentials = append(basicAuthCredentials, &dynamicproxy.BasicAuthCredentials{
 				Username:     credObj.Username,
-				PasswordHash: auth.Hash(credObj.Password),
+				PasswordHash: auth.HashPasswordWithProfile(credObj.Password, auth.ProfileBasicAuth),
 			})
 		}
 	}
@@ -1231,7 +1233,7 @@ func UpdateProxyBasicAuthCredentials(w http.ResponseWriter, r *http.Request) {
 				//This username have given password
 				mergedCredentials = append(mergedCredentials, &dynamicproxy.BasicAuthCredentials{
 					Username:     credential.Username,
-					PasswordHash: auth.Hash(credential.Password),
+					PasswordHash: auth.HashPasswordWithProfile(credential.Password, auth.ProfileBasicAuth),
 				})
 			}
 		}

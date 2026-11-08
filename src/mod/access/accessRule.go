@@ -64,28 +64,28 @@ func (s *AccessRule) IsBlacklisted(ipAddr string) bool {
 		return false
 	}
 
-	countryCode, err := s.parent.Options.GeoDB.ResolveCountryCodeFromIP(ipAddr)
-	if err != nil {
-		return false
-	}
-
-	if s.IsCountryCodeBlacklisted(countryCode.CountryIsoCode) {
-		return true
-	}
-
+	//Explicit IP / CIDR / wildcard rules never depend on GeoIP, check them first
 	if s.IsIPBlacklisted(ipAddr) {
 		return true
 	}
 
-	return false
+	//Country rules. A lookup failure is logged and fails open for the country
+	//decision only (it never skips the IP rules above)
+	countryCode, err := s.resolveCountry(ipAddr)
+	if err != nil {
+		s.logGeoError("blacklist", ipAddr, err)
+		return false
+	}
+
+	return s.IsCountryCodeBlacklisted(countryCode)
 }
 
 /*
 IsWhitelisted check if a given IP address is in the current
 server's white list.
 
-Note that the Whitelist default result is true even
-when encountered error
+When the whitelist is enabled, an unresolvable country
+code fails closed (only explicit IP rules can allow it)
 */
 func (s *AccessRule) IsWhitelisted(ipAddr string) bool {
 	if !s.WhitelistEnabled {
@@ -98,23 +98,47 @@ func (s *AccessRule) IsWhitelisted(ipAddr string) bool {
 		return true
 	}
 
-	countryCode, err := s.parent.Options.GeoDB.ResolveCountryCodeFromIP(ipAddr)
-	if err != nil {
-		return true
-	}
-
-	if s.IsCountryCodeWhitelisted(countryCode.CountryIsoCode) {
-		return true
-	}
-
+	//Explicit IP / CIDR rules do not depend on GeoIP
 	if s.IsIPWhitelisted(ipAddr) {
 		return true
 	}
 
-	return false
+	countryCode, err := s.resolveCountry(ipAddr)
+	if err != nil {
+		//Fail closed: a lookup error must never allow-list an address
+		s.logGeoError("whitelist", ipAddr, err)
+		return false
+	}
+
+	return s.IsCountryCodeWhitelisted(countryCode)
 }
 
 /* Utilities function */
+
+// resolveCountry resolves the ISO country code of an IP, using the
+// override resolver if set (tests), otherwise the GeoDB
+func (s *AccessRule) resolveCountry(ipAddr string) (string, error) {
+	if s.parent == nil || s.parent.Options == nil {
+		return "", errors.New("access rule detached from controller")
+	}
+	if s.parent.CountryResolver != nil {
+		return s.parent.CountryResolver(ipAddr)
+	}
+	if s.parent.Options.GeoDB == nil {
+		return "", errors.New("geoip database not available")
+	}
+	info, err := s.parent.Options.GeoDB.ResolveCountryCodeFromIP(ipAddr)
+	if err != nil {
+		return "", err
+	}
+	return info.CountryIsoCode, nil
+}
+
+func (s *AccessRule) logGeoError(list string, ipAddr string, err error) {
+	if s.parent != nil && s.parent.Options != nil {
+		s.parent.Options.Logger.PrintAndLog("Access", "GeoIP lookup failed during "+list+" check for "+ipAddr+", country rules skipped", err)
+	}
+}
 
 // Update the current access rule to json file
 func (s *AccessRule) SaveChanges() error {

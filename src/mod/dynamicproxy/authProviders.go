@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"regexp"
 
-	"imuslab.com/zoraxy/mod/auth"
 	"imuslab.com/zoraxy/mod/netutils"
 	"imuslab.com/zoraxy/mod/pathmatch"
 )
@@ -150,16 +149,10 @@ func handleBasicAuth(w http.ResponseWriter, r *http.Request, pe *ProxyEndpoint) 
 	}
 
 	//Check for the credentials to see if there is one matching
-	hashedPassword := auth.Hash(p)
-	matchingFound := false
-	for _, cred := range pe.AuthenticationProvider.BasicAuthCredentials {
-		if u == cred.Username && hashedPassword == cred.PasswordHash {
-			matchingFound = true
-
-			//Set the X-Remote-User header
-			r.Header.Set("X-Remote-User", u)
-			break
-		}
+	matchingFound := verifyBasicAuthCredentials(pe, u, p, r.Header.Get("Authorization"))
+	if matchingFound {
+		//Set the X-Remote-User header
+		r.Header.Set("X-Remote-User", u)
 	}
 
 	if !matchingFound {

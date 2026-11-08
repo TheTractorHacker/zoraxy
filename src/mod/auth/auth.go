@@ -146,7 +146,6 @@ func (a *AuthAgent) ValidateUsernameAndPassword(username string, password string
 
 // validate the username and password, return reasons if the auth failed
 func (a *AuthAgent) ValidateUsernameAndPasswordWithReason(username string, password string) (bool, string) {
-	hashedPassword := Hash(password)
 	var passwordInDB string
 	err := a.Database.Read("auth", "passhash/"+username, &passwordInDB)
 	if err != nil {
@@ -155,11 +154,21 @@ func (a *AuthAgent) ValidateUsernameAndPasswordWithReason(username string, passw
 		return false, "Invalid username or password"
 	}
 
-	if passwordInDB == hashedPassword {
-		return true, ""
-	} else {
+	ok, needsRehash := VerifyPassword(password, passwordInDB, ProfileAdmin)
+	if !ok {
 		return false, "Invalid username or password"
 	}
+
+	if needsRehash {
+		//Transparent migration from legacy unsalted SHA-512 (or weaker
+		//argon2 parameters). Failure to upgrade must never fail the login
+		if err := a.Database.Write("auth", "passhash/"+username, HashPassword(password)); err != nil {
+			a.Logger.PrintAndLog("auth", "Unable to upgrade password hash of "+username, err)
+		} else {
+			a.Logger.PrintAndLog("auth", "Password hash of "+username+" upgraded to argon2id", nil)
+		}
+	}
+	return true, ""
 }
 
 // Login the user by creating a valid session for this user
@@ -461,7 +470,7 @@ func (a *AuthAgent) CreateUserAccount(newusername string, password string, email
 	}
 
 	key := newusername
-	hashedPassword := Hash(password)
+	hashedPassword := HashPassword(password)
 	err := a.Database.Write("auth", "passhash/"+key, hashedPassword)
 	if err != nil {
 		return err
@@ -477,7 +486,9 @@ func (a *AuthAgent) CreateUserAccount(newusername string, password string, email
 	return nil
 }
 
-// Hash the given raw string into sha512 hash
+// Hash the given raw string into an unsalted sha512 hex digest.
+// Deprecated for passwords: this is only kept to verify legacy stored hashes
+// (see VerifyPassword). Use HashPassword for anything new.
 func Hash(raw string) string {
 	h := sha512.New()
 	h.Write([]byte(raw))

@@ -98,9 +98,9 @@ func (s *AccessRule) IsIPBlacklisted(ipAddr string) bool {
 // Searches blacklist for a Country (if country-code provided), IP address, or CIDR that matches the IP address
 // returns error if not found
 func (s *AccessRule) GetBlacklistedIPComment(ipAddr string) (string, error) {
-	if countryInfo, err := s.parent.Options.GeoDB.ResolveCountryCodeFromIP(ipAddr); err == nil {
+	if cc, err := s.resolveCountry(ipAddr); err == nil {
 		CCBlacklist := *s.BlackListContryCode
-		countryCode := strings.ToLower(countryInfo.CountryIsoCode)
+		countryCode := strings.ToLower(cc)
 
 		if comment, ok := CCBlacklist[countryCode]; ok {
 			return comment, nil

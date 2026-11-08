@@ -2,10 +2,9 @@ package zorxauth
 
 import (
 	"bytes"
-	"crypto/sha512"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"net/mail"
 	"sort"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"imuslab.com/zoraxy/mod/auth"
 	"imuslab.com/zoraxy/mod/utils"
 )
 
@@ -57,10 +57,11 @@ func userToResponse(user *User) *UserResponse {
 	}
 }
 
+// hashPassword returns a salted argon2id hash (see auth.HashPassword).
+// Legacy unsalted SHA-512 hashes are still accepted by ValidateUsername and
+// upgraded on the next successful login.
 func hashPassword(raw string) string {
-	h := sha512.New()
-	h.Write([]byte(raw))
-	return hex.EncodeToString(h.Sum(nil))
+	return auth.HashPassword(raw)
 }
 
 func (ar *AuthRouter) userDbKey(username string) string {
@@ -537,7 +538,23 @@ func (ar *AuthRouter) ValidateUsername(username, password string) bool {
 		user = matchedUser
 	}
 
-	return user.PasswordHash != "" && user.PasswordHash == hashPassword(password)
+	ok, needsRehash := auth.VerifyPassword(password, user.PasswordHash, auth.ProfileAdmin)
+	if !ok {
+		return false
+	}
+
+	if needsRehash {
+		//Transparent migration from legacy unsalted SHA-512. Re-read the
+		//record so only the password hash changes, and never fail the login
+		//because the upgrade could not be stored
+		if fresh, err := ar.getUserByUsername(user.Username); err == nil && fresh.PasswordHash == user.PasswordHash {
+			fresh.PasswordHash = hashPassword(password)
+			if err := ar.saveUser(fresh, fresh.Username); err != nil {
+				log.Println("[zorxauth] unable to upgrade password hash of " + fresh.Username + ": " + err.Error())
+			}
+		}
+	}
+	return true
 }
 
 func (ar *AuthRouter) HandleDisableUserTOTP(w http.ResponseWriter, r *http.Request) {

@@ -70,26 +70,27 @@ func (p TlsCipherProfile) IsValid() bool {
 /* Router Object Options */
 type RouterOption struct {
 	/* Basic Settings */
-	HostUUID           string //The UUID of Zoraxy, use for heading mod
-	HostVersion        string //The version of Zoraxy, use for heading mod
-	Port               int    //Incoming port
-	UseTls             bool   //Use TLS to serve incoming requsts
-	MinTLSVersion      uint16 //Minimum TLS version
+	HostUUID           string           //The UUID of Zoraxy, use for heading mod
+	HostVersion        string           //The version of Zoraxy, use for heading mod
+	Port               int              //Incoming port
+	UseTls             bool             //Use TLS to serve incoming requsts
+	MinTLSVersion      uint16           //Minimum TLS version
 	TlsCipherProfile   TlsCipherProfile //TLS cipher profile (see TlsCipherProfile enum and tlscipherprofile.go)
-	NoCache            bool   //Force set Cache-Control: no-store
-	ListenOnPort80     bool   //Enable port 80 http listener
-	ForceHttpsRedirect bool   //Force redirection of http to https endpoint
-	UseProxyProtocol   bool   //Enable PROXY protocol v1/v2 support for TLS listener
+	NoCache            bool             //Force set Cache-Control: no-store
+	ListenOnPort80     bool             //Enable port 80 http listener
+	ForceHttpsRedirect bool             //Force redirection of http to https endpoint
+	UseProxyProtocol   bool             //Enable PROXY protocol v1/v2 support for TLS listener
 
 	/* Routing Service Managers */
-	TlsManager         *tlscert.Manager          //TLS manager for serving SAN certificates
-	RedirectRuleTable  *redirection.RuleTable    //Redirection rules handler and table
-	GeodbStore         *geodb.Store              //GeoIP resolver
-	AccessController   *access.Controller        //Blacklist / whitelist controller
-	StatisticCollector *statistic.Collector      //Statistic collector for storing stats on incoming visitors
-	WebDirectory       string                    //The static web server directory containing the templates folder
-	LoadBalancer       *loadbalance.RouteManager //Load balancer that handle load balancing of proxy target
-	PluginManager      *plugins.Manager          //Plugin manager for handling plugin routing
+	TlsManager           *tlscert.Manager           //TLS manager for serving SAN certificates
+	RedirectRuleTable    *redirection.RuleTable     //Redirection rules handler and table
+	GeodbStore           *geodb.Store               //GeoIP resolver
+	AccessController     *access.Controller         //Blacklist / whitelist controller
+	StatisticCollector   *statistic.Collector       //Statistic collector for storing stats on incoming visitors
+	WebDirectory         string                     //The static web server directory containing the templates folder
+	LoadBalancer         *loadbalance.RouteManager  //Load balancer that handle load balancing of proxy target
+	PersistProxyEndpoint func(*ProxyEndpoint) error //Optional, called to save an endpoint config after a basic auth hash upgrade
+	PluginManager        *plugins.Manager           //Plugin manager for handling plugin routing
 
 	/* Timeouts */
 	ReadHeaderTimeout int64 //HTTP server read timeout in seconds
@@ -103,7 +104,7 @@ type RouterOption struct {
 	H2MaxUploadBufferPerStream     int32  //HTTP/2 max upload buffer per stream in bytes (0 = Go default)
 
 	/* HTTP/3 (QUIC) */
-	EnableH3              bool   //Enable HTTP/3 (QUIC) listener alongside HTTP/1.1+2 (requires TLS; DB-persisted, runtime-toggleable)
+	EnableH3               bool   //Enable HTTP/3 (QUIC) listener alongside HTTP/1.1+2 (requires TLS; DB-persisted, runtime-toggleable)
 	H3MaxConcurrentStreams uint32 //HTTP/3 max concurrent streams per connection (0 = quic-go default)
 
 	/* Authentication Providers */
@@ -130,15 +131,16 @@ type Router struct {
 	routingRules []*RoutingRule            //Special routing rules, handle high priority routing like ACME request handling
 	restarting   bool                      //If the router is restarting
 
-	h3Server *http3.Server   //HTTP/3 (QUIC) server, nil when disabled
-	h3Conn   net.PacketConn  //UDP connection serving the HTTP/3 listener; closed on shutdown
+	h3Server *http3.Server  //HTTP/3 (QUIC) server, nil when disabled
+	h3Conn   net.PacketConn //UDP connection serving the HTTP/3 listener; closed on shutdown
 
 	tlsListener      net.Listener //TLS listener, handle SNI routing
 	tlsBehaviorMutex sync.RWMutex //Mutex for tlsBehavior map
 	tlsRedirectStop  chan bool    //Stop channel for tls redirection server
 
-	rateLimterStop   chan bool              //Stop channel for rate limiter
-	rateLimitCounter RequestCountPerIpTable //Request counter for rate limter
+	rateLimterStop   chan bool                                                     //Stop channel for rate limiter
+	pluginRouteHook  func(http.ResponseWriter, *http.Request, *ProxyEndpoint) bool //test seam, nil in production
+	rateLimitCounter RequestCountPerIpTable                                        //Request counter for rate limter
 
 	captchaSessionStore *captcha.SessionStore //CAPTCHA session store for tracking verified sessions
 
@@ -300,7 +302,8 @@ type ProxyEndpoint struct {
 
 	// Rate Limiting
 	RequireRateLimit bool
-	RateLimit        int64 // Rate limit in requests per second
+	RateLimit        int64 // Rate limit in requests per second (token refill rate)
+	RateLimitBurst   int64 // Max burst size in requests, 0 = same as RateLimit
 
 	// CAPTCHA Gating
 	RequireCaptcha bool           // Enable CAPTCHA gating for this endpoint
