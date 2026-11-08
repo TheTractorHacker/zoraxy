@@ -119,6 +119,11 @@
     <button class="ui basic small button" onclick="showSideWrapper('snippet/globalErrorPages.html?t=' + Date.now());"><i class="orange exclamation triangle icon"></i> Default error pages</button>
     <button class="ui basic small button quickStartShowAgain" style="display:none;" onclick="setQuickStartDismissed(false);" title="Put the Quick Start page back in the menu"><i class="magic icon"></i> Show Quick Start again</button>
     <div class="ui divider"></div>
+    <p>Interface language</p>
+    <select class="i18n-picker" id="uiLanguageSetting" aria-label="Interface language" style="min-width: 12em;"></select>
+    <br><small>Applies immediately and is remembered for this instance. Machine-assisted translations: help improve them (docs/translating.md).</small>
+    <script>if (window.i18n) { i18n.mountPickers(); }</script>
+    <div class="ui divider"></div>
     <p>Inbound / Proxy Listening Port</p>
     <div class="ui action fluid notloopbackOnly input" tourstep="incomingPort">
         <small id="applyButtonReminder">Click "Apply" button to confirm listening port changes</small>

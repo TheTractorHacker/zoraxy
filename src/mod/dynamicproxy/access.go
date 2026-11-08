@@ -64,7 +64,7 @@ func accessRequestBlocked(accessRule *access.AccessRule, templateDirectory strin
 			w.WriteHeader(http.StatusForbidden)
 			template, err := os.ReadFile(filepath.Join(templateDirectory, "templates/blacklist.html"))
 			if err != nil {
-				w.Write(page_forbidden)
+				w.Write(localizedPage(r, page_forbidden))
 			} else {
 				w.Write(template)
 			}
@@ -97,7 +97,7 @@ func accessRequestBlocked(accessRule *access.AccessRule, templateDirectory strin
 			w.WriteHeader(http.StatusForbidden)
 			template, err := os.ReadFile(filepath.Join(templateDirectory, "templates/whitelist.html"))
 			if err != nil {
-				w.Write(page_forbidden)
+				w.Write(localizedPage(r, page_forbidden))
 			} else {
 				w.Write(template)
 			}

@@ -242,7 +242,7 @@ func (h *ProxyHandler) serve404PageWithTemplate(w http.ResponseWriter, r *http.R
 	w.WriteHeader(http.StatusNotFound)
 	template, err := os.ReadFile(filepath.Join(h.Parent.Option.WebDirectory, "templates/notfound.html"))
 	if err != nil {
-		w.Write(page_hosterror)
+		w.Write(localizedPage(r, page_hosterror))
 	} else {
 		w.Write(template)
 	}

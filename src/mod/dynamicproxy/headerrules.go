@@ -243,10 +243,10 @@ func (h *ProxyHandler) handleHeaderRules(w http.ResponseWriter, r *http.Request,
 			dropConnection(w)
 		case HeaderActionNotFound:
 			h.Parent.logRequest(r, false, 404, reason, r.Host, "", sep)
-			serveProxyRequestError(w, http.StatusNotFound, h.Parent, ErrorTemplateHostError)
+			serveProxyRequestError(w, r, http.StatusNotFound, h.Parent, ErrorTemplateHostError)
 		default:
 			h.Parent.logRequest(r, false, 403, reason, r.Host, "", sep)
-			serveProxyRequestError(w, http.StatusForbidden, h.Parent, ErrorTemplateForbidden)
+			serveProxyRequestError(w, r, http.StatusForbidden, h.Parent, ErrorTemplateForbidden)
 		}
 		return true
 	}

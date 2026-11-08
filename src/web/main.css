@@ -1172,3 +1172,36 @@ body.darkTheme .ui.table tr.negative, body.darkTheme .ui.table td.negative { bac
 body.darkTheme .ui.table tr.warning, body.darkTheme .ui.table td.warning { background: #4a3d12 !important; color: #ffe9a8 !important; }
 /* button groups may wrap on a phone (access rule options) */
 #aoOrderBtns { display: inline-flex; flex-wrap: wrap; }
+
+
+/* Language picker (top bar and settings): native select, styled like the neighbouring buttons */
+select.i18n-picker{
+    height: 2.6em;
+    max-width: 9.5em;
+    padding: 0 0.6em;
+    font-size: 0.95em;
+    color: inherit;
+    background: var(--theme_bg_secondary, #fff);
+    border: 1px solid rgba(34,36,38,0.15);
+    border-radius: 0.28rem;
+    cursor: pointer;
+}
+body.darkTheme select.i18n-picker{
+    color: #e8e8e8;
+    background: #1c1e22;
+    border-color: rgba(255,255,255,0.18);
+}
+@media (max-width: 750px){
+    .menubar select.i18n-picker{ max-width: 6.5em; }
+}
+
+/* Longer translated strings (German, Russian, CJK): let flex/grid children shrink and long words wrap */
+html:not([lang^="en"]) .ui.menu .item,
+html:not([lang^="en"]) .ui.button,
+html:not([lang^="en"]) .ui.label,
+html:not([lang^="en"]) .menugroup-header span{
+    overflow-wrap: anywhere;
+    min-width: 0;
+}
+html:not([lang^="en"]) .ui.buttons .button{ white-space: normal; }
+html:not([lang^="en"]) th{ overflow-wrap: break-word; word-break: keep-all; }

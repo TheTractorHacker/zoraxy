@@ -1,0 +1,72 @@
+# Strings that exist only at runtime (built in JavaScript / server answers) and are not found by extract.py.
+# One per line, same normalisation as the catalogue ({0} {1} ... = dynamic parts). Found with tools/i18n/scan.py --emit-extra.
+{0} Cloudflare, {1} other
+{0} entries shown, scanned {1} MB in {2} file(s)
+{0} in the last 24 hours
+{0} errors/min
+{0}/min - traffic today {1}
+{0} MiB free, need about {1} MiB
+{0} visitors - page {1} of {2}
+{0} of {1} proxy rules inspected.
+401 Unauthorized responses (failed basic auth)
+403 Forbidden responses
+404 Not Found (scanners)
+no certificates yet
+no monitored upstream
+not set
+Detected only
+Disk space
+Events (24 h)
+Exploit detector blocks
+Bot rule blocks
+WAF blocks
+Rate limit rejections (429)
+Failed CAPTCHA
+Failed admin panel logins
+Rules inspected
+Since start
+Restart method
+Running binary
+Binary directory writable
+Config directory writable
+Backup directory writable
+Switch to horizontal layout
+Interface language
+Applies immediately and is remembered for this instance. Machine-assisted translations: help improve them (docs/translating.md).
+List docker container failed
+Path Access Control
+Apply existing IP/CIDR access rules to individual paths of tagged proxy hosts.
+Default access rule for all HTTP proxy hosts
+No visitor matches these filters.
+No visits recorded yet. They show up here as soon as requests reach one of your proxy rules.
+No proxy rules yet. Create one under Reverse Proxy, then come back to protect it.
+No token set (remote API disabled).
+No zrok binary found. Token: not set. Environment: not enabled.
+No inspection. Requests go straight to the service. Pick this to pause the WAF without losing any settings.
+Inspects and logs what it would block, but never rejects anything. The safe way to start and to test new rules
+manual: the process re-executes the new binary in place.
+paste the account token
+There is no previous binary to roll back to.
+Brand Mark
+Watermark Icon
+Panel Art Wallpaper
+Square logo shown at the top left corner of the login page.
+Wide logo overlaid on the panel art. Use a transparent background and light colors.
+Portrait artwork filling the right hand panel. It is cropped to cover, so keep the focus centered.
+Known abusive bots and spam harvesters ({0})
+Generic HTTP client libraries (often scripts) ({0})
+SEO and marketing crawlers ({0})
+Scraping frameworks and offline copiers ({0})
+Vulnerability scanners and attack tools ({0})
+AI crawlers and training bots (shared with the exploit detector's list) ({0})
+Encrypted Client Hello（ECH）
+Resource Monitor
+Route Debugger
+DNS Resolver
+Data-Shield Blocklist
+Inspects and logs what it would block, but never rejects anything. The safe way to start and to test new rules.
+Rejects requests whose anomaly score reaches the threshold with HTTP 403. Use after a detection-only period without false positives.
+Traceroute / Ping
+Traffic Management
+Base version {0} (build date unknown: not installed by the updater yet)
+Roll back: There is no previous binary to roll back to.

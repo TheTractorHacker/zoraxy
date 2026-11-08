@@ -417,12 +417,12 @@ func (h *ProxyHandler) handlePathRules(w http.ResponseWriter, r *http.Request, s
 			return false
 		case PathRuleDeny:
 			h.Parent.logRequest(r, false, 403, "path-rule-deny", r.Host, "", sep)
-			serveProxyRequestError(w, http.StatusForbidden, h.Parent, ErrorTemplateForbidden)
+			serveProxyRequestError(w, r, http.StatusForbidden, h.Parent, ErrorTemplateForbidden)
 			return true
 		case PathRuleRequireAuth:
 			if sep.AuthenticationProvider == nil || sep.AuthenticationProvider.AuthMethod == AuthMethodNone {
 				h.Parent.logRequest(r, false, 403, "path-rule-noauth", r.Host, "", sep)
-				serveProxyRequestError(w, http.StatusForbidden, h.Parent, ErrorTemplateForbidden)
+				serveProxyRequestError(w, r, http.StatusForbidden, h.Parent, ErrorTemplateForbidden)
 				return true
 			}
 			*r = *r.WithContext(context.WithValue(r.Context(), pathForceAuthKey{}, true))

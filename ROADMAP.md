@@ -208,3 +208,9 @@ FriendlyCaptcha, counting SSO redirect failures in the auto-ban, per-user admin 
 - ✅ CodeQL (Go, JavaScript, Actions) and Dependabot gomod (fork #146 / upstream #741); 📋 needs GitHub Actions enabled on the fork.
 - ✅ FriendlyCaptcha on the CAPTCHA page, Status map console error, Quick Start tours on the new HTTP Proxy page, Recent nav duplicates, openapi.yaml scope notes.
 - 📋 Templates cannot yet set auth provider, CORS or access rule (the template schema has no such fields).
+
+## Multi-language UI (`feat/i18n`)
+- ✅ Runtime i18n layer (no build step): dictionary keyed by the English text, language picker (top bar + Ingress page), server-side default (`/api/i18n/language`), instant switch, snippet iframes follow, `<html lang>`.
+- ✅ Locales (machine-assisted, `reviewed: false`): zh-CN (first class, ~95 %), zh-TW, es, de, fr, ja, pt-BR, ru (main screens). Glossary, extractor / `--check` CI job, coverage scan, `docs/translating.md`.
+- ✅ Visitor pages follow `Accept-Language`: CAPTCHA challenge / failed / blocked defaults and the built-in 403 / 404 / 521 pages.
+- 📋 Native-speaker review of every locale; more strings for the non-Chinese locales (long help texts, snippets); plural forms; RTL languages; translating `apidocs`, `tools/*.html` pages and plugin UIs; templating the login page server side.
