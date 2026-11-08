@@ -245,13 +245,14 @@ func ReverseProxyEditVdir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//Overwrite the target endpoint
+	//Overwrite the target endpoint, keeping the enabled state of the old rule
+	wasDisabled := targetEndpoint.GetVirtualDirectoryRuleByMatchingPath(vdir).Disabled
 	newVdirRule := dynamicproxy.VirtualDirectoryEndpoint{
 		MatchingPath:        vdir,
 		Domain:              domain,
 		RequireTLS:          reqTLS,
 		SkipCertValidations: skipValid,
-		Disabled:            false,
+		Disabled:            wasDisabled,
 	}
 
 	targetEndpoint.RemoveVirtualDirectoryRuleByMatchingPath(vdir)
