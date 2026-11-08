@@ -262,9 +262,13 @@ body.darkTheme .menubar{
         -webkit-overflow-scrolling: touch;
         margin-bottom: 0;
         z-index: 9;
-        padding: 1em;
+        padding: 0 1em 1em 1em; /* no top padding: the sticky menu filter sits flush so items never show above it */
         display:none;
         border-left: 1px solid rgb(206, 206, 206);
+    }
+
+    .toolbar .navFilter {
+        padding-top: 1em;
     }
 
     .menutoggle{

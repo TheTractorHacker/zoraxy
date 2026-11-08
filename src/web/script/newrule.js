@@ -392,6 +392,13 @@
     window.openNewRuleDialog = function (opts) {
         opts = opts || {};
         build();
+        // a dialog that is still fading in or out (e.g. "Add another" right after creating) cannot be reopened yet
+        if (($m.modal("is animating") || ($m.hasClass("active") && !$m.hasClass("visible"))) && (opts._tries || 0) < 12) {
+            opts._tries = (opts._tries || 0) + 1;
+            setTimeout(function () { window.openNewRuleDialog(opts); }, 250);
+            return;
+        }
+        if ($m.hasClass("active") && !$m.hasClass("visible")) { $m.removeClass("active hidden"); }
         var keep = !!opts.keep;
         if (!keep) {
             $f("nrForm")[0].reset();

@@ -162,3 +162,10 @@ FriendlyCaptcha, counting SSO redirect failures in the auto-ban, per-user admin 
 - ✅ `{{host}}` `{{client_ip}}` `{{request_id}}` `{{rule_name}}` `{{external_ip}}` in headers, redirects, static responses; rule templates; bulk edit (upstream #370 #826 #877 #924).
 - ✅ API tokens + `/api/v1` + OpenAPI (upstream #382 #714 #996), response bandwidth limit (upstream #1208), plain HTTP listener address (#909), IP calculators (#504), opt-in split-horizon DNS responder (#769).
 - 📋 UI editor for custom rule templates (API exists), bandwidth limit for WebSocket traffic.
+
+## Proxy UX (`feat/ui-proxy-ux`)
+- ✅ HTTP proxy list rebuilt: status pill with undo, search, status and tag filters, sorting, pagination, shift-click multi-select with a sticky bulk bar.
+- ✅ Navigation regrouped into Proxy / Security / Certificates / Observability / Tools / System; saved menu state migrated.
+- ✅ "New proxy rule" dialog with live upstream test and HTTPS auto-detection; the full form stays as Advanced Rule Form.
+- ✅ Quick Start hides once an instance is set up or dismissed (stored server side), "Show Quick Start again" in Ingress.
+- 📋 Per-rule request count / sparkline in the list (needs a cheap per-host aggregate), editing custom rule templates in the UI, a "create certificate" action that handles wildcard domains through DNS challenge from the dialog.

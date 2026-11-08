@@ -97,6 +97,26 @@
             #httprpPage .ptSeg{ overflow-x:auto; max-width:100%; }
             #httprpPage .ptHead .ui.primary.button{ width:100%; }
             #bulkBar{ top:0.2em; }
+            /* rows become cards: no sideways scrolling on a phone */
+            table.ptTable{ min-width:0; }
+            table.ptTable, table.ptTable tbody{ display:block; }
+            table.ptTable thead tr{ display:flex; align-items:center; border-bottom:1px solid var(--divider_color); }
+            table.ptTable thead th{ border:0; }
+            table.ptTable thead th:not(.ptSel):not([data-sort=host]):not([data-sort=status]){ display:none; }
+            table.ptTable thead th[data-sort=host]{ flex:1; }
+            table.ptTable tr.ptRow{ display:grid; grid-template-columns:2.4em 1fr auto; grid-template-areas:"sel name name" ". ups ups" ". prot prot" ". tags tags" ". stat act"; padding:0.5em 0.3em; border-bottom:1px solid var(--divider_color); }
+            table.ptTable tr.ptRow:last-child{ border-bottom:0; }
+            table.ptTable tr.ptRow td{ display:block; border:0; padding:0.2em 0.4em; }
+            table.ptTable .ptSel{ grid-area:sel; padding-top:0.5em; }
+            table.ptTable .ptName{ grid-area:name; min-width:0; }
+            table.ptTable .ptUps{ grid-area:ups; }
+            table.ptTable .ptProt{ grid-area:prot; min-width:0; }
+            table.ptTable .ptTagsCell{ grid-area:tags; min-width:0; }
+            table.ptTable .ptStatusCell{ grid-area:stat; }
+            table.ptTable .ptAct{ grid-area:act; width:auto; }
+            table.ptTable td.ptProt:has(.ptMuted:only-child), table.ptTable td.ptTagsCell:empty{ display:none; }
+            table.ptTable tr.ptEmptyRow{ display:block; }
+            table.ptTable tr.ptEmptyRow td{ display:block; }
         }
 
         /* ---------- proxy rule editor ---------- */

@@ -31,6 +31,7 @@
         pageSize: 50,
         view: [],            // filtered + sorted rules
         lastClicked: null,   // rule name, anchor for shift-click range selection
+        flash: "",           // rule whose row is flashing (survives the re-renders caused by late health / access data)
         loaded: false
     };
 
@@ -187,7 +188,7 @@
         }).join("");
 
         var on = !r.Disabled;
-        return '<tr class="subdEntry ptRow ' + (r.Disabled ? "isOff " : "") + (state.sel[name] ? "isSel" : "") + '" eptuuid="' + e + '" data-ep="' + e + '">' +
+        return '<tr class="subdEntry ptRow ' + (r.Disabled ? "isOff " : "") + (state.sel[name] ? "isSel " : "") + (state.flash === name ? "ptFlash" : "") + '" eptuuid="' + e + '" data-ep="' + e + '">' +
             '<td class="ptSel"><input type="checkbox" class="bulkSel" data-ep="' + e + '" aria-label="Select ' + e + '"' + (state.sel[name] ? " checked" : "") + '></td>' +
             '<td class="ptName"><span class="ptDot ' + st + '" title="' + esc(stateText(r)) + '"></span><div class="ptNameBody">' +
             '<a class="ptHost" href="' + esc(hostLink(r, name)) + '" target="_blank" rel="noopener">' + e + '</a> ' + lock +
@@ -446,12 +447,12 @@
         if (idx < 0) { return; }
         state.page = Math.floor(idx / state.pageSize) + 1;
         render();
+        state.flash = name;
+        render();
         var row = $("#httpProxyList tr.ptRow").filter(function () { return $(this).attr("data-ep") === name; });
-        if (row.length) {
-            row[0].scrollIntoView({ block: "center", behavior: "smooth" });
-            row.addClass("ptFlash");
-            setTimeout(function () { row.removeClass("ptFlash"); }, 3500);
-        }
+        if (row.length) { row[0].scrollIntoView({ block: "center", behavior: "smooth" }); }
+        clearTimeout(highlight.t);
+        highlight.t = setTimeout(function () { state.flash = ""; $("#httpProxyList tr.ptFlash").removeClass("ptFlash"); }, 3500);
     }
 
     /* ------------------------------------------------------------------ events */
