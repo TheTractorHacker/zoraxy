@@ -477,6 +477,9 @@ func statusFor(kind PageKind, preview bool) int {
 
 // renderPage is the single place that turns a config into a response.
 func renderPage(w http.ResponseWriter, r *http.Request, cfg *Config, kind PageKind, domain string, opts RenderOptions) {
+	if !opts.Preview {
+		cfg = ApplyDefaultBranding(cfg) // previews merge on their own, see HandleCaptchaPreview
+	}
 	nonce := newNonce()
 	if kind == PageFailed && opts.RetryURL == "" {
 		opts.RetryURL = retryURLFor(r)
