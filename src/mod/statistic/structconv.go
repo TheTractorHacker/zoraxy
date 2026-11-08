@@ -128,3 +128,8 @@ func (c *Collector) GetExportSummary() *DailySummaryExport {
 	exportFormatDailySummary := dailySummaryToExport(c.GetCurrentDailySummary())
 	return &exportFormatDailySummary
 }
+
+// GetExportSummaryBlocked returns today's number of blocked requests without building the full export
+func (c *Collector) GetExportSummaryBlocked() int64 {
+	return atomic.LoadInt64(&c.GetCurrentDailySummary().BlockedRequest)
+}

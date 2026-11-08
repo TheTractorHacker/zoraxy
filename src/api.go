@@ -226,6 +226,7 @@ func RegisterStatisticalAPIs(authRouter *auth.RouterDef) {
 	/* Traffic Summary */
 	authRouter.HandleFunc("/api/stats/summary", statisticCollector.HandleTodayStatLoad)
 	authRouter.HandleFunc("/api/stats/overview", HandleDashboardOverview)
+	authRouter.HandleFunc("/api/stats/glance", HandleDashboardGlance)
 	authRouter.HandleFunc("/api/stats/trafficmap", HandleTrafficMapData)
 	authRouter.HandleFunc("/api/stats/countries", HandleCountryDistrSummary)
 	authRouter.HandleFunc("/api/stats/netstat", netstatBuffers.HandleGetNetworkInterfaceStats)

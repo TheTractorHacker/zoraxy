@@ -88,6 +88,7 @@ type Collector struct {
 	incr incrFn
 
 	settings settingsHolder //Exclusion filters and URL query handling, see settings.go
+	rates    rateRing       //Per-minute counters for the status page, see rate.go
 }
 
 // incrFn is the dispatch shape for "increment one entry in one of the eight
@@ -274,6 +275,7 @@ func (c *Collector) RecordRequest(ri RequestInfo) {
 	if !c.shouldRecord(&ri) {
 		return
 	}
+	c.rates.add(time.Now(), !ri.Succ, ri.Blocked)
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {

@@ -227,7 +227,10 @@ func TestSMTPChannel(t *testing.T) {
 	}
 	// failure is retried then reported without the password
 	calls := 0
-	s.smtpSend = func(cc ChannelConfig, to, subj, body string) error { calls++; return errors.New("auth failed for s3cretpw") }
+	s.smtpSend = func(cc ChannelConfig, to, subj, body string) error {
+		calls++
+		return errors.New("auth failed for s3cretpw")
+	}
 	s.Attempts, s.Backoff = 2, time.Millisecond
 	err := s.Deliver(context.Background(), ev)
 	if err == nil || strings.Contains(err.Error(), "s3cretpw") || calls < 4 {

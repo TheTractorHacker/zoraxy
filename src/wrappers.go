@@ -50,6 +50,8 @@ type TrafficMapProxy struct {
 	Disabled     bool                 `json:"disabled"`
 	RequestCount int                  `json:"requestCount"`
 	Upstreams    []*TrafficMapUpstream `json:"upstreams"`
+	Kind         string               `json:"kind,omitempty"`   //"stream" for TCP/UDP stream proxy instances, empty for HTTP proxy rules
+	Detail       string               `json:"detail,omitempty"` //Short description (protocol and listening port) for stream proxy nodes
 }
 
 // TrafficMapData is the top-level payload for the traffic flow diagram
@@ -107,6 +109,31 @@ func HandleTrafficMapData(w http.ResponseWriter, r *http.Request) {
 		result.Proxies = append(result.Proxies, proxyNode)
 		return true
 	})
+
+	//Stream proxy (TCP/UDP) instances are part of the picture too
+	if streamProxyManager != nil {
+		for _, sp := range streamProxyManager.Configs {
+			proto := ""
+			if sp.UseTCP {
+				proto = "TCP"
+			}
+			if sp.UseUDP {
+				if proto != "" {
+					proto += "/"
+				}
+				proto += "UDP"
+			}
+			result.Proxies = append(result.Proxies, &TrafficMapProxy{
+				Domain:   "[stream] " + sp.Name,
+				Kind:     "stream",
+				Detail:   proto + " " + sp.ListeningAddress,
+				Disabled: !sp.Running,
+				Upstreams: []*TrafficMapUpstream{{
+					Origin: sp.ProxyTargetAddr, Weight: 1, Inactive: !sp.Running,
+				}},
+			})
+		}
+	}
 
 	js, _ := json.Marshal(result)
 	utils.SendJSONResponse(w, string(js))

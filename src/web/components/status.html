@@ -415,6 +415,94 @@
     </div>
 </div>
 
+<!-- At a glance: rates, alerts, certificates and upstream health (GET /api/stats/glance) -->
+<div class="standardContainer nobottom" id="glancePanel">
+    <style>
+        #glancePanel .glanceGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.8em; }
+        #glancePanel .glanceCard { padding: 0.9em 1em; border: 1px solid rgba(128,128,128,0.25); border-radius: 8px; }
+        #glancePanel .glanceLabel { font-size: 0.85em; opacity: 0.7; display: block; }
+        #glancePanel .glanceValue { font-size: 1.6em; font-weight: 600; }
+        #glancePanel .glanceSub { font-size: 0.8em; opacity: 0.7; word-break: break-word; }
+        #glancePanel .glanceBad { color: #db2828; }
+        #glancePanel .glanceWarn { color: #f2711c; }
+        #glancePanel .glanceOk { color: #21ba45; }
+        #glancePanel .glanceSpark { display: block; margin-top: 0.3em; }
+    </style>
+    <div class="glanceGrid">
+        <div class="glanceCard">
+            <span class="glanceLabel"><i class="exchange icon"></i> Requests / min (5 min avg)</span>
+            <span class="glanceValue" id="glanceRpm">-</span>
+            <span id="glanceSpark" class="glanceSpark"></span>
+        </div>
+        <div class="glanceCard">
+            <span class="glanceLabel"><i class="exclamation circle icon"></i> Error rate</span>
+            <span class="glanceValue" id="glanceErr">-</span>
+            <span class="glanceSub" id="glanceErrSub"></span>
+        </div>
+        <div class="glanceCard">
+            <span class="glanceLabel"><i class="ban icon"></i> Blocked today</span>
+            <span class="glanceValue" id="glanceBlocked">-</span>
+            <span class="glanceSub" id="glanceBlockedSub"></span>
+        </div>
+        <div class="glanceCard">
+            <span class="glanceLabel"><i class="heartbeat icon"></i> Upstream health</span>
+            <span class="glanceValue" id="glanceUp">-</span>
+            <span class="glanceSub" id="glanceUpSub"></span>
+        </div>
+        <div class="glanceCard">
+            <span class="glanceLabel"><i class="lock icon"></i> Certificates</span>
+            <span class="glanceValue" id="glanceCert">-</span>
+            <span class="glanceSub" id="glanceCertSub"></span>
+        </div>
+        <div class="glanceCard">
+            <span class="glanceLabel"><i class="bell icon"></i> Alerts</span>
+            <span class="glanceValue" id="glanceAlerts">-</span>
+            <span class="glanceSub" id="glanceAlertsSub"></span>
+        </div>
+    </div>
+    <script>
+        (function(){
+            function esc(t){ return $("<div>").text(t == null ? "" : String(t)).html(); }
+            function spark(values){
+                if (!values || values.length < 2){ return ""; }
+                let max = Math.max.apply(null, values); if (max <= 0){ max = 1; }
+                let w = 160, h = 24;
+                let pts = values.map((v, i) => (i * w / (values.length - 1)).toFixed(1) + "," + (h - 2 - (v / max) * (h - 4)).toFixed(1)).join(" ");
+                return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="requests per minute, last 30 minutes"><polyline fill="none" stroke="#2185d0" stroke-width="1.5" points="${pts}"/></svg>`;
+            }
+            function bytes(n){
+                if (n > 1073741824) return (n / 1073741824).toFixed(2) + " GB";
+                if (n > 1048576) return (n / 1048576).toFixed(1) + " MB";
+                return (n / 1024).toFixed(0) + " KB";
+            }
+            function loadGlance(){
+                if (!document.getElementById("glancePanel") || $("#glancePanel").is(":hidden")){ return; }
+                $.getJSON("/api/stats/glance", function(d){
+                    if (d.error){ return; }
+                    $("#glanceRpm").text(d.Rates.RequestsPerMin.toFixed(1));
+                    $("#glanceSpark").html(spark(d.Rates.Series));
+                    let er = d.Rates.ErrorRate * 100;
+                    $("#glanceErr").text(er.toFixed(1) + "%").attr("class", "glanceValue " + (er >= 20 ? "glanceBad" : er >= 5 ? "glanceWarn" : "glanceOk"));
+                    $("#glanceErrSub").text(d.Rates.ErrorsPerMin.toFixed(1) + " errors/min");
+                    $("#glanceBlocked").text(d.BlockedToday);
+                    $("#glanceBlockedSub").text(d.Rates.BlockedPerMin.toFixed(1) + "/min - traffic today " + bytes(d.BandwidthRx + d.BandwidthTx));
+                    let down = d.UpstreamsDown || [];
+                    $("#glanceUp").text(down.length == 0 ? "All up" : down.length + " down").attr("class", "glanceValue " + (down.length ? "glanceBad" : "glanceOk"));
+                    $("#glanceUpSub").html(d.UpstreamsTotal + " monitored" + (down.length ? ": " + down.slice(0, 3).map(x => esc(x.Name)).join(", ") : ""));
+                    let ce = d.CertsExpiring || [];
+                    $("#glanceCert").text(ce.length == 0 ? "OK" : ce[0].DaysLeft + " d").attr("class", "glanceValue " + (ce.length == 0 ? "glanceOk" : ce[0].DaysLeft < 7 ? "glanceBad" : "glanceWarn"));
+                    $("#glanceCertSub").html(ce.length == 0 ? d.CertsTotal + " certificates, none expiring within " + d.WarnDays + " days" : "soonest: " + esc(ce[0].Name) + (ce.length > 1 ? " (+" + (ce.length - 1) + " more)" : ""));
+                    $("#glanceAlerts").text(d.AlertsFailed ? d.AlertsFailed + " failed" : (d.AlertsRecent.length ? d.AlertsRecent.length + " recent" : "none")).attr("class", "glanceValue " + (d.AlertsFailed ? "glanceWarn" : ""));
+                    let r = (d.AlertsRecent || [])[0];
+                    $("#glanceAlertsSub").html(r ? esc(r.event) + " &rarr; " + esc(r.channel) + " (" + esc(r.status) + ") " : '<a href="snippet/notifications.html" target="_blank">Set up notifications</a>');
+                });
+            }
+            loadGlance();
+            setInterval(loadGlance, 15000);
+        })();
+    </script>
+</div>
+
 <!-- Traffic Flow Diagram (left) + Realtime Network In / Out (right) -->
 <div class="standardContainer nobottom">
     <div class="statusTopRow">
