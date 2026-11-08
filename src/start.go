@@ -407,6 +407,8 @@ func startupSequence() {
 		Logger:             SystemWideLogger,
 		PluginGroupsConfig: CONF_PLUGIN_GROUPS,
 		APIKeyManager:      pluginApiKeyManager,
+		RunAsUser:          *plugin_user,
+		RunAsGroup:         *plugin_group,
 		ZoraxyPort:         ZoraxyPort,
 		CSRFTokenGen: func(r *http.Request) string {
 			return csrf.Token(r)

@@ -43,6 +43,10 @@ type ManagerOptions struct {
 	DownloadablePluginCache []*DownloadablePlugin //The cache for the downloadable plugins, key is the plugin ID and value is the DownloadablePlugin struct
 	LastSuccPluginSyncTime  int64                 //The last sync time for the plugin store URLs, used to check if the plugin store URLs need to be synced again
 
+	/* Run plugins as an unprivileged OS user (Unix only, requires root, see runas_unix.go). Empty = same user as Zoraxy */
+	RunAsUser  string
+	RunAsGroup string
+
 	/* Runtime */
 	SystemConst  *zoraxyPlugin.RuntimeConstantValue //The system constant value
 	ZoraxyPort   int                                //The port of the Zoraxy instance, used for API calls

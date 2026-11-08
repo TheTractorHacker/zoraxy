@@ -68,6 +68,9 @@ func (m *Manager) StartPlugin(pluginID string) error {
 	m.Log("Starting plugin "+thisPlugin.Spec.Name+" at :"+strconv.Itoa(pluginConfiguration.Port), nil)
 	cmd := exec.Command(absolutePath, "-configure="+string(js))
 	cmd.Dir = filepath.Dir(absolutePath)
+	if err := m.applyRunAs(cmd, absolutePath); err != nil { //optional -plugin_user, see runas_unix.go
+		return err
+	}
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
