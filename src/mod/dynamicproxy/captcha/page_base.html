@@ -1,0 +1,282 @@
+{{define "zx_css"}}
+        :root {
+            --bg: #fff;
+            --fg: #313131;
+            --sub: #555;
+            --border: #e5e5e5;
+            --accent: {{.Accent}};
+            --err-bg: #fee; --err-fg: #c33; --err-bd: #fcc;
+            --ok-bg: #efe; --ok-fg: #3c3; --ok-bd: #cfc;
+            --info-bg: #f3f3f3; --info-fg: #555; --info-bd: #ddd;
+            --foot: #888;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root[data-theme="auto"] {
+                --bg: #222; --fg: #d9d9d9; --sub: #aaa; --border: #444; --foot: #aaa;
+                --info-bg: #2c2c2c; --info-fg: #bbb; --info-bd: #444;
+            }
+        }
+        :root[data-theme="dark"] {
+            --bg: #222; --fg: #d9d9d9; --sub: #aaa; --border: #444; --foot: #aaa;
+            --info-bg: #2c2c2c; --info-fg: #bbb; --info-bd: #444;
+        }
+        :root { color-scheme: light dark; }
+        :root[data-theme="light"] { color-scheme: light; }
+        :root[data-theme="dark"] { color-scheme: dark; }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html {
+            line-height: 1.15;
+            -webkit-text-size-adjust: 100%;
+            color: var(--fg);
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            background-color: {{if .Background}}{{.Background}}{{else}}var(--bg){{end}};
+        }
+
+        .main-wrapper { flex: 1; display: flex; flex-direction: column; }
+
+        .main-content {
+            margin: 8rem auto;
+            max-width: 60rem;
+            padding-left: 1.5rem;
+            padding-right: 1.5rem;
+            width: 100%;
+        }
+
+        .header { margin-bottom: 2rem; }
+
+        .logo { display: block; max-height: 5rem; max-width: 16rem; margin-bottom: 1.5rem; }
+
+        .h1 { font-size: 2.5rem; font-weight: 500; margin-bottom: 1rem; color: var(--fg); }
+
+        .subtitle { font-size: 1.5rem; font-weight: 450; color: var(--fg); }
+
+        .challenge-container {
+            margin: 2rem 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        .loader {
+            border: 4px solid var(--border);
+            border-top: 4px solid var(--accent);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        .loader[hidden] { display: none; }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .security-message { margin-top: 2rem; font-size: 1.5rem; color: var(--sub); }
+
+        #status {
+            margin-top: 1rem;
+            padding: 1rem;
+            border-radius: 0.25rem;
+            text-align: center;
+        }
+        #status[hidden] { display: none; }
+
+        .error { background-color: var(--err-bg); color: var(--err-fg); border: 1px solid var(--err-bd); }
+        .success { background-color: var(--ok-bg); color: var(--ok-fg); border: 1px solid var(--ok-bd); }
+        .info { background-color: var(--info-bg); color: var(--info-fg); border: 1px solid var(--info-bd); }
+
+        .retry-row { margin-top: 1rem; text-align: center; }
+        .retry-row[hidden], #retry[hidden] { display: none; }
+
+        .btn {
+            display: inline-block;
+            padding: 0.6rem 1.4rem;
+            border: 0;
+            border-radius: 0.25rem;
+            background: var(--accent);
+            color: #fff;
+            font: inherit;
+            font-size: 1rem;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .btn:hover { filter: brightness(1.1); }
+
+        .footer {
+            padding: 1rem;
+            text-align: center;
+            font-size: 0.75rem;
+            color: var(--foot);
+            border-top: 1px solid var(--border);
+        }
+        .footer-content { display: flex; flex-direction: column; gap: 0.5rem; }
+        .footer a { color: var(--accent); text-decoration: none; }
+        .footer a:hover { text-decoration: underline; }
+
+        @media (max-width: 720px) {
+            .h1 { font-size: 1.5rem; }
+            .subtitle { font-size: 1rem; }
+            .main-content { padding: 1rem; }
+        }
+{{end}}
+
+{{define "zx_head"}}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+{{end}}
+
+{{define "zx_footer"}}
+{{if .ShowFooter}}
+    <footer class="footer">
+        <div class="footer-content">
+            <div>Performance &amp; security by <a href="https://zoraxy.aroz.org" target="_blank" rel="noopener noreferrer">Zoraxy</a></div>
+        </div>
+    </footer>
+{{end}}
+{{end}}
+
+{{define "zx_widget"}}
+            <div class="challenge-container">
+                <div class="loader" id="zx-loader"{{if not .ShowLoader}} hidden{{end}}></div>
+                {{if ne .Provider "recaptcha_v3"}}<div id="zx-widget"></div>{{end}}
+            </div>
+            <div id="status" role="status" aria-live="polite" hidden></div>
+            <div class="retry-row"><button type="button" id="retry" class="btn" hidden>{{.Strings.Retry}}</button></div>
+{{end}}
+
+{{define "zx_runtime"}}
+    <script nonce="{{.Nonce}}">
+    (function () {
+        var cfg = {{.Client}};
+        var nonce = document.currentScript ? (document.currentScript.nonce || '') : '';
+        var statusEl = document.getElementById('status');
+        var retryEl = document.getElementById('retry');
+        var loaderEl = document.getElementById('zx-loader');
+        var widgetId = null, busy = false, errorCount = 0, loaded = false;
+
+        function show(msg, cls) { if (!statusEl) return; statusEl.textContent = msg; statusEl.className = cls; statusEl.hidden = false; }
+        function hideStatus() { if (statusEl) statusEl.hidden = true; }
+        function hideLoader() { if (loaderEl) loaderEl.hidden = true; }
+        function fail(msg) { busy = false; hideLoader(); show(msg, 'error'); if (retryEl) retryEl.hidden = false; }
+
+        function submit(token) {
+            if (busy) return;
+            busy = true;
+            if (retryEl) retryEl.hidden = true;
+            show(cfg.s.verifying, 'info');
+            if (cfg.preview) {
+                setTimeout(function () { busy = false; show(cfg.s.success, 'success'); }, 700);
+                return;
+            }
+            var fd = new FormData();
+            fd.append(cfg.field, token);
+            fetch(cfg.verifyPath, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+                .then(function (r) { return r.json().catch(function () { return { success: false }; }); })
+                .then(function (d) {
+                    if (d && d.success) {
+                        busy = false;
+                        show(cfg.s.success, 'success');
+                        setTimeout(function () { window.location.reload(); }, 1000);
+                    } else {
+                        fail(cfg.s.failed);
+                    }
+                })
+                .catch(function () { fail(cfg.s.error); });
+        }
+
+        function pageIsDark() {
+            var t = document.documentElement.getAttribute('data-theme');
+            if (t === 'dark') return true;
+            if (t === 'light') return false;
+            return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        }
+
+        function run() {
+            if (cfg.provider === 'turnstile') {
+                if (!window.turnstile) { window.location.reload(); return; }
+                if (widgetId !== null) {
+                    window.turnstile.reset(widgetId);
+                    if (cfg.turnstile.appearance === 'execute') window.turnstile.execute(widgetId);
+                    return;
+                }
+                var o = cfg.turnstile;
+                var opts = {
+                    sitekey: cfg.siteKey,
+                    callback: submit,
+                    theme: o.theme || 'auto',
+                    size: o.size || 'normal',
+                    appearance: o.appearance || 'always',
+                    'refresh-expired': 'auto',
+                    'refresh-timeout': 'auto',
+                    'expired-callback': function () { hideStatus(); },
+                    'timeout-callback': function () { try { window.turnstile.reset(widgetId); } catch (e) {} },
+                    'before-interactive-callback': hideLoader,
+                    'error-callback': function () {
+                        errorCount++;
+                        if (errorCount >= 3) fail(cfg.s.error);
+                        return true;
+                    }
+                };
+                if (o.action) opts.action = o.action;
+                if (o.cdata) opts.cData = o.cdata;
+                if (opts.appearance === 'execute') opts.execution = 'execute';
+                widgetId = window.turnstile.render('#zx-widget', opts);
+                if (opts.appearance === 'execute') window.turnstile.execute(widgetId);
+            } else if (cfg.provider === 'recaptcha_v2') {
+                if (!window.grecaptcha || !window.grecaptcha.render) { window.location.reload(); return; }
+                if (widgetId !== null) {
+                    window.grecaptcha.reset(widgetId);
+                    if (cfg.invisible) window.grecaptcha.execute(widgetId);
+                    return;
+                }
+                widgetId = window.grecaptcha.render('zx-widget', {
+                    sitekey: cfg.siteKey,
+                    callback: submit,
+                    theme: pageIsDark() ? 'dark' : 'light',
+                    size: cfg.invisible ? 'invisible' : 'normal',
+                    'expired-callback': function () { hideStatus(); window.grecaptcha.reset(widgetId); },
+                    'error-callback': function () { fail(cfg.s.error); }
+                });
+                if (cfg.invisible) window.grecaptcha.execute(widgetId);
+            } else {
+                if (cfg.preview) { submit('preview'); return; }
+                if (!window.grecaptcha) { window.location.reload(); return; }
+                window.grecaptcha.ready(function () {
+                    window.grecaptcha.execute(cfg.siteKey, { action: cfg.action }).then(submit, function () { fail(cfg.s.error); });
+                });
+            }
+        }
+
+        window.zxReady = function () { loaded = true; run(); };
+
+        if (retryEl) retryEl.addEventListener('click', function () {
+            busy = false; errorCount = 0; hideStatus(); retryEl.hidden = true;
+            if (loaderEl && cfg.showLoader) loaderEl.hidden = false;
+            run();
+        });
+
+        if (cfg.provider === 'recaptcha_v3' && cfg.preview) { run(); return; }
+
+        var src;
+        if (cfg.provider === 'turnstile') src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=zxReady';
+        else if (cfg.provider === 'recaptcha_v2') src = 'https://www.google.com/recaptcha/api.js?render=explicit&onload=zxReady';
+        else src = 'https://www.google.com/recaptcha/api.js?render=' + encodeURIComponent(cfg.siteKey) + '&onload=zxReady';
+        var s = document.createElement('script');
+        s.src = src; s.async = true; s.defer = true;
+        if (nonce) s.setAttribute('nonce', nonce);
+        s.onerror = function () { fail(cfg.s.error); };
+        document.head.appendChild(s);
+    })();
+    </script>
+{{end}}

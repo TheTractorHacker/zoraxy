@@ -266,7 +266,7 @@ func (h *ProxyHandler) runEndpointChain(w http.ResponseWriter, r *http.Request, 
 
 	/* Exploit Detection */
 	if sep.detector != nil {
-		if sep.detector.CheckIsAttack(w, r) {
+		if sep.detector.CheckIsAttackWithCaptcha(w, r, h.Parent.exploitCaptchaResponder(sep)) {
 			statusCode := sep.detector.GetResponseStatusCode()
 			h.Parent.logRequest(r, false, statusCode, "exploit-blocked", domainOnly, "blocked", sep)
 			return true

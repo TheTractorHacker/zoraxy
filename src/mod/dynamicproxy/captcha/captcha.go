@@ -1,22 +1,15 @@
 package captcha
 
 import (
-	"bytes"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
-	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html/template"
-	"io"
 	"net"
 	"net/http"
-	"net/url"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -31,21 +24,19 @@ import (
 	Supports Cloudflare Turnstile and Google reCAPTCHA (v2 and v3).
 */
 
-//go:embed cloudflare_turnstile.html
-var cloudflareTurnstileTemplate string
-
-//go:embed google_recaptcha_v2.html
-var googleRecaptchaV2Template string
-
-//go:embed google_recaptcha_v3.html
-var googleRecaptchaV3Template string
-
 const (
 	CookieName             = "zoraxy_captcha_session"
 	VerifyPath             = "/.zoraxy/captcha/verify"
 	DefaultSessionDuration = 3600 // 1 hour in seconds
 	CloudflareTurnstileAPI = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 	GoogleRecaptchaAPIv2v3 = "https://www.google.com/recaptcha/api/siteverify"
+)
+
+// Siteverify endpoints. Variables (not constants) so tests can point them at an
+// httptest server standing in for the provider.
+var (
+	TurnstileVerifyURL = CloudflareTurnstileAPI
+	RecaptchaVerifyURL = GoogleRecaptchaAPIv2v3
 )
 
 // Provider represents the CAPTCHA provider type
@@ -74,6 +65,14 @@ type Config struct {
 	RecaptchaScore        float64          `json:"RecaptchaScore"`        // v3 only, 0.0-1.0
 	ProtectedPathPrefixes []string         `json:"ProtectedPathPrefixes"` // Empty means protect all paths on this endpoint
 	ExceptionRules        []*ExceptionRule `json:"ExceptionRules"`
+
+	// Page customisation. All optional; a nil / zero value keeps the stock pages,
+	// so configs written by older versions load unchanged.
+	Branding           *Branding         `json:"Branding,omitempty"`
+	Turnstile          *TurnstileOptions `json:"Turnstile,omitempty"`          // Cloudflare only
+	RecaptchaInvisible bool              `json:"RecaptchaInvisible,omitempty"` // v2 only: invisible badge instead of the checkbox
+	RecaptchaAction    string            `json:"RecaptchaAction,omitempty"`    // v3 only: action name, default "access", checked in siteverify
+	VerifyHostname     bool              `json:"VerifyHostname,omitempty"`     // reject tokens whose siteverify hostname differs from the requested host
 }
 
 // ExceptionRule defines rules for bypassing CAPTCHA
@@ -224,87 +223,6 @@ type GoogleRecaptchaResponse struct {
 	ErrorCodes  []string `json:"error-codes"`
 }
 
-// VerifyCloudflareToken verifies a Cloudflare Turnstile token
-func VerifyCloudflareToken(token, secretKey, remoteIP string) (bool, error) {
-	if token == "" || secretKey == "" {
-		return false, errors.New("token and secret key are required")
-	}
-
-	formData := url.Values{
-		"secret":   {secretKey},
-		"response": {token},
-	}
-	if net.ParseIP(remoteIP) != nil {
-		formData.Add("remoteip", remoteIP)
-	}
-
-	resp, err := http.PostForm(CloudflareTurnstileAPI, formData)
-	if err != nil {
-		return false, fmt.Errorf("failed to verify token: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return false, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	var result CloudflareTurnstileResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return false, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	if !result.Success {
-		return false, fmt.Errorf("verification failed: %v", result.ErrorCodes)
-	}
-
-	return true, nil
-}
-
-// VerifyGoogleRecaptchaToken verifies a Google reCAPTCHA token
-func VerifyGoogleRecaptchaToken(token, secretKey, remoteIP string, version string, minScore float64) (bool, error) {
-	if token == "" || secretKey == "" {
-		return false, errors.New("token and secret key are required")
-	}
-
-	formData := url.Values{
-		"secret":   {secretKey},
-		"response": {token},
-	}
-	if net.ParseIP(remoteIP) != nil {
-		formData.Add("remoteip", remoteIP)
-	}
-
-	resp, err := http.PostForm(GoogleRecaptchaAPIv2v3, formData)
-	if err != nil {
-		return false, fmt.Errorf("failed to verify token: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return false, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	var result GoogleRecaptchaResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return false, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	if !result.Success {
-		return false, fmt.Errorf("verification failed: %v", result.ErrorCodes)
-	}
-
-	// For v3, check the score
-	if version == "v3" {
-		if result.Score < minScore {
-			return false, fmt.Errorf("score too low: %f < %f", result.Score, minScore)
-		}
-	}
-
-	return true, nil
-}
-
 // CheckException checks if the request matches any exception rules.
 // clientIP must be resolved by the caller with the endpoint's trusted proxy
 // policy (see Router.GetClientIPForEndpoint). This package does not read
@@ -401,115 +319,6 @@ func ShouldEnforcePath(requestPath string, config *Config) bool {
 	return false
 }
 
-// TemplateData holds the data for rendering CAPTCHA templates
-type TemplateData struct {
-	Domain     string
-	SiteKey    string
-	VerifyPath string
-}
-
-// loadExternalTemplate tries to load an external template from the filesystem
-func loadExternalTemplate(webDir string, templateName string) (string, error) {
-	// Try both .html and .tmpl extensions
-	possiblePaths := []string{
-		filepath.Join(webDir, "templates", templateName+".html"),
-		filepath.Join(webDir, "templates", templateName+".tmpl"),
-	}
-
-	for _, path := range possiblePaths {
-		if _, err := os.Stat(path); err == nil {
-			// File exists, read it
-			content, err := os.ReadFile(path)
-			if err != nil {
-				return "", fmt.Errorf("failed to read external template: %w", err)
-			}
-			return string(content), nil
-		}
-	}
-
-	return "", os.ErrNotExist
-}
-
-// RenderChallenge renders the CAPTCHA challenge page
-func RenderChallenge(w http.ResponseWriter, r *http.Request, config *Config, domain string, webDir string) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusForbidden)
-
-	// Prepare template data
-	data := TemplateData{
-		Domain:     domain,
-		SiteKey:    config.SiteKey,
-		VerifyPath: VerifyPath,
-	}
-
-	var templateContent string
-	var templateName string
-
-	// Determine which template to use based on provider
-	if config.Provider == ProviderCloudflare {
-		templateName = "captcha_cloudflare"
-		// Try to load external template first
-		if webDir != "" {
-			external, err := loadExternalTemplate(webDir, templateName)
-			if err == nil {
-				templateContent = external
-			}
-		}
-		// Fall back to embedded template
-		if templateContent == "" {
-			templateContent = cloudflareTurnstileTemplate
-		}
-	} else {
-		version := config.RecaptchaVersion
-		if version == "" {
-			version = "v2"
-		}
-
-		if version == "v2" {
-			templateName = "captcha_recaptcha_v2"
-			// Try to load external template first
-			if webDir != "" {
-				external, err := loadExternalTemplate(webDir, templateName)
-				if err == nil {
-					templateContent = external
-				}
-			}
-			// Fall back to embedded template
-			if templateContent == "" {
-				templateContent = googleRecaptchaV2Template
-			}
-		} else {
-			templateName = "captcha_recaptcha_v3"
-			// Try to load external template first
-			if webDir != "" {
-				external, err := loadExternalTemplate(webDir, templateName)
-				if err == nil {
-					templateContent = external
-				}
-			}
-			// Fall back to embedded template
-			if templateContent == "" {
-				templateContent = googleRecaptchaV3Template
-			}
-		}
-	}
-
-	// Parse and execute template
-	tmpl, err := template.New(templateName).Parse(templateContent)
-	if err != nil {
-		http.Error(w, "Failed to parse template", http.StatusInternalServerError)
-		return
-	}
-
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		http.Error(w, "Failed to render template", http.StatusInternalServerError)
-		return
-	}
-
-	w.Write(buf.Bytes())
-}
-
 // HandleVerification processes CAPTCHA verification requests. clientIP is
 // forwarded to the provider as remoteip and must be resolved by the caller
 // with the endpoint's trusted proxy policy, same as CheckException.
@@ -559,36 +368,29 @@ func HandleVerification(w http.ResponseWriter, r *http.Request, config *Config, 
 		return errors.New("token missing")
 	}
 
-	var verified bool
 	var verifyErr error
+	exp := config.expectationsFor(r)
 
 	// Verify based on provider
 	switch config.Provider {
 	case ProviderCloudflare:
-		verified, verifyErr = VerifyCloudflareToken(token, config.SecretKey, clientIP)
+		verifyErr = VerifyTurnstile(token, config.SecretKey, clientIP, exp)
 	case ProviderGoogle:
-		version := config.RecaptchaVersion
-		if version == "" {
-			version = "v2"
-		}
-		minScore := config.RecaptchaScore
-		if minScore == 0 {
-			minScore = 0.5
-		}
-		verified, verifyErr = VerifyGoogleRecaptchaToken(token, config.SecretKey, clientIP, version, minScore)
+		verifyErr = VerifyRecaptcha(token, config.SecretKey, clientIP, exp)
 	default:
 		http.Error(w, "Invalid CAPTCHA provider", http.StatusInternalServerError)
 		return errors.New("invalid provider")
 	}
 
-	if verifyErr != nil || !verified {
-		// Verification failed
+	if verifyErr != nil {
+		errorMsg := verifyErr.Error()
+		if wantsHTML(r) {
+			// Plain navigation (no script): show the "verification failed" page
+			RenderFailed(w, r, config, r.Host, RenderOptions{})
+			return fmt.Errorf("verification failed: %v", errorMsg)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
-		errorMsg := "CAPTCHA verification failed"
-		if verifyErr != nil {
-			errorMsg = verifyErr.Error()
-		}
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
 			"error":   errorMsg,
@@ -649,4 +451,10 @@ func (config *Config) IsConfigured() bool {
 		return false
 	}
 	return true
+}
+
+// wantsHTML reports whether the client asked for a page rather than JSON.
+func wantsHTML(r *http.Request) bool {
+	accept := r.Header.Get("Accept")
+	return strings.Contains(accept, "text/html") && !strings.Contains(accept, "application/json")
 }

@@ -144,3 +144,119 @@ Details:
 Example: `./zoraxy -port=:8000 -webui_tls=auto`
 
 Implementation: `src/mod/webuitls`.
+
+
+## Customising CAPTCHA pages
+
+Each proxy endpoint with "Require CAPTCHA Challenge" enabled can restyle its bot-check pages from the endpoint editor
+(Security tab, **Customise page**). Everything is optional: with nothing set the pages look and read exactly as before,
+and configs saved by older versions load unchanged. Implementation: `src/mod/dynamicproxy/captcha`
+(`branding.go`, `pages.go`, `verify.go`, templates `page_base.html`, `challenge.html`, `failed.html`, `blocked.html`).
+
+### Pages
+
+| Page | When | Status |
+|------|------|--------|
+| challenge | visitor has no valid CAPTCHA session | 403 (unchanged) |
+| verification failed | the verify endpoint rejects a token and the client asked for HTML (no-script flow). Shows a retry button. The built-in script shows the failure inline with a retry button instead of looping. | 401 |
+| blocked | the exploit / crawler detector's action is "CAPTCHA challenge" but the endpoint has no CAPTCHA configured | 403 |
+
+The exploit / crawler action **CAPTCHA challenge** now works: a flagged request gets the endpoint's challenge; a
+visitor who already holds a valid CAPTCHA session is let through; an endpoint without CAPTCHA falls back to the blocked page.
+The verify path (`/.zoraxy/captcha/verify`) is always reachable for a challenged client.
+
+### Config fields (`CaptchaConfig`, all optional)
+
+| Field | Default | Meaning |
+|-------|---------|---------|
+| `Branding.Title` / `Heading` / `Message` / `Notice` | `Just a moment...` / host name / `Verify you are human by completing the action below.` / `{domain} needs to review the security of your connection before proceeding.` | page texts; `{domain}` is replaced with the requested host |
+| `Branding.VerifyingText` `SuccessText` `FailedText` `ErrorText` `RetryText` | stock wording, `Try again` | status strings |
+| `Branding.BlockedTitle` `BlockedHeading` `BlockedMessage` | `Access blocked` ... | blocked page |
+| `Branding.LogoURL` | none | `https://` URL or `data:image/(png\|jpeg\|gif\|webp);base64,...`, max 256 KiB decoded, content sniffed, SVG refused |
+| `Branding.AccentColor` / `BackgroundColor` | `#2c7cb0` / theme | hex colours only |
+| `Branding.Theme` | `auto` | `auto` (browser), `light`, `dark` |
+| `Branding.HideFooter` | `false` | hide "Performance & security by Zoraxy" |
+| `Branding.CustomTemplate` | none | full custom challenge page, max 64 KiB, see below |
+| `Turnstile.Mode` | `managed` | `managed`, `non-interactive`, `invisible`. Must match the widget type of the site key (it is chosen in the Cloudflare dashboard); the page uses it to decide whether to show a spinner. |
+| `Turnstile.Appearance` | `always` | `always`, `execute`, `interaction-only` |
+| `Turnstile.Theme` / `Size` | `auto` / `normal` | widget theme `auto\|light\|dark`, size `normal\|flexible\|compact` |
+| `Turnstile.Action` / `CData` | none | bound to the token; when set, siteverify must return the same value or the token is rejected |
+| `RecaptchaInvisible` | `false` | reCAPTCHA v2 invisible badge (needs an invisible-type key) |
+| `RecaptchaAction` | `access` | reCAPTCHA v3 action name, checked in siteverify |
+| `VerifyHostname` | `false` | reject tokens whose siteverify `hostname` differs from the requested host |
+
+All of these are validated when the endpoint is saved (clear error in the UI) and validated again when rendering, so a
+hand-edited config cannot inject markup. Text is escaped by `html/template`; a `<script>` in the title is shown as text.
+
+Turnstile widgets use explicit rendering with `refresh-expired=auto`, expiry/timeout callbacks and an error counter, so an
+expired token is refreshed instead of leaving a dead page; after three widget errors a retry button appears.
+
+### Content-Security-Policy and nonces
+
+Every challenge/failed/blocked response carries a CSP with a fresh per-response nonce, `Cache-Control: no-store`,
+`X-Frame-Options: DENY` and `frame-ancestors 'none'`:
+
+- Turnstile: `script-src 'nonce-..' https://challenges.cloudflare.com`, `frame-src` and `connect-src` for the same host, `style-src 'nonce-..'`.
+- reCAPTCHA: `script-src 'nonce-..' https://www.google.com https://www.gstatic.com`, `frame-src https://www.google.com https://recaptcha.google.com`, and `style-src 'unsafe-inline'` because the reCAPTCHA widget injects inline styles that cannot carry a nonce.
+- everything else `default-src 'none'`; `connect-src 'self'` for the verify call; images from `data:` and `https:` (logo).
+
+Inline `<script>` and `<style>` in a custom template **must** carry `nonce="{{.Nonce}}"`, otherwise the browser blocks them.
+Legacy overrides in `<webroot>/templates/captcha_cloudflare.html`, `captcha_recaptcha_v2.html`, `captcha_recaptcha_v3.html`
+(still honoured, lower priority than a per-endpoint custom template) predate nonces and get `'unsafe-inline'`.
+
+### Custom template reference
+
+A custom template is a Go `html/template`. It is parsed and rendered once per provider with sample data when saved; a
+template that does not parse, references an unknown field/function/template, or fails to execute is rejected with the error
+text. If a stored template ever fails at request time the stock page is served instead of an error.
+
+Variables (`{{.Name}}`):
+
+| Variable | Value |
+|----------|-------|
+| `Domain`, `SiteKey`, `VerifyPath` | host being protected, public site key, `/.zoraxy/captcha/verify` |
+| `Nonce` | CSP nonce for inline script/style |
+| `Provider` | `turnstile`, `recaptcha_v2`, `recaptcha_v3` |
+| `Page` | `challenge` |
+| `Preview` | true in the admin preview |
+| `Title`, `Heading`, `Message`, `Notice` | resolved texts (defaults applied, `{domain}` expanded) |
+| `Strings.Verifying` `.Success` `.Failed` `.Error` `.Retry` | status strings |
+| `LogoURL` | validated logo or empty |
+| `Accent`, `Background`, `Theme` | `#rrggbb`, empty = default, `auto\|light\|dark` |
+| `ShowFooter`, `ShowLoader` | booleans |
+| `Client` | the JSON blob the runtime script reads (provider, key, verify path, texts, Turnstile options) |
+
+Named templates you can include: `zx_css` (the built-in stylesheet, uses the accent/theme/background), `zx_head`,
+`zx_widget` (widget container, spinner, `#status`, retry button), `zx_footer`, and `zx_runtime` (the script that loads the
+provider, submits the token to `VerifyPath`, handles expiry/retry and reloads on success). The shortest working page:
+
+```html
+<!DOCTYPE html>
+<html><head><title>{{.Title}}</title></head>
+<body><h1>{{.Heading}}</h1>{{template "zx_widget" .}}{{template "zx_runtime" .}}</body></html>
+```
+
+If you write your own script instead of `zx_runtime`, POST the token as form field `cf-turnstile-response` (Turnstile) or
+`g-recaptcha-response` (reCAPTCHA) to `VerifyPath` with header `Accept: application/json`; the answer is `{"success":true}`
+(and a session cookie) or `{"success":false,"error":..}` with status 401.
+
+Examples: `example/captcha-templates/` (minimal card, split screen, fully hand written). The editor's
+"Insert starter template" button inserts the minimal card.
+
+### Preview
+
+The **Preview** buttons in the editor POST the current, unsaved form to `POST /api/proxy/captcha/preview` (admin auth +
+CSRF like every other admin API) and show the answer in a modal iframe. Challenge, verification failed and blocked pages
+can each be previewed. The server renders with the providers' public test site key (Turnstile `1x00000000000000000000AA`,
+reCAPTCHA v2 `6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI`), calls no external service, verifies nothing and never echoes the real
+keys. Only the visitor's browser loads the provider script. reCAPTCHA v3 has no public test key, so its preview is simulated.
+
+### Tests
+
+```bash
+cd src
+go test ./mod/dynamicproxy/captcha/ .        # rendering, escaping, CSP/nonce, template validation, siteverify, preview
+go test -race ./mod/dynamicproxy/...
+```
+
+Siteverify URLs are variables (`captcha.TurnstileVerifyURL`, `captcha.RecaptchaVerifyURL`) so tests point them at an `httptest` server.

@@ -581,6 +581,7 @@
                                     <div class="item" data-value="1">403 Forbidden</div>
                                     <div class="item" data-value="2">400 Bad Request</div>
                                     <div class="item" data-value="3">Drop Connection</div>
+                                    <div class="item" data-value="4">CAPTCHA challenge (blocked page if CAPTCHA is not enabled)</div>
                                 </div>
                             </div>
                              <small style="opacity:0.7;">Select how the system should respond when malicious or automated traffic is detected.</small>
@@ -651,6 +652,151 @@
                                             <label class="ui basic label">score</label>
                                         </div>
                                         <small style="opacity:0.7;">Higher score = stricter verification (0.5 recommended)</small>
+                                    </div>
+                                </div>
+
+                                <!-- Customise the CAPTCHA pages -->
+                                <div class="ui accordion captchaCustomise" style="margin-top: 1em;">
+                                    <div class="title" style="padding-left: 0;">
+                                        <i class="dropdown icon"></i> <b>Customise page</b>
+                                        <small style="opacity:0.7;">&nbsp;branding, texts, Turnstile options, custom template</small>
+                                    </div>
+                                    <div class="content">
+                                        <div class="ui small form">
+                                            <div class="field"><label>Page title</label>
+                                                <input type="text" data-cp="captchaTitle" maxlength="120" placeholder="Just a moment..."></div>
+                                            <div class="field"><label>Heading</label>
+                                                <input type="text" data-cp="captchaHeading" maxlength="200" placeholder="(the host name)"></div>
+                                            <div class="field"><label>Message</label>
+                                                <input type="text" data-cp="captchaMessage" maxlength="500" placeholder="Verify you are human by completing the action below."></div>
+                                            <div class="field"><label>Notice under the widget</label>
+                                                <input type="text" data-cp="captchaNotice" maxlength="500" placeholder="{domain} needs to review the security of your connection before proceeding."></div>
+                                            <small style="opacity:0.7;">Use <code>{domain}</code> for the requested host name. All text is HTML-escaped.</small>
+                                            <div class="two fields" style="margin-top: 0.8em;">
+                                                <div class="field"><label>"Verifying" text</label>
+                                                    <input type="text" data-cp="captchaVerifyingText" maxlength="200" placeholder="Verifying..."></div>
+                                                <div class="field"><label>"Success" text</label>
+                                                    <input type="text" data-cp="captchaSuccessText" maxlength="200" placeholder="Verification successful! Redirecting..."></div>
+                                            </div>
+                                            <div class="two fields">
+                                                <div class="field"><label>"Failed" text</label>
+                                                    <input type="text" data-cp="captchaFailedText" maxlength="200" placeholder="Verification failed. Please try again."></div>
+                                                <div class="field"><label>"Error" text</label>
+                                                    <input type="text" data-cp="captchaErrorText" maxlength="200" placeholder="An error occurred. Please try again."></div>
+                                            </div>
+                                            <div class="field"><label>Retry button text</label>
+                                                <input type="text" data-cp="captchaRetryText" maxlength="200" placeholder="Try again"></div>
+                                            <div class="field"><label>Logo</label>
+                                                <input type="text" class="cpLogo" data-cp="captchaLogo" placeholder="https://example.com/logo.png or upload below">
+                                                <input type="file" class="cpLogoFile" accept="image/png,image/jpeg,image/gif,image/webp" style="margin-top: 0.4em;">
+                                                <small class="cpLogoInfo" style="opacity:0.7;">HTTPS URL, or upload a PNG / JPEG / GIF / WebP image (max 256 KiB). SVG is not accepted.</small>
+                                                <a class="cpLogoClear" style="cursor:pointer; display:none;">remove logo</a>
+                                            </div>
+                                            <div class="three fields">
+                                                <div class="field"><label>Accent colour</label>
+                                                    <input type="color" class="cpAccent" value="#2c7cb0">
+                                                    <input type="hidden" data-cp="captchaAccent"></div>
+                                                <div class="field"><label>Background colour</label>
+                                                    <input type="color" class="cpBackground" value="#ffffff">
+                                                    <input type="hidden" data-cp="captchaBackground"></div>
+                                                <div class="field"><label>Theme</label>
+                                                    <select data-cp="captchaTheme">
+                                                        <option value="">Auto (follow browser)</option>
+                                                        <option value="light">Light</option>
+                                                        <option value="dark">Dark</option>
+                                                    </select></div>
+                                            </div>
+                                            <small><a class="cpResetColors" style="cursor:pointer;">reset colours to default</a></small>
+                                            <div class="ui checkbox" style="display:block; margin-top: 0.8em;">
+                                                <input type="checkbox" data-cp="captchaHideFooter">
+                                                <label>Hide the "Performance &amp; security by Zoraxy" footer</label>
+                                            </div>
+
+                                            <div class="ui divider"></div>
+                                            <b>"Blocked" page</b> <small style="opacity:0.7;">shown by the exploit / crawler action when no CAPTCHA can be shown</small>
+                                            <div class="field" style="margin-top: 0.4em;"><label>Title</label>
+                                                <input type="text" data-cp="captchaBlockedTitle" maxlength="120" placeholder="Access blocked"></div>
+                                            <div class="field"><label>Heading</label>
+                                                <input type="text" data-cp="captchaBlockedHeading" maxlength="200" placeholder="Access blocked"></div>
+                                            <div class="field"><label>Message</label>
+                                                <input type="text" data-cp="captchaBlockedMessage" maxlength="500" placeholder="Your request was blocked by the security rules of this site."></div>
+
+                                            <div class="turnstileSettings">
+                                                <div class="ui divider"></div>
+                                                <b>Cloudflare Turnstile</b>
+                                                <div class="two fields" style="margin-top: 0.4em;">
+                                                    <div class="field"><label>Widget mode</label>
+                                                        <select data-cp="turnstileMode">
+                                                            <option value="">Managed (default)</option>
+                                                            <option value="managed">Managed</option>
+                                                            <option value="non-interactive">Non-interactive</option>
+                                                            <option value="invisible">Invisible</option>
+                                                        </select></div>
+                                                    <div class="field"><label>Appearance</label>
+                                                        <select data-cp="turnstileAppearance">
+                                                            <option value="">Always (default)</option>
+                                                            <option value="always">Always</option>
+                                                            <option value="execute">Execute (after the page starts it)</option>
+                                                            <option value="interaction-only">Interaction only</option>
+                                                        </select></div>
+                                                </div>
+                                                <small style="opacity:0.7;">The widget mode must match the widget type of your site key in the Cloudflare dashboard.</small>
+                                                <div class="two fields" style="margin-top: 0.6em;">
+                                                    <div class="field"><label>Widget theme</label>
+                                                        <select data-cp="turnstileTheme">
+                                                            <option value="">Auto (default)</option>
+                                                            <option value="light">Light</option>
+                                                            <option value="dark">Dark</option>
+                                                        </select></div>
+                                                    <div class="field"><label>Widget size</label>
+                                                        <select data-cp="turnstileSize">
+                                                            <option value="">Normal (default)</option>
+                                                            <option value="flexible">Flexible</option>
+                                                            <option value="compact">Compact</option>
+                                                        </select></div>
+                                                </div>
+                                                <div class="two fields">
+                                                    <div class="field"><label>Action (optional)</label>
+                                                        <input type="text" data-cp="turnstileAction" maxlength="32" placeholder="login"></div>
+                                                    <div class="field"><label>cData (optional)</label>
+                                                        <input type="text" data-cp="turnstileCData" maxlength="255" placeholder="my-endpoint"></div>
+                                                </div>
+                                                <small style="opacity:0.7;">When set, the siteverify answer must carry the same action / cData, otherwise the token is rejected. Letters, digits, - and _ only.</small>
+                                            </div>
+
+                                            <div class="recaptchaPageSettings">
+                                                <div class="ui divider"></div>
+                                                <b>Google reCAPTCHA</b>
+                                                <div class="ui checkbox recaptchaInvisibleBox" style="display:block; margin-top: 0.4em;">
+                                                    <input type="checkbox" data-cp="captchaRecaptchaInvisible">
+                                                    <label>v2: invisible badge instead of the checkbox (site key must be an invisible-type key)</label>
+                                                </div>
+                                                <div class="field recaptchaActionBox" style="margin-top: 0.6em;"><label>v3 action name</label>
+                                                    <input type="text" data-cp="captchaRecaptchaAction" maxlength="32" placeholder="access"></div>
+                                            </div>
+
+                                            <div class="ui divider"></div>
+                                            <div class="ui checkbox" style="display:block;">
+                                                <input type="checkbox" data-cp="captchaVerifyHostname">
+                                                <label>Reject tokens whose siteverify hostname differs from the requested host</label>
+                                            </div>
+
+                                            <div class="ui divider"></div>
+                                            <div class="field"><label>Custom HTML template (optional)</label>
+                                                <textarea data-cp="captchaCustomTemplate" rows="8" style="font-family: monospace; resize: vertical;" placeholder="Leave empty to use the built-in page. See DEVELOPMENT.md, Customising CAPTCHA pages."></textarea>
+                                                <small style="opacity:0.7;">A Go html/template (max 64 KiB), checked when you save. Put <code>nonce="{{.Nonce}}"</code> on inline scripts and styles, and include <code>{{template "zx_widget" .}}</code> and <code>{{template "zx_runtime" .}}</code>.</small>
+                                            </div>
+                                            <div class="ui basic small button cpLoadExample">Insert starter template</div>
+
+                                            <div class="ui divider"></div>
+                                            <b>Preview</b>
+                                            <small style="opacity:0.7;">uses the provider's test site key; nothing is verified</small><br>
+                                            <div class="ui small basic buttons" style="margin-top: 0.4em;">
+                                                <button type="button" class="ui button cpPreview" data-page="challenge">Challenge</button>
+                                                <button type="button" class="ui button cpPreview" data-page="failed">Verification failed</button>
+                                                <button type="button" class="ui button cpPreview" data-page="blocked">Blocked</button>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1143,6 +1289,180 @@
         });
     }
 
+
+    /* ---- CAPTCHA page customisation ---- */
+    const CAPTCHA_STARTER_TEMPLATE = `<!DOCTYPE html>
+<html lang="en" data-theme="{{.Theme}}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{.Title}}</title>
+<style nonce="{{.Nonce}}">
+  {{template "zx_css" .}}
+  .card { max-width: 32rem; margin: 6rem auto; padding: 2rem; text-align: center; }
+</style>
+</head>
+<body>
+  <div class="card">
+    {{if .LogoURL}}<img class="logo" src="{{.LogoURL}}" alt="" style="margin:0 auto 1rem">{{end}}
+    <h1>{{.Heading}}</h1>
+    <p>{{.Message}}</p>
+    {{template "zx_widget" .}}
+  </div>
+  {{template "zx_footer" .}}
+  {{template "zx_runtime" .}}
+</body>
+</html>
+`;
+
+    function collectCaptchaPageFields(editor){
+        let out = {};
+        editor.find(".captchaCustomise [data-cp]").each(function(){
+            let key = $(this).attr("data-cp");
+            if (this.type === "checkbox"){
+                out[key] = this.checked;
+            }else{
+                out[key] = $(this).val();
+            }
+        });
+        return out;
+    }
+
+    function populateCaptchaPageFields(editor, cfg){
+        cfg = cfg || {};
+        let b = cfg.Branding || {};
+        let t = cfg.Turnstile || {};
+        let values = {
+            captchaTitle: b.Title, captchaHeading: b.Heading, captchaMessage: b.Message, captchaNotice: b.Notice,
+            captchaVerifyingText: b.VerifyingText, captchaSuccessText: b.SuccessText, captchaFailedText: b.FailedText,
+            captchaErrorText: b.ErrorText, captchaRetryText: b.RetryText, captchaBlockedTitle: b.BlockedTitle,
+            captchaBlockedHeading: b.BlockedHeading, captchaBlockedMessage: b.BlockedMessage, captchaLogo: b.LogoURL,
+            captchaAccent: b.AccentColor, captchaBackground: b.BackgroundColor, captchaTheme: b.Theme,
+            captchaCustomTemplate: b.CustomTemplate,
+            turnstileMode: t.Mode, turnstileAppearance: t.Appearance, turnstileTheme: t.Theme, turnstileSize: t.Size,
+            turnstileAction: t.Action, turnstileCData: t.CData,
+            captchaRecaptchaAction: cfg.RecaptchaAction
+        };
+        let checks = {
+            captchaHideFooter: b.HideFooter, captchaRecaptchaInvisible: cfg.RecaptchaInvisible, captchaVerifyHostname: cfg.VerifyHostname
+        };
+        editor.find(".captchaCustomise [data-cp]").each(function(){
+            let key = $(this).attr("data-cp");
+            if (this.type === "checkbox"){
+                this.checked = !!checks[key];
+            }else{
+                $(this).val(values[key] || "");
+            }
+        });
+        if (b.AccentColor) editor.find(".cpAccent").val(b.AccentColor);
+        if (b.BackgroundColor) editor.find(".cpBackground").val(b.BackgroundColor);
+        updateCaptchaLogoInfo(editor);
+    }
+
+    function updateCaptchaLogoInfo(editor){
+        let v = editor.find(".cpLogo").val() || "";
+        if (v.startsWith("data:")){
+            editor.find(".cpLogoInfo").text("Uploaded image (" + Math.round(v.length * 0.75 / 1024) + " KiB)");
+        }else{
+            editor.find(".cpLogoInfo").text("HTTPS URL, or upload a PNG / JPEG / GIF / WebP image (max 256 KiB). SVG is not accepted.");
+        }
+        editor.find(".cpLogoClear").toggle(v !== "");
+    }
+
+    function updateCaptchaProviderSections(editor){
+        let provider = editor.find(".captchaProviderDropdown").dropdown("get value");
+        let version = editor.find(".recaptchaVersionDropdown").dropdown("get value");
+        editor.find(".turnstileSettings").toggle(provider != "1");
+        editor.find(".recaptchaPageSettings").toggle(provider == "1");
+        editor.find(".recaptchaInvisibleBox").toggle(version != "v3");
+        editor.find(".recaptchaActionBox").toggle(version == "v3");
+    }
+
+    // Render the unsaved config in a modal. The server answers with a real page
+    // (with its CSP header), so a hidden form is posted into the iframe.
+    function previewCaptchaPage(editor, page){
+        let modal = $("#captchaPreviewModal");
+        if (modal.length == 0){
+            $("body").append(`<div class="ui large modal" id="captchaPreviewModal">
+                <div class="header">CAPTCHA page preview <small style="opacity:0.6">(test site key, nothing is verified)</small></div>
+                <div class="content" style="padding:0;"><iframe name="captchaPreviewFrame" style="width:100%; height:70vh; border:0;"></iframe></div>
+                <div class="actions"><div class="ui cancel button">Close</div></div></div>
+                <form id="captchaPreviewForm" method="POST" action="/api/proxy/captcha/preview" target="captchaPreviewFrame" style="display:none;"></form>`);
+            modal = $("#captchaPreviewModal");
+        }
+        let form = $("#captchaPreviewForm");
+        form.empty();
+        let fields = collectCaptchaPageFields(editor);
+        fields.page = page;
+        fields.captchaProvider = editor.find(".captchaProviderDropdown").dropdown("get value");
+        fields.captchaRecaptchaVersion = editor.find(".recaptchaVersionDropdown").dropdown("get value");
+        fields.domain = editor.data("cpDomain") || "";
+        let csrf = document.getElementsByTagName("meta")["zoraxy.csrf.Token"];
+        if (csrf){
+            fields["gorilla.csrf.Token"] = csrf.getAttribute("content");
+        }
+        Object.keys(fields).forEach(function(k){
+            let v = fields[k];
+            if (v === true) v = "true";
+            if (v === false) v = "";
+            $("<input type='hidden'>").attr("name", k).val(v).appendTo(form);
+        });
+        modal.modal({ autofocus: false }).modal("show");
+        form[0].submit();
+    }
+
+    function bindCaptchaPageEditor(editor, uuid){
+        editor.find(".captchaCustomise").accordion();
+        updateCaptchaProviderSections(editor);
+        editor.find(".captchaProviderDropdown input[type='hidden'], .recaptchaVersionDropdown input[type='hidden']").off("change.cp").on("change.cp", function(){
+            updateCaptchaProviderSections(editor);
+        });
+        editor.find(".captchaCustomise [data-cp]").off("change.cp").on("change.cp", function(){
+            saveProxyInlineEdit(uuid);
+        });
+        editor.find(".cpAccent").off("input.cp").on("input.cp", function(){
+            editor.find("[data-cp='captchaAccent']").val($(this).val()).trigger("change");
+        });
+        editor.find(".cpBackground").off("input.cp").on("input.cp", function(){
+            editor.find("[data-cp='captchaBackground']").val($(this).val()).trigger("change");
+        });
+        editor.find(".cpResetColors").off("click.cp").on("click.cp", function(){
+            editor.find("[data-cp='captchaAccent'], [data-cp='captchaBackground']").val("");
+            editor.find(".cpAccent").val("#2c7cb0");
+            editor.find(".cpBackground").val("#ffffff");
+            saveProxyInlineEdit(uuid);
+        });
+        editor.find(".cpLogo").off("input.cp").on("input.cp", function(){ updateCaptchaLogoInfo(editor); });
+        editor.find(".cpLogoClear").off("click.cp").on("click.cp", function(){
+            editor.find(".cpLogo").val("").trigger("change");
+            editor.find(".cpLogoFile").val("");
+            updateCaptchaLogoInfo(editor);
+        });
+        editor.find(".cpLogoFile").off("change.cp").on("change.cp", function(){
+            let file = this.files[0];
+            if (!file) return;
+            if (file.size > 256 * 1024){
+                msgbox("Logo is too large (max 256 KiB)", false, 5000);
+                this.value = "";
+                return;
+            }
+            let reader = new FileReader();
+            reader.onload = function(){
+                editor.find(".cpLogo").val(reader.result).trigger("change");
+                updateCaptchaLogoInfo(editor);
+            };
+            reader.readAsDataURL(file);
+        });
+        editor.find(".cpLoadExample").off("click.cp").on("click.cp", function(){
+            let ta = editor.find("[data-cp='captchaCustomTemplate']");
+            if (ta.val().trim() !== "" && !confirm("Replace the current custom template?")) return;
+            ta.val(CAPTCHA_STARTER_TEMPLATE).trigger("change");
+        });
+        editor.find(".cpPreview").off("click.cp").on("click.cp", function(){
+            previewCaptchaPage(editor, $(this).attr("data-page"));
+        });
+    }
+
     function saveProxyInlineEdit(uuid){
         let editor = $("#httprpEditModal");
         
@@ -1178,6 +1498,7 @@
         let captchaRecaptchaVersion = $(editor).find(".recaptchaVersionDropdown").dropdown("get value");
         let captchaRecaptchaScore = $(editor).find(".RecaptchaScore").val();
         let captchaPathPrefixes = $(editor).find(".CaptchaPathPrefixes").val();
+        let captchaPageFields = collectCaptchaPageFields($(editor));
 
         let tags = getTagsArrayFromEndpoint(uuid);
         if (tags.length > 0){
@@ -1219,6 +1540,7 @@
                 "captchaPathPrefixes": captchaPathPrefixes,
                 "tags": tags,
             };
+        Object.assign(cfgPayload, captchaPageFields);
         console.log("updating proxy config:", cfgPayload);
 
         $.cjax({
@@ -2070,6 +2392,10 @@
                 saveProxyInlineEdit(uuid);
             }
         });
+
+        editor.data("cpDomain", subd.RootOrMatchingDomain);
+        populateCaptchaPageFields(editor, subd.CaptchaConfig);
+        bindCaptchaPageEditor(editor, uuid);
 
         // Bind CAPTCHA checkbox change event
         editor.find(".RequireCaptcha").off("change").on("change", function() {

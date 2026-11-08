@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+{{- /*
+  Everything hand written: no built-in stylesheet. Only the hooks the runtime
+  needs are kept: {{template "zx_widget" .}} (provides #zx-widget, #status,
+  #retry and #zx-loader) and {{template "zx_runtime" .}}. Branches on
+  .Provider to show provider specific text.
+*/ -}}
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{.Title}}</title>
+<style nonce="{{.Nonce}}">
+  body { font-family: Georgia, serif; background: {{if .Background}}{{.Background}}{{else}}#faf7f0{{end}}; color: #222; margin: 0; }
+  main { max-width: 34rem; margin: 5rem auto; padding: 0 1.5rem; }
+  h1 { font-weight: normal; border-bottom: 2px solid {{.Accent}}; padding-bottom: .4rem; }
+  #status { margin-top: 1rem; padding: .8rem; border-left: 4px solid {{.Accent}}; background: #fff; }
+  #status[hidden], #retry[hidden], .loader[hidden] { display: none; }
+  .error { border-color: #b00020 !important; }
+  .success { border-color: #1b7f3b !important; }
+  .loader { width: 28px; height: 28px; border: 3px solid #ddd; border-top-color: {{.Accent}}; border-radius: 50%; animation: s 1s linear infinite; }
+  @keyframes s { to { transform: rotate(360deg); } }
+  button { margin-top: 1rem; padding: .5rem 1.2rem; background: {{.Accent}}; color: #fff; border: 0; cursor: pointer; }
+</style>
+</head>
+<body>
+<main>
+  <h1>{{.Heading}}</h1>
+  <p>{{.Message}}</p>
+  {{if eq .Provider "recaptcha_v3"}}<p><em>This check runs automatically.</em></p>{{end}}
+  {{template "zx_widget" .}}
+  <p><small>{{.Notice}} ({{.Domain}})</small></p>
+</main>
+{{template "zx_runtime" .}}
+</body>
+</html>
