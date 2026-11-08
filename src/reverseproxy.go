@@ -733,6 +733,13 @@ func ReverseProxyHandleAddEndpoint(w http.ResponseWriter, r *http.Request) {
 			EnableTimeoutRefreshOnActivity: enableTimeoutRefreshOnActivity,
 		}
 
+		if tplName, _ := utils.PostPara(r, "template"); strings.TrimSpace(tplName) != "" {
+			if err := applyRuleTemplateByName(&thisProxyEndpoint, strings.TrimSpace(tplName)); err != nil {
+				utils.SendErrorResponse(w, err.Error())
+				return
+			}
+		}
+
 		preparedEndpoint, err := dynamicProxyRouter.PrepareProxyRoute(&thisProxyEndpoint)
 		if err != nil {
 			utils.SendErrorResponse(w, "unable to prepare proxy route to target endpoint: "+err.Error())

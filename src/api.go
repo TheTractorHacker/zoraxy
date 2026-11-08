@@ -464,6 +464,7 @@ func initAPIs(targetMux *http.ServeMux) {
 	RegisterAuthAPIs(requireAuth, targetMux)
 	RegisterHTTPProxyAPIs(authRouter)
 	RegisterWAFAPIs(authRouter)
+	RegisterBulkAPIs(authRouter)
 	RegisterNetworkingAPIs(authRouter)
 	RegisterOpsAPIs(authRouter)
 	RegisterTLSAPIs(authRouter)
