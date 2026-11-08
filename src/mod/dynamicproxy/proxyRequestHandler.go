@@ -251,6 +251,9 @@ func (h *ProxyHandler) hostRequest(w http.ResponseWriter, r *http.Request, targe
 		panic(http.ErrAbortHandler)
 	}
 	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			h.Parent.logUpstreamFailure(reqHostname, upstreamHostname, err)
+		}
 		if errors.As(err, &dnsError) {
 			serveProxyRequestError(w, 404, h.Parent, ErrorTemplateHostError)
 			h.Parent.logRequest(r, false, 404, "host-http", reqHostname, upstreamHostname, target)
@@ -410,6 +413,9 @@ func (h *ProxyHandler) vdirRequest(w http.ResponseWriter, r *http.Request, targe
 		panic(http.ErrAbortHandler)
 	}
 	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			h.Parent.logUpstreamFailure(reqHostname, target.Domain, err)
+		}
 		if errors.As(err, &dnsError) {
 			serveProxyRequestError(w, 404, h.Parent, ErrorTemplateHostError)
 			//log.Println(err.Error())
