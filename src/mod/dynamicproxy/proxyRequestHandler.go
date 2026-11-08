@@ -160,8 +160,16 @@ func (h *ProxyHandler) hostRequest(w http.ResponseWriter, r *http.Request, targe
 	reqHostname := r.Host
 
 	/* Load balancing */
-	selectedUpstream, err := h.Parent.loadBalancer.GetRequestUpstreamTarget(w, r, target.ActiveOrigins, target.UseStickySession, target.DisableAutoFallback)
+	selectOptions := h.Parent.newSelectOptions(r, target)
+	selectedUpstream, err := h.Parent.loadBalancer.SelectUpstream(w, r, target.ActiveOrigins, selectOptions)
 	if err != nil {
+		if errors.Is(err, loadbalance.ErrUpstreamsBusy) {
+			//Every upstream reached its max concurrent requests
+			w.Header().Set("Retry-After", "1")
+			http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
+			h.Parent.logRequest(r, false, http.StatusServiceUnavailable, "host-http", r.Host, "", target)
+			return
+		}
 		serveProxyRequestError(w, 521, h.Parent, ErrorTemplateRPError)
 		h.Parent.Option.Logger.PrintAndLog("proxy", "Failed to assign an upstream for this request", err)
 		h.Parent.logRequest(r, false, 521, "subdomain-http", r.URL.Hostname(), r.Host, target)
@@ -203,26 +211,31 @@ func (h *ProxyHandler) hostRequest(w http.ResponseWriter, r *http.Request, targe
 		PermissionPolicy:             headerRewriteOptions.PermissionPolicy,
 	})
 
-	//Handle the request reverse proxy
-	statusCode, err := selectedUpstream.ServeHTTP(w, r, &dpcore.ResponseRewriteRuleSet{
-		ProxyDomain:                    selectedUpstream.OriginIpOrDomain,
-		OriginalHost:                   reqHostname,
-		UseTLS:                         selectedUpstream.RequireTLS,
-		NoCache:                        h.Parent.Option.NoCache,
-		PathPrefix:                     "",
-		UpstreamHeaders:                upstreamHeaders,
-		DownstreamHeaders:              downstreamHeaders,
-		DisableChunkedTransferEncoding: target.DisableChunkedTransferEncoding,
-		ForceHTTP11:                    target.ForceHTTP11,
-		NoRemoveUserAgentHeader:        headerRewriteOptions.DisableUserAgentHeaderRemoval,
-		HostHeaderOverwrite:            headerRewriteOptions.RequestHostOverwrite,
-		NoRemoveHopByHop:               headerRewriteOptions.DisableHopByHopHeaderRemoval,
-		AllowConnect:                   target.EnableConnectSupport,
-		AllowUpgrade:                   target.EnableUpgradeForwarding,
-		Version:                        target.parent.Option.HostVersion,
-		DevelopmentMode:                target.parent.Option.DevelopmentMode,
-		AltSvc:                         h.Parent.getAltSvcValue(),
-	})
+	//Handle the request reverse proxy. Retries (if enabled for this endpoint) re-run this on another upstream
+	serveUpstream := func(w http.ResponseWriter, r *http.Request, upstream *loadbalance.Upstream) (int, error) {
+		return upstream.ServeHTTP(w, r, &dpcore.ResponseRewriteRuleSet{
+			ProxyDomain:                    upstream.OriginIpOrDomain,
+			OriginalHost:                   reqHostname,
+			UseTLS:                         upstream.RequireTLS,
+			NoCache:                        h.Parent.Option.NoCache,
+			PathPrefix:                     "",
+			UpstreamHeaders:                upstreamHeaders,
+			DownstreamHeaders:              downstreamHeaders,
+			DisableChunkedTransferEncoding: target.DisableChunkedTransferEncoding,
+			ForceHTTP11:                    target.ForceHTTP11,
+			NoRemoveUserAgentHeader:        headerRewriteOptions.DisableUserAgentHeaderRemoval,
+			HostHeaderOverwrite:            headerRewriteOptions.RequestHostOverwrite,
+			NoRemoveHopByHop:               headerRewriteOptions.DisableHopByHopHeaderRemoval,
+			AllowConnect:                   target.EnableConnectSupport,
+			AllowUpgrade:                   target.EnableUpgradeForwarding,
+			Version:                        target.parent.Option.HostVersion,
+			DevelopmentMode:                target.parent.Option.DevelopmentMode,
+			AltSvc:                         h.Parent.getAltSvcValue(),
+		})
+	}
+	result := h.Parent.loadBalancer.ServeWithRetry(w, r, target.ActiveOrigins, selectedUpstream, selectOptions, serveUpstream)
+	statusCode, err := result.Status, result.Err
+	selectedUpstream = result.Upstream
 
 	//validate the error
 	var dnsError *net.DNSError
@@ -366,7 +379,7 @@ func (h *ProxyHandler) vdirRequest(w http.ResponseWriter, r *http.Request, targe
 		NoRemoveHopByHop:               headerRewriteOptions.DisableHopByHopHeaderRemoval,
 		AllowUpgrade:                   target.parent.EnableUpgradeForwarding,
 		Version:                        target.parent.parent.Option.HostVersion,
-		DevelopmentMode:                 target.parent.parent.Option.DevelopmentMode,
+		DevelopmentMode:                target.parent.parent.Option.DevelopmentMode,
 		AltSvc:                         h.Parent.getAltSvcValue(),
 	})
 

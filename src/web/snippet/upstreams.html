@@ -78,6 +78,7 @@
             <div class="ui small pointing secondary menu">
                 <a class="item active narrowpadding" data-tab="upstreamlist">Upstreams</a>
                 <a class="item narrowpadding" data-tab="newupstream">Add Upstream</a>
+                <a class="item narrowpadding" data-tab="loadbalance">Load Balancing</a>
             </div>
             <div class="ui tab basic segment active" data-tab="upstreamlist">
                 <!-- A list of current existing upstream on this reverse proxy-->
@@ -87,7 +88,8 @@
                     </div>
                 </div>
                 <div class="ui message">
-                    <i class="ui blue info circle icon"></i> Weighted random will be used for load-balancing. Set weight to 0 for fallback only.
+                    <i class="ui blue info circle icon"></i> <span id="algorithmSummary">Weighted random</span> is used for load-balancing. Set weight to 0 for fallback only.
+                    Status is refreshed every 5 seconds. Change the algorithm, health checks and retries in the <b>Load Balancing</b> tab.
                  </div>
             </div>
             <div class="ui tab basic segment" data-tab="newupstream">
@@ -152,6 +154,91 @@
                 <br><br>
                 <button class="ui basic button" onclick="addNewUpstream();"><i class="ui green circle add icon"></i> Create</button>
             </div>
+            <div class="ui tab basic segment" data-tab="loadbalance">
+                <h4 class="ui header">
+                    <i class="blue balance scale icon"></i>
+                    <div class="content">
+                        Load Balancing
+                        <div class="sub header">Applies to all upstreams of this proxy rule. Unchanged defaults keep the classic weighted random behavior.</div>
+                    </div>
+                </h4>
+                <p style="margin-bottom: 0.4em;">Algorithm</p>
+                <select class="ui fluid dropdown" id="lbAlgorithm" onchange="updateLbFieldVisibility();">
+                    <option value="random">Weighted random (default)</option>
+                    <option value="round_robin">Round robin</option>
+                    <option value="weighted_round_robin">Weighted round robin (smooth)</option>
+                    <option value="least_connections">Least connections</option>
+                    <option value="least_response_time">Least response time</option>
+                    <option value="power_of_two_choices">Power of two choices</option>
+                    <option value="ip_hash">IP hash (client IP stays on one upstream)</option>
+                    <option value="header_hash">Header hash (consistent)</option>
+                    <option value="cookie_hash">Cookie hash (consistent)</option>
+                </select>
+                <small id="lbAlgorithmHint" style="display:block; margin-top:0.4em;"></small>
+                <div id="lbHashKeyField" style="display:none; margin-top: 0.8em;">
+                    <p style="margin-bottom: 0.4em;">Header or cookie name</p>
+                    <div class="ui small fluid input"><input type="text" id="lbHashKey" placeholder="e.g. X-Tenant-Id or session_id"></div>
+                    <small>Requests without this header / cookie are spread randomly. Adding or removing an upstream only moves a small share of the keys.</small>
+                </div>
+                <div class="ui message" style="margin-top:1em;">
+                    <small>Sticky sessions (if enabled on the rule) always take precedence. Upstreams with weight 0 are only used when no other upstream is available.</small>
+                </div>
+
+                <div class="ui divider"></div>
+                <div class="ui checkbox"><input type="checkbox" id="lbActiveEnabled" onchange="updateLbFieldVisibility();">
+                    <label>Active health checks<br><small>Zoraxy probes every upstream in the background and stops sending traffic to failing ones</small></label></div>
+                <div id="lbActiveFields" style="display:none; margin-top:0.8em;" class="ui form">
+                    <div class="two fields">
+                        <div class="field"><label>Mode</label>
+                            <select class="ui dropdown" id="lbAhcMode"><option value="http">HTTP request</option><option value="tcp">TCP connect only</option></select></div>
+                        <div class="field"><label>Method</label>
+                            <select class="ui dropdown" id="lbAhcMethod"><option>GET</option><option>HEAD</option><option>OPTIONS</option></select></div>
+                    </div>
+                    <div class="field"><label>Path</label><input type="text" id="lbAhcPath" placeholder="/"><small>Sent to every upstream, e.g. /healthz. TLS settings of the upstream are used.</small></div>
+                    <div class="three fields">
+                        <div class="field"><label>Interval (s)</label><input type="number" min="1" id="lbAhcInterval" placeholder="10"></div>
+                        <div class="field"><label>Timeout (s)</label><input type="number" min="1" id="lbAhcTimeout" placeholder="5"></div>
+                        <div class="field"><label>Expected status</label>
+                            <div class="two fields" style="margin:0;"><input type="number" id="lbAhcStatusMin" placeholder="200" style="width:50%;"><input type="number" id="lbAhcStatusMax" placeholder="399" style="width:50%;"></div></div>
+                    </div>
+                    <div class="field"><label>Response must contain (optional)</label><input type="text" id="lbAhcBody"></div>
+                    <div class="two fields">
+                        <div class="field"><label>Healthy after (rise)</label><input type="number" min="1" id="lbAhcRise" placeholder="2"><small>consecutive successes</small></div>
+                        <div class="field"><label>Unhealthy after (fall)</label><input type="number" min="1" id="lbAhcFall" placeholder="3"><small>consecutive failures</small></div>
+                    </div>
+                </div>
+
+                <div class="ui divider"></div>
+                <div class="ui checkbox"><input type="checkbox" id="lbPassiveEnabled" onchange="updateLbFieldVisibility();">
+                    <label>Passive health checks<br><small>Temporarily remove an upstream that fails real requests (connection errors, timeouts, bad gateway)</small></label></div>
+                <div id="lbPassiveFields" style="display:none; margin-top:0.8em;" class="ui form">
+                    <div class="two fields">
+                        <div class="field"><label>Eject after failures</label><input type="number" min="1" id="lbPhcThreshold" placeholder="3"><small>consecutive</small></div>
+                        <div class="field"><label>Cooldown (s)</label><input type="number" min="1" id="lbPhcCooldown" placeholder="30"></div>
+                    </div>
+                    <div class="field"><label>Response codes counted as failure</label><input type="text" id="lbPhcStatuses" placeholder="502,503,504"></div>
+                </div>
+
+                <div id="lbSlowStartField" style="display:none; margin-top:1em;" class="ui form">
+                    <div class="field"><label>Slow start (s)</label><input type="number" min="0" id="lbSlowStart" placeholder="30">
+                        <small>A recovered upstream gets its traffic share back gradually over this time. 0 = immediately.</small></div>
+                </div>
+
+                <div class="ui divider"></div>
+                <div class="ui checkbox"><input type="checkbox" id="lbRetryEnabled" onchange="updateLbFieldVisibility();">
+                    <label>Retry on another upstream<br><small>Only when nothing was sent to the client yet. GET, HEAD and OPTIONS only unless you add methods below.</small></label></div>
+                <div id="lbRetryFields" style="display:none; margin-top:0.8em;" class="ui form">
+                    <div class="two fields">
+                        <div class="field"><label>Max retries</label><input type="number" min="1" max="10" id="lbRetryMax" placeholder="1"></div>
+                        <div class="field"><label>Max buffered body (KB)</label><input type="number" min="1" id="lbRetryBody" placeholder="1024"><small>Larger or streamed bodies are never retried</small></div>
+                    </div>
+                    <div class="field"><label>Also retry on response codes</label><input type="text" id="lbRetryStatuses" placeholder="e.g. 502,503"><small>Empty = only connection errors and timeouts</small></div>
+                    <div class="field"><label>Also retry these methods</label><input type="text" id="lbRetryMethods" placeholder="e.g. POST"><small>Only enable for requests that are safe to run twice</small></div>
+                </div>
+
+                <br><br>
+                <button class="ui basic button" onclick="saveLoadBalanceSettings();"><i class="ui green save icon"></i> Save</button>
+            </div>
         </div>
         <br><br><br><br>
 
@@ -159,6 +246,7 @@
         <script>
             let origins = [];
             let editingEndpoint = {};
+            let upstreamStates = {};
             $('.menu .item').tab();
            
 
@@ -176,6 +264,7 @@
                             alert(data.error);
                             return;
                         }else{
+                            upstreamStates = data.States || {};
                             $("#upstreamTable").html("");
 
                             if (data.ActiveOrigins.length == 0){
@@ -263,7 +352,8 @@
                         </div>
                         <div class="content">
                         <a href="${url}" target="_blank" class="upstreamLink">${upstream.OriginIpOrDomain} ${tlsIcon}</a>
-                            <div class="sub header">${isActive?(upstream.Weight==0?"Fallback Only":"Active"):"Inactive"} | Weight: ${upstream.Weight}x </div>
+                            <div class="sub header">${isActive?(upstream.Weight==0?"Fallback Only":"Active"):"Inactive"} | Weight: ${upstream.Weight}x
+                                ${isActive?` | <span class="upstreamState" data-origin="${encodeURIComponent(upstream.OriginIpOrDomain)}">${renderUpstreamStateHTML(upstreamStates[upstream.OriginIpOrDomain])}</span>`:""}</div>
                         </div>
                     </h4>
                     <div class="advanceOptions" style="display:none;">
@@ -311,6 +401,15 @@
                                     </div>
                                 </div>
                                 <small>Maximum waiting time before Zoraxy receive server header response, set to 0 for default</small>
+                                <p style="margin-top: 0.6em;">Max In-flight Requests</p>
+                                <div class="ui mini fluid input" style="margin-top: -0.6em;">
+                                    <input type="number" min="0" class="maxInFlight" value="${upstream.MaxInFlight || 0}">
+                                </div>
+                                <small>Stop sending new requests to this upstream while this many are being served (clients get 503 if all upstreams are full). 0 = unlimited.</small>
+                                <div class="ui checkbox" style="margin-top: 0.8em;">
+                                    <input type="checkbox" class="drainingCheckbox" ${upstream.Draining?"checked":""}>
+                                    <label>Draining<br><small>Receive no new requests or sticky sessions. Requests in flight finish normally. Use before maintenance.</small></label>
+                                </div>
                                 
                             </div>
                         </div>
@@ -446,6 +545,9 @@
                 originalSettings.SkipWebSocketOriginCheck = skipWebSocketOriginCheck;
                 originalSettings.MaxConn = parseInt(maxConn);
                 originalSettings.RespTimeout = respTimeout;
+                let maxInFlight = parseInt($(upstream).find(".maxInFlight").val());
+                originalSettings.MaxInFlight = (isNaN(maxInFlight) || maxInFlight < 0) ? 0 : maxInFlight;
+                originalSettings.Draining = $(upstream).find(".drainingCheckbox")[0].checked;
 
                 //console.log(originalSettings);
                 return originalSettings;
@@ -603,6 +705,176 @@
                 })
             }
 
+            /* Live upstream state */
+            function renderUpstreamStateHTML(st){
+                if (st == undefined){
+                    return `<span style="opacity:0.6;">no data</span>`;
+                }
+                let colors = {healthy: "green", unhealthy: "red", ejected: "red", draining: "orange", slow_start: "yellow"};
+                let labels = {healthy: "Healthy", unhealthy: "Unhealthy", ejected: "Ejected", draining: "Draining", slow_start: "Slow start"};
+                let color = colors[st.State] || "grey";
+                let extra = [];
+                if (st.State == "slow_start"){
+                    extra.push(Math.round(st.SlowStartFactor * 100) + "% weight");
+                }
+                if (st.State == "ejected" && st.EjectedUntil > 0){
+                    extra.push("back in " + Math.max(0, st.EjectedUntil - Math.floor(Date.now()/1000)) + "s");
+                }
+                if (st.State == "unhealthy" && st.LastCheckError){
+                    extra.push(st.LastCheckError);
+                }
+                let detail = extra.length ? ` (${$("<div>").text(extra[0]).html()})` : "";
+                let ewma = st.EWMAMillis > 0 ? ` | ${st.EWMAMillis.toFixed(st.EWMAMillis < 10 ? 1 : 0)} ms` : "";
+                return `<span class="ui ${color} empty circular label"></span> ${labels[st.State] || st.State}${detail} | ${st.InFlight} in flight${ewma}`;
+            }
+
+            //Refresh the state badges without rebuilding the list (keeps edit mode intact)
+            function refreshUpstreamStates(){
+                if (document.hidden || editingEndpoint.ep == undefined){
+                    return;
+                }
+                $.ajax({
+                    url: "/api/proxy/upstream/list",
+                    method: "GET",
+                    data: {"ep": editingEndpoint.ep},
+                    success: function(data){
+                        if (data.error != undefined || data.States == undefined){
+                            return;
+                        }
+                        upstreamStates = data.States;
+                        $(".upstreamState").each(function(){
+                            let origin = decodeURIComponent($(this).attr("data-origin"));
+                            $(this).html(renderUpstreamStateHTML(upstreamStates[origin]));
+                        });
+                    }
+                });
+            }
+            setInterval(refreshUpstreamStates, 5000);
+
+            /* Load balancing settings tab */
+            const algorithmHints = {
+                random: "Picks an upstream at random, proportional to its weight.",
+                round_robin: "Rotates through the upstreams in order.",
+                weighted_round_robin: "Rotates in order, but upstreams with a higher weight come up more often, evenly spread out.",
+                least_connections: "Sends the request to the upstream with the fewest requests in progress (relative to its weight). Good for long running requests.",
+                least_response_time: "Prefers the upstream that answers fastest (moving average of time to first byte) and is the least busy.",
+                power_of_two_choices: "Picks two random upstreams and uses the less busy one. Cheap and balances well.",
+                ip_hash: "The same client IP always reaches the same upstream, without cookies.",
+                header_hash: "Requests with the same value in a header always reach the same upstream.",
+                cookie_hash: "Requests with the same cookie value always reach the same upstream."
+            };
+
+            function updateLbFieldVisibility(){
+                let algo = $("#lbAlgorithm").val();
+                $("#lbAlgorithmHint").text(algorithmHints[algo] || "");
+                $("#lbHashKeyField").toggle(algo == "header_hash" || algo == "cookie_hash");
+                $("#lbActiveFields").toggle($("#lbActiveEnabled")[0].checked);
+                $("#lbPassiveFields").toggle($("#lbPassiveEnabled")[0].checked);
+                $("#lbRetryFields").toggle($("#lbRetryEnabled")[0].checked);
+                $("#lbSlowStartField").toggle($("#lbActiveEnabled")[0].checked || $("#lbPassiveEnabled")[0].checked);
+                $("#algorithmSummary").text($("#lbAlgorithm option:selected").text().replace(/ \(.*\)/, ""));
+            }
+
+            function loadLoadBalanceSettings(){
+                $.ajax({
+                    url: "/api/proxy/upstream/lb/get",
+                    method: "GET",
+                    data: {"ep": editingEndpoint.ep},
+                    success: function(data){
+                        if (data.error != undefined){
+                            parent.msgbox(data.error, false);
+                            return;
+                        }
+                        $("#lbAlgorithm").val(data.Algorithm);
+                        $("#lbHashKey").val(data.HashKey);
+                        let a = data.ActiveHealthCheck;
+                        $("#lbActiveEnabled").prop("checked", a.Enabled);
+                        $("#lbAhcMode").val(a.Mode);
+                        $("#lbAhcMethod").val(a.Method);
+                        $("#lbAhcPath").val(a.Path);
+                        $("#lbAhcInterval").val(a.IntervalSeconds);
+                        $("#lbAhcTimeout").val(a.TimeoutSeconds);
+                        $("#lbAhcStatusMin").val(a.ExpectedStatusMin);
+                        $("#lbAhcStatusMax").val(a.ExpectedStatusMax);
+                        $("#lbAhcBody").val(a.BodyContains);
+                        $("#lbAhcRise").val(a.Rise);
+                        $("#lbAhcFall").val(a.Fall);
+                        let p = data.PassiveHealthCheck;
+                        $("#lbPassiveEnabled").prop("checked", p.Enabled);
+                        $("#lbPhcThreshold").val(p.FailThreshold);
+                        $("#lbPhcCooldown").val(p.CooldownSeconds);
+                        $("#lbPhcStatuses").val(p.FailureStatuses.join(","));
+                        $("#lbSlowStart").val(data.SlowStartSeconds);
+                        let r = data.Retry;
+                        $("#lbRetryEnabled").prop("checked", r.Enabled);
+                        $("#lbRetryMax").val(r.MaxRetries);
+                        $("#lbRetryBody").val(r.MaxBodyKB);
+                        $("#lbRetryStatuses").val(r.RetryStatuses.join(","));
+                        $("#lbRetryMethods").val(r.ExtraMethods.join(","));
+                        updateLbFieldVisibility();
+                    }
+                });
+            }
+
+            function parseIntList(text){
+                return text.split(",").map(x => parseInt(x.trim())).filter(x => !isNaN(x));
+            }
+
+            function intOr(selector, fallback){
+                let v = parseInt($(selector).val());
+                return isNaN(v) ? fallback : v;
+            }
+
+            function saveLoadBalanceSettings(){
+                let cfg = {
+                    Algorithm: $("#lbAlgorithm").val(),
+                    HashKey: $("#lbHashKey").val().trim(),
+                    SlowStartSeconds: intOr("#lbSlowStart", 0),
+                    ActiveHealthCheck: {
+                        Enabled: $("#lbActiveEnabled")[0].checked,
+                        Mode: $("#lbAhcMode").val(),
+                        Method: $("#lbAhcMethod").val(),
+                        Path: $("#lbAhcPath").val().trim() || "/",
+                        IntervalSeconds: intOr("#lbAhcInterval", 10),
+                        TimeoutSeconds: intOr("#lbAhcTimeout", 5),
+                        ExpectedStatusMin: intOr("#lbAhcStatusMin", 200),
+                        ExpectedStatusMax: intOr("#lbAhcStatusMax", 399),
+                        BodyContains: $("#lbAhcBody").val(),
+                        Rise: intOr("#lbAhcRise", 2),
+                        Fall: intOr("#lbAhcFall", 3)
+                    },
+                    PassiveHealthCheck: {
+                        Enabled: $("#lbPassiveEnabled")[0].checked,
+                        FailThreshold: intOr("#lbPhcThreshold", 3),
+                        CooldownSeconds: intOr("#lbPhcCooldown", 30),
+                        FailureStatuses: parseIntList($("#lbPhcStatuses").val())
+                    },
+                    Retry: {
+                        Enabled: $("#lbRetryEnabled")[0].checked,
+                        MaxRetries: intOr("#lbRetryMax", 1),
+                        MaxBodyKB: intOr("#lbRetryBody", 1024),
+                        RetryStatuses: parseIntList($("#lbRetryStatuses").val()),
+                        ExtraMethods: $("#lbRetryMethods").val().split(",").map(x => x.trim().toUpperCase()).filter(x => x != "")
+                    }
+                };
+                $.cjax({
+                    url: "/api/proxy/upstream/lb/set",
+                    method: "POST",
+                    data: {
+                        ep: editingEndpoint.ep,
+                        payload: JSON.stringify(cfg)
+                    },
+                    success: function(data){
+                        if (data.error != undefined){
+                            parent.msgbox(data.error, false);
+                        }else{
+                            parent.msgbox("Load balancing settings saved");
+                            loadLoadBalanceSettings();
+                        }
+                    }
+                });
+            }
+
             if (window.location.hash.length > 1){
                 let payloadHash = window.location.hash.substr(1);
                 try{
@@ -610,6 +882,7 @@
                     $(".epname").text(payloadHash.ep);
                     editingEndpoint = payloadHash;
                     initOriginList();
+                    loadLoadBalanceSettings();
                 }catch(ex){
                     console.log("Unable to load endpoint data from hash")
                 }

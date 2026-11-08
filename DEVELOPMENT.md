@@ -144,3 +144,31 @@ Details:
 Example: `./zoraxy -port=:8000 -webui_tls=auto`
 
 Implementation: `src/mod/webuitls`.
+
+## Load balancing and health checks
+
+All of it lives in `src/mod/dynamicproxy/loadbalance` and is driven by one optional per-endpoint object,
+`ProxyEndpoint.LoadBalanceConfig` (`nil` in every config written before this feature = weighted random, no
+checks, no retries, exactly the old behaviour).
+
+- **Selection** (`originPicker.go`, `algorithms.go`, `hashring.go`): `SelectUpstream` filters candidates
+  (uptime monitor, draining, `MaxInFlight`, active/passive health; if health would remove everything the
+  endpoint fails open) and then applies the algorithm. Sticky sessions are checked first. Weight 0 is fallback only
+  for every algorithm. Hash algorithms use a consistent ring with virtual nodes.
+- **Per upstream state** (`state.go`): in-flight counter, EWMA of time to first byte, passive ejection with
+  cooldown and slow start, active rise/fall state. Memory only, never serialized. All time dependent code takes a
+  `now` value so tests use a fake clock (`RouteManager.Now`).
+- **Active checks** (`healthcheck.go`): one goroutine per checked upstream, grouped per endpoint and owned by the
+  `RouteManager`. The router syncs them in `lbglue.go` (start with the router, stop on `StopProxyService`, follow
+  endpoint updates and removal). New code that stores or removes an endpoint must go through `UpdateToRuntime` /
+  `Remove` so the goroutines follow.
+- **Retries** (`retry.go`): `ServeWithRetry` wraps the client `ResponseWriter` in a gate so a failed attempt can be
+  discarded while nothing was sent. Request bodies are only replayed if empty or fully buffered up front (known
+  length, under `MaxBodyKB`); non-idempotent methods retry only when listed in `ExtraMethods`.
+- **Config fields** (all optional): `LoadBalanceConfig{Algorithm, HashKey, ActiveHealthCheck, PassiveHealthCheck,
+  Retry, SlowStartSeconds}` on the endpoint; `MaxInFlight`, `Draining`, `HealthCheck` on each `Upstream`.
+- **API**: `/api/proxy/upstream/lb/get|set`, `/setDraining`, `/setMaxInFlight`; `/list` also returns live `States`.
+- Algorithms and checks are clean-room implementations of publicly documented designs (nginx smooth WRR, HAProxy
+  leastconn, power of two choices, ketama ring); no third-party code was copied.
+- Tests: `go test -race ./mod/dynamicproxy/...` (distribution, ring stability, state machines with a fake clock,
+  goroutine leak check, retry rules, old-config compatibility).

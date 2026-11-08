@@ -50,6 +50,7 @@ func (u *Upstream) StartProxy(tlsServerName string) error {
 	})
 
 	u.proxy = proxy
+	u.tlsServerName = tlsServerName
 	return nil
 }
 

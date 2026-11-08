@@ -274,6 +274,7 @@ type ProxyEndpoint struct {
 	InactiveOrigins      []*loadbalance.Upstream //Disabled Upstream or origin servers IP or domain to proxy to
 	UseStickySession     bool                    //Use stick session for load balancing
 	UseActiveLoadBalance bool                    //Use active loadbalancing, default passive
+	LoadBalanceConfig    *loadbalance.Config     //Optional: algorithm, health checks and retries. nil = weighted random, no extra checks
 	Disabled             bool                    //If the rule is disabled
 	ListeningPorts       []string                //Alternative listening ports in format "ip:port" or ":port" (e.g., ":8080", "192.168.1.1:8080")
 

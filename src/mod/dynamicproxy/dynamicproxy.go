@@ -250,6 +250,7 @@ func (router *Router) StartProxyService() error {
 		}
 
 		router.Running = true
+		router.syncAllHealthChecks()
 		if router.Option.Port != 80 && router.Option.ListenOnPort80 && !netutils.CheckIfPortOccupied(80) {
 			//Add a 80 to 443 redirector
 			httpServer := &http.Server{
@@ -389,6 +390,7 @@ func (router *Router) StartProxyService() error {
 			IdleTimeout:       time.Duration(router.Option.IdleTimeout) * time.Second,
 		}
 		router.Running = true
+		router.syncAllHealthChecks()
 		router.Option.Logger.PrintAndLog("dprouter", "Reverse proxy service started in the background (Plain HTTP mode)", nil)
 
 		go func(srv *http.Server) {
@@ -439,7 +441,7 @@ func (router *Router) handleNonTLSRequest(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	selectedUpstream, err := router.loadBalancer.GetRequestUpstreamTarget(w, r, sep.ActiveOrigins, sep.UseStickySession, sep.DisableAutoFallback)
+	selectedUpstream, err := router.loadBalancer.SelectUpstream(w, r, sep.ActiveOrigins, router.newSelectOptions(r, sep))
 	if err != nil {
 		serveProxyRequestError(w, 404, router, ErrorTemplateHostError)
 		router.Option.Logger.PrintAndLog("dprouter", "failed to get upstream for hostname", err)
@@ -466,6 +468,8 @@ func (router *Router) handleNonTLSRequest(w http.ResponseWriter, r *http.Request
 		endpointProxyRewriteRules = sep.HeaderRewriteRules
 	}
 
+	selectedUpstream.Acquire()
+	defer selectedUpstream.Release()
 	selectedUpstream.ServeHTTP(w, r, &dpcore.ResponseRewriteRuleSet{
 		ProxyDomain:             selectedUpstream.OriginIpOrDomain,
 		OriginalHost:            originalHostHeader,
@@ -743,6 +747,7 @@ func (router *Router) StopProxyService() error {
 	router.secondaryServerMutex.Unlock()
 
 	router.Running = false
+	router.stopAllHealthChecks()
 
 	router.Option.Logger.PrintAndLog("dprouter", "Proxy service stopped successfully", nil)
 

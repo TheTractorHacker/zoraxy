@@ -328,6 +328,7 @@ func (ep *ProxyEndpoint) Clone() *ProxyEndpoint {
 func (ep *ProxyEndpoint) Remove() error {
 	lookupHostname := strings.ToLower(ep.RootOrMatchingDomain)
 	ep.parent.ProxyEndpoints.Delete(lookupHostname)
+	ep.parent.loadBalancer.StopHealthChecks(healthCheckKey(ep))
 	return nil
 }
 
@@ -342,4 +343,5 @@ func (ep *ProxyEndpoint) IsEnabled() bool {
 func (ep *ProxyEndpoint) UpdateToRuntime() {
 	lookupHostname := strings.ToLower(ep.RootOrMatchingDomain)
 	ep.parent.ProxyEndpoints.Store(lookupHostname, ep)
+	ep.parent.syncHealthChecks(ep)
 }
