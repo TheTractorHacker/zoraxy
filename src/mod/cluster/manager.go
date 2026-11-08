@@ -57,8 +57,13 @@ type Options struct {
 	Validate func(p *Payload) error
 	Logf     func(format string, a ...any)
 	Now      func() time.Time
-	// HTTPClient is used by followers; nil builds one from the config.
+	// HTTPClient is used by followers and fleet nodes; nil builds one from the config.
 	HTTPClient *http.Client
+	// Actor names the admin who issued a hub action (audit log). Optional.
+	Actor func(r *http.Request) string
+	// Stats returns the bounded telemetry a fleet node reports in its
+	// heartbeat. Optional.
+	Stats func() NodeStats
 }
 
 // Manager owns the cluster configuration and both roles of the sync.
@@ -75,6 +80,9 @@ type Manager struct {
 	primary *primaryState
 	status  followerStatus
 	syncMu  sync.Mutex
+
+	hub   *Hub      //central management (role hub)
+	creds nodeCreds //node key of a fleet node (cached, lives in .cluster/fleet-node.json)
 }
 
 // NewManager loads conf/cluster.json (missing = standalone).
@@ -113,6 +121,13 @@ func NewManager(opt Options) (*Manager, error) {
 		return nil, fmt.Errorf("cluster.json health allow list: %w", err)
 	}
 	m.primary = newPrimaryState(m)
+	m.hub = newHub(m)
+	if m.cfg.Role == RoleNode {
+		if _, ok := m.loadCreds(); !ok {
+			opt.Logf("[fleet] role node needs hub credentials (.cluster/fleet-node.json); running as standalone")
+			m.cfg.Role = RoleStandalone
+		}
+	}
 	m.loadStatus()
 	m.bootGuard()
 	return m, nil
@@ -122,7 +137,7 @@ func (m *Manager) configPath() string { return filepath.Join(m.opt.ConfDir, conf
 
 func (m *Manager) normalizeLocked() {
 	switch m.cfg.Role {
-	case RolePrimary, RoleFollower:
+	case RolePrimary, RoleFollower, RoleHub, RoleNode:
 	default:
 		m.cfg.Role = RoleStandalone
 	}
@@ -212,9 +227,16 @@ func (m *Manager) Update(u ConfigUpdate) error {
 	next := m.cfg
 	if u.Role != nil {
 		next.Role = *u.Role
-		if next.Role != RoleStandalone && next.Role != RolePrimary && next.Role != RoleFollower {
+		switch next.Role {
+		case RoleStandalone, RolePrimary, RoleFollower, RoleHub:
+		case RoleNode:
+			if m.creds.NodeKey == "" {
+				m.mu.Unlock()
+				return errors.New("a node joins a fleet with a join token (Fleet page); it cannot be switched on directly")
+			}
+		default:
 			m.mu.Unlock()
-			return errors.New("role must be standalone, primary or follower")
+			return errors.New("role must be standalone, primary, follower, hub or node")
 		}
 	}
 	if u.Secret != nil {
@@ -255,7 +277,7 @@ func (m *Manager) Update(u ConfigUpdate) error {
 		m.mu.Unlock()
 		return errors.New("a cluster secret is required for the primary and follower roles")
 	}
-	if next.Role == RoleFollower {
+	if next.Role == RoleFollower || next.Role == RoleNode {
 		if err := validatePrimaryURL(next.PrimaryURL); err != nil {
 			m.mu.Unlock()
 			return err

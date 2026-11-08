@@ -131,3 +131,13 @@ func (r *RateLimiter) Allow(key string, now time.Time) bool {
 	e.n++
 	return e.n <= r.limit
 }
+
+// TokenNode extracts the node id from a bearer token without verifying it, so
+// the verifier can look up that node's own key. Callers must still Verify.
+func TokenNode(token string) (string, bool) {
+	parts := strings.Split(token, ":")
+	if len(parts) != 5 || parts[0] != "zxc1" || !nodeIDPattern.MatchString(parts[2]) {
+		return "", false
+	}
+	return parts[2], true
+}

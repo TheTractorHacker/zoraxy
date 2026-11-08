@@ -72,6 +72,12 @@ func (ap *Applier) ApplyPayload(p *Payload, tag string) (*Applied, error) {
 		return nil, err
 	}
 	stateDir := filepath.Join(ap.ConfDir, StateDirName)
+	for i := 2; ; i++ { //two applies inside one clock tick must not share a backup folder
+		if _, err := os.Lstat(filepath.Join(stateDir, "backup-"+tag)); err != nil {
+			break
+		}
+		tag = fmt.Sprintf("%s-%d", strings.SplitN(tag, "-", 2)[0], i)
+	}
 	staging := filepath.Join(stateDir, "staging-"+tag)
 	backup := filepath.Join(stateDir, "backup-"+tag)
 	os.RemoveAll(staging)

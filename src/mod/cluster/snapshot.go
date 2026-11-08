@@ -84,6 +84,9 @@ type Payload struct {
 	IncludesCerts bool        `json:"includesCerts"`
 	ContentHash   string      `json:"hash"`
 	Files         []FileEntry `json:"files"`
+	// Fleet carries bundle metadata of the central management mode (nil for
+	// the legacy primary/follower snapshots).
+	Fleet *FleetMeta `json:"fleet,omitempty"`
 }
 
 // Envelope is the transferred form.

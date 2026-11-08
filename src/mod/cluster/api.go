@@ -40,6 +40,8 @@ func (m *Manager) HandleStatus(w http.ResponseWriter, r *http.Request) {
 		"nodeId":             m.opt.NodeID,
 		"version":            m.opt.Version,
 		"readOnly":           cfg.Role == RoleFollower && !m.opt.AllowLocalEdits,
+		"legacyMode":         cfg.Role == RolePrimary || cfg.Role == RoleFollower,
+		"fleet":              m.FleetInfo(),
 	}
 	if cfg.Role == RoleFollower {
 		out["follower"] = m.Status()
@@ -200,6 +202,17 @@ func (m *Manager) isSyncedWrite(r *http.Request, syncCerts bool) bool {
 // objects are refused with 403 (primary wins).
 func (m *Manager) GuardLocalEdits(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Fleet node: objects the hub manages are read-only, node local ones stay editable.
+		if m.Role() == RoleNode {
+			if what := m.fleetBlocks(r); what != "" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				json.NewEncoder(w).Encode(map[string]string{
+					"error": "Managed by hub (" + what + "). Change it on the Fleet hub; node local objects can still be edited here.",
+				})
+				return
+			}
+		}
 		if m.opt.AllowLocalEdits {
 			next.ServeHTTP(w, r)
 			return
