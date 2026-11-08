@@ -36,6 +36,10 @@ func (router *Router) captchaChallenge(w http.ResponseWriter, r *http.Request, s
 	}
 	clientIP := router.GetClientIPForEndpoint(r, sep)
 
+	if r.URL.Path == captcha.AltchaChallengePath && sep.CaptchaConfig.Provider == captcha.ProviderAltcha {
+		captcha.HandleAltchaChallenge(w, r, sep.CaptchaConfig)
+		return true
+	}
 	if r.URL.Path == captcha.VerifyPath {
 		captcha.HandleVerification(w, r, sep.CaptchaConfig, router.captchaSessionStore, clientIP)
 		router.recordCaptchaVerification(w, sep)

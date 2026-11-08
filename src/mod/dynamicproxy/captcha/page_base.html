@@ -163,7 +163,7 @@
         var statusEl = document.getElementById('status');
         var retryEl = document.getElementById('retry');
         var loaderEl = document.getElementById('zx-loader');
-        var widgetId = null, busy = false, errorCount = 0, loaded = false;
+        var widgetId = null, busy = false, errorCount = 0, loaded = false, altchaGo = null;
 
         function show(msg, cls) { if (!statusEl) return; statusEl.textContent = msg; statusEl.className = cls; statusEl.hidden = false; }
         function hideStatus() { if (statusEl) statusEl.hidden = true; }
@@ -203,6 +203,7 @@
         }
 
         function run() {
+            if (altchaGo) { altchaGo(); return; }
             if (cfg.provider === 'turnstile') {
                 if (!window.turnstile) { window.location.reload(); return; }
                 if (widgetId !== null) {
@@ -267,6 +268,40 @@
         });
 
         if (cfg.provider === 'recaptcha_v3' && cfg.preview) { run(); return; }
+
+        if (cfg.provider === 'altcha') {
+            // Self-hosted proof of work: nothing is loaded from a third party
+            if (cfg.preview) { submit('preview'); return; }
+            var hex = function (buf) { var a = new Uint8Array(buf), s = ''; for (var i = 0; i < a.length; i++) s += (a[i] < 16 ? '0' : '') + a[i].toString(16); return s; };
+            var solve = function (c) {
+                var enc = new TextEncoder(), n = 0, max = c.maxnumber;
+                return new Promise(function (resolve, reject) {
+                    (function step() {
+                        var end = Math.min(n + 500, max + 1), jobs = [];
+                        for (var i = n; i < end; i++) jobs.push(window.crypto.subtle.digest('SHA-256', enc.encode(c.salt + i)));
+                        Promise.all(jobs).then(function (res) {
+                            for (var j = 0; j < res.length; j++) {
+                                if (hex(res[j]) === c.challenge) { resolve(n + j); return; }
+                            }
+                            n = end;
+                            if (n > max) { reject(new Error('unsolved')); return; }
+                            setTimeout(step, 0);
+                        }, reject);
+                    })();
+                });
+            };
+            altchaGo = function () {
+                if (!window.crypto || !window.crypto.subtle) { fail(cfg.s.error); return; }
+                fetch(cfg.altchaPath, { credentials: 'same-origin', cache: 'no-store' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (c) { return solve(c).then(function (num) {
+                        submit(btoa(JSON.stringify({ algorithm: c.algorithm, challenge: c.challenge, number: num, salt: c.salt, signature: c.signature })));
+                    }); })
+                    .catch(function () { fail(cfg.s.error); });
+            };
+            altchaGo();
+            return;
+        }
 
         var src;
         if (cfg.provider === 'turnstile') src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=zxReady';

@@ -461,6 +461,10 @@ func (router *Router) handleCaptchaGating(w http.ResponseWriter, r *http.Request
 	// cannot satisfy a CIDR exception or be reported to the CAPTCHA provider
 	clientIP := router.GetClientIPForEndpoint(r, sep)
 
+	if r.URL.Path == captcha.AltchaChallengePath && sep.CaptchaConfig.Provider == captcha.ProviderAltcha {
+		captcha.HandleAltchaChallenge(w, r, sep.CaptchaConfig)
+		return true, false
+	}
 	if r.URL.Path == captcha.VerifyPath {
 		captcha.HandleVerification(w, r, sep.CaptchaConfig, router.captchaSessionStore, clientIP)
 		router.recordCaptchaVerification(w, sep)

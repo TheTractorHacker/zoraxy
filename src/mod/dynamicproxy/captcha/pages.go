@@ -45,6 +45,7 @@ const (
 
 // Provider ids exposed to templates as {{.Provider}}.
 const (
+	ProviderIDAltcha      = "altcha"
 	ProviderIDTurnstile   = "turnstile"
 	ProviderIDRecaptchaV2 = "recaptcha_v2"
 	ProviderIDRecaptchaV3 = "recaptcha_v3"
@@ -66,6 +67,7 @@ type ClientConfig struct {
 	SiteKey    string `json:"siteKey"`
 	VerifyPath string `json:"verifyPath"`
 	Field      string `json:"field"` // form field name the token is POSTed as
+	AltchaPath string `json:"altchaPath,omitempty"`
 	Preview    bool   `json:"preview"`
 	ShowLoader bool   `json:"showLoader"`
 	S          struct {
@@ -126,6 +128,9 @@ func providerID(c *Config) string {
 	if c == nil || c.Provider == ProviderCloudflare {
 		return ProviderIDTurnstile
 	}
+	if c.Provider == ProviderAltcha {
+		return ProviderIDAltcha
+	}
 	if c.RecaptchaVersion == "v3" {
 		return ProviderIDRecaptchaV3
 	}
@@ -181,7 +186,7 @@ func buildData(cfg *Config, kind PageKind, domain, nonce string, opts RenderOpti
 		d.SiteKey = cfg.SiteKey
 	}
 	if opts.Preview {
-		if prov == ProviderIDTurnstile {
+		if prov == ProviderIDTurnstile || prov == ProviderIDAltcha {
 			d.SiteKey = PreviewTurnstileSiteKey
 		} else {
 			d.SiteKey = PreviewRecaptchaSiteKey
@@ -243,6 +248,10 @@ func buildData(cfg *Config, kind PageKind, domain, nonce string, opts RenderOpti
 		c.Turnstile.Mode, c.Turnstile.Appearance, c.Turnstile.Theme = ts.Mode, ts.Appearance, ts.Theme
 		c.Turnstile.Size, c.Turnstile.Action, c.Turnstile.CData = ts.Size, ts.Action, ts.CData
 		d.ShowLoader = ts.Mode == "invisible" || ts.Mode == "non-interactive" || ts.Appearance == "interaction-only"
+	case ProviderIDAltcha:
+		c.Field = AltchaField
+		c.AltchaPath = AltchaChallengePath
+		d.ShowLoader = true
 	case ProviderIDRecaptchaV2:
 		c.Field = "g-recaptcha-response"
 		c.Invisible = cfg != nil && cfg.RecaptchaInvisible
