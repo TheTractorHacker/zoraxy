@@ -501,6 +501,7 @@ func ShutdownSeq() {
 	}
 
 	stopAbuseManager()
+	stopEch()
 
 	SystemWideLogger.Println("Closing Statistic Collector")
 	if statisticCollector != nil {

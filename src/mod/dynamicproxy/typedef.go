@@ -8,6 +8,7 @@ package dynamicproxy
 	If you are looking for the default object initailization, please refer to default.go
 */
 import (
+	"crypto/tls"
 	_ "embed"
 	"imuslab.com/zoraxy/mod/metrics"
 	"net"
@@ -77,19 +78,21 @@ func (p TlsCipherProfile) IsValid() bool {
 /* Router Object Options */
 type RouterOption struct {
 	/* Basic Settings */
-	HostUUID           string                  //The UUID of Zoraxy, use for heading mod
-	HostVersion        string                  //The version of Zoraxy, use for heading mod
-	SessionSecret      string                  `json:"-"` //Key input for the CAPTCHA session signing (never serialised: /api/proxy/status marshals RouterOption). Empty = HostUUID (cluster deployments pass a key derived from the cluster secret)
-	Health             *cluster.HealthEndpoint //Optional /.zoraxy/health endpoint, served on the proxy listeners before host routing
-	Port               int                     //Incoming port
-	UseTls             bool                    //Use TLS to serve incoming requsts
-	MinTLSVersion      uint16                  //Minimum TLS version
-	TlsCipherProfile   TlsCipherProfile        //TLS cipher profile (see TlsCipherProfile enum and tlscipherprofile.go)
-	NoCache            bool                    //Force set Cache-Control: no-store
-	ListenOnPort80     bool                    //Enable port 80 http listener
-	HttpListenAddr     string                  //Plain HTTP listener address, empty = ":80" (see httplistenaddr.go)
-	ForceHttpsRedirect bool                    //Force redirection of http to https endpoint
-	UseProxyProtocol   bool                    //Enable PROXY protocol v1/v2 support for TLS listener
+	HostUUID           string                                                            //The UUID of Zoraxy, use for heading mod
+	HostVersion        string                                                            //The version of Zoraxy, use for heading mod
+	SessionSecret      string                                                            `json:"-"` //Key input for the CAPTCHA session signing (never serialised: /api/proxy/status marshals RouterOption). Empty = HostUUID (cluster deployments pass a key derived from the cluster secret)
+	Health             *cluster.HealthEndpoint                                           //Optional /.zoraxy/health endpoint, served on the proxy listeners before host routing
+	Port               int                                                               //Incoming port
+	UseTls             bool                                                              //Use TLS to serve incoming requsts
+	MinTLSVersion      uint16                                                            //Minimum TLS version
+	EchKeys            func(*tls.ClientHelloInfo) ([]tls.EncryptedClientHelloKey, error) `json:"-"` //Optional server side Encrypted Client Hello keys (ech_glue.go), read per handshake
+	EchObserve         func(accepted bool)                                               `json:"-"` //Optional: called once per TLS request with the ECH outcome
+	TlsCipherProfile   TlsCipherProfile                                                  //TLS cipher profile (see TlsCipherProfile enum and tlscipherprofile.go)
+	NoCache            bool                                                              //Force set Cache-Control: no-store
+	ListenOnPort80     bool                                                              //Enable port 80 http listener
+	HttpListenAddr     string                                                            //Plain HTTP listener address, empty = ":80" (see httplistenaddr.go)
+	ForceHttpsRedirect bool                                                              //Force redirection of http to https endpoint
+	UseProxyProtocol   bool                                                              //Enable PROXY protocol v1/v2 support for TLS listener
 
 	SanitiseClientIPHeaders bool //Global default (off): drop client supplied X-Forwarded-For / X-Real-IP / ... from peers that are not trusted proxies
 

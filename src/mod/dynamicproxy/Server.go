@@ -33,6 +33,7 @@ import (
 */
 
 func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.Parent.echObserve(r)
 	if h.Parent.Option.Metrics.Enabled() {
 		var done func()
 		w, r, done = h.Parent.metricsBegin(w, r, nil)

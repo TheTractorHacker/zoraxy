@@ -227,6 +227,8 @@ func (router *Router) StartProxyService() error {
 	//Apply the TLS cipher profile (default = Go defaults, see tlscipherprofile.go)
 	ApplyTlsCipherProfile(config, router.Option.TlsCipherProfile)
 
+	router.applyEch(config) //Encrypted Client Hello keys (ech_glue.go), kept by the per-SNI clones below
+
 	//Endpoints with client certificates (mTLS) enabled ask for one, selected by SNI name
 	config.GetConfigForClient = router.clientCertGetConfig(config)
 

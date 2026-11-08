@@ -1301,3 +1301,37 @@ otherwise each rule is applied independently on a copy and reported (partial upd
 
 Tests: `go test -race ./mod/dynamicproxy/...` (ops_test.go through `ProxyHandler.ServeHTTP`, bulk_test.go, unix_upstream_test.go,
 loadbalance/clientrules_test.go, redirection/advanced_test.go).
+
+## Platform features (`feat/platform-features`)
+
+Four opt-in features, all off by default: Encrypted Client Hello, Lua script handlers, Sablier (scale-to-zero) integration
+and zrok tunnels. Each keeps its logic in its own package; the shared files only got small hooks.
+
+### Encrypted Client Hello (fork #235 / upstream #1319)
+
+Code: `src/mod/ech` (keys, config serialisation, DNS check), `src/echapi.go` (APIs), `src/mod/dynamicproxy/ech_glue.go`
+(router wiring), `src/web/components/ech.html` (page: Networking > Encrypted Client Hello).
+
+- Server side ECH uses `tls.Config.GetEncryptedClientHelloKeys`, which crypto/tls calls per handshake, so enabling, rotating and
+  retiring keys never needs a listener restart. The callback is installed on the HTTPS listener config *before* the per-SNI
+  `GetConfigForClient` clones (client certificate / mTLS), and `tls.Config.Clone` copies it; ECH is decrypted before
+  `GetConfigForClient` runs, so mTLS and certificate selection see the inner SNI (test: `TestEchKeysSurviveClientCertClones`,
+  `TestHandshakeHidesInnerSNI` with and without the clone). The secondary TLS listeners get the same callback.
+- Keys: DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-128-GCM + ChaCha20-Poly1305, random config id, configurable public name and
+  `maximum_name_length` (default 64). Stored in `conf/ech/ech.json` (dir 0700, file 0600; the private keys are never returned
+  by any API except the admin-only PEM export, which viewers cannot call). `conf/` backups contain them like TLS private keys.
+  Cluster/Fleet snapshots do not carry ECH keys: configure each node (or copy the PEM) on purpose.
+- Rotation: the newest `active` key is the only one advertised in the `ECHConfigList` and the only one sent as retry config;
+  older keys become `retired` (decrypt-only) and are purged after the retain window (default 7 days, keep it above the DNS TTL).
+  Optional automatic rotation every N hours (checked every 10 minutes).
+- Rejections: a client with the wrong/unknown key is answered with the outer certificate for the public name plus the retry
+  configs (`tls.ECHRejectionError.RetryConfigList` on the client); with ECH disabled the server ignores the extension.
+  The public name needs a certificate Zoraxy can serve (an existing wildcard works); the page warns when none matches.
+- DNS: the page shows the base64 list, a copy-ready `HTTPS 1 . alpn=... ech=...` record and a lookup helper
+  (`/api/ech/dnscheck`, HTTPS RR through miekg/dns against the system or a given resolver IP) that compares the published `ech=`
+  with the active list. Automatic publishing through a DNS provider is *not* implemented (needs a record API beyond lego's
+  ACME challenge providers).
+- HTTP/3: the QUIC listener clones the same config; with the pinned quic-go and Go version ECH is accepted over QUIC
+  (`TestQUICECHSupport` fails if that stops being true, then revisit this paragraph).
+- Observability: the page shows counts of TLS requests that arrived through ECH vs. not; `r.TLS.ECHAccepted` is available to code.
+- Not validated here: real browsers (Firefox/Chrome) against a public DNS record; the Go client in the tests is the interop peer.

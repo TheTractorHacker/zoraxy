@@ -310,7 +310,10 @@ func ReverseProxyInit() {
 		use for managemening and provide functions to access proxy handlers
 	*/
 
+	initEch()
 	dprouter, err := dynamicproxy.NewDynamicProxy(dynamicproxy.RouterOption{
+		EchKeys:            echKeysCallback(),
+		EchObserve:         echObserveCallback(),
 		HostUUID:           nodeUUID,
 		SessionSecret:      clusterMgr.KeyMaterial(nodeUUID, cluster.PurposeCaptchaSession),
 		Health:             clusterMgr.Health(),

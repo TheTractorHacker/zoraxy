@@ -452,6 +452,7 @@ func initAPIs(targetMux *http.ServeMux) {
 	RegisterBulkAPIs(authRouter)
 	RegisterNetworkingAPIs(authRouter)
 	RegisterOpsAPIs(authRouter)
+	RegisterEchAPIs(authRouter)
 	RegisterTLSAPIs(authRouter)
 	RegisterAuthenticationHandlerAPIs(authRouter)
 	RegisterZorxAuthUserManagementAPIs(authRouter)

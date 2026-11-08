@@ -41,6 +41,7 @@ var viewerDeniedPrefixes = []string{
 	"/api/info/pprof",   //heap / goroutine dumps
 	"/api/users/",       //account management
 	"/api/abuse/config", //auto-ban settings
+	"/api/ech/export",   //ECH private key
 	"/web.ssh/",         //terminal
 	"/plugin.ui/",       //plugin UIs can mutate
 }

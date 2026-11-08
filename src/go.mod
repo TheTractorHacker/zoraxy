@@ -123,6 +123,7 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/yandex-cloud/go-sdk/services/dns v0.0.96 // indirect
 	github.com/yandex-cloud/go-sdk/v2 v2.175.0 // indirect
+	github.com/yuin/gopher-lua v1.1.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect
