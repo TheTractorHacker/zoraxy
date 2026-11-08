@@ -63,6 +63,14 @@ type Upstream struct {
 	//such as NetBird. Ignored when RequireTLS is set. Default off
 	H2C bool
 
+	//Optional: PROXY protocol header towards this upstream (0 off, 1 = v1 text, 2 = v2 binary). Disables connection reuse
+	//and h2c for this upstream, see dpcore/proxyproto.go. HTTP requests only (not WebSocket upgrades / CONNECT)
+	ProxyProtocol int
+
+	//Optional upstream mTLS: name of a certificate pair in the certificate store (<name>.pem + <name>.key) that is
+	//presented when this HTTPS upstream asks for a client certificate. See UpstreamClientCertLoader
+	ClientCertName string
+
 	//Optional runtime controls, all zero values keep the historical behavior
 	MaxInFlight int                //Maximum concurrent in-flight requests to this upstream, 0 = unlimited
 	Draining    bool               //Receive no new requests (sticky sessions are re-assigned), in-flight requests finish normally

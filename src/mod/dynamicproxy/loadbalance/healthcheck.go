@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"imuslab.com/zoraxy/mod/dynamicproxy/dpcore"
 	"io"
 	"net"
 	"net/http"
@@ -167,12 +168,20 @@ func newProber(u *Upstream, hc ActiveHealthCheck) *prober {
 	if hc.Mode != "tcp" {
 		//Same TLS rules as the proxied traffic: skip verify flag and SNI override
 		tlsCfg := &tls.Config{InsecureSkipVerify: u.SkipCertValidations, ServerName: u.tlsServerName}
+		if cb := u.clientCertCallback(); cb != nil {
+			tlsCfg.GetClientCertificate = cb //upstream mTLS, same as the proxied traffic
+		}
+		tr := &http.Transport{
+			TLSClientConfig:   tlsCfg,
+			DisableKeepAlives: true, //No idle connection goroutines to leak
+			Proxy:             nil,
+		}
+		if u.ProxyProtocol == 1 || u.ProxyProtocol == 2 {
+			//Upstreams that require a PROXY header would drop probes without one
+			tr.DialContext = dpcore.ProxyProtocolDialer((&net.Dialer{}).DialContext, u.ProxyProtocol)
+		}
 		p.client = &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig:   tlsCfg,
-				DisableKeepAlives: true, //No idle connection goroutines to leak
-				Proxy:             nil,
-			},
+			Transport:     tr,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		}
 	}
@@ -215,8 +224,11 @@ func (p *prober) probe(ctx context.Context) error {
 	defer cancel()
 
 	if p.hc.Mode == "tcp" {
-		var d net.Dialer
-		conn, err := d.DialContext(ctx, "tcp", p.u.tcpAddress())
+		dial := (&net.Dialer{}).DialContext
+		if p.u.ProxyProtocol == 1 || p.u.ProxyProtocol == 2 {
+			dial = dpcore.ProxyProtocolDialer(dial, p.u.ProxyProtocol)
+		}
+		conn, err := dial(ctx, "tcp", p.u.tcpAddress())
 		if err != nil {
 			return err
 		}

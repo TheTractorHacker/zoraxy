@@ -1,15 +1,19 @@
 package main
 
 import (
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"imuslab.com/zoraxy/mod/auth"
 	"imuslab.com/zoraxy/mod/dynamicproxy"
+	"imuslab.com/zoraxy/mod/dynamicproxy/loadbalance"
 	"imuslab.com/zoraxy/mod/utils"
 )
 
@@ -282,4 +286,19 @@ func HandleDefaultSiteLogging(w http.ResponseWriter, r *http.Request) {
 		"logged":  dynamicProxyRouter.DefaultSiteLogStats(),
 	})
 	utils.SendJSONResponse(w, string(js))
+}
+
+// initUpstreamClientCertLoader lets upstreams present a client certificate (mTLS towards the backend) taken from the
+// certificate store, by name (<name>.pem + <name>.key). The name was validated when the upstream was saved; it is checked again here.
+func initUpstreamClientCertLoader() {
+	loadbalance.UpstreamClientCertLoader = func(name string) (*tls.Certificate, error) {
+		if name == "" || name != filepath.Base(name) || strings.HasPrefix(name, ".") {
+			return nil, errors.New("invalid client certificate name")
+		}
+		pair, err := tls.LoadX509KeyPair(filepath.Join(tlsCertManager.CertStore, name+".pem"), filepath.Join(tlsCertManager.CertStore, name+".key"))
+		if err != nil {
+			return nil, err
+		}
+		return &pair, nil
+	}
 }

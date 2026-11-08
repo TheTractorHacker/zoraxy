@@ -1,10 +1,12 @@
 package loadbalance
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -41,6 +43,11 @@ func (u *Upstream) StartProxy(tlsServerName string) error {
 		return err
 	}
 
+	proxyProto := 0
+	if u.ProxyProtocol == 1 || u.ProxyProtocol == 2 {
+		proxyProto = u.ProxyProtocol
+	}
+
 	proxy := dpcore.NewDynamicProxyCore(path, "", &dpcore.DpcoreOptions{
 		IgnoreTLSVerification:   u.SkipCertValidations,
 		FlushInterval:           100 * time.Millisecond,
@@ -48,7 +55,9 @@ func (u *Upstream) StartProxy(tlsServerName string) error {
 		MaxConcurrentConnection: u.MaxConn,
 		UpstreamTLSServerName:   tlsServerName,
 		DisableKeepAlive:        u.DisableKeepAlive,
-		H2C:                     u.H2C && !u.RequireTLS,
+		H2C:                     u.H2C && !u.RequireTLS && proxyProto == 0,
+		ProxyProtocolVersion:    proxyProto,
+		ClientCertificate:       u.clientCertCallback(),
 	})
 
 	u.proxy = proxy
@@ -83,4 +92,41 @@ func (u *Upstream) ServeHTTP(w http.ResponseWriter, r *http.Request, rrr *dpcore
 // String return the string representations of endpoints in this upstream
 func (u *Upstream) String() string {
 	return u.OriginIpOrDomain
+}
+
+// UpstreamClientCertLoader loads the named client certificate pair of the certificate store.
+// Set by the main package at start up; nil disables upstream mTLS.
+var UpstreamClientCertLoader func(name string) (*tls.Certificate, error)
+
+// clientCertCallback returns the callback that presents the configured client certificate, or nil.
+// The pair is read again on every handshake, so a renewed certificate is picked up without a restart.
+func (u *Upstream) clientCertCallback() func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+	name := u.ClientCertName
+	if name == "" || !u.RequireTLS {
+		return nil
+	}
+	return func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+		if UpstreamClientCertLoader == nil {
+			return nil, errors.New("upstream client certificates are not available")
+		}
+		return UpstreamClientCertLoader(name)
+	}
+}
+
+var upstreamCertNamePattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$`)
+
+// ValidateTransportOptions checks the optional PROXY protocol and client certificate settings of an upstream
+func (u *Upstream) ValidateTransportOptions() error {
+	if u.ProxyProtocol < 0 || u.ProxyProtocol > 2 {
+		return errors.New("PROXY protocol version must be 0 (off), 1 or 2")
+	}
+	if u.ClientCertName != "" {
+		if !upstreamCertNamePattern.MatchString(u.ClientCertName) || strings.Contains(u.ClientCertName, "..") {
+			return errors.New("invalid client certificate name")
+		}
+		if !u.RequireTLS {
+			return errors.New("a client certificate can only be used with an upstream that requires TLS")
+		}
+	}
+	return nil
 }
