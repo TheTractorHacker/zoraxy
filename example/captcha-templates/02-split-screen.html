@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+{{- /*
+  Two column layout: brand panel on the left (accent colour), challenge on the
+  right. Collapses to one column on phones.
+*/ -}}
+<html lang="en" data-theme="{{.Theme}}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{.Title}}</title>
+<style nonce="{{.Nonce}}">
+  {{template "zx_css" .}}
+  body { flex-direction: row; min-height: 100vh; }
+  .brand { flex: 1; background: var(--accent); color: #fff; display: flex; flex-direction: column;
+           justify-content: center; align-items: center; padding: 2rem; text-align: center; }
+  .brand h1 { font-size: 2rem; margin-bottom: .5rem; }
+  .brand .logo { max-height: 6rem; margin-bottom: 1.5rem; }
+  .panel { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 2rem; }
+  .panel p { margin-bottom: 1rem; color: var(--sub); }
+  @media (max-width: 720px) { body { flex-direction: column; } .brand { padding: 1.5rem; } }
+</style>
+</head>
+<body>
+  <div class="brand">
+    {{if .LogoURL}}<img class="logo" src="{{.LogoURL}}" alt="">{{end}}
+    <h1>{{.Heading}}</h1>
+  </div>
+  <div class="panel">
+    <p>{{.Message}}</p>
+    {{template "zx_widget" .}}
+    <p><small>{{.Notice}}</small></p>
+    {{template "zx_footer" .}}
+  </div>
+  {{template "zx_runtime" .}}
+</body>
+</html>

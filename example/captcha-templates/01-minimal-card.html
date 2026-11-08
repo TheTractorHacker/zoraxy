@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+{{- /*
+  Minimal centred card. Reuses the built-in stylesheet (zx_css) so the accent
+  colour, theme and background settings from the admin UI still apply.
+*/ -}}
+<html lang="en" data-theme="{{.Theme}}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{.Title}}</title>
+<style nonce="{{.Nonce}}">
+  {{template "zx_css" .}}
+  .card { max-width: 30rem; margin: 6rem auto; padding: 2rem; text-align: center; }
+  .card .logo { margin-left: auto; margin-right: auto; }
+</style>
+</head>
+<body>
+  <div class="card">
+    {{if .LogoURL}}<img class="logo" src="{{.LogoURL}}" alt="">{{end}}
+    <h1>{{.Heading}}</h1>
+    <p>{{.Message}}</p>
+    {{template "zx_widget" .}}
+  </div>
+  {{template "zx_footer" .}}
+  {{template "zx_runtime" .}}
+</body>
+</html>

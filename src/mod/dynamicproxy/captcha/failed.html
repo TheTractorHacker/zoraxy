@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en-US" data-theme="{{.Theme}}">
+<head>
+{{template "zx_head" .}}
+    <title>{{.Title}}</title>
+    <style nonce="{{.Nonce}}">
+{{template "zx_css" .}}
+    </style>
+</head>
+<body>
+    <div class="main-wrapper" role="main">
+        <div class="main-content">
+            <div class="header">
+                {{if .LogoURL}}<img class="logo" src="{{.LogoURL}}" alt="">{{end}}
+                <h1 class="h1">{{.Heading}}</h1>
+                <p class="subtitle">{{.Message}}</p>
+            </div>
+            <div class="retry-row"><a class="btn" id="retry-link" href="{{.RetryURL}}">{{.Strings.Retry}}</a></div>
+            <div class="security-message">{{.Notice}}</div>
+        </div>
+    </div>
+{{template "zx_footer" .}}
+</body>
+</html>

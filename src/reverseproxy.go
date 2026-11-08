@@ -47,6 +47,65 @@ func parseCaptchaConfigFromRequest(r *http.Request) (*dynamicproxy.CaptchaConfig
 	if !requireCaptcha {
 		return nil, nil
 	}
+	return buildCaptchaConfigFromRequest(r)
+}
+
+// postText reads a trimmed POST parameter, empty if absent
+func postText(r *http.Request, key string) string {
+	v, _ := utils.PostPara(r, key)
+	return strings.TrimSpace(v)
+}
+
+// parseCaptchaPageSettings reads the optional page customisation fields.
+// With nothing customised, Branding / Turnstile stay nil.
+func parseCaptchaPageSettings(r *http.Request, cfg *captcha.Config) {
+	b := captcha.Branding{
+		Title:           postText(r, "captchaTitle"),
+		Heading:         postText(r, "captchaHeading"),
+		Message:         postText(r, "captchaMessage"),
+		Notice:          postText(r, "captchaNotice"),
+		VerifyingText:   postText(r, "captchaVerifyingText"),
+		SuccessText:     postText(r, "captchaSuccessText"),
+		FailedText:      postText(r, "captchaFailedText"),
+		ErrorText:       postText(r, "captchaErrorText"),
+		RetryText:       postText(r, "captchaRetryText"),
+		BlockedTitle:    postText(r, "captchaBlockedTitle"),
+		BlockedHeading:  postText(r, "captchaBlockedHeading"),
+		BlockedMessage:  postText(r, "captchaBlockedMessage"),
+		LogoURL:         postText(r, "captchaLogo"),
+		AccentColor:     postText(r, "captchaAccent"),
+		BackgroundColor: postText(r, "captchaBackground"),
+		Theme:           postText(r, "captchaTheme"),
+	}
+	b.HideFooter, _ = utils.PostBool(r, "captchaHideFooter")
+	// the template is not trimmed: whitespace is the author's business
+	b.CustomTemplate, _ = utils.PostPara(r, "captchaCustomTemplate")
+	if strings.TrimSpace(b.CustomTemplate) == "" {
+		b.CustomTemplate = ""
+	}
+	if b != (captcha.Branding{}) {
+		cfg.Branding = &b
+	}
+
+	ts := captcha.TurnstileOptions{
+		Mode:       postText(r, "turnstileMode"),
+		Appearance: postText(r, "turnstileAppearance"),
+		Theme:      postText(r, "turnstileTheme"),
+		Size:       postText(r, "turnstileSize"),
+		Action:     postText(r, "turnstileAction"),
+		CData:      postText(r, "turnstileCData"),
+	}
+	if ts != (captcha.TurnstileOptions{}) {
+		cfg.Turnstile = &ts
+	}
+	cfg.RecaptchaInvisible, _ = utils.PostBool(r, "captchaRecaptchaInvisible")
+	cfg.RecaptchaAction = postText(r, "captchaRecaptchaAction")
+	cfg.VerifyHostname, _ = utils.PostBool(r, "captchaVerifyHostname")
+}
+
+// buildCaptchaConfigFromRequest builds and validates a CAPTCHA config from the
+// POST parameters, regardless of the "captcha" enable flag.
+func buildCaptchaConfigFromRequest(r *http.Request) (*dynamicproxy.CaptchaConfig, error) {
 
 	captchaProviderStr, _ := utils.PostPara(r, "captchaProvider")
 	captchaSiteKey, _ := utils.PostPara(r, "captchaSiteKey")
@@ -99,7 +158,7 @@ func parseCaptchaConfigFromRequest(r *http.Request) (*dynamicproxy.CaptchaConfig
 		protectedPathPrefixes = append(protectedPathPrefixes, normalizedPath)
 	}
 
-	return &dynamicproxy.CaptchaConfig{
+	cfg := &dynamicproxy.CaptchaConfig{
 		Provider:              dynamicproxy.CaptchaProvider(captchaProvider),
 		SiteKey:               captchaSiteKey,
 		SecretKey:             captchaSecretKey,
@@ -107,7 +166,40 @@ func parseCaptchaConfigFromRequest(r *http.Request) (*dynamicproxy.CaptchaConfig
 		RecaptchaVersion:      captchaRecaptchaVersion,
 		RecaptchaScore:        captchaRecaptchaScore,
 		ProtectedPathPrefixes: protectedPathPrefixes,
-	}, nil
+	}
+	parseCaptchaPageSettings(r, cfg)
+	if err := cfg.ValidatePageSettings(); err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+// HandleCaptchaPreview renders a CAPTCHA page for the posted (unsaved) config
+// so the admin UI can show it in an iframe. It uses the providers' published
+// test site key, verifies nothing and never contacts an external service.
+func HandleCaptchaPreview(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	cfg, err := buildCaptchaConfigFromRequest(r)
+	if err != nil {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Cannot preview: " + err.Error()))
+		return
+	}
+	kind := captcha.PageKind(postText(r, "page"))
+	switch kind {
+	case captcha.PageChallenge, captcha.PageFailed, captcha.PageBlocked:
+	default:
+		kind = captcha.PageChallenge
+	}
+	domain := postText(r, "domain")
+	if domain == "" || len(domain) > 253 {
+		domain = "example.com"
+	}
+	captcha.RenderPreview(w, r, cfg, kind, domain)
 }
 
 // Add user customizable reverse proxy

@@ -249,7 +249,7 @@ Potential improvements for future versions:
 2. **Additional Providers**: Support for hCaptcha, FriendlyCaptcha
 3. **Exception Rule Management API**: Dedicated endpoints for managing exception rules
 4. **Analytics**: Track CAPTCHA solve rates and bot detection statistics
-5. **Custom Challenge Pages**: Allow custom HTML templates for CAPTCHA pages
+5. ~~Custom Challenge Pages~~: done, see "Customising CAPTCHA pages" in DEVELOPMENT.md
 6. **Distributed Sessions**: Support for session sharing across multiple Zoraxy instances
 
 ## Troubleshooting

@@ -23,7 +23,7 @@ Status: ✅ done · 🔧 in progress · 📋 planned
   Per-endpoint buckets, token bucket with burst, optional per-path limits.
 - 📋 Exploit regexes are recompiled on every request; TLS key pairs are read from disk on every handshake.
   Precompile and cache (with reload on cert change).
-- 📋 `ExploitRequestResponseTypeCaptcha` returns "handled" without writing a response.
+- ✅ `ExploitRequestResponseTypeCaptcha` returns "handled" without writing a response. Now shows the endpoint's CAPTCHA challenge (or the blocked page).
 - 📋 Triage the open upstream issues mirrored here: reproduce each bug with a test, fix or close with evidence.
 
 ## 2. Admin panel
@@ -34,11 +34,11 @@ Status: ✅ done · 🔧 in progress · 📋 planned
 - 📋 Admin login hardening: rate limiting / lockout on login, optional TOTP for the admin account.
 
 ## 3. Bot protection and CAPTCHA pages
-- 📋 Customisable challenge pages: per-endpoint title, message, logo, colours and full custom HTML template,
+- ✅ Customisable challenge pages (fork issue #77): per-endpoint title, message, logo, colours and full custom HTML template,
   edited and previewed from the UI (the `<webroot>/templates/` override already exists; this adds UI and
   per-endpoint selection).
-- 📋 Separate pages for "challenge", "verification failed" and "blocked".
-- 📋 Turnstile options: widget mode (managed/non-interactive/invisible), appearance, action/cData binding,
+- ✅ Separate pages for "challenge", "verification failed" and "blocked".
+- ✅ Turnstile options: widget mode (managed/non-interactive/invisible), appearance, action/cData binding,
   hostname check of the siteverify response.
 
 ## 4. Authentication
