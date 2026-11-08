@@ -23,6 +23,9 @@ import (
 	restart or an endpoint removal.
 */
 
+// healthIntervalUnit is the unit of IntervalSeconds, shortened by tests
+var healthIntervalUnit = time.Second
+
 type healthGroup struct {
 	sig    string
 	cancel context.CancelFunc
@@ -125,7 +128,7 @@ func (m *RouteManager) runHealthCheck(ctx context.Context, u *Upstream, hc Activ
 	prober := newProber(u, hc)
 	defer prober.close()
 
-	interval := time.Duration(hc.IntervalSeconds) * time.Second
+	interval := time.Duration(hc.IntervalSeconds) * healthIntervalUnit
 	timer := time.NewTimer(0) //First probe right away
 	defer timer.Stop()
 	for {
