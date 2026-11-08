@@ -1301,3 +1301,47 @@ otherwise each rule is applied independently on a copy and reported (partial upd
 
 Tests: `go test -race ./mod/dynamicproxy/...` (ops_test.go through `ProxyHandler.ServeHTTP`, bulk_test.go, unix_upstream_test.go,
 loadbalance/clientrules_test.go, redirection/advanced_test.go).
+
+## UI audit bot, CAPTCHA page, WAF page (feat/ui-audit-captcha-waf)
+
+### UI audit bot (`tools/ui-audit/`)
+`audit.py` is a Playwright bot that opens every nav page and every sub tab (Security Center, WAF, Access, SSO, Network tools,
+Utilities ...) in light and dark theme at a desktop (1366 px) and a phone (390 px) width and reports, per page / tab / selector:
+`icon` (an `<i class="... icon">` whose `::before` draws nothing, i.e. the icon name does not exist in the bundled Semantic UI 2.4.2
+icon font), `empty-label` (button / link / field without text, aria-label or title), `overflow`, `clipped` text, `small-target`
+(< 24x24 px), `contrast` (WCAG ratio < 4.5:1, 3:1 for large text, sampled), `table-header`, `img-alt`, `console` and `request`
+(failed / HTTP >= 400). It also saves a full-page screenshot of each state. `seed.py` fills a throw-away instance with a dozen proxy
+rules, CAPTCHA settings, a WAF policy and WAF events produced by attack-looking requests, so pages are judged with data.
+
+```bash
+# throw-away instance (never your real one): own conf, db, admin port and proxy port
+./zoraxy -noauth -dev -port :28783 -default_inbound_port 28443 -conf ./conf -dbpath ./sys.db &
+PY=./venv/bin/python           # a python with playwright + chromium, see "UI smoke test"
+$PY tools/ui-audit/seed.py --url http://127.0.0.1:28783 --proxy-port 28443
+$PY tools/ui-audit/audit.py --url http://127.0.0.1:28783 --out ~/audit-out    # audit-report.md / .json + shots/
+```
+Options: `--pages a,b` (nav tags), `--themes`, `--viewports`, `--no-shots`, `--allow REGEX`, `--report-only`. Exit status 1 when a
+finding of severity major or worse exists. Icons: only names that exist in `script/semantic/semantic.css` render (for example
+`robot` and `palette` do not, `bug`, `crosshairs`, `paint brush` do).
+
+### CAPTCHA / Bot check page (`components/captcha.html`)
+Top level page (Security group). Overview of every proxy rule (CAPTCHA on/off, provider, session, branding customised) with a
+Customise / Set up action; a full page editor per rule (provider and keys, session duration in minutes / hours / days, path prefixes,
+exceptions via `snippet/captchaExceptionEditor.html`, texts, logo upload, colours, theme, footer, Turnstile and reCAPTCHA options,
+custom template with variable reference and starter template) with live Challenge / Failed / Blocked previews (debounced form POST
+into an iframe, desktop / phone width) and a test key helper. The endpoint editor has a "Customise bot-check page" button
+(`captchaPageOpen(ep)`). Saving a rule posts the CAPTCHA fields to the existing partial update `POST /api/proxy/edit`.
+
+**Global default branding**: `GET/POST /api/proxy/captcha/default` (`captcha_default_api.go`, stored in `settings/captchaDefaultBranding`,
+loaded at start). `captcha.MergeBranding` fills every field a rule leaves empty from the default (field by field, `HideFooter` is OR-ed;
+provider, keys and Turnstile options are never inherited); the merge happens in `renderPage` for live pages, and for previews when the
+form posts `applyDefault=true`. Not replicated by cluster sync (node local setting).
+
+### WAF page (`components/waf.html`)
+Tabs: Overview (mode selector cards, tiles, events per hour, needs-attention list, top rules / IPs), Events (filters, group by rule /
+IP / URL / proxy rule, severity badges, rule descriptions from the CRS reference, detail drawer with the matched variable / value
+(control characters stripped, length capped), exclude globally / per rule / per path, allow IP, copy request; 100 rows at a time; "Live"
+polling pauses while the tab or the browser tab is hidden), Coverage (rules with no WAF highlighted, filter chips, bulk apply through
+`/api/proxy/bulk` `set_waf`), Policy, Profiles (presets Log only / Standard / Strict / Paranoid fill the form), Exclusions (structured
+list with search, add and remove), Rules reference. First run state offers "Enable in detection-only mode for all rules". Policy changes
+re-read the stored policy before writing so a stale tab cannot overwrite them. No new server endpoints.

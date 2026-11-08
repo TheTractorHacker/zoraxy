@@ -28,6 +28,7 @@ os.makedirs(args.out, exist_ok=True)
 # Offline-tolerant: external fetches (plugin store, update check, ...) may fail in a sandbox.
 allow = [re.compile(a) for a in args.allow] + [
     re.compile(r"favicon"),
+    re.compile(r"netstatgraph.*ERR_ABORTED"),  # a chart request cancelled by switching tabs
     re.compile(r"ERR_(NAME_NOT_RESOLVED|INTERNET_DISCONNECTED|CONNECTION)"),
 ]
 failures = []
@@ -263,6 +264,75 @@ def main():
         finally:
             pg.evaluate("""host => new Promise(res => $.cjax({url: '/api/proxy/del', method: 'POST', data: {ep: host}, success: res, error: res}))""", host)
             pg.evaluate("listProxyEndpoints()")
+
+        # ---- CAPTCHA / Bot check page ----
+        current["page"] = "captcha-page"
+        host = "smoke-captcha.invalid"
+        try:
+            pg.evaluate("""host => new Promise(res => $.cjax({url: '/api/proxy/add', method: 'POST',
+                data: {type: 'host', rootname: host, ep: '127.0.0.1:9', tls: false, tlsval: false, bypassGlobalTLS: false}, success: res, error: res}))""", host)
+            pg.evaluate("openTabById('captcha')")
+            settle(pg, 900)
+            row = f"#cpRows tr[data-ep='{host}']"
+            pg.wait_for_selector(row, timeout=5000)
+            pg.click(row + " .cpEdit")
+            pg.wait_for_selector("#cpEditor", state="visible", timeout=5000)
+            pg.check("#cpEnable") if not pg.is_checked("#cpEnable") else None
+            # public Turnstile test keys through the helper button
+            pg.click("#cpTestKeys")
+            if pg.input_value("#cpSiteKey") != "1x00000000000000000000AA":
+                fail("captcha", "test keys button did not fill the Turnstile test site key")
+            pg.fill("#cpForm [data-cp=captchaHeading]", "Smoke heading")
+            pg.wait_for_timeout(1500)  # debounced live preview
+            frame = next((f for f in pg.frames if f.name == "cpPreviewFrame"), None)
+            if frame is None or "Smoke heading" not in frame.content():
+                fail("captcha", "live preview did not show the edited heading")
+            pg.click("#cpPageBtns [data-page=blocked]")
+            pg.wait_for_timeout(1000)
+            pg.click("#cpWidthBtns [data-w=mobile]")
+            pg.screenshot(path=os.path.join(args.out, "captcha-editor.png"), full_page=True)
+            pg.click("#cpSave")
+            pg.wait_for_timeout(1200)
+            saved = pg.evaluate("""host => fetch('/api/proxy/detail?type=host&epname=' + host).then(r => r.json())""", host)
+            if not saved.get("RequireCaptcha") or (saved.get("CaptchaConfig") or {}).get("Branding", {}).get("Heading") != "Smoke heading":
+                fail("captcha", "saving the CAPTCHA page did not persist the settings")
+            pg.click("#cpBack")
+            pg.wait_for_selector("#cpOverview", state="visible", timeout=5000)
+            pg.click("#cpGlobalBtn")
+            pg.wait_for_selector("#cpEditor", state="visible", timeout=5000)
+            pg.screenshot(path=os.path.join(args.out, "captcha-global.png"), full_page=True)
+            pg.click("#cpBack")
+        except Exception as ex:
+            fail("captcha", f"captcha page flow failed: {' '.join(str(ex).split()[:30])}")
+            pg.screenshot(path=os.path.join(args.out, "captcha-failure.png"))
+        finally:
+            pg.evaluate("""host => new Promise(res => $.cjax({url: '/api/proxy/del', method: 'POST', data: {ep: host}, success: res, error: res}))""", host)
+
+        # ---- WAF page: tabs, mode cards, exclusions list ----
+        current["page"] = "waf-page"
+        try:
+            pg.evaluate("openTabById('waf')")
+            settle(pg, 900)
+            if pg.locator("#wafModeCards .wafCard").count() != 3:
+                fail("waf", "mode selector does not show three modes")
+            for t in ("events", "coverage", "policy", "profiles", "exclusions", "rules"):
+                pg.click(f"#wafTabs .item[data-tab=waf-{t}]")
+                settle(pg, 700)
+                pg.screenshot(path=os.path.join(args.out, f"waf-{t}.png"), full_page=True)
+            pg.click("#wafTabs .item[data-tab=waf-exclusions]")
+            pg.fill("#wafxRule", "942999")
+            pg.click("#wafxAdd")
+            pg.wait_for_timeout(1200)
+            if "942999" not in pg.inner_text("#wafxBody"):
+                fail("waf", "added exclusion is not listed")
+            pg.fill("#wafxFilter", "942999")
+            pg.click("#wafxBody .wafxDel")
+            pg.wait_for_timeout(1200)
+            if "942999" in pg.inner_text("#wafxBody"):
+                fail("waf", "removed exclusion is still listed")
+            pg.fill("#wafxFilter", "")
+        except Exception as ex:
+            fail("waf", f"waf page flow failed: {' '.join(str(ex).split()[:30])}")
 
         # ---- narrow / mobile layout ----
         current["page"] = "mobile"
