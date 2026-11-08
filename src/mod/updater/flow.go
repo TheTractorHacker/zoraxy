@@ -155,6 +155,17 @@ func (m *Manager) runApp(ctx context.Context, opts RunOptions, reserved bool) (e
 		return err
 	}
 	m.logf(a, "SHA256SUMS signature is valid")
+	installedBuild := 0
+	if cur.Known {
+		if inst := m.st.installed(); inst != nil {
+			installedBuild = inst.Build
+		}
+	}
+	hdr, err := CheckSumsHeader(sums, r.rel.Tag, installedBuild)
+	if err != nil {
+		return err
+	}
+	m.logf(a, "Signed release header: tag %s build %d", hdr.Tag, hdr.Build)
 
 	m.stage(a, "Downloading "+r.asset.Name)
 	tmp, err := os.CreateTemp(exeDir, ".zoraxy-update-*")
@@ -207,7 +218,7 @@ func (m *Manager) runApp(ctx context.Context, opts RunOptions, reserved bool) (e
 	}
 	installed = true
 	newSHA := fmt.Sprintf("%x", sum)
-	newInst := &Installed{Tag: r.rel.Tag, Published: r.rel.Published, SHA256: newSHA, Previous: prevInst}
+	newInst := &Installed{Tag: r.rel.Tag, Published: r.rel.Published, SHA256: newSHA, Build: hdr.Build, Previous: prevInst}
 	now := m.cfg.Hooks.Now()
 	pend := &Pending{
 		Tag: r.rel.Tag, PrevTag: cur.label(), Exe: exe, PrevBinary: prevSlot(exe, 0), Args: m.cfg.Args,

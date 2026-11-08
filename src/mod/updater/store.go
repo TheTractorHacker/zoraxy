@@ -74,6 +74,7 @@ type Installed struct {
 	Tag       string     `json:"tag"`
 	Published time.Time  `json:"published"`
 	SHA256    string     `json:"sha256"`
+	Build     int        `json:"build,omitempty"` // signed build number from SHA256SUMS
 	Previous  *Installed `json:"previous,omitempty"`
 }
 

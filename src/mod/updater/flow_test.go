@@ -235,6 +235,8 @@ func TestUpdateFailuresLeaveBinaryUntouched(t *testing.T) {
 		{"tampered binary", func(r *fakeRelease) { r.TamperBinary = true }, "checksum mismatch"},
 		{"tampered sums", func(r *fakeRelease) { r.TamperSums = true }, "signature verification FAILED"},
 		{"wrong signing key", func(r *fakeRelease) { r.WrongKey = true }, "signature verification FAILED"},
+		{"replayed sums signed for another tag", func(r *fakeRelease) { r.SignedTag = "v3.3.5-old.1" }, "does not match release tag"},
+		{"legacy sums without release header", func(r *fakeRelease) { r.NoHeader = true }, "release header"},
 		{"missing signature asset", func(r *fakeRelease) { r.NoSig = true }, "not signed"},
 		{"missing platform asset", func(r *fakeRelease) { r.NoBinary = true }, "no asset"},
 	}
@@ -265,6 +267,35 @@ func TestUpdateFailuresLeaveBinaryUntouched(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A validly signed older build (lower signed build number) must not be
+// installable over a newer one, even if GitHub metadata claims it is newer.
+func TestSignedBuildMustIncrease(t *testing.T) {
+	f := newFixture(t)
+	r1 := f.release("v3.3.6-x.1", false, 10*24*time.Hour, "NEW1")
+	r1.Build = 50
+	f.gh.set(r1)
+	must(t, f.m.RunApp(context.Background(), RunOptions{}))
+	f.m.MarkHealthy()
+	f.unbusy()
+	if inst := f.m.st.installed(); inst == nil || inst.Build != 50 {
+		t.Fatalf("installed build not recorded: %+v", inst)
+	}
+	r2 := f.release("v3.3.7-x.1", false, time.Hour, "NEW2")
+	r2.Build = 49 // replayed/older signed content
+	f.gh.set(r2)
+	err := f.m.RunApp(context.Background(), RunOptions{})
+	if err == nil || !strings.Contains(err.Error(), "build") {
+		t.Fatalf("expected build downgrade refusal, got %v", err)
+	}
+	if f.readExe() != "NEW1" {
+		t.Error("binary must be untouched")
+	}
+	f.unbusy()
+	r2.Build = 51
+	f.gh.set(r2)
+	must(t, f.m.RunApp(context.Background(), RunOptions{}))
 }
 
 func TestBackupFailureAbortsBeforeDownload(t *testing.T) {
