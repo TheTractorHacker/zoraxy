@@ -175,7 +175,7 @@ var nodeLocalProxyPaths = map[string]bool{
 	"/api/proxy/enable": true, "/api/proxy/setIncoming": true, "/api/proxy/useHttpsRedirect": true,
 	"/api/proxy/listenPort80": true, "/api/proxy/httpListenAddr": true, "/api/proxy/developmentMode": true, "/api/proxy/proxyProtocol": true,
 	"/api/proxy/quic": true, "/api/proxy/timeouts": true, "/api/proxy/tlscheck": true,
-	"/api/proxy/requestIsProxied": true,
+	"/api/proxy/requestIsProxied": true, "/api/proxy/ops/globalerrors": true, "/api/proxy/ops/errorpreview": true,
 }
 
 // isSyncedWrite reports whether a request would modify synced state.

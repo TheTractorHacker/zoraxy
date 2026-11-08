@@ -363,6 +363,7 @@ func ReverseProxyInit() {
 
 	//Persist basic auth credential hashes upgraded from legacy SHA-512
 	dprouter.Option.PersistProxyEndpoint = SaveReverseProxyConfig
+	initOpsGlobals()
 	dynamicProxyRouter = dprouter
 
 	//Optional logging of default site requests (off unless enabled)
