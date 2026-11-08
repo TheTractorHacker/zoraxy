@@ -124,3 +124,14 @@ Status: ✅ done · 🔧 in progress · 📋 planned
 - ✅ Opt-in rate limited logging of default site requests (upstream #578).
 - ✅ Run plugins as an unprivileged OS user, `-plugin_user` / `-plugin_group` (upstream #760). 📋 Per-plugin user, automatic ownership fix.
 - ✅ Network diagnostics: DNS lookup, TLS certificate inspector, HTTP request tester with metadata address guard.
+
+## 12. Proxy behaviour and ops (`feat/proxy-ops-2`)
+- ✅ Global / per-rule error pages with html/template, Retry-After, request id (upstream #313); streaming, gRPC and WebSocket responses are never replaced.
+- ✅ Static responses served without the upstream, public or behind auth (upstream #431).
+- ✅ Unix domain socket upstreams `unix:/path.sock` (upstream #663). 📋 WebSocket and the passive uptime monitor over a socket.
+- ✅ Load balancing by client CIDR / country with fallback (upstream #677).
+- ✅ Proxy handled CORS with preflight (upstream #680).
+- ✅ Opt-in backtracking regex engine for redirect rules, hard match timeout (upstream #689).
+- ✅ `{{host}}` `{{client_ip}}` `{{request_id}}` `{{rule_name}}` `{{external_ip}}` in headers, redirects, static responses; rule templates; bulk edit (upstream #370 #826 #877 #924).
+- ✅ API tokens + `/api/v1` + OpenAPI (upstream #382 #714 #996), response bandwidth limit (upstream #1208), plain HTTP listener address (#909), IP calculators (#504), opt-in split-horizon DNS responder (#769).
+- 📋 UI editor for custom rule templates (API exists), bandwidth limit for WebSocket traffic.
