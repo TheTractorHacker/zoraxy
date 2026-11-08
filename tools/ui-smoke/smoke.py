@@ -169,6 +169,31 @@ def main():
         settle(pg, 900)
         try:
             pg.screenshot(path=os.path.join(args.out, "httprp-with-rule.png"))
+            # bulk edit: selection checkbox, action bar and a modal
+            if pg.locator("#httpProxyList .bulkSel").count() < 1:
+                fail("bulk", "no selection checkbox in the proxy rule table")
+            else:
+                pg.click("#httpProxyList .bulkSel")
+                if not pg.is_visible("#bulkBar"):
+                    fail("bulk", "bulk action bar did not appear after selecting a rule")
+                else:
+                    pg.click("#bulkBar button[data-act=tags]")
+                    pg.wait_for_selector("#bulkModal", state="visible", timeout=5000)
+                    pg.screenshot(path=os.path.join(args.out, "httprp-bulk-modal.png"))
+                    pg.evaluate("$('#bulkModal').modal('hide')")
+                    pg.wait_for_timeout(400)
+                    pg.click("#bulkBar button[data-act=clear]")
+            # per rule ops editor (error pages, static responses, CORS, bandwidth)
+            current["page"] = "opseditor"
+            pg.goto(args.url + "/snippet/opsEditor.html#" + "%7B%22ept%22%3A%22host%22%2C%22ep%22%3A%22smoke-test.invalid%22%7D", wait_until="networkidle")
+            pg.wait_for_timeout(600)
+            pg.screenshot(path=os.path.join(args.out, "ops-editor.png"))
+            pg.goto(args.url + "/snippet/globalErrorPages.html", wait_until="networkidle")
+            pg.wait_for_timeout(400)
+            pg.goto(args.url + "/", wait_until="networkidle")
+            pg.evaluate("openTabById('httprp')")
+            settle(pg)
+            current["page"] = "editor"
             pg.click("#httpProxyList .editBtn")
             pg.wait_for_selector("#httprpEditModal", state="visible", timeout=5000)
             settle(pg, 800)
