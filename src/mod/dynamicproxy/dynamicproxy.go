@@ -145,7 +145,7 @@ func NewDynamicProxy(option RouterOption) (*Router, error) {
 		routingRules:        []*RoutingRule{},
 		loadBalancer:        option.LoadBalancer,
 		rateLimitCounter:    RequestCountPerIpTable{},
-		captchaSessionStore: captcha.NewSessionStore(),
+		captchaSessionStore: captcha.NewSessionStoreWithSecret(option.HostUUID),
 		secondaryServers:    make(map[string]*http.Server),
 		secondaryStopChans:  make(map[string]chan bool),
 	}
@@ -519,9 +519,15 @@ func (router *Router) handleCaptchaGating(w http.ResponseWriter, r *http.Request
 		return false, false
 	}
 
-	if captcha.CheckException(r, sep.CaptchaConfig.ExceptionRules, clientIP) || captcha.CheckSession(r, router.captchaSessionStore) {
+	if captcha.CheckException(r, sep.CaptchaConfig.ExceptionRules, clientIP) {
 		return false, false
 	}
+	sessionOK, sessionReason := captcha.CheckSessionReason(r, router.captchaSessionStore)
+	if sessionOK {
+		return false, false
+	}
+	// Tell the client why it is being challenged again (helps debug re-challenges)
+	w.Header().Set("X-Zoraxy-Captcha-Reason", sessionReason)
 
 	domain := r.Host
 	if domain == "" {

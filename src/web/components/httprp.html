@@ -622,10 +622,10 @@
                                     <input type="password" class="CaptchaSecretKey" placeholder="Secret Key / Private Key">
                                 </div>
                                 <div class="ui small right labeled fluid input" style="margin-bottom: 0.8em;">
-                                    <input type="number" class="CaptchaSessionDuration" value="3600" min="60" max="86400">
+                                    <input type="number" class="CaptchaSessionDuration" value="3600" min="60" max="2592000">
                                     <label class="ui basic label">seconds</label>
                                 </div>
-                                <small style="opacity:0.7;">Session duration: how long users can access after solving CAPTCHA</small>
+                                <small style="opacity:0.7;">Session duration in <b>seconds</b> (min 60, max 2592000): how long users can access after solving CAPTCHA. <b class="CaptchaSessionHuman"></b></small>
                                 <div style="margin-top: 0.8em;">
                                     <label>Protected Path Prefixes (Optional)</label>
                                     <textarea class="CaptchaPathPrefixes" rows="3" placeholder="/form&#10;/api" style="width: 100%; resize: vertical;"></textarea>
@@ -2088,7 +2088,21 @@
         editor.find(".CaptchaSecretKey").off("change").on("change", function() {
             saveProxyInlineEdit(uuid);
         });
+        function showCaptchaSessionHuman() {
+            let sec = parseInt(editor.find(".CaptchaSessionDuration").val(), 10);
+            let txt = "";
+            if (!isNaN(sec)) {
+                if (sec < 60) sec = 60;
+                if (sec >= 86400) txt = "= " + (sec / 86400).toFixed(sec % 86400 ? 1 : 0) + " day(s)";
+                else if (sec >= 3600) txt = "= " + (sec / 3600).toFixed(sec % 3600 ? 1 : 0) + " hour(s)";
+                else txt = "= " + Math.round(sec / 60) + " minute(s)";
+            }
+            editor.find(".CaptchaSessionHuman").text(txt);
+        }
+        showCaptchaSessionHuman();
+        editor.find(".CaptchaSessionDuration").off("input").on("input", showCaptchaSessionHuman);
         editor.find(".CaptchaSessionDuration").off("change").on("change", function() {
+            showCaptchaSessionHuman();
             saveProxyInlineEdit(uuid);
         });
         editor.find(".CaptchaPathPrefixes").off("change").on("change", function() {
