@@ -97,6 +97,27 @@ def main():
                 check_horizontal(pg, "desktop")
                 pg.screenshot(path=os.path.join(args.out, f"{t}-{theme}.png"))
 
+        # ---- Security Center sub tabs and the Access rule Options tab ----
+        current["page"] = "seccenter-tabs"
+        pg.evaluate("openTabById('seccenter')")
+        settle(pg)
+        for sec in pg.eval_on_selector_all("#secTabs .item", "els => els.map(e => e.getAttribute('data-sec'))"):
+            current["page"] = f"seccenter/{sec}"
+            pg.click(f"#secTabs .item[data-sec='{sec}']")
+            settle(pg, 900)
+            if pg.evaluate("document.getElementById('secPane').innerText.trim().length") < 20:
+                fail("tab", f"security tab {sec} is empty")
+            check_horizontal(pg, "desktop")
+            pg.screenshot(path=os.path.join(args.out, f"seccenter-{sec}.png"))
+        current["page"] = "access-options"
+        pg.evaluate("openTabById('access')")
+        settle(pg)
+        pg.click(".menu .accesscontrol.item[data-tab='tab_options']")
+        settle(pg, 900)
+        if pg.evaluate("document.getElementById('accessOptionsPane').innerText.trim().length") < 20:
+            fail("tab", "access Options tab is empty")
+        pg.screenshot(path=os.path.join(args.out, "access-options.png"))
+
         # ---- nav scroll behaviour at a short viewport ----
         current["page"] = "nav-scroll"
         if pg.evaluate("document.body.classList.contains('darkTheme')"):

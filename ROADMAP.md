@@ -124,3 +124,12 @@ Status: ✅ done · 🔧 in progress · 📋 planned
 - ✅ Opt-in rate limited logging of default site requests (upstream #578).
 - ✅ Run plugins as an unprivileged OS user, `-plugin_user` / `-plugin_group` (upstream #760). 📋 Per-plugin user, automatic ownership fix.
 - ✅ Network diagnostics: DNS lookup, TLS certificate inspector, HTTP request tester with metadata address guard.
+
+## Security and access (feat/security-access-2)
+
+Done (all opt-in): built-in auto-ban + remote ban API, multiple admin accounts with viewer role and audit log, challenge countries,
+drop-on-block, access rule sort / duplicate, bot rules, header rules, shared basic auth lists + path scoped basic auth, auth audit and
+auto-tagging, OAuth2 / OIDC claim and e-mail allow-lists, Altcha CAPTCHA.
+
+Open: multiple OIDC / OAuth2 providers selectable per proxy rule (needs one `OAuth2Router` per provider and per-provider callback paths),
+FriendlyCaptcha, counting SSO redirect failures in the auto-ban, per-user admin API tokens, fine grained roles beyond admin / viewer.

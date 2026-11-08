@@ -71,6 +71,11 @@
         if (a === "setRole") { d.role = $(this).attr("data-r"); }
         act(d);
     });
-    load();
+    $.get("/api/auth/authEnabled", function (on) {
+        if (on === false) {
+            $("#usrRows").html('<tr><td colspan="4">The admin panel runs without authentication (-noauth), so there are no accounts to manage.</td></tr>');
+            $("#usrAdd").prop("disabled", true);
+        } else { load(); }
+    });
 })();
 </script>
