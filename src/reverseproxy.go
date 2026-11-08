@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 
 	"imuslab.com/zoraxy/mod/auth"
 	"imuslab.com/zoraxy/mod/dynamicproxy"
+	"imuslab.com/zoraxy/mod/dynamicproxy/captcha"
 	"imuslab.com/zoraxy/mod/dynamicproxy/loadbalance"
 	"imuslab.com/zoraxy/mod/dynamicproxy/permissionpolicy"
 	"imuslab.com/zoraxy/mod/dynamicproxy/rewrite"
@@ -59,9 +61,13 @@ func parseCaptchaConfigFromRequest(r *http.Request) (*dynamicproxy.CaptchaConfig
 		captchaProvider, _ = strconv.Atoi(captchaProviderStr)
 	}
 
-	captchaSessionDuration := 3600
+	captchaSessionDuration := captcha.DefaultSessionDuration
 	if captchaSessionDurationStr != "" {
-		captchaSessionDuration, _ = strconv.Atoi(captchaSessionDurationStr)
+		parsed, err := strconv.Atoi(strings.TrimSpace(captchaSessionDurationStr))
+		if err != nil {
+			return nil, fmt.Errorf("invalid CAPTCHA session duration %q: must be a number of seconds", captchaSessionDurationStr)
+		}
+		captchaSessionDuration = captcha.ClampSessionDuration(parsed)
 	}
 
 	captchaRecaptchaScore := 0.5
