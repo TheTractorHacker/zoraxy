@@ -53,65 +53,55 @@
                     </div>
                     <div class="ui divider recent-section-divider"></div>
 
-                    <a class="item" tag="qstart">
-                        <i class="simplistic magic icon"></i>Quick Start
+                    <!--
+                        NAVIGATION MAP.  To add a page: append ONE line inside the group it belongs to:
+                            <a class="item" tag="TABID" tab_group="GROUPID"><i class="simplistic ICON icon"></i> Label</a>
+                        TABID is the id of the <div class="functiontab"> further down, GROUPID the suffix of the group id
+                        (id="group-GROUPID"). Every item needs an icon (Semantic UI 2.4.2 / Font Awesome 5 free names).
+                        Groups: proxy, security, certs, observe, tools, system.
+                        Do not rename existing tab ids or group ids: scripts, the UI smoke test and saved menu state use them.
+                    -->
+                    <a class="item" tag="qstart" id="qstartNavItem" style="display:none;">
+                        <i class="simplistic magic icon"></i> Quick Start
                     </a>
                     <a class="item active" tag="status">
-                        <i class="simplistic info circle icon"></i>Status
-                    </a>
-                    <a class="item" tag="globalsettings">
-                        <i class="arrow alternate circle right icon"></i>Ingress
-                    </a>
-                    <a class="item" tag="setroot">
-                        <i class="simplistic home icon"></i> Default Site
+                        <i class="simplistic info circle icon"></i> Status
                     </a>
 
-                    <!-- Reverse Proxy Group -->
+                    <!-- Proxy: everything that routes traffic to an upstream -->
                     <div class="menugroup-container">
-                        <div class="menugroup-header" onclick="toggleMenuGroup('reverseproxy')">
-                            <img class="menugroup-icon theme-icon-light" src="img/icons/proxy_black.svg" alt="Reverse Proxy">
-                            <img class="menugroup-icon theme-icon-dark" src="img/icons/proxy_white.svg" alt="Reverse Proxy">
-                            <span>Reverse Proxy</span>
-                            <i class="chevron down icon menugroup-chevron" id="chevron-reverseproxy"></i>
+                        <div class="menugroup-header" onclick="toggleMenuGroup('proxy')">
+                            <img class="menugroup-icon theme-icon-light" src="img/icons/proxy_black.svg" alt="Proxy">
+                            <img class="menugroup-icon theme-icon-dark" src="img/icons/proxy_white.svg" alt="Proxy">
+                            <span>Proxy</span>
+                            <i class="chevron down icon menugroup-chevron" id="chevron-proxy"></i>
                         </div>
-                        <div class="menugroup-items" id="group-reverseproxy">
-                            <a class="item" tag="httprp" tab_group="reverseproxy">
+                        <div class="menugroup-items" id="group-proxy">
+                            <a class="item" tag="httprp" tab_group="proxy">
                                 <i class="simplistic sitemap icon"></i> HTTP Proxy
                             </a>
-                            <a class="item" tag="vdir" tab_group="reverseproxy">
-                                <i class="simplistic folder icon"></i> Virtual Directory
+                            <a class="item" tag="setroot" tab_group="proxy">
+                                <i class="simplistic home icon"></i> Default Site
                             </a>
-                            <a class="item" tag="rules" tab_group="reverseproxy">
-                                <i class="simplistic plus square icon"></i> Create Proxy Rule
-                            </a>
-                            <a class="item" tag="streamproxy" tab_group="reverseproxy">
-                                <i class="simplistic exchange icon"></i> Stream Proxy
-                            </a>
-                        </div>
-                    </div>
-
-                    <!-- Access & Connections Group -->
-                    <div class="menugroup-container">
-                        <div class="menugroup-header" onclick="toggleMenuGroup('accessconn')">
-                            <img class="menugroup-icon theme-icon-light" src="img/icons/access_black.svg" alt="Access and Connections">
-                            <img class="menugroup-icon theme-icon-dark" src="img/icons/access_white.svg" alt="Access and Connections">
-                            <span>Access & Connections</span>
-                            <i class="chevron down icon menugroup-chevron" id="chevron-accessconn"></i>
-                        </div>
-                        <div class="menugroup-items" id="group-accessconn">
-                            <a class="item" tag="redirectset" tab_group="accessconn">
+                            <a class="item" tag="redirectset" tab_group="proxy">
                                 <i class="simplistic level up alternate icon"></i> Redirection
                             </a>
-                            <a class="item" tag="access" tab_group="accessconn">
-                                <i class="simplistic ban icon"></i> Access Control
+                            <a class="item" tag="vdir" tab_group="proxy">
+                                <i class="simplistic folder icon"></i> Virtual Directories
                             </a>
-                             <a class="item" tag="trustproxy" tab_group="accessconn">
-                                <i class="shield alternate icon"></i> Trusted Proxy
+                            <a class="item" tag="streamproxy" tab_group="proxy">
+                                <i class="simplistic exchange icon"></i> Stream Proxy
+                            </a>
+                            <a class="item" tag="globalsettings" tab_group="proxy">
+                                <i class="simplistic arrow alternate circle right icon"></i> Ingress
+                            </a>
+                            <a class="item" tag="rules" tab_group="proxy">
+                                <i class="simplistic plus square icon"></i> Advanced Rule Form
                             </a>
                         </div>
                     </div>
 
-                    <!-- Security Group -->
+                    <!-- Security: who may connect and how they are checked -->
                     <div class="menugroup-container">
                         <div class="menugroup-header" onclick="toggleMenuGroup('security')">
                             <img class="menugroup-icon theme-icon-light" src="img/icons/security_black.svg" alt="Security">
@@ -120,85 +110,103 @@
                             <i class="chevron down icon menugroup-chevron" id="chevron-security"></i>
                         </div>
                         <div class="menugroup-items" id="group-security">
-                            <a class="item" tag="cert" tab_group="security">
-                                <i class="simplistic lock icon"></i> TLS / SSL certificates
-                            </a>
-                            <a class="item" tag="acme" tab_group="security">
-                                <i class="simplistic asterisk icon"></i> ACME Client
-                            </a>
-                            <a class="item" tag="sso" tab_group="security">
-                                <i class="simplistic user circle icon"></i> SSO / OAuth2
+                            <a class="item" tag="seccenter" tab_group="security">
+                                <i class="simplistic user secret icon"></i> Security Center
                             </a>
                             <a class="item" tag="waf" tab_group="security">
                                 <i class="simplistic shield alternate icon"></i> WAF
                             </a>
-                            <a class="item" tag="seccenter" tab_group="security">
-                                <i class="simplistic user secret icon"></i> Security Center
+                            <a class="item" tag="access" tab_group="security">
+                                <i class="simplistic ban icon"></i> Access Rules
+                            </a>
+                            <a class="item" tag="trustproxy" tab_group="security">
+                                <i class="simplistic handshake icon"></i> Trusted Proxies
+                            </a>
+                            <a class="item" tag="sso" tab_group="security">
+                                <i class="simplistic user circle icon"></i> SSO / OAuth2
                             </a>
                         </div>
                     </div>
 
-                    <!-- Services Group -->
+                    <!-- Certificates -->
                     <div class="menugroup-container">
-                        <div class="menugroup-header" onclick="toggleMenuGroup('services')">
-                            <img class="menugroup-icon theme-icon-light" src="img/icons/service_black.svg" alt="Services">
-                            <img class="menugroup-icon theme-icon-dark" src="img/icons/service_white.svg" alt="Services">
-                            <span>Services</span>
-                            <i class="chevron down icon menugroup-chevron" id="chevron-services"></i>
+                        <div class="menugroup-header" onclick="toggleMenuGroup('certs')">
+                            <img class="menugroup-icon theme-icon-light" src="img/icons/certs_black.svg" alt="Certificates">
+                            <img class="menugroup-icon theme-icon-dark" src="img/icons/certs_white.svg" alt="Certificates">
+                            <span>Certificates</span>
+                            <i class="chevron down icon menugroup-chevron" id="chevron-certs"></i>
                         </div>
-                        <div class="menugroup-items" id="group-services">
-                            <a class="item" tag="webserv" tab_group="services">
-                                <i class="simplistic globe icon"></i> Static Web Server
+                        <div class="menugroup-items" id="group-certs">
+                            <a class="item" tag="cert" tab_group="certs">
+                                <i class="simplistic lock icon"></i> TLS / SSL Certificates
                             </a>
-                            <a class="item" tag="utm" tab_group="services">
+                            <a class="item" tag="acme" tab_group="certs">
+                                <i class="simplistic asterisk icon"></i> ACME Client
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Observability: what is happening and who is calling (Visitors goes here) -->
+                    <div class="menugroup-container">
+                        <div class="menugroup-header" onclick="toggleMenuGroup('observe')">
+                            <img class="menugroup-icon theme-icon-light" src="img/icons/observe_black.svg" alt="Observability">
+                            <img class="menugroup-icon theme-icon-dark" src="img/icons/observe_white.svg" alt="Observability">
+                            <span>Observability</span>
+                            <i class="chevron down icon menugroup-chevron" id="chevron-observe"></i>
+                        </div>
+                        <div class="menugroup-items" id="group-observe">
+                            <a class="item" tag="stats" tab_group="observe">
+                                <i class="simplistic chart bar icon"></i> Statistics
+                            </a>
+                            <a class="item" tag="utm" tab_group="observe">
                                 <i class="simplistic time icon"></i> Uptime Monitor
                             </a>
                         </div>
                     </div>
 
-                    <!-- Networking Group -->
+                    <!-- Tools: extra services and helpers that run next to the proxy -->
                     <div class="menugroup-container">
-                        <div class="menugroup-header" onclick="toggleMenuGroup('networking')">
-                            <img class="menugroup-icon theme-icon-light" src="img/icons/lan_black.svg" alt="Networking">
-                            <img class="menugroup-icon theme-icon-dark" src="img/icons/lan_white.svg" alt="Networking">
-                            <span>Networking</span>
-                            <i class="chevron down icon menugroup-chevron" id="chevron-networking"></i>
+                        <div class="menugroup-header" onclick="toggleMenuGroup('tools')">
+                            <img class="menugroup-icon theme-icon-light" src="img/icons/service_black.svg" alt="Tools">
+                            <img class="menugroup-icon theme-icon-dark" src="img/icons/service_white.svg" alt="Tools">
+                            <span>Tools</span>
+                            <i class="chevron down icon menugroup-chevron" id="chevron-tools"></i>
                         </div>
-                        <div class="menugroup-items" id="group-networking">
-                            <a class="item" tag="networktool" tab_group="networking">
+                        <div class="menugroup-items" id="group-tools">
+                            <a class="item" tag="webserv" tab_group="tools">
+                                <i class="simplistic globe icon"></i> Static Web Server
+                            </a>
+                            <a class="item" tag="networktool" tab_group="tools">
                                 <i class="simplistic terminal icon"></i> Network Tools
                             </a>
-                            <a class="item" tag="iface" tab_group="networking">
-                                <i class="wifi icon"></i> Network Interfaces
+                            <a class="item" tag="iface" tab_group="tools">
+                                <i class="simplistic wifi icon"></i> Network Interfaces
+                            </a>
+                            <a class="item" tag="utils" tab_group="tools">
+                                <i class="simplistic paperclip icon"></i> Utilities
                             </a>
                         </div>
                     </div>
 
-                    <!-- Others Group -->
+                    <!-- System: running, clustering and updating Zoraxy itself -->
                     <div class="menugroup-container">
-                        <div class="menugroup-header" onclick="toggleMenuGroup('others')">
-                            <img class="menugroup-icon theme-icon-light" src="img/icons/others_black.svg" alt="Others">
-                            <img class="menugroup-icon theme-icon-dark" src="img/icons/others_white.svg" alt="Others">
-                            <span>Others</span>
-                            <i class="chevron down icon menugroup-chevron" id="chevron-others"></i>
+                        <div class="menugroup-header" onclick="toggleMenuGroup('system')">
+                            <img class="menugroup-icon theme-icon-light" src="img/icons/others_black.svg" alt="System">
+                            <img class="menugroup-icon theme-icon-dark" src="img/icons/others_white.svg" alt="System">
+                            <span>System</span>
+                            <i class="chevron down icon menugroup-chevron" id="chevron-system"></i>
                         </div>
-                        <div class="menugroup-items" id="group-others">
-                            <a class="item" tag="stats" tab_group="others">
-                                <i class="simplistic database icon"></i> Statistical Analysis
-                            </a>
-                            <a class="item" tag="utils" tab_group="others">
-                                <i class="simplistic paperclip icon"></i> Utilities
-                            </a>
-                            <a class="item" tag="cluster" tab_group="others">
+                        <div class="menugroup-items" id="group-system">
+                            <a class="item" tag="cluster" tab_group="system">
                                 <i class="simplistic server icon"></i> Cluster / HA
                             </a>
-                            <a class="item" tag="fleet" tab_group="others">
-                                <i class="simplistic sitemap icon"></i> Fleet
+                            <a class="item" tag="fleet" tab_group="system">
+                                <i class="simplistic cubes icon"></i> Fleet
                             </a>
-                            <a class="item" tag="apitokens" tab_group="others">
+                            <a class="item" tag="apitokens" tab_group="system">
                                 <i class="simplistic key icon"></i> API Tokens
                             </a>
-                            <a class="item" tag="updater" tab_group="others">
+                            <a class="item" tag="updater" tab_group="system">
                                 <i class="simplistic download icon"></i> Update
                             </a>
                         </div>
@@ -453,8 +461,10 @@
                         openTabById(tabID);
                     }
                 }else{
-                    openTabById("status");
+                    //Fresh (not yet set up) instances land on Quick Start, everyone else on Status
+                    initQuickStartState(function(show){ openTabById(show ? "qstart" : "status"); });
                 }
+                if (window.location.hash.length > 1) { initQuickStartState(); }
                 $(".ui.dropdown").dropdown();
                 $(".ui.checkbox").checkbox();
 
@@ -735,6 +745,33 @@
             /* Utilities */
             $(".year").text(new Date().getFullYear());
 
+            /*
+                Quick Start visibility. The server decides (GET /api/quickstart): it is shown until at least one proxy rule
+                exists and the proxy is running, or until it is dismissed. Hidden = no menu item.
+            */
+            var quickStartState = { show: true };
+            function applyQuickStartState(s){
+                quickStartState = s || quickStartState;
+                var show = !!quickStartState.show;
+                $("#qstartNavItem").toggle(show);
+                if (!show && $("#qstart").is(":visible")) { openTabById("status"); }
+                $(".quickStartShowAgain").toggle(!show);
+            }
+            function initQuickStartState(cb){
+                $.get("./api/quickstart", function(s){
+                    applyQuickStartState(s);
+                    if (cb) { cb(!!(s && s.show)); }
+                }).fail(function(){ $("#qstartNavItem").show(); if (cb) { cb(false); } });
+            }
+            function setQuickStartDismissed(dismissed){
+                $.cjax({url: "./api/quickstart", method: "POST", data: {dismissed: dismissed}, success: function(s){
+                    if (s && s.error){ msgbox(s.error, false); return; }
+                    applyQuickStartState(s);
+                    msgbox(dismissed ? "Quick Start hidden. You can bring it back in Ingress settings." : "Quick Start is back in the menu", true);
+                    if (!dismissed) { openTabById("qstart"); }
+                }});
+            }
+
             /* 
                 Collapsible Side Menu Groups
             */
@@ -751,9 +788,25 @@
                 return map;
             })();
 
+            // Saved state (localStorage zoraxy_menu_groups) is {groupId: expanded}. Version 2 of the menu renamed the
+            // groups; state saved under the old ids is carried over to the group that took their place.
+            var MENU_GROUP_MIGRATION = {
+                reverseproxy: 'proxy', security: 'security', services: 'tools', others: 'system'
+            };
             function getMenuGroupStates() {
-                try { return JSON.parse(localStorage.getItem('zoraxy_menu_groups') || '{}'); }
+                var states;
+                try { states = JSON.parse(localStorage.getItem('zoraxy_menu_groups') || '{}') || {}; }
                 catch(e) { return {}; }
+                if (states._v !== 2) {
+                    var migrated = { _v: 2 };
+                    if (states.recent !== undefined) { migrated.recent = states.recent; }
+                    Object.keys(MENU_GROUP_MIGRATION).forEach(function(oldId) {
+                        if (states[oldId] !== undefined) { migrated[MENU_GROUP_MIGRATION[oldId]] = states[oldId]; }
+                    });
+                    states = migrated;
+                    try { localStorage.setItem('zoraxy_menu_groups', JSON.stringify(states)); } catch(e) {}
+                }
+                return states;
             }
 
             function saveMenuGroupStates(states) {
