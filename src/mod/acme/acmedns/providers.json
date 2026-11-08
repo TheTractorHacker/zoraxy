@@ -1407,6 +1407,33 @@
    }
   ]
  },
+ "dnshomede": {
+  "Name": "dnshomede",
+  "ConfigableFields": [
+   {
+    "Title": "Credentials",
+    "Datatype": "map[string]string"
+   },
+   {
+    "Title": "PropagationTimeout",
+    "Datatype": "time.Duration"
+   },
+   {
+    "Title": "PollingInterval",
+    "Datatype": "time.Duration"
+   }
+  ],
+  "HiddenFields": [
+   {
+    "Title": "SequenceInterval",
+    "Datatype": "time.Duration"
+   },
+   {
+    "Title": "HTTPClient",
+    "Datatype": "*http.Client"
+   }
+  ]
+ },
  "dnsimple": {
   "Name": "dnsimple",
   "ConfigableFields": [
@@ -2634,6 +2661,33 @@
    }
   ]
  },
+ "hurricane": {
+  "Name": "hurricane",
+  "ConfigableFields": [
+   {
+    "Title": "Credentials",
+    "Datatype": "map[string]string"
+   },
+   {
+    "Title": "PropagationTimeout",
+    "Datatype": "time.Duration"
+   },
+   {
+    "Title": "PollingInterval",
+    "Datatype": "time.Duration"
+   }
+  ],
+  "HiddenFields": [
+   {
+    "Title": "SequenceInterval",
+    "Datatype": "time.Duration"
+   },
+   {
+    "Title": "HTTPClient",
+    "Datatype": "*http.Client"
+   }
+  ]
+ },
  "hyperone": {
   "Name": "hyperone",
   "ConfigableFields": [
@@ -3433,6 +3487,37 @@
    }
   ],
   "HiddenFields": [
+   {
+    "Title": "HTTPClient",
+    "Datatype": "*http.Client"
+   }
+  ]
+ },
+ "myaddr": {
+  "Name": "myaddr",
+  "ConfigableFields": [
+   {
+    "Title": "Credentials",
+    "Datatype": "map[string]string"
+   },
+   {
+    "Title": "PropagationTimeout",
+    "Datatype": "time.Duration"
+   },
+   {
+    "Title": "PollingInterval",
+    "Datatype": "time.Duration"
+   }
+  ],
+  "HiddenFields": [
+   {
+    "Title": "SequenceInterval",
+    "Datatype": "time.Duration"
+   },
+   {
+    "Title": "TTL",
+    "Datatype": "int"
+   },
    {
     "Title": "HTTPClient",
     "Datatype": "*http.Client"
@@ -4742,6 +4827,10 @@
     "Datatype": "string"
    },
    {
+    "Title": "RecordsMapping",
+    "Datatype": "map[string]*Seq"
+   },
+   {
     "Title": "PropagationTimeout",
     "Datatype": "time.Duration"
    },
@@ -4751,10 +4840,6 @@
    }
   ],
   "HiddenFields": [
-   {
-    "Title": "RecordsMapping",
-    "Datatype": "map[string]*Seq"
-   },
    {
     "Title": "recordsMappingMu",
     "Datatype": "sync.Mutex"

@@ -44,8 +44,17 @@ func GetDnsChallengeProviderByName(dnsProvider string, dnsCredentials string, pp
 		return newPleskProvider(dnsCredentialsMap, userDefinedPropagationTimeout, userDefinedPollingInterval)
 	}
 
+	if dnsProvider == "selfhostde" {
+		return newSelfhostdeProvider(dnsCredentialsMap, userDefinedPropagationTimeout, userDefinedPollingInterval)
+	}
+
 	providerConfigStructure, err := acmedns.GetProviderConfigStructure(dnsProvider)
 	if err != nil {
+		return nil, err
+	}
+
+	// Map typed fields (Hurricane Electric Credentials ...) arrive as text from the UI
+	if err := normaliseMapCredentials(providerConfigStructure, dnsCredentialsMap); err != nil {
 		return nil, err
 	}
 
