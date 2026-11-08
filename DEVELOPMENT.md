@@ -1448,3 +1448,46 @@ idle for 45 s, the grid is a viewport sized background). `uxkit.js` scans only t
   `Enabled` (default on), `MaxIPs` 20000, `MaxAgeDays` 90, `MaxVisits` 5000, `KeepQuery` off, `NotifyNewCountry` off (event `visitor.new_country`).
 * API: `GET /api/visitors/{summary,list,recent,detail,export,settings}`, `POST /api/visitors/{settings,delete,purge}`. CSV export neutralises formula injection.
 * Country only (the embedded GeoIP database has no city data; no network lookups).
+## Proxy UX: navigation, rule list, new rule dialog, Quick Start (`feat/ui-proxy-ux`)
+
+**Navigation map** (`index.html`, one commented block). Groups (`id="group-ID"`): `proxy`, `security`, `certs`, `observe`, `tools`,
+`system`; Quick Start and Status stay above them. To add a page append one line to the right group:
+`<a class="item" tag="TABID" tab_group="GROUPID"><i class="simplistic ICON icon"></i> Label</a>` (and a `<div id="TABID" class="functiontab"
+target="x.html">`). Tab ids and `tab_group` attributes drive `openTabById`, the Recent list, group auto-expand and the UI smoke test, so
+never rename them. Every item needs an icon that exists in Semantic UI 2.4.2 (the smoke test checks the computed `::before`). Collapse
+state is `localStorage.zoraxy_menu_groups` (`{groupId: expanded, _v: 2}`); state saved under the version 1 ids (`reverseproxy`, `services`,
+`others`) is migrated by `getMenuGroupStates()`.
+Old to new: Reverse Proxy (HTTP Proxy, Virtual Directory, Create Proxy Rule, Stream Proxy) and the top level Default Site and Ingress became
+**Proxy** (HTTP Proxy, Default Site, Redirection, Virtual Directories, Stream Proxy, Ingress, Advanced Rule Form); Access & Connections
+(Redirection, Access Control, Trusted Proxy) and Security (TLS, ACME, SSO, WAF, Security Center) became **Security** (Security Center, WAF,
+Access Rules, Trusted Proxies, SSO / OAuth2) and **Certificates** (TLS / SSL Certificates, ACME Client); Others / Statistical Analysis and
+Services / Uptime Monitor became **Observability** (Statistics, Uptime Monitor; Visitors goes here); Services, Networking and Utilities
+became **Tools** (Static Web Server, Network Tools, Network Interfaces, Utilities); Cluster, Fleet, API Tokens, Update became **System**.
+
+**HTTP proxy list** (`components/httprp.html` markup, `script/proxytable.js`, `script/proxybulk.js`). The table renders from a model
+(`ProxyTable.state.list`, also exposed as `httpProxyList`) with one `innerHTML` write per page (25/50/100 rows) and event delegation, so
+hundreds of rules never mean hundreds of DOM rows. Row = status dot, host (+ alias, listening ports, virtual directories, access rule),
+upstreams, protection badges (auth, WAF, CAPTCHA, rate limit, exploit/bot blocking), tags, a status pill that enables / disables with one
+click and an undo toast, Edit and remove. Health (red dot, "Errors" filter) comes from `/api/utm/list` matched against the rule's current
+upstreams. Filters: search (host, alias, upstream, tag, auth), All / Enabled / Disabled / Errors / No auth, tag chips (all selected tags
+must match). Sort: host, upstream, tags, status (saved in `localStorage.httprp_table`). Selection: checkboxes, shift-click range in the order
+shown, select all on the page (then "select all N matching"), Esc clears, a sticky bar shows only while rules are selected. The bar calls
+`ProxyBulk.run(action, names)` which uses `/api/proxy/bulk` with the existing preview / confirm dialogs. `n` opens the new rule dialog.
+Snippets still call `parent.renderTagsPreview / updateAliasListForEndpoint / updateAccessRuleNameUnderHost`, which are kept.
+
+**New proxy rule dialog** (`script/newrule.js`, loaded by `index.html`, `openNewRuleDialog({keep, domain, upstream})`): domain with
+validation and duplicate check, upstream with live validation and `GET /api/proxy/testupstream?url=host[:port][/path]` (read only: TCP dial,
+TLS probe, certificate verification, one GET; unix sockets are only dialled) which also sets the HTTPS toggle and "ignore certificate
+errors" unless the user touched them, template picker (`/api/proxy/templates/list`), "More options" (tags, access rule, rate limit, uptime
+monitor, sticky sessions, exploit blocking, plain HTTP, logging). It posts the same `/api/proxy/add` as `components/rules.html`, which stays
+as "Advanced Rule Form" (the dialog's "Open the full form" copies domain and upstream over). After creating it opens HTTP Proxy, flashes the
+new row and offers Open rule / Add another / Create certificate for this host (when HTTPS is on and no certificate covers the host).
+
+**Quick Start** (`quickstartapi.go`): `GET /api/quickstart` returns `{dismissed, configured, show, rules, proxyRunning}`; `POST` with
+`dismissed=true|false` stores the flag in the `settings` table (key `quickstartDismissed`). The instance counts as set up when at least one
+HTTP proxy rule exists and the proxy listener runs; `show = !dismissed && !configured`. The menu item is hidden and the default landing page
+is Status when `show` is false; a fresh install lands on Quick Start. "Show Quick Start again" is in Ingress (`.quickStartShowAgain`).
+
+Tests: `go test -run 'QuickStart|Upstream' .`; the UI smoke test seeds 36 rules and covers nav structure/icons/collapse/state migration,
+Quick Start dismissal, search, status and tag filters, sorting, shift-click range, bulk preview, Esc, status pill + undo, pagination, the
+phone layout and the whole new rule dialog (validation, connection test, Enter to submit, highlight, quick actions).

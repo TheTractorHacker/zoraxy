@@ -66,9 +66,14 @@
         </div>
         <br>
         <div style="width: 100%;" align="center">
+            <button onclick="openNewRuleDialog();" class="ui primary button" title="Create your first proxy rule right now"><i class="plus icon"></i> Create a proxy rule</button>
             <button onclick="startQuickStartTour();" class="ui finished button quickstartControlButton">
                 Start Walkthrough
             </button>
+            <button onclick="setQuickStartDismissed(true);" class="ui basic button" id="qsDismissBtn" title="Remove Quick Start from the menu. It also disappears by itself once a proxy rule exists and the proxy is running.">
+                <i class="eye slash outline icon"></i> Dismiss Quick Start
+            </button>
+            <div style="margin-top: 0.8em; opacity: 0.7;"><small>Quick Start also hides itself once you have a proxy rule and the proxy is running.</small></div>
         </div>
         <div class="ui divider"></div>
         <!-- More advance tutorials -->

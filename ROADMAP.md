@@ -186,3 +186,9 @@ FriendlyCaptcha, counting SSO redirect failures in the auto-ban, per-user admin 
 - ✅ Status page: KPI cards with skeletons, traffic over time chart, upstream / certificate / alert lists, latest visitors, traffic map hide / pause.
 - ✅ Visitors list (per IP, recent visits, Cloudflare aware, retention, export, purge, per IP delete, optional new-country notification).
 - 📋 Visitors: city level GeoIP, per-host retention, hourly history chart on the Status page, virtualised rows for very large pages.
+## Proxy UX (`feat/ui-proxy-ux`)
+- ✅ HTTP proxy list rebuilt: status pill with undo, search, status and tag filters, sorting, pagination, shift-click multi-select with a sticky bulk bar.
+- ✅ Navigation regrouped into Proxy / Security / Certificates / Observability / Tools / System; saved menu state migrated.
+- ✅ "New proxy rule" dialog with live upstream test and HTTPS auto-detection; the full form stays as Advanced Rule Form.
+- ✅ Quick Start hides once an instance is set up or dismissed (stored server side), "Show Quick Start again" in Ingress.
+- 📋 Per-rule request count / sparkline in the list (needs a cheap per-host aggregate), editing custom rule templates in the UI, a "create certificate" action that handles wildcard domains through DNS challenge from the dialog.
