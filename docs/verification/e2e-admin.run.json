@@ -5,8 +5,8 @@
    "120",
    "564"
   ],
-  "status": "FAIL",
-  "evidence": "exception: RuntimeError: out of ports | , in main\n    ev = s[\"fn\"]()\n  File \"/home/sysadmin/src/zoraxy/.claude/worktrees/agent-ae51ac1f5e06dcbe5/tools/e2e-admin/scenarios/s08_platform.py\", line 72, in sablier\n    with Env(\"sab\") as e:\n         ~~~^^^^^^^\n  File \"/home/sysadmin/src/zoraxy/.claude/worktrees/agent-ae51ac1f5e06dcbe5/tools/e2e-admin/scenarios/common.py\", line 14, in __init__\n    self.pport = alloc_port()\n                 ~~~~~~~~~~^^\n  File \"/home/sysadmin/src/zoraxy/.claude/worktrees/agent-ae51ac1f5e06dcbe5/tools/e2e-admin/lib.py\", line 29, in alloc_port\n    raise RuntimeError(\"out of ports\")\nRuntimeError: out of ports\n (rerun: tools/e2e-admin/run.sh --only api-sablier-gate-and-test)",
+  "status": "PASS",
+  "evidence": "Sablier: connection test (waiting), dynamic strategy serves Sablier's waiting page without hitting the upstream, ready proxies, names forwarded, Sablier answering 500 without the session header => 503 (fail closed). Real Sablier + Docker providers NOT-TESTABLE (rerun: tools/e2e-admin/run.sh --only api-sablier-gate-and-test)",
   "commits": [],
   "notes": ""
  }

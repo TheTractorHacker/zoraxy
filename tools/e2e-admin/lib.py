@@ -18,6 +18,7 @@ def alloc_port():
         if p in _ports_used:
             continue
         s = socket.socket()
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             s.bind(("127.0.0.1", p))
         except OSError:
