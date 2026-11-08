@@ -225,8 +225,11 @@ func (f *fixture) build(mut func(*Config)) {
 	f.m = New(cfg)
 }
 
+// fixtureEpoch is a fixed clock for release dates, so ordering never depends on wall-clock timing.
+var fixtureEpoch = time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+
 func (f *fixture) release(tag string, pre bool, age time.Duration, bin string) fakeRelease {
-	return fakeRelease{Tag: tag, Prerelease: pre, Published: time.Now().Add(-age), Binary: []byte(bin)}
+	return fakeRelease{Tag: tag, Prerelease: pre, Published: fixtureEpoch.Add(-age), Binary: []byte(bin)}
 }
 
 func (f *fixture) readExe() string {

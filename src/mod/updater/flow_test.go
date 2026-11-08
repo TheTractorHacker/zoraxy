@@ -218,11 +218,38 @@ func TestForwardOnly(t *testing.T) {
 	// only an older release is on offer now
 	f.gh.set(f.release("v3.3.5-x.1", false, 10*24*time.Hour, "NEW1"), f.release("v3.3.4-hot.1", false, time.Hour, "OLDER"))
 	err := f.m.RunApp(context.Background(), RunOptions{})
-	if err == nil || !strings.Contains(err.Error(), "nothing to install") {
-		t.Fatalf("expected forward-only refusal, got %v", err)
+	if err == nil {
+		t.Fatal("expected the update to be refused")
+	}
+	// The refusal must come from version ordering ("nothing to install"), before anything is downloaded or signed data is looked at.
+	if !strings.Contains(err.Error(), "nothing to install") || strings.Contains(err.Error(), "build") {
+		t.Fatalf("expected forward-only refusal from ordering, got %v", err)
 	}
 	if f.readExe() != "NEW1" {
 		t.Error("binary must be untouched")
+	}
+}
+
+// A release that GitHub re-published under the tag already installed (later published-at)
+// is the same build, not an update: the refusal must not depend on the signed-build check.
+func TestSameTagRepublishedIsNotAnUpdate(t *testing.T) {
+	f := newFixture(t)
+	r1 := f.release("v3.3.5-x.1", false, 10*24*time.Hour, "NEW1")
+	f.gh.set(r1)
+	must(t, f.m.RunApp(context.Background(), RunOptions{}))
+	f.m.MarkHealthy()
+	f.unbusy()
+	r2 := f.release("v3.3.5-x.1", false, 10*24*time.Hour, "NEW1")
+	r2.Published = r1.Published.Add(3 * time.Second)
+	f.gh.set(r2)
+	err := f.m.RunApp(context.Background(), RunOptions{})
+	if err == nil || !strings.Contains(err.Error(), "nothing to install") {
+		t.Fatalf("got %v", err)
+	}
+	res, cerr := f.m.Check(context.Background(), true)
+	must(t, cerr)
+	if res.UpdateAvailable {
+		t.Error("republished identical tag offered as update")
 	}
 }
 

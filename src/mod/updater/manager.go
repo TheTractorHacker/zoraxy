@@ -307,8 +307,14 @@ func (m *Manager) resolve(ctx context.Context) (*resolved, Current, error) {
 	}
 	r := &resolved{rel: *latest, assetNameStr: AssetName(m.cfg.GOOS, m.cfg.GOARCH)}
 	id, _ := latest.ID()
-	if CompareReleases(id, curID) <= 0 {
-		if CompareReleases(id, curID) == 0 {
+	cmp := CompareReleases(id, curID)
+	if cur.Known && cur.Tag == latest.Tag {
+		// The same tag is the same build, even if GitHub reports a later published-at
+		// (re-published release). Ordering must not depend on that timestamp.
+		cmp = 0
+	}
+	if cmp <= 0 {
+		if cmp == 0 {
 			r.reason = "You are running the latest release."
 		} else {
 			r.reason = "The latest release on this channel is older than the running build; updates are forward-only."
