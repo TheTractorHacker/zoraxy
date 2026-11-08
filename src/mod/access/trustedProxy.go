@@ -185,6 +185,36 @@ func (c *Controller) SaveTrustedProxies() error {
 	return err
 }
 
+// clientIPHeaders are the request headers that carry (or can be mistaken for) the
+// address of the original client.
+var clientIPHeaders = []string{
+	"X-Forwarded-For", "X-Real-Ip", "Forwarded",
+	"CF-Connecting-IP", "Fastly-Client-IP", "True-Client-IP", "X-Client-IP",
+}
+
+// StripUntrustedClientIPHeaders removes client supplied client-IP headers from a
+// request that did not come from a trusted proxy. It only acts when the access
+// rule opted in to TrustProxyHeadersOnly, so setups that never enabled the
+// trusted proxy list keep forwarding the headers untouched. Without this a
+// direct client could choose the X-Forwarded-For / X-Real-IP values Zoraxy
+// forwards to the upstream (upstream #1359). Returns true if headers were removed.
+func (s *AccessRule) StripUntrustedClientIPHeaders(r *http.Request) bool {
+	if !s.TrustProxyHeadersOnly || s.parent == nil {
+		return false
+	}
+	if s.parent.IsTrustedProxy(netutils.GetRequesterIPUntrusted(r)) {
+		return false
+	}
+	stripped := false
+	for _, h := range clientIPHeaders {
+		if len(r.Header.Values(h)) > 0 {
+			r.Header.Del(h)
+			stripped = true
+		}
+	}
+	return stripped
+}
+
 // GetClientIP returns the client IP based on the access rule's trusted proxy config.
 // When TrustProxyHeadersOnly is enabled, proxy headers (X-Forwarded-For, X-Real-IP, etc.)
 // are only trusted if the direct connection comes from an IP in the trusted proxy list.

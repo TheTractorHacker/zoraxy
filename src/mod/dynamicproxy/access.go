@@ -23,6 +23,9 @@ func (h *ProxyHandler) handleAccessRouting(ruleID string, w http.ResponseWriter,
 		return true
 	}
 
+	//Do not forward client-IP headers set by clients that are not trusted proxies
+	accessRule.StripUntrustedClientIPHeaders(r)
+
 	isBlocked, blockedReason := accessRequestBlocked(accessRule, h.Parent.Option.WebDirectory, w, r)
 	if isBlocked {
 		h.Parent.logRequest(r, false, 403, blockedReason, r.Host, "", sep)
