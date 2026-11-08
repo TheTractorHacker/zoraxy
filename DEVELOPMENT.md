@@ -1580,3 +1580,14 @@ Code: `src/mod/sablier` (config validation, HTTP client, gate with ready cache),
   followed, no environment proxy is used. Loopback and private addresses are allowed (Sablier normally runs next to the proxy). `AllowMetadataAddress` opts out.
 - Not validated: against a real Sablier server and real Docker / Swarm / Kubernetes providers. The fake Sablier in the tests follows the documented API
   (`X-Sablier-Session-Status`, `/api/strategies/{dynamic,blocking}`), so compare the "Check connection" button's URL with your Sablier version's docs.
+
+## CodeQL and Dependabot (fork #146 / upstream #741)
+
+`.github/workflows/codeql.yml` runs CodeQL (`security-extended` queries) for Go, JavaScript/TypeScript and the
+GitHub Actions workflows on pushes and pull requests to `dev`/`main` and weekly. Permissions are `contents: read`
+plus `security-events: write` on the analyze job only; every action is pinned to a commit SHA (comment = tag).
+`.github/dependabot.yml` covers `github-actions` and `gomod` (`/src`).
+
+**These only run once GitHub Actions is enabled on the fork** (Settings > Actions); until then nothing is scanned.
+Results appear under Security > Code scanning. To bump a pin: `gh api repos/github/codeql-action/commits/<tag> --jq .sha`
+(prefer tags that are at least two weeks old).
