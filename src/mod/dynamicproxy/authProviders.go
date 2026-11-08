@@ -153,6 +153,16 @@ func basicAuthExceptionMatched(pe *ProxyEndpoint, r *http.Request) bool {
 // Handle basic auth logic
 // do not write to http.ResponseWriter if err return is not nil (already handled by this function)
 func handleBasicAuth(w http.ResponseWriter, r *http.Request, pe *ProxyEndpoint) error {
+	if pe.basicScopeErr != nil {
+		//Broken scope config: never fall back to "no authentication"
+		http.Error(w, "503 - Basic auth scope misconfigured", http.StatusServiceUnavailable)
+		return pe.basicScopeErr
+	}
+	if !basicAuthInScope(pe, r) {
+		//Outside the protected path prefixes. The identity header is only ever set by us
+		r.Header.Del("X-Remote-User")
+		return nil
+	}
 	if basicAuthExceptionMatched(pe, r) {
 		return nil
 	}

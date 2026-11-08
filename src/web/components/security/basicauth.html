@@ -1,0 +1,75 @@
+<h3>Basic auth: shared credential lists and path scope</h3>
+<p>Create named credential lists once and assign them to several proxy rules (in addition to the rule's own users). Optionally limit
+    basic auth to path prefixes such as <code>/admin</code>; everything else on that host is then served without basic auth.
+    Passwords are stored as argon2id hashes and are never shown; leave a password empty to keep the stored one.
+    Basic auth must be the selected authentication method of the proxy rule (HTTP Proxy tab, Authentication).</p>
+<div id="baMsg" class="ui negative message" style="display:none"></div>
+<h4>Credential lists</h4>
+<div id="baLists"></div>
+<div class="ui form">
+    <div class="two fields">
+        <div class="field"><label>List name</label><input id="baName" placeholder="team-a" autocomplete="off"></div>
+        <div class="field"><label>Users (one per line: <code>username:password</code>, password optional for existing users)</label><textarea id="baUsers" rows="3" autocomplete="off"></textarea></div>
+    </div>
+    <button class="ui basic green button" id="baSave"><i class="save icon"></i> Save list</button>
+</div>
+<div class="ui divider"></div>
+<h4>Per proxy rule</h4>
+<div class="ui form">
+    <div class="three fields">
+        <div class="field"><label>Proxy rule</label><select id="baEp" class="ui dropdown"></select></div>
+        <div class="field"><label>Assigned lists (comma separated)</label><input id="baAssign" placeholder="team-a, team-b"></div>
+        <div class="field"><label>Only below these paths (comma separated, empty = whole host)</label><input id="baScope" placeholder="/admin, /private"></div>
+    </div>
+    <button class="ui basic green button" id="baApply"><i class="save icon"></i> Apply</button>
+</div>
+<script>
+(function () {
+    function esc(s) { return $("<div>").text(s == null ? "" : String(s)).html(); }
+    function toast(m, ok) { if (window.msgbox) { msgbox(m, ok); } }
+    function err(m) { $("#baMsg").text(m).show(); }
+    function csv(v) { return v.split(",").map(function (x) { return x.trim(); }).filter(Boolean); }
+    function loadLists() {
+        $.get("/api/basicauth/lists/get", function (d) {
+            $("#baMsg").hide();
+            $("#baLists").html((d || []).map(function (l) {
+                return '<div class="ui segment"><b>' + esc(l.Name) + "</b> - users: " + esc((l.Users || []).join(", ") || "none") + "<br><small>used by: " + esc((l.UsedBy || []).join(", ") || "no proxy rule") + '</small> ' +
+                    '<button class="ui mini basic button baEdit" data-n="' + esc(l.Name) + '" data-u="' + esc((l.Users || []).join(",")) + '">Edit</button> <button class="ui mini basic red button baDel" data-n="' + esc(l.Name) + '">Delete</button></div>';
+            }).join("") || "<p><i>No lists yet.</i></p>");
+        });
+    }
+    $("#baLists").on("click", ".baEdit", function () {
+        $("#baName").val($(this).attr("data-n"));
+        $("#baUsers").val($(this).attr("data-u").split(",").filter(Boolean).map(function (u) { return u + ":"; }).join("\n"));
+    });
+    $("#baLists").on("click", ".baDel", function () {
+        $.cjax({ type: "POST", url: "/api/basicauth/lists/delete", data: { name: $(this).attr("data-n") }, success: function (d) { if (d && d.error) { err(d.error); } loadLists(); } });
+    });
+    $("#baSave").on("click", function () {
+        var users = $("#baUsers").val().split("\n").map(function (l) { return l.replace(/\r$/, ""); }).filter(function (l) { return l.trim() !== ""; }).map(function (l) {
+            var i = l.indexOf(":"); return i < 0 ? { Username: l, Password: "" } : { Username: l.substring(0, i), Password: l.substring(i + 1) };
+        });
+        $.cjax({ type: "POST", url: "/api/basicauth/lists/set", data: { name: $("#baName").val(), users: JSON.stringify(users) }, success: function (d) {
+            if (d && d.error) { err(d.error); } else { $("#baMsg").hide(); $("#baUsers").val(""); toast("Saved", true); loadLists(); }
+        } });
+    });
+    function loadEp() {
+        var ep = $("#baEp").val(); if (!ep) { return; }
+        $.get("/api/basicauth/endpoint?ep=" + encodeURIComponent(ep), function (d) {
+            if (d && d.error) { err(d.error); return; }
+            $("#baAssign").val((d.Lists || []).join(", ")); $("#baScope").val((d.Scope || []).join(", "));
+        });
+    }
+    $.cjax({ type: "POST", url: "/api/proxy/list", data: { type: "host" }, success: function (list) {
+        $("#baEp").html((list || []).map(function (e) { return "<option>" + esc(e.RootOrMatchingDomain) + "</option>"; }).join("") || "<option value=''>(no proxy rules)</option>");
+        loadEp();
+    } });
+    $("#baEp").on("change", loadEp);
+    $("#baApply").on("click", function () {
+        $.cjax({ type: "POST", url: "/api/basicauth/endpoint", data: { ep: $("#baEp").val(), lists: JSON.stringify(csv($("#baAssign").val())), scope: JSON.stringify(csv($("#baScope").val())) }, success: function (d) {
+            if (d && d.error) { err(d.error); } else { $("#baMsg").hide(); toast("Saved", true); loadLists(); }
+        } });
+    });
+    loadLists();
+})();
+</script>

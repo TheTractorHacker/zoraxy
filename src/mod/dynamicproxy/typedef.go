@@ -103,6 +103,7 @@ type RouterOption struct {
 	PersistProxyEndpoint func(*ProxyEndpoint) error `json:"-"` //Optional, called to save an endpoint config after a basic auth hash upgrade
 	PluginManager        *plugins.Manager           //Plugin manager for handling plugin routing
 	Metrics              *metrics.Registry          //Optional Prometheus metrics registry (nil or disabled = no overhead)
+	BasicAuthLists       *CredentialLists           `json:"-"` //Optional named basic auth credential lists (basicauth_ext.go)
 	Bots                 *botrules.Engine           `json:"-"` //Optional bot (User-Agent) rules, see bot_hook.go
 	Abuse                *abuse.Manager             `json:"-"` //Optional automatic abuse banning (nil or disabled = no overhead), see abuse_hook.go
 
@@ -268,6 +269,8 @@ type AuthenticationProvider struct {
 	BasicAuthCredentials    []*BasicAuthCredentials   //Basic auth credentials
 	BasicAuthExceptionRules []*BasicAuthExceptionRule //Path to exclude in a basic auth enabled proxy target
 	BasicAuthGroupIDs       []string                  //Group IDs that are allowed to access this endpoint
+	BasicAuthListNames      []string                  `json:",omitempty"` //Named credential lists (CredentialLists) accepted in addition to BasicAuthCredentials
+	BasicAuthScopePrefixes  []string                  `json:",omitempty"` //Basic auth only applies below these path prefixes (empty = whole host)
 
 	/* Forward Auth Settings */
 	ForwardAuthURL                    string   // Full URL of the Forward Auth endpoint. Example: https://auth.example.com/api/authz/forward-auth
@@ -399,6 +402,8 @@ type ProxyEndpoint struct {
 	peerSetErr     error                 `json:"-"`
 	headerRules    []*compiledHeaderRule `json:"-"` //Compiled header rules
 	headerRulesErr error                 `json:"-"`
+	basicScope     []*compiledPathRule   `json:"-"` //Compiled basic auth scope prefixes
+	basicScopeErr  error                 `json:"-"`
 	Tags           []string              // Tags for the proxy endpoint
 }
 

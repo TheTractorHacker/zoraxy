@@ -112,6 +112,12 @@ func verifyBasicAuthCredentials(pe *ProxyEndpoint, username string, password str
 		stored[i] = c.PasswordHash
 	}
 	basicAuthCredMu.RUnlock()
+	//Credentials of assigned named lists (copies: a legacy hash in a list is simply not upgraded in place)
+	nOwn := len(creds)
+	for _, lc := range pe.listCredentialsFor() {
+		creds = append(creds, lc)
+		stored = append(stored, lc.PasswordHash)
+	}
 
 	for i, cred := range creds {
 		if cred.Username != username {
@@ -135,6 +141,9 @@ func verifyBasicAuthCredentials(pe *ProxyEndpoint, username string, password str
 			continue
 		}
 
+		if needsRehash && i >= nOwn {
+			needsRehash = false
+		}
 		if needsRehash {
 			upgradeBasicAuthHash(pe, cred, stored[i], password)
 			basicAuthCredMu.RLock()
