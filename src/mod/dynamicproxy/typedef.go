@@ -28,6 +28,7 @@ import (
 	"imuslab.com/zoraxy/mod/dynamicproxy/permissionpolicy"
 	"imuslab.com/zoraxy/mod/dynamicproxy/redirection"
 	"imuslab.com/zoraxy/mod/dynamicproxy/rewrite"
+	"imuslab.com/zoraxy/mod/dynamicproxy/waf"
 	"imuslab.com/zoraxy/mod/geodb"
 	"imuslab.com/zoraxy/mod/info/logger"
 	"imuslab.com/zoraxy/mod/plugins"
@@ -322,6 +323,9 @@ type ProxyEndpoint struct {
 	BlockAICrawlers     bool //Enable blocking of AI crawlers and bots
 	MitigationAction    int  //Action to take when exploit/crawler detected (0=404, 1=403, 2=400, 3=Drop, 4=Delay, 5=Captcha)
 
+	//Web Application Firewall (Coraza + OWASP CRS), nil / mode "off" = disabled
+	WAF *waf.Config `json:",omitempty"`
+
 	// Chunked Transfer Encoding
 	DisableChunkedTransferEncoding bool //Disable chunked transfer encoding for this endpoint
 	ForceHTTP11                    bool //Force use HTTP/1.1 for upstream connection
@@ -336,6 +340,7 @@ type ProxyEndpoint struct {
 	//Internal Logic Elements
 	parent   *Router            `json:"-"` //Parent router, excluded from JSON
 	detector *exploits.Detector `json:"-"` //Exploit detector instance, excluded from JSON
+	wafInst  *waf.Instance      `json:"-"` //Compiled WAF instance (shared between identical configs), excluded from JSON
 	Tags     []string           // Tags for the proxy endpoint
 }
 

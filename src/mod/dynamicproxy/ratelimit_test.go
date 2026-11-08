@@ -14,7 +14,7 @@ import (
 // newTestRateLimitRouter builds a minimal Router wired with a real access
 // controller, so the rate limiter resolves client IPs the same way it does
 // in production.
-func newTestRateLimitRouter(t *testing.T, trustProxyHeaders bool, trustedProxies ...string) *Router {
+func newTestRateLimitRouter(t testing.TB, trustProxyHeaders bool, trustedProxies ...string) *Router {
 	t.Helper()
 	tmpDir := t.TempDir()
 

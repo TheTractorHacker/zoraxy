@@ -9,6 +9,7 @@ import (
 
 	"imuslab.com/zoraxy/mod/access"
 	"imuslab.com/zoraxy/mod/dynamicproxy/redirection"
+	"imuslab.com/zoraxy/mod/dynamicproxy/waf"
 	"imuslab.com/zoraxy/mod/eventsystem"
 	"imuslab.com/zoraxy/mod/info/logger"
 )
@@ -105,5 +106,26 @@ func TestNonTLS_SpecialRoutingRuleApplies(t *testing.T) {
 	w := serveNonTLS(router, sep, "http://app.example.com/.well-known/acme-challenge/tok", "198.51.100.1:1000")
 	if w.Code != 218 {
 		t.Fatalf("special routing rule (ACME) not honoured on non-TLS path, got %d", w.Code)
+	}
+}
+
+// The WAF is part of the shared pre-proxy chain, so the port-80 / secondary
+// listener path must be covered too, not only the TLS path.
+func TestNonTLS_WAFBlocksAttackAndPassesCleanRequest(t *testing.T) {
+	router, sep, _ := newNonTLSTestRouter(t)
+	sep.ProxyType = ProxyTypeHost
+	sep.WAF = &waf.Config{Mode: waf.ModeBlock}
+	prepared, err := router.PrepareProxyRoute(sep)
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	prepared.parent = router
+
+	attack := "http://app.example.com/?id=1%27%20OR%20%271%27%3D%271"
+	if w := serveNonTLS(router, prepared, attack, "198.51.100.1:1000"); w.Code != 403 {
+		t.Fatalf("SQL injection on the non-TLS path got %d, want 403 from the WAF", w.Code)
+	}
+	if w := serveNonTLS(router, prepared, "http://app.example.com/index.html?page=2", "198.51.100.1:1000"); w.Code != 299 {
+		t.Fatalf("clean request on the non-TLS path got %d, want 299", w.Code)
 	}
 }

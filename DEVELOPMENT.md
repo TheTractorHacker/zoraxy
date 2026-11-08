@@ -172,3 +172,61 @@ checks, no retries, exactly the old behaviour).
   leastconn, power of two choices, ketama ring); no third-party code was copied.
 - Tests: `go test -race ./mod/dynamicproxy/...` (distribution, ring stability, state machines with a fake clock,
   goroutine leak check, retry rules, old-config compatibility).
+
+## Web Application Firewall (WAF)
+
+Package `src/mod/dynamicproxy/waf` embeds [Coraza](https://github.com/corazawaf/coraza) (Apache-2.0, pure Go, no CGO)
+with the OWASP Core Rule Set v4 via `github.com/corazawaf/coraza-coreruleset/v4` (CRS is compiled into the
+binary, about +5 MB). Licences: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+**Config** is `ProxyEndpoint.WAF` (`*waf.Config`, omitted/`null` = off, so old configs are unchanged):
+
+| Field | Default | Meaning |
+|---|---|---|
+| `Mode` | `off` | `off`, `detection_only` (log, never block), `block` |
+| `ParanoiaLevel` | 1 | CRS paranoia level 1-4 (blocking and detection) |
+| `InboundThreshold` | 5 | CRS inbound anomaly score needed to block (5 = one CRITICAL rule) |
+| `MaxBodyBytes` | 131072 | Request bodies up to this size are buffered, inspected and replayed |
+| `ExcludedRuleIDs` | none | Rule IDs or ranges (`942100`, `949000-949999`) disabled for the endpoint |
+| `PathExclusions` | none | `{Path, Exact, RuleIDs}`: rules disabled for matching request paths (prefix unless `Exact`) |
+| `CustomRules` | empty | Extra SecLang, appended after the CRS. Use IDs above 1000000 |
+
+**Request path.** `ProxyHandler.ServeHTTP` calls `Router.wafInspect(w, r, sep)` (`waf_inspect.go`) right after
+`handleAccessRouting`; it is a single nil check when the endpoint has no WAF. The call sites are marked
+`WAF-HOOK` in `Server.go` (one for host endpoints, one for the default-site root endpoint). The non-TLS path
+(`handleNonTLSRequest`) does not have the call yet: add it to the shared pre-proxy chain when that lands.
+
+**Behaviour.**
+- Compiled instances are cached by the hash of the normalised config, so endpoints with identical settings share
+  one compiled CRS (memory). Compilation happens in `PrepareProxyRoute`; an invalid config or custom rule makes
+  it return an error, which rejects the save (the running config is untouched). Coraza never gets to panic the
+  proxy: compile panics are recovered and `Inspect` fails open on an internal panic.
+- Only the `REQUEST-*` CRS files are loaded. Response inspection is not implemented (always off).
+- Rules are loaded from the embedded read-only CRS filesystem only. Custom rules cannot `Include`, use `*FromFile`
+  operators or change engine / audit / body directives (checked on save).
+- Request bodies: up to `MaxBodyBytes` are read, inspected and replayed byte for byte. Larger bodies (known
+  `Content-Length` or discovered while reading) are passed through uninspected; at most `MaxBodyBytes+1` bytes are
+  ever buffered, the rest streams. `application/grpc*` requests and any request with an `Upgrade` header
+  (WebSocket) are not inspected at all, so `dpcore` streaming and its gRPC handling are untouched.
+- CRS defaults were widened for a reverse proxy: methods PUT/PATCH/DELETE and common API/upload content types
+  are allowed (rules 911100 / 920420 would otherwise reject normal REST traffic).
+- Go's regexp engine is linear time, so CRS regexes cannot cause catastrophic backtracking; body size, argument
+  count (1000) and JSON depth (64) are bounded by directives.
+- Blocked requests get the normal 403 page (`<webroot>/templates/forbidden.html` override supported) with the
+  transaction ID appended and an `X-Request-Id` header. No rule data goes to the client.
+
+**Audit.** Every request that triggers a rule produces one JSON line (`waf.Event`) in
+`<log folder>/zr-waf_<year>-<month>.log` (same `logger.Logger`, so the log rotation settings apply; `-enablelog`
+must be on), an entry in the in-memory ring buffer (1000 events) and increments the per-rule and per-endpoint
+counters. `action` is `blocked` or `detected`; `would_block` says the anomaly threshold was reached.
+
+**API** (admin auth, `src/wafapi.go`): `POST /api/waf/set` (`rootname`, `config` JSON), `POST /api/waf/validate`,
+`GET /api/waf/events?limit=&endpoint=`, `GET /api/waf/stats`, `POST /api/waf/exclude` (`rootname`, `ruleid`,
+`path` empty = whole endpoint). UI: the **WAF** tab of the endpoint editor (`src/web/components/httprp.html`).
+
+**Tuning.** Start with `detection_only`, browse the events in the WAF tab, use *exclude for this path* for false
+positives, then switch to `block`. Typical offenders are rich-text editors and admin consoles (941xxx XSS, 942xxx
+SQLi on free text fields), JSON APIs with odd content types (920420) and WebDAV-style methods (911100).
+
+**Benchmarks** (`go test ./mod/dynamicproxy -run xxx -bench 'Proxy(GET|POSTJSON|Attack)_WAF' -benchmem`) drive a request
+through `ProxyHandler.ServeHTTP` to a local upstream. See the PR description for numbers.

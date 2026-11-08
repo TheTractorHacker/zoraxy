@@ -64,10 +64,13 @@ Status: ✅ done · 🔧 in progress · 📋 planned
 - 📋 Virtual IP failover guide (keepalived/VRRP) and a `/health` endpoint for external load balancers.
 
 ## 7. WAF
-- 📋 Request inspection layer after access rules (insertion point: `Server.go` after `handleAccessRouting`,
-  plus the non-TLS path). Candidate engine: **Coraza** (Apache-2.0, Go, ModSecurity-compatible) with the
-  **OWASP Core Rule Set** (Apache-2.0); per-endpoint enable, paranoia level, detection-only mode,
-  rule exclusions, audit log in the UI.
+- ✅ Request inspection layer after access rules (`Server.go`, marker `WAF-HOOK`) built on **Coraza** with the
+  embedded **OWASP Core Rule Set** v4: per-endpoint mode (off / detection only / block), paranoia level 1-4,
+  anomaly threshold, rule and path-scoped exclusions, validated custom SecLang rules, body limit with
+  replay, gRPC and WebSocket passthrough, JSON audit log + in-memory events + counters, WAF tab with recent
+  events and one-click exclusions (`feat/waf-coraza`).
+- 📋 Add the WAF call to the shared pre-proxy chain / non-TLS path once that refactor lands.
+- 📋 Response inspection (CRS RESPONSE-* rules), per-path paranoia level, CRS version update flow, WAF metrics.
 - 📋 Replace the regex exploit detector with WAF rules, or keep it as a lightweight mode.
 
 ## 8. Plugins / add-ons

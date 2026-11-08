@@ -89,6 +89,11 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	/* WAF for the default site (root endpoint) -- WAF-HOOK: keep in the shared pre-proxy chain */
+	if h.Parent.wafInspect(w, r, h.Parent.Root) {
+		return
+	}
+
 	//Clean up the request URI
 	proxyingPath := strings.TrimSpace(r.RequestURI)
 	if !strings.HasSuffix(proxyingPath, "/") {
@@ -261,6 +266,11 @@ func (h *ProxyHandler) runEndpointChain(w http.ResponseWriter, r *http.Request, 
 	}
 	if h.handleAccessRouting(ruleID, w, r, sep) {
 		//Request handled by subroute
+		return true
+	}
+
+	/* WAF (Coraza + OWASP CRS) -- WAF-HOOK: runs on both the TLS and non-TLS paths via this shared chain */
+	if h.Parent.wafInspect(w, r, sep) {
 		return true
 	}
 

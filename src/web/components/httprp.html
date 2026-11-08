@@ -279,6 +279,9 @@
                     <a class="item hrpedit_menu_item" cfgpage="security">
                         <i class="key icon"></i> <span class="editorSideMenuText">Security</span>
                     </a>
+                    <a class="item hrpedit_menu_item" cfgpage="waf">
+                        <i class="shield alternate icon"></i> <span class="editorSideMenuText">WAF</span>
+                    </a>
                     <a class="item hrpedit_menu_item" cfgpage="tags">
                         <i class="tags icon"></i> <span class="editorSideMenuText">Tags</span>
                     </a>
@@ -657,6 +660,73 @@
                         </div>
                     </div>
                     <!-- Tags -->
+                    <!-- WAF (Coraza + OWASP Core Rule Set) -->
+                    <div class="rpconfig_content" rpcfg="waf" style="display:none;">
+                        <div class="ui segment wafEditor">
+                            <h4><i class="shield alternate icon"></i> Web Application Firewall</h4>
+                            <p style="opacity:0.7;">Inspects requests with the OWASP Core Rule Set (via Coraza) before they reach the upstream. Start with <b>Detection only</b>, review the events below, add exclusions for false positives, then switch to <b>Block</b>.</p>
+                            <div class="ui form">
+                                <div class="two fields">
+                                    <div class="field">
+                                        <label>Mode</label>
+                                        <select class="ui dropdown wafMode">
+                                            <option value="off">Off</option>
+                                            <option value="detection_only">Detection only (log, never block)</option>
+                                            <option value="block">Block</option>
+                                        </select>
+                                    </div>
+                                    <div class="field">
+                                        <label>Paranoia level</label>
+                                        <select class="ui dropdown wafParanoia">
+                                            <option value="1">1 - Low false positives (recommended)</option>
+                                            <option value="2">2</option>
+                                            <option value="3">3</option>
+                                            <option value="4">4 - Strictest, expect false positives</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="two fields">
+                                    <div class="field">
+                                        <label>Anomaly score threshold</label>
+                                        <input type="number" class="wafThreshold" min="1" value="5">
+                                        <small>Request is blocked when the summed rule score reaches this value. 5 = a single critical rule blocks.</small>
+                                    </div>
+                                    <div class="field">
+                                        <label>Body inspection limit (KiB)</label>
+                                        <input type="number" class="wafBodyLimit" min="1" value="128">
+                                        <small>Larger bodies, gRPC and WebSocket traffic are passed through uninspected.</small>
+                                    </div>
+                                </div>
+                                <div class="field">
+                                    <label>Excluded rule IDs (whole endpoint)</label>
+                                    <input type="text" class="wafExcludedIds" placeholder="942100, 949000-949999">
+                                    <small>Comma separated rule IDs or ranges.</small>
+                                </div>
+                                <div class="field">
+                                    <label>Path scoped exclusions</label>
+                                    <textarea class="wafPathExclusions" rows="3" placeholder="/api/search 942100,942200&#10;=/login 920420"></textarea>
+                                    <small>One per line: <code>PATH RULEID,RULEID</code>. The path is a prefix; start it with <code>=</code> to match exactly.</small>
+                                </div>
+                                <div class="field">
+                                    <label>Custom rules (SecLang)</label>
+                                    <textarea class="wafCustomRules" rows="5" style="font-family:monospace;" placeholder='SecRule REQUEST_HEADERS:X-Evil "@streq yes" "id:1000001,phase:1,deny,status:403,msg:custom"'></textarea>
+                                    <small>Validated when saved; a syntax error rejects the save. Use rule IDs above 1000000. Include, file operators and engine/audit directives are not allowed.</small>
+                                </div>
+                                <button class="ui basic small green button wafSaveBtn"><i class="save icon"></i> Save WAF settings</button>
+                            </div>
+                        </div>
+                        <div class="ui segment">
+                            <button class="ui right floated basic mini icon button wafRefreshBtn" title="Refresh"><i class="sync icon"></i></button>
+                            <h4><i class="list icon"></i> Recent WAF events</h4>
+                            <small style="opacity:0.7;">Held in memory (last 1000, cleared on restart). The full audit trail is in the <code>zr-waf_*.log</code> files in the log folder.</small>
+                            <div style="overflow-x:auto; max-height: 420px; overflow-y:auto; margin-top:0.6em;">
+                                <table class="ui compact very basic small table">
+                                    <thead><tr><th>Time</th><th>Client</th><th>Request</th><th>Result</th><th>Rules</th></tr></thead>
+                                    <tbody class="wafEventsBody"><tr><td colspan="5"><small>No events</small></td></tr></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                     <div class="rpconfig_content" rpcfg="tags">
                         <iframe src="" class="wrapper_frame">
 
@@ -2184,7 +2254,116 @@
             editor.find(".rpconfig_content[rpcfg='tags'] .wrapper_frame").attr('src', frameURL);
         })();
 
+
+        /* ------------ WAF ------------ */
+        initWAFEditor(editor, subd);
+
         console.log(subd);
+    }
+
+    /* WAF editor: settings + recent events with one-click exclusions */
+    function wafEsc(t){ return $("<div>").text(t == null ? "" : String(t)).html(); }
+
+    function initWAFEditor(editor, subd){
+        let box = editor.find(".wafEditor");
+        let cfg = subd.WAF || {};
+        let ep = subd.RootOrMatchingDomain;
+        box.find(".wafMode").val(cfg.Mode || "off");
+        box.find(".wafParanoia").val(String(cfg.ParanoiaLevel || 1));
+        box.find(".wafThreshold").val(cfg.InboundThreshold || 5);
+        box.find(".wafBodyLimit").val(Math.round((cfg.MaxBodyBytes || 131072) / 1024));
+        box.find(".wafExcludedIds").val((cfg.ExcludedRuleIDs || []).join(", "));
+        box.find(".wafPathExclusions").val((cfg.PathExclusions || []).map(function(p){
+            return (p.Exact ? "=" : "") + p.Path + " " + p.RuleIDs.join(",");
+        }).join("\n"));
+        box.find(".wafCustomRules").val(cfg.CustomRules || "");
+
+        box.find(".wafSaveBtn").off("click").on("click", function(){
+            let pathEx = [];
+            let bad = null;
+            box.find(".wafPathExclusions").val().split("\n").forEach(function(line){
+                line = line.trim();
+                if (line == "") return;
+                let parts = line.split(/\s+/);
+                if (parts.length < 2){ bad = line; return; }
+                let exact = parts[0].charAt(0) == "=";
+                pathEx.push({Path: exact ? parts[0].substring(1) : parts[0], Exact: exact,
+                    RuleIDs: parts.slice(1).join("").split(",").filter(x => x != "")});
+            });
+            if (bad){ msgbox("Invalid path exclusion line: " + bad, false, 4000); return; }
+            let payload = {
+                Mode: box.find(".wafMode").val(),
+                ParanoiaLevel: parseInt(box.find(".wafParanoia").val()),
+                InboundThreshold: parseInt(box.find(".wafThreshold").val()) || 5,
+                MaxBodyBytes: (parseInt(box.find(".wafBodyLimit").val()) || 128) * 1024,
+                ExcludedRuleIDs: box.find(".wafExcludedIds").val().split(/[\s,]+/).filter(x => x != ""),
+                PathExclusions: pathEx,
+                CustomRules: box.find(".wafCustomRules").val()
+            };
+            let btn = $(this).addClass("loading");
+            $.cjax({
+                url: "/api/waf/set",
+                method: "POST",
+                data: {rootname: ep, config: JSON.stringify(payload)},
+                success: function(data){
+                    btn.removeClass("loading");
+                    if (data.error != undefined){
+                        msgbox(data.error, false, 6000);
+                    }else{
+                        msgbox("WAF settings saved");
+                        loadWAFEvents(editor, ep);
+                    }
+                },
+                error: function(){ btn.removeClass("loading"); msgbox("Request failed", false, 4000); }
+            });
+        });
+
+        editor.find(".wafRefreshBtn").off("click").on("click", function(){ loadWAFEvents(editor, ep); });
+        loadWAFEvents(editor, ep);
+    }
+
+    function loadWAFEvents(editor, ep){
+        $.get("/api/waf/events?limit=200&endpoint=" + encodeURIComponent(ep), function(events){
+            let body = editor.find(".wafEventsBody");
+            body.empty();
+            if (!events || events.length == 0){
+                body.html('<tr><td colspan="5"><small>No events</small></td></tr>');
+                return;
+            }
+            events.forEach(function(ev){
+                let rules = (ev.rules || []).filter(r => r.id != 949110).map(function(r){
+                    return `<div><b>${wafEsc(r.id)}</b> ${wafEsc(r.msg)}
+                        <a href="#" class="wafExcludeRule" data-rule="${wafEsc(r.id)}" data-path="${wafEsc(ev.path)}" title="Do not apply this rule to this path"><small>exclude for this path</small></a>
+                        | <a href="#" class="wafExcludeRule" data-rule="${wafEsc(r.id)}" data-path="" title="Do not apply this rule anywhere on this endpoint"><small>exclude everywhere</small></a></div>`;
+                }).join("");
+                let result = ev.action == "blocked" ? '<span style="color:#db2828;">blocked</span>'
+                    : (ev.would_block ? '<span style="color:#f2711c;">detected (would block)</span>' : 'detected');
+                body.append(`<tr>
+                    <td>${wafEsc(new Date(ev.time).toLocaleString())}</td>
+                    <td>${wafEsc(ev.client_ip)}</td>
+                    <td style="word-break:break-all;"><b>${wafEsc(ev.method)}</b> ${wafEsc(ev.uri)}<br><small style="opacity:0.6;">ID ${wafEsc(ev.txid)}</small></td>
+                    <td>${result}</td>
+                    <td>${rules}</td></tr>`);
+            });
+            body.find(".wafExcludeRule").off("click").on("click", function(e){
+                e.preventDefault();
+                let rule = $(this).attr("data-rule");
+                let path = $(this).attr("data-path");
+                $.cjax({
+                    url: "/api/waf/exclude",
+                    method: "POST",
+                    data: {rootname: ep, ruleid: rule, path: path},
+                    success: function(data){
+                        if (data.error != undefined){
+                            msgbox(data.error, false, 6000);
+                        }else{
+                            msgbox("Rule " + rule + " excluded" + (path ? " for " + path : ""));
+                            resyncProxyEditorConfig();
+                        }
+                    }
+                });
+            });
+        });
     }
 
     // Pull the latest proxy config from server side again and populate the editor
