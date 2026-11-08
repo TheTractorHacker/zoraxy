@@ -1368,3 +1368,26 @@ proxy as any upstream they like, but the script must not become a shell, a file 
 Residual risk: a native Go function that ignores the context could in theory hold a request goroutine (every exposed native is bounded as
 above). The heap watchdog is a ceiling, not an accountant. Treat script editing like shell access to the proxy host's CPU and memory,
 not like a safe multi-tenant sandbox: do not give untrusted users the admin role.
+
+### Sablier compatibility (fork #120 / upstream #564)
+
+Code: `src/mod/sablier` (config validation, HTTP client, gate with ready cache), `src/mod/dynamicproxy/sablier_gate.go` (request stage),
+`src/sablierapi.go`, `src/web/snippet/sablierEditor.html` (button "Sablier (scale to zero)" in the endpoint editor). Off unless a rule has
+`Sablier.Enabled`. No plugin is needed: this is Sablier's reverse proxy plugin contract implemented natively.
+
+- Per rule: Sablier URL, strategy `dynamic` (`/api/strategies/dynamic`, waiting page, `display_name`, `theme`, `refresh_frequency`,
+  `show_details`) or `blocking` (`/api/strategies/blocking`, `timeout`), `session_duration`, `names` (repeated parameter) or `group`.
+- `X-Sablier-Session-Status: ready` -> the request is proxied. Any other value -> Sablier's body, status and Content-Type are served with
+  `Cache-Control: no-store`. A response without that header (wrong URL, an auth portal in between, a 500) is an *error*, not a waiting page.
+- Position in the chain: after authentication and the Lua stage, right before plugin routing / the upstream. A Lua *handler* replaces the upstream, so
+  it never wakes the workload; public static responses and `/.zoraxy/health` are answered earlier; `BypassPaths` skips the gate per prefix.
+- Cache: a `ready` answer is trusted for 3 s (0-60 s configurable, -1 = ask every time); "not ready" is never cached; concurrent callers share one call
+  to Sablier (no thundering herd) and the shared call has its own deadline (5 s, blocking: timeout + 5 s) so one impatient client cannot cancel it.
+- Fail mode: Sablier unreachable / erroring -> `503` + `Retry-After` (fail closed, default) or proxy anyway (`FailOpen`).
+- WebSocket upgrades and clients that do not accept HTML (JSON APIs) get a plain `503` + `Retry-After` instead of the HTML waiting page; the
+  request has still woken the workload. A ready workload passes upgrades through.
+- SSRF: the URL must be http(s) without credentials/query; link-local (169.254.0.0/16 incl. 169.254.169.254, fe80::/10), `0.0.0.0/8`, multicast
+  and the Alibaba / Oracle / AWS-IPv6 metadata addresses are refused at validation *and* at dial time (after DNS resolution), redirects are not
+  followed, no environment proxy is used. Loopback and private addresses are allowed (Sablier normally runs next to the proxy). `AllowMetadataAddress` opts out.
+- Not validated: against a real Sablier server and real Docker / Swarm / Kubernetes providers. The fake Sablier in the tests follows the documented API
+  (`X-Sablier-Session-Status`, `/api/strategies/{dynamic,blocking}`), so compare the "Check connection" button's URL with your Sablier version's docs.
