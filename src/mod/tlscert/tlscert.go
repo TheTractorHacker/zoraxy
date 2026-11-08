@@ -35,6 +35,10 @@ type Manager struct {
 	Logger       *logger.Logger //System wide logger for debug mesage
 	FallbackCert string        //Name of the fallback/default certificate (no file renaming)
 
+	//OnCertRemoved is called after a certificate has been deleted, so other modules
+	//(e.g. ACME) can drop the data they keep for it
+	OnCertRemoved func(domain string)
+
 	/* External handlers */
 	hostSpecificTlsBehavior func(serverName string) (*HostSpecificTlsBehavior, error) // Function to get host specific TLS behavior, if nil, use global TLS options
 }
@@ -357,6 +361,19 @@ func (m *Manager) RemoveCert(domain string) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	//Remove the ACME metadata of this certificate. A stale <name>.json would otherwise
+	//override the challenge type of the next certificate issued under the same name
+	infoFile := filepath.Join(m.CertStore, domain+".json")
+	if utils.FileExists(infoFile) {
+		if err = os.Remove(infoFile); err != nil {
+			return err
+		}
+	}
+
+	if m.OnCertRemoved != nil {
+		m.OnCertRemoved(domain)
 	}
 
 	//Update the cert list

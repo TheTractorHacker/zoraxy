@@ -144,6 +144,14 @@ func startupSequence() {
 	if err != nil {
 		panic(err)
 	}
+	//Forget the stored ACME DNS provider / credentials when a certificate is deleted (upstream #1193)
+	tlsCertManager.OnCertRemoved = func(name string) {
+		for _, suffix := range []string{"_dns_provider", "_dns_credentials", "_dns_servers"} {
+			if sysdb.KeyExists("acme", name+suffix) {
+				sysdb.Delete("acme", name+suffix)
+			}
+		}
+	}
 
 	//Create a redirection rule table
 	db.NewTable("redirect")
