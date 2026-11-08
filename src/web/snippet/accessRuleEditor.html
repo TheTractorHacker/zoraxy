@@ -47,7 +47,7 @@
                 <div class="ui toggle checkbox">
                     <input type="checkbox" id="newRuleTrustProxy">
                     <label>Enable Trusted Proxy Gating<br>
-                        <small>Only trust X-Real-IP or X-Forwarded-For headers from trusted proxy listed in the whitelist advanced settings</small></label>
+                        <small>Off (default): access rules check the address of the TCP connection, which is your CDN / tunnel / VPN gateway when you sit behind one. On: X-Real-IP, CF-Connecting-IP and X-Forwarded-For are used for the visitor address, but only when the connection comes from an address on the <b>Trusted Proxy</b> page (Cloudflare ranges by default; add your tunnel / reverse proxy address there).</small></label>
                 </div>
                 <div class="ui divider"></div>
                 <button class="ui basic button" type="submit"><i class="ui green add icon"></i> Create</button>
@@ -82,7 +82,7 @@
                  <div class="ui toggle checkbox" id="trustedProxyGatingToggle">
                     <input type="checkbox" id="enableWhitelistTrustedProxy">
                     <label>Enable Trusted Proxy Gating<br>
-                        <small>Only trust X-Real-IP or X-Forwarded-For headers from trusted proxy listed in the whitelist advanced settings</small></label>
+                        <small>Off (default): access rules check the address of the TCP connection, which is your CDN / tunnel / VPN gateway when you sit behind one. On: X-Real-IP, CF-Connecting-IP and X-Forwarded-For are used for the visitor address, but only when the connection comes from an address on the <b>Trusted Proxy</b> page (Cloudflare ranges by default; add your tunnel / reverse proxy address there).</small></label>
                 </div>
                 <div class="ui divider"></div>
                 <button class="ui basic button" type="submit"><i class="ui green save icon"></i> Save Changes</button>

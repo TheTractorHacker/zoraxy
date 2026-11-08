@@ -78,13 +78,15 @@ func (ep *ProxyEndpoint) AddUserDefinedHeader(newHeaderRule *rewrite.UserDefined
 
 // Get virtual directory handler from given URI
 func (ep *ProxyEndpoint) GetVirtualDirectoryHandlerFromRequestURI(requestURI string) *VirtualDirectoryEndpoint {
+	//The longest matching prefix wins, so the order in which the directories were added does not matter
+	//(a "/" directory used to shadow every directory added after it, upstream #417). Equal length: first added.
+	var best *VirtualDirectoryEndpoint
 	for _, vdir := range ep.VirtualDirectories {
-		if strings.HasPrefix(requestURI, vdir.MatchingPath) {
-			thisVdir := vdir
-			return thisVdir
+		if strings.HasPrefix(requestURI, vdir.MatchingPath) && (best == nil || len(vdir.MatchingPath) > len(best.MatchingPath)) {
+			best = vdir
 		}
 	}
-	return nil
+	return best
 }
 
 // Get virtual directory handler by matching path (exact match required)

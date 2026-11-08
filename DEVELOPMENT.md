@@ -1353,3 +1353,27 @@ re-read the stored policy before writing so a stale tab cannot overwrite them. N
 * Host names are compared in punycode (`utils.NormalizeHostname`): use it for any new place that compares or stores a domain.
 * Upstreams with "Skip Verification" use `utils.InsecureUpstreamTLSConfig` (legacy TLS versions and RSA suites allowed) for IPMI-class devices.
 * Soak the forward-auth module for leaks: `ZORAXY_LEAK_SECONDS=300 go test ./mod/auth/sso/forward -run Leak -v`.
+
+## Support closure batch (`docs/support-closure`)
+
+Answers for the mirrored support-question issues live in `docs/guides/` (index below) and `docs/triage/closure-support.{md,json}`.
+Behaviour changes that came out of them:
+
+* **Virtual directories:** the longest matching `MatchingPath` wins (`GetVirtualDirectoryHandlerFromRequestURI`), creation order no longer matters.
+  A WebSocket upgrade through a virtual directory now honours a base path in the target (`host:8072/websocket`), like plain HTTP does
+  (`vdirWebsocketPath`); an empty remainder maps to the base path without a trailing slash.
+* **DNS challenge credentials:** empty string fields sent by the UI are dropped before the provider config is decoded, so provider defaults
+  (PowerDNS `ServerName=localhost`) apply.
+* **Upstream failures:** the reason behind a 521/404 (dial refused, TLS handshake, DNS) is logged as `[proxy] Upstream X failed for request to Y`,
+  at most once per upstream+reason per 30 s (`upstream_error_log.go`).
+* **Error pages:** `{{.Host}}` / `{{.Path}}` are captured when the writer is wrapped (the proxy rewrites `r.Host` / `r.URL` later).
+* **pprof:** `/api/info/pprof/` serves profile, heap, goroutine, ... (admin only, viewer role refused by the prefix rule). Use
+  `go tool pprof` with the session cookie.
+* **Access UI help text** explains which address access rules check, CGNAT (`100.64.0.0/10`) and the exact LAN list; the list is pinned by
+  `TestIsPrivateIPRangeMatchesDocumentedList`, keep the text in `web/components/access.html` in sync.
+* Known limitation documented in `docs/guides/authelia.md`: the forward-auth subrequest's `X-Forwarded-For` is the TCP peer, not resolved
+  through the Trusted Proxy list (`mod/auth/sso/forward/util.go`).
+
+Guides: `websockets-odoo-cleanslate-domoticz`, `url-rewrite-and-locations`, `real-client-ip-cloudflare`, `ssl-troubleshooting`, `authelia`,
+`authentik`, `keycloak-groups`, `google-oauth2`, `pocket-id-navidrome`, `performance-tuning`, `updating`, `crowdsec`, `error-pages-and-521`,
+`captcha-and-mobile-apps`.

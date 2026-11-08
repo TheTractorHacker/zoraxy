@@ -167,3 +167,8 @@ FriendlyCaptcha, counting SSO redirect failures in the auto-ban, per-user admin 
 
 * Optional: "Reset all ACME state" button (upstream #1193 c), literal `CF-IPCountry` support gated on trusted peers (#831), smoother nav chevron + divider under default site (#1201, belongs to the nav rework).
 * Open for reporter evidence: Infomaniak punycode zone (#458), Authelia v3.2.3 redirect (#698), VoidAuth (#958), oauth2-proxy behind Cloudflare Tunnel (#1032), Uptime Kuma chain (#403), Let's Encrypt 400 (#537). See `docs/triage/closure-bugs.md`.
+## Support closure (`docs/support-closure`)
+- ✅ 14 task guides under `docs/guides/` answering the mirrored support questions; fixes: virtual directory longest match and WebSocket base path,
+  blank DNS credential fields, logged upstream failure reasons, error page host variable, pprof endpoints, access rule help text.
+- 📋 Forward-auth subrequest should send the Trusted Proxy resolved client IP to Authelia/Authentik. 📋 Real-instance runs of the Authentik, Keycloak,
+  Google and Pocket ID guides. 📋 Per-route group policies (see section 4). 📋 Publish a container image from the fork (needs Docker Hub credentials).

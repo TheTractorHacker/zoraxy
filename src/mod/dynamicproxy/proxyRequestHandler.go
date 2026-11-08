@@ -252,6 +252,9 @@ func (h *ProxyHandler) hostRequest(w http.ResponseWriter, r *http.Request, targe
 		panic(http.ErrAbortHandler)
 	}
 	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			h.Parent.logUpstreamFailure(reqHostname, upstreamHostname, err)
+		}
 		if errors.As(err, &dnsError) {
 			serveProxyRequestError(w, 404, h.Parent, ErrorTemplateHostError)
 			h.Parent.logRequest(r, false, 404, "host-http", reqHostname, upstreamHostname, target)
@@ -327,14 +330,20 @@ func (h *ProxyHandler) vdirRequest(w http.ResponseWriter, r *http.Request, targe
 		}
 		//Handle WebSocket request. Forward the custom Upgrade header and rewrite origin
 		r.Header.Set("Zr-Origin-Upgrade", "websocket")
-		wsRedirectionEndpoint := target.Domain
-		if wsRedirectionEndpoint[len(wsRedirectionEndpoint)-1:] != "/" {
-			wsRedirectionEndpoint = wsRedirectionEndpoint + "/"
-		}
-		u, _ := url.Parse("ws://" + wsRedirectionEndpoint + r.URL.String())
+		//The target may carry a base path (host:8072/websocket). Like the HTTP path, keep it in front of the
+		//remainder of the request path. The websocket proxy takes the path from r.URL, so set it there.
+		wsScheme := "ws://"
 		if target.RequireTLS {
-			u, _ = url.Parse("wss://" + wsRedirectionEndpoint + r.URL.String())
+			wsScheme = "wss://"
 		}
+		u, perr := url.Parse(wsScheme + target.Domain)
+		if perr != nil || u == nil {
+			http.Error(w, "invalid virtual directory target", http.StatusBadGateway)
+			return
+		}
+		r.URL.Path = vdirWebsocketPath(u.Path, r.URL.Path)
+		r.URL.RawPath = ""
+		u.Path, u.RawPath = "", ""
 
 		if target.parent.HeaderRewriteRules == nil {
 			target.parent.HeaderRewriteRules = GetDefaultHeaderRewriteRules()
@@ -405,6 +414,9 @@ func (h *ProxyHandler) vdirRequest(w http.ResponseWriter, r *http.Request, targe
 		panic(http.ErrAbortHandler)
 	}
 	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			h.Parent.logUpstreamFailure(reqHostname, target.Domain, err)
+		}
 		if errors.As(err, &dnsError) {
 			serveProxyRequestError(w, 404, h.Parent, ErrorTemplateHostError)
 			//log.Println(err.Error())

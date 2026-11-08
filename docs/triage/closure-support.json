@@ -1,0 +1,302 @@
+[
+ {
+  "fork": 70,
+  "upstream": 314,
+  "reply": "Use a virtual directory whose **target carries the path**: path `/websocket`, target `host:8072/websocket` (Odoo 16: `/longpolling`). Plain proxy rule `odoo.example.com` -> `host:8069`, `proxy_mode = True` in `odoo.conf`. If `workers = 0` you need no virtual directory at all.\n\nCause: a virtual directory strips its prefix and, for WebSocket upgrades, also ignored a base path in the target, so Odoo's gevent port received `/` and answered the upgrade with a non-101 (`websocket: bad handshake`). Fixed in commit d8d88d0 (verified with a fake backend: `/websocket` -> `/websocket`). Details and a table: [docs/guides/websockets-odoo-cleanslate-domoticz.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/websockets-odoo-cleanslate-domoticz.md).\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "d8d88d0",
+  "confidence": "partly-verified",
+  "notes": "Fix verified with a fake backend logging the request line; not run against a real Odoo."
+ },
+ {
+  "fork": 76,
+  "upstream": 366,
+  "reply": "Enable the **PROXY protocol** on the stream proxy (Stream Proxy > edit > Proxy Protocol v1 or v2) and make the mail server require it (Postfix: `postscreen_upstream_proxy_protocol = haproxy` / `smtpd_upstream_proxy_protocol = haproxy`, on a dedicated port). A plain TCP stream can only show Zoraxy's address; headers such as X-Forwarded-For do not exist for SMTP.\n\nVerified: with v1 the target receives `PROXY TCP4 <client> <local> <sport> <dport>` as the first bytes. Services without PROXY support (sshd) need haproxy/go-mmproxy on the target host. Proxmox Mail Gateway's way to set the Postfix option is not verified. See section 3 of [docs/guides/real-client-ip-cloudflare.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/real-client-ip-cloudflare.md).\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "ff78693",
+  "confidence": "partly-verified",
+  "notes": "PROXY v1 header verified with a socket listener; Postfix/PMG side not tested."
+ },
+ {
+  "fork": 93,
+  "upstream": 386,
+  "reply": "A `404` from Let's Encrypt means something other than Zoraxy answered `http://name/.well-known/acme-challenge/...` on port 80. Check from outside your network: `curl -i http://name/.well-known/acme-challenge/test`. If Zoraxy answers, the body is `No ACME challenge in progress` (verified); any other 404 page is the program/router that owns port 80. Also check the port-80 forward / Docker `-p 80:80`, `AAAA` records and double NAT; if inbound 80 cannot work use the **DNS challenge**. Full checklist: [docs/guides/ssl-troubleshooting.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/ssl-troubleshooting.md) (sections 1 and 2).\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "ff78693",
+  "confidence": "partly-verified",
+  "notes": "Diagnostic response verified; the reporter's actual network cause is unknown."
+ },
+ {
+  "fork": 98,
+  "upstream": 417,
+  "reply": "Zoraxy has no nginx `location` blocks; if `/api`, `/local`, `/media` go to the same Home Assistant you need **one** proxy rule `home.example.com` -> `homeassistant:8123` and no virtual directory (plus `use_x_forwarded_for` / `trusted_proxies` in Home Assistant). Virtual directories are for sending a path to a *different* upstream.\n\nThe ordering complaint is fixed: the **longest matching virtual directory now wins** regardless of creation order (commit c5d4047, unit-tested), so a `/` entry no longer shadows the others. Details: [docs/guides/url-rewrite-and-locations.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/url-rewrite-and-locations.md).\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "c5d4047",
+  "confidence": "verified",
+  "notes": "Matching rule covered by TestVirtualDirectoryLongestPrefixWins; prefix/target-path behaviour checked on a live instance."
+ },
+ {
+  "fork": 99,
+  "upstream": 418,
+  "reply": "Expected behaviour: Zoraxy strips the virtual directory prefix and does not rewrite HTML, so an app that emits `/css/style.css` is requested at the domain root. Options: give the app its own hostname (best), or configure the app's base path **and** put it in the target (`/web-check` -> `192.168.0.11:5555/web-check`, verified: request `/web-check/style.css` reaches the app as `/web-check/style.css`). Table and details: [docs/guides/url-rewrite-and-locations.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/url-rewrite-and-locations.md).\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "ff78693",
+  "confidence": "verified",
+  "notes": "Prefix handling checked with a fake backend."
+ },
+ {
+  "fork": 103,
+  "upstream": 446,
+  "reply": "Not reproduced, so no confirmed fix yet. Things to try, in order: compare Zoraxy's access log status with Domoticz's own log (if both say 200 the 404 is browser side), enable the upstream option **Disable connection reuse (keep-alive)** and **Force HTTP/1.1** (Domoticz's embedded server is old and drops idle connections), make sure the target is plain `http://` unless Domoticz serves HTTPS. See [docs/guides/websockets-odoo-cleanslate-domoticz.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/websockets-odoo-cleanslate-domoticz.md). If it persists please post the Zoraxy log lines for one failing resource and the Domoticz log for the same request.\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": false,
+  "close_reason": null,
+  "fork_commit": "ff78693",
+  "confidence": "unverified",
+  "notes": "No reproduction; Domoticz not available. Suggestions only."
+ },
+ {
+  "fork": 108,
+  "upstream": 494,
+  "reply": "On this fork use **System > Update** (checks signed GitHub releases only when you open the page, installs with signature + SHA-256 verification, keeps the old binary for rollback, restarts itself; disabled in Docker). Manual update: stop the service, back up `conf/`, `sys.db`, `sys.uuid`, replace the binary with the release asset for your CPU, start it. Data lives relative to the **working directory** the binary is started in (set `WorkingDirectory=` in systemd). Source checkouts need `git pull` and a rebuild. Steps: [docs/guides/updating.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/updating.md).\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "ff78693",
+  "confidence": "partly-verified",
+  "notes": "Flags/paths verified from code; updater not executed here."
+ },
+ {
+  "fork": 114,
+  "upstream": 513,
+  "reply": "This cannot be fixed inside Zoraxy, so no setting was added: the validation request comes from the CA, not from Zoraxy, and Let's Encrypt resolves `A` and `AAAA` and prefers IPv6 when an `AAAA` exists, so the challenge lands on whatever the `AAAA` points to (your backend). Fixes: remove/redirect the `AAAA` record for that name, forward IPv6 80/443 to Zoraxy, or use the **DNS challenge** (TXT lookup, address family irrelevant). See section 5 of [docs/guides/ssl-troubleshooting.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/ssl-troubleshooting.md).\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "not_planned",
+  "fork_commit": "ff78693",
+  "confidence": "partly-verified",
+  "notes": "Based on how ACME HTTP-01 validation works (CA side); not testable without a CA. Zoraxy's own outbound client does not influence it, so an 'IPv4 only' switch would not help."
+ },
+ {
+  "fork": 115,
+  "upstream": 514,
+  "reply": "Zoraxy already sends it: `X-Forwarded-For: <incoming XFF>, <peer>` and `X-Real-Ip` (CF/Fastly header or first XFF entry). The application must be told to trust Zoraxy's address and read those headers (Authelia/OctoPrint/Home Assistant each have a \"trusted proxies\" setting). If a NAT/masquerading device sits in front of Zoraxy, Zoraxy only sees that device; fix it at the router. Verified header behaviour and a `{{client_ip}}` custom header: [docs/guides/real-client-ip-cloudflare.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/real-client-ip-cloudflare.md) (section 1). For Authelia see [docs/guides/authelia.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/authelia.md).\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "ff78693",
+  "confidence": "partly-verified",
+  "notes": "Headers verified with a header-echo backend; the reporter's OctoPrint hop sequence not reproduced."
+ },
+ {
+  "fork": 118,
+  "upstream": 543,
+  "reply": "Decision tree in [docs/guides/ssl-troubleshooting.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/ssl-troubleshooting.md) section 4: (1) the certificate shown is \"Zoraxy Self-host\" = no stored certificate matched the SNI name (or you used the IP), (2) a CA certificate for another name / a wildcard that does not cover the name, (3) the warning is about the upstream (DSM self-signed) - then tick **Skip Verification** for that upstream. Run `openssl s_client -connect zoraxy:443 -servername dsm.<name>.duckdns.org </dev/null | openssl x509 -noout -subject -issuer -ext subjectAltName` and tell us which one you get. Left open because the reporter's setup could not be reproduced; will be closed if there is no reply in 14 days.\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": false,
+  "close_reason": null,
+  "fork_commit": "ff78693",
+  "confidence": "partly-verified",
+  "notes": "Certificate selection order verified from code and with openssl; actual cause for this setup unknown."
+ },
+ {
+  "fork": 122,
+  "upstream": 590,
+  "reply": "The upstream gets the visitor in `X-Forwarded-For` (first entry when Zoraxy is the first proxy) and `X-Real-Ip`; there is no setting to \"pass the IP\" because it is always passed. Configure the application's *trusted proxy* option with Zoraxy's address and the header it should read, or send a dedicated header from the rule's Custom Headers: `X-Client-IP: {{client_ip}}`. If Zoraxy itself sees the firewall's address (NAT/masquerade in front), fix it there. Everything verified: [docs/guides/real-client-ip-cloudflare.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/real-client-ip-cloudflare.md).\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "ff78693",
+  "confidence": "verified",
+  "notes": "Header echo test with and without trusted-proxy gating."
+ },
+ {
+  "fork": 125,
+  "upstream": 612,
+  "reply": "Zoraxy checks the address of the TCP connection unless **Trusted Proxy Gating** is on *and* the peer is on the Trusted Proxy page. If the WireGuard server masquerades client traffic, Zoraxy only sees the VPN server's address: route instead of NAT (and whitelist the VPN subnet) or whitelist the VPN server address. This matches what you worked out in the thread. The access page now explains which address is checked and why reserved ranges are denied (commit 9f335a3). See [docs/guides/real-client-ip-cloudflare.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/real-client-ip-cloudflare.md).\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "9f335a3",
+  "confidence": "partly-verified",
+  "notes": "Behaviour verified; the reporter's WireGuard topology not reproduced."
+ },
+ {
+  "fork": 129,
+  "upstream": 622,
+  "reply": "Use a virtual directory with the full GraphQL path in the target: path `/v1/graphql`, target `graphql-server:8080/v1/graphql`. Hasura's log (`only '/v1/graphql', ... are supported on websockets`, `\"path\":\"$\"`) shows it received `/`: virtual directories dropped the target path for WebSocket upgrades. Fixed in d8d88d0 (verified with a fake backend). Guide: [docs/guides/websockets-odoo-cleanslate-domoticz.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/websockets-odoo-cleanslate-domoticz.md).\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "d8d88d0",
+  "confidence": "partly-verified",
+  "notes": "Fix verified with a fake backend; not run against real Hasura/CleanSlate."
+ },
+ {
+  "fork": 130,
+  "upstream": 648,
+  "reply": "Zoraxy appends each request to `log/zr_<YYYY>-<MM>.log` as it happens, so that file is the live log. Acquire `log/zr_*.log` with CrowdSec (the glob follows the monthly rotation). The line format and a regex are in [docs/guides/crowdsec.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/crowdsec.md) (the regex matched all 19,000 lines of a test log). Remediation: a firewall bouncer, or the Zoraxy remote ban API (`/api/abuse/remote/ban`, bearer token, Auto-ban must be on; verified). The CrowdSec YAML itself is untested here.\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "ff78693",
+  "confidence": "partly-verified",
+  "notes": "Log format and ban API verified; CrowdSec not installed."
+ },
+ {
+  "fork": 137,
+  "upstream": 665,
+  "reply": "Expected: unknown names and the bare IP get the **fallback certificate** (self-signed unless you set one with the house icon on the Certificates page), and the TLS handshake happens before any redirect, so the browser warns first. Set a fallback certificate that covers the names you type (a wildcard), or do the redirect over HTTP (port 80 listener). For the OVH DNS-challenge follow-up: provider `ovh`, fields APIEndpoint, ApplicationKey, ApplicationSecret, ConsumerKey. Verified with openssl: [docs/guides/ssl-troubleshooting.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/ssl-troubleshooting.md) section 4.\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "ff78693",
+  "confidence": "verified",
+  "notes": "Fallback certificate behaviour verified with openssl s_client."
+ },
+ {
+  "fork": 138,
+  "upstream": 676,
+  "reply": "It is already passed (`X-Real-Ip` = `CF-Connecting-IP`, `X-Forwarded-For`); the application must trust Zoraxy and use those headers (Home Assistant: `use_x_forwarded_for: true`, `trusted_proxies: [<Zoraxy address>]`). For Zoraxy's own decisions (access rules, auto-ban) enable **Trusted Proxy Gating** on the access rule - the Trusted Proxy page is pre-filled with Cloudflare's ranges; for a Cloudflare Tunnel add the tunnel's address. Verified: `{{client_ip}}` is the visitor when the peer is trusted. Steps: [docs/guides/real-client-ip-cloudflare.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/real-client-ip-cloudflare.md).\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "ff78693",
+  "confidence": "verified",
+  "notes": "Verified with a simulated CF-Connecting-IP from a trusted peer."
+ },
+ {
+  "fork": 141,
+  "upstream": 681,
+  "reply": "Provider `pdns`: fill **APIKey** and **Host** (`https://ns.example.org:8081`), leave ServerName, APIVersion and the intervals empty (defaults `localhost`, auto-detect). Bug fixed (commit 3936702): blank fields were sent as empty strings and overwrote the provider defaults, so PowerDNS was called as `/servers//zones`; blank fields are now ignored. Unit test calls a fake PowerDNS API. Guide: [docs/guides/ssl-troubleshooting.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/ssl-troubleshooting.md) section 2.\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "3936702",
+  "confidence": "verified",
+  "notes": "TestDNSProviderEmptyFieldsKeepProviderDefaults (fake PowerDNS API)."
+ },
+ {
+  "fork": 147,
+  "upstream": 749,
+  "reply": "A plain `404 page not found` from Zoraxy means **no proxy rule matched the host name** (typo, rule disabled, DNS pointing elsewhere; verified) - not an Authelia error. Create a rule `auth.example.com` -> `http://authelia:9091` with *no* authentication, check `https://auth.example.com/api/health`, then follow [docs/guides/authelia.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/authelia.md) for the forward-auth part.\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "ff78693",
+  "confidence": "verified",
+  "notes": "The 404 body for an unmatched host reproduced."
+ },
+ {
+  "fork": 148,
+  "upstream": 750,
+  "reply": "Use the **DNS challenge** for the name (no inbound connection needed), then restrict the rule to your LAN with an access rule whitelist (or the rule's \"TCP peer must be in this CIDR set\"). The public DNS can hold the private A record or you can serve it only internally (Pi-hole, or the optional split-horizon DNS responder). Walkthrough: [docs/guides/ssl-troubleshooting.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/ssl-troubleshooting.md) section 3.\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "ff78693",
+  "confidence": "partly-verified",
+  "notes": "Challenge path ordering verified in code; DNS providers not exercised against real APIs."
+ },
+ {
+  "fork": 156,
+  "upstream": 770,
+  "reply": "1024 TLS connections from `wrk` will use all cores on any Go proxy; the useful questions are requests/second per core and where the time goes. New in commit 54c8ce4: the Go profiler is reachable at `/api/info/pprof/` (profile, heap, goroutine...; admin login required, it only returned 404 before). Capture `profile?seconds=30` during your test and attach it. Tuning knobs (keep-alive, ECDSA certs, per-rule logging/statistics, WAF scope, `-fastgeoip`, `GOMAXPROCS`, `GOMEMLIMIT`, HTTP/2 flags): [docs/guides/performance-tuning.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/performance-tuning.md).\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "54c8ce4",
+  "confidence": "partly-verified",
+  "notes": "Endpoint verified with a live CPU profile; the reporter's workload and hotspot are not known."
+ },
+ {
+  "fork": 159,
+  "upstream": 775,
+  "reply": "Zoraxy OAuth 2.0: Issuer `https://keycloak/realms/<realm>`, scopes `openid profile email`, PKCE S256, **Groups claim** `groups`, **Allowed groups** `admins` (use `/admins` if Keycloak's *Full group path* is on); add a *Group Membership* mapper (claim `groups`, ID token + userinfo on) in Keycloak. Roles: *Allowed claim values* `realm_access.roles=...`. Limitation: the allow-list is global to the OAuth2 provider (per-route groups are on the roadmap). Guide: [docs/guides/keycloak-groups.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/keycloak-groups.md). The Zoraxy side is tested with a fake OIDC provider; not with a real Keycloak.\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "ff78693",
+  "confidence": "partly-verified",
+  "notes": "Zoraxy side covered by fake IdP tests; Keycloak screens from documentation."
+ },
+ {
+  "fork": 161,
+  "upstream": 793,
+  "reply": "SSO > Forward Auth: press the **Authelia** preset (address `<base>/api/authz/forward-auth`, response headers `Remote-User,Remote-Groups,Remote-Name,Remote-Email`, X-Original-* off, Host preservation off), **Apply Change**, then set the rule to Authentication Provider **Forward Auth**. The address must be Authelia's *direct* address (`http://authelia:9091/...`), not the public URL through Zoraxy (the maintainer's finding in the thread), and no custom `X-Original-URL` headers are needed. Details and a limitation about client IPs: [docs/guides/authelia.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/authelia.md).\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "ff78693",
+  "confidence": "partly-verified",
+  "notes": "Zoraxy side read from code/UI; no real Authelia available."
+ },
+ {
+  "fork": 174,
+  "upstream": 895,
+  "reply": "This fork has a dedicated Authentik integration: SSO > Forward Auth > enter the outpost URL > **Authentik: single application** (or domain level) preset, which sets the nginx-style address, X-Original-* headers, Host preservation, the `/outpost.goauthentik.io/` callback proxying and the sign-in redirect. Full guide: [docs/authentik.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/authentik.md); the 404 checklist (Host header, External host, http vs https port) is in [docs/guides/authentik.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/authentik.md). Verified so far against fake outposts only - a real Authentik run is still on the checklist.\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "ff78693",
+  "confidence": "partly-verified",
+  "notes": "Fake outpost tests only; real Authentik not available."
+ },
+ {
+  "fork": 190,
+  "upstream": 959,
+  "reply": "Issuer URL `https://accounts.google.com`, scopes `openid profile email`, PKCE S256, redirect URI `https://<host>/internal/oauth2` registered in the Google console; press **Test discovery**, apply, then set the rule to OAuth2. Restrict who may sign in with **Allowed e-mail addresses/domains** (Google has no groups; Workspace: `hd=example.com` in *Allowed claim values*). A rule set to OAuth2 fails closed while it is not configured. Guide: [docs/guides/google-oauth2.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/google-oauth2.md) (tested with a fake OIDC provider, not against Google).\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "ff78693",
+  "confidence": "partly-verified",
+  "notes": "Not run against Google."
+ },
+ {
+  "fork": 196,
+  "upstream": 993,
+  "reply": "Mobile **browsers** already work: the challenge pages are responsive (checked at 360 and 320 px, no horizontal overflow, all providers). Native apps cannot solve a CAPTCHA and no mobile SDK flow exists for proxied traffic, so exempt the app's traffic: rule > CAPTCHA > **CAPTCHA Exceptions** (path prefix `/api`, or a CIDR) or limit the challenge with **Protected Path Prefixes**. Guide: [docs/guides/captcha-and-mobile-apps.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/captcha-and-mobile-apps.md). A dedicated \"mobile reCAPTCHA\" flow is not planned.\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "not_planned",
+  "fork_commit": "ff78693",
+  "confidence": "verified",
+  "notes": "Responsiveness measured with headless Chromium; exception mechanism covered by existing tests."
+ },
+ {
+  "fork": 209,
+  "upstream": 1087,
+  "reply": "Access rules check the address of the TCP connection unless **Enable Trusted Proxy Gating** is on and the peer is on the Trusted Proxy page. Behind Cloudflare / a tunnel / Tailscale that address is a reserved one (e.g. `100.64.0.0/10` = zone \"CarrierNAT\"), which has no country and is not covered by \"Enable LAN and Loopback\" - hence the 403 with a country whitelist. Fix: enable Trusted Proxy Gating (add your tunnel address to Trusted Proxy) or whitelist the CIDR. The access page now says all this next to the whitelist and the gating toggle (commit 9f335a3); the LAN range list is pinned by a test. See [docs/guides/real-client-ip-cloudflare.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/real-client-ip-cloudflare.md).\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "9f335a3",
+  "confidence": "verified",
+  "notes": "Behaviour from code + TestIsPrivateIPRangeMatchesDocumentedList; UI text added."
+ },
+ {
+  "fork": 210,
+  "upstream": 1095,
+  "reply": "Two ways. (1) Ingress settings > **Default error pages** (or per rule: *Error Pages, Static Responses, CORS & Bandwidth*): list status `521`, paste an HTML template (`{{.Status}} {{.Host}} {{.RequestID}}`...). (2) Template file `./www/templates/rperror.html` (the web root's `templates` folder; `521.html` is not read) - verified. A bug where the host variable was empty for Zoraxy-generated errors is fixed (commit 89dc754). Guide: [docs/guides/error-pages-and-521.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/error-pages-and-521.md).\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "89dc754",
+  "confidence": "verified",
+  "notes": "Both mechanisms exercised on a live instance; regression test added."
+ },
+ {
+  "fork": 214,
+  "upstream": 1102,
+  "reply": "521 means Zoraxy could not talk to the upstream. The reason is now written to the system log (commit 9d83c82): look for `[proxy] Upstream ... failed ...`. The usual cause with Transmission on `:9091` is the rule having **Require TLS** ticked while Transmission speaks plain HTTP (logged as `TLS handshake timeout` / `first record does not look like a TLS handshake`); otherwise `connection refused` / `i/o timeout` = test with `curl` from the Zoraxy host. Table of log messages and fixes: [docs/guides/error-pages-and-521.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/error-pages-and-521.md).\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "9d83c82",
+  "confidence": "partly-verified",
+  "notes": "Log lines verified for refused / TLS mismatch / DNS; the reporter's actual cause unknown."
+ },
+ {
+  "fork": 218,
+  "upstream": 1118,
+  "reply": "Remove the static custom header. SSO > OAuth 2.0 > **Upstream header mappings**: `X-Auth-User=preferred_username` (Zoraxy deletes incoming copies and sets it from the verified token claim; custom-header fields do not know OIDC claims, which is why you got `$username` as a user). Scopes `openid profile email`, callback `https://music.example.com/internal/oauth2`. In Navidrome set `ND_EXTAUTH_TRUSTEDSOURCES` to Zoraxy's address, not `0.0.0.0/0`. Subsonic apps: add an OAuth2 exception for `/rest/`. Guide: [docs/guides/pocket-id-navidrome.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/pocket-id-navidrome.md) (tested with a fake IdP; Pocket ID/Navidrome not run).\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "completed",
+  "fork_commit": "ff78693",
+  "confidence": "partly-verified",
+  "notes": "Header mapping covered by fake IdP tests."
+ },
+ {
+  "fork": 225,
+  "upstream": 1174,
+  "reply": "Honest status: this fork ships Linux release binaries (signed, with the in-app updater) and a `docker/` directory to **build the image yourself**; the Docker workflow only publishes when Docker Hub credentials are configured, and none are, so **the fork publishes no container image today**. The image `zoraxydocker/zoraxy` is upstream's and does not contain the fork's features. The maintainer question in #1174 concerns upstream. Details and update steps: [docs/guides/updating.md](https://github.com/TheTractorHacker/zoraxy/blob/dev/docs/guides/updating.md) (section C). Pull requests that make a fork image publishable are welcome.\n\n_(Guide links work once the branch `docs/support-closure` is merged into `dev`.)_",
+  "close": true,
+  "close_reason": "not_planned",
+  "fork_commit": "ff78693",
+  "confidence": "verified",
+  "notes": "Workflow, secrets and variables inspected via gh; no docker runs exist."
+ }
+]

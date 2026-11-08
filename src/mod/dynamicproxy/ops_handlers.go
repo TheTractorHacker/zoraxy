@@ -99,7 +99,7 @@ func (router *Router) opsBegin(w http.ResponseWriter, r *http.Request, sep *Prox
 	if sep.Ops == nil && globalErrorPages.Load() == nil {
 		return w
 	}
-	ow := &opsWriter{ResponseWriter: w, r: r, st: st, ep: sep}
+	ow := &opsWriter{ResponseWriter: w, r: r, st: st, ep: sep, origHost: r.Host, origPath: r.URL.Path}
 	if sep.Ops != nil {
 		ow.rt = sep.Ops.runtime()
 	}
@@ -123,6 +123,8 @@ type opsWriter struct {
 	ep       *ProxyEndpoint
 	rt       *opsRuntime
 	errPages *errorPagesRuntime
+	origHost string //request Host and path as received: the proxy rewrites r.Host / r.URL before the upstream call
+	origPath string
 
 	wroteHeader bool
 	discard     bool
@@ -183,7 +185,7 @@ func (o *opsWriter) serveErrorPage(code int) {
 		tpl = t
 	}
 	var buf bytes.Buffer
-	data := ErrorPageData{Status: code, StatusText: http.StatusText(code), RequestID: o.st.id, Host: o.r.Host, Path: o.r.URL.Path, RuleName: o.ep.RootOrMatchingDomain}
+	data := ErrorPageData{Status: code, StatusText: http.StatusText(code), RequestID: o.st.id, Host: o.origHost, Path: o.origPath, RuleName: o.ep.RootOrMatchingDomain}
 	if data.StatusText == "" {
 		data.StatusText = "Error"
 	}

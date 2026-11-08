@@ -26,6 +26,37 @@ func TestVirtualDirectoryEndpointHasSameTarget(t *testing.T) {
 	}
 }
 
+// The longest matching virtual directory wins regardless of the order they were added in.
+func TestVirtualDirectoryLongestPrefixWins(t *testing.T) {
+	ep := &ProxyEndpoint{VirtualDirectories: []*VirtualDirectoryEndpoint{
+		{MatchingPath: "/", Domain: "root"},
+		{MatchingPath: "/api", Domain: "api"},
+		{MatchingPath: "/api/v2", Domain: "api2"},
+		{MatchingPath: "/media/", Domain: "media"},
+	}}
+	cases := map[string]string{
+		"/":              "root",
+		"/lovelace":      "root",
+		"/api/states":    "api",
+		"/api/v2/x":      "api2",
+		"/media/a.mp3":   "media",
+		"/media":         "root",
+		"/api":           "api",
+		"/apiary":        "api", //prefix match, not path segment match (unchanged behaviour)
+		"/api/v2":        "api2",
+		"/something/api": "root",
+	}
+	for uri, want := range cases {
+		got := ep.GetVirtualDirectoryHandlerFromRequestURI(uri)
+		if got == nil || got.Domain != want {
+			t.Errorf("%s: got %v want %s", uri, got, want)
+		}
+	}
+	if (&ProxyEndpoint{}).GetVirtualDirectoryHandlerFromRequestURI("/x") != nil {
+		t.Error("no directories must give nil")
+	}
+}
+
 // TestClassifyBulkVdir verifies the per-host decision for both apply (ensure present) and remove
 // (ensure absent), including that a differently-configured directory is always a conflict so it
 // is never silently overwritten or deleted.

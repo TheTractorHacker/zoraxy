@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/go-acme/lego/v5/challenge"
 	"imuslab.com/zoraxy/mod/acme/acmedns"
@@ -37,6 +38,14 @@ func GetDnsChallengeProviderByName(dnsProvider string, dnsCredentials string, pp
 	err := json.Unmarshal([]byte(dnsCredentials), &dnsCredentialsMap)
 	if err != nil {
 		return nil, err
+	}
+
+	// The UI sends every field of the provider, empty ones as "". Drop them so that the provider's own
+	// defaults apply (e.g. PowerDNS ServerName "localhost", upstream #681)
+	for key, value := range dnsCredentialsMap {
+		if s, ok := value.(string); ok && strings.TrimSpace(s) == "" {
+			delete(dnsCredentialsMap, key)
+		}
 	}
 
 	// Clear the PollingInterval and PropagationTimeout field and conert to int

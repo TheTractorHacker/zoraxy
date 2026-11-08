@@ -100,6 +100,17 @@ func TestErrorPage_StreamingAndGRPCNotIntercepted(t *testing.T) {
 	}
 }
 
+// The 521 raised by Zoraxy itself happens after the proxy rewrote r.Host / r.URL for the upstream call;
+// the page must still show the host and path the visitor asked for (upstream #1095 / #1102).
+func TestErrorPage_OwnErrorShowsRequestedHostAndPath(t *testing.T) {
+	router, sep := newOpsTestRouter(t, "127.0.0.1:1") //nothing listens: connection refused -> 521
+	sep.Ops = errPagesOn(521)
+	w := serveOps(router, "GET", "/transmission/web/", nil)
+	if w.Code != 521 || !strings.Contains(w.Body.String(), "<i>app.example.com/transmission/web/</i>") {
+		t.Fatalf("got %d %q", w.Code, w.Body.String())
+	}
+}
+
 func TestErrorPage_OwnErrorsAndGlobalDefault(t *testing.T) {
 	router, sep := newOpsTestRouter(t, "127.0.0.1:1") //nothing listens: connection refused -> 521
 	if w := serveOps(router, "GET", "/", nil); w.Code != 521 || strings.Contains(w.Body.String(), "<h1>521</h1>") {

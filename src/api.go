@@ -504,4 +504,5 @@ func initAPIs(targetMux *http.ServeMux) {
 
 	//Debug
 	authRouter.HandleFunc("/api/info/pprof", pprof.Index)
+	authRouter.HandleFunc(pprofAPIPrefix, handlePprof)
 }
