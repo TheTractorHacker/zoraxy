@@ -54,6 +54,7 @@ require (
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/corazawaf/libinjection-go v0.3.3 // indirect
+	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/dnsimple/dnsimple-go/v9 v9.1.1 // indirect
 	github.com/exoscale/egoscale/v3 v3.1.50 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.2 // indirect

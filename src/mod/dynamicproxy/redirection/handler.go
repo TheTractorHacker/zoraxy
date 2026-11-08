@@ -4,6 +4,8 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+
+	"imuslab.com/zoraxy/mod/dynamicproxy/rewrite"
 )
 
 /*
@@ -76,6 +78,8 @@ func (t *RuleTable) HandleRedirect(w http.ResponseWriter, r *http.Request) int {
 		if !strings.HasPrefix(redirectTarget, "http://") && !strings.HasPrefix(redirectTarget, "https://") {
 			redirectTarget = "http://" + redirectTarget
 		}
+
+		redirectTarget = rewrite.ExpandTemplateVars(r, redirectTarget) //{{host}} {{client_ip}} {{request_id}} {{external_ip}}
 
 		http.Redirect(w, r, redirectTarget, rr.StatusCode)
 		return rr.StatusCode

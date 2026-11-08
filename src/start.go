@@ -166,6 +166,8 @@ func startupSequence() {
 		panic(err)
 	}
 
+	initRedirectAdvancedRegex()
+
 	//Create a geodb store
 	geodbStore, err = geodb.NewGeoDb(sysdb, &geodb.StoreOptions{
 		AllowSlowIpv4LookUp:          !*enableHighSpeedGeoIPLookup,

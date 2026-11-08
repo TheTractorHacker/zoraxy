@@ -173,6 +173,8 @@ func RegisterRedirectionAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/redirect/edit", handleEditRedirectionRule)
 	authRouter.HandleFunc("/api/redirect/toggle", handleToggleRedirectionRuleEnable)
 	authRouter.HandleFunc("/api/redirect/regex", handleToggleRedirectRegexpSupport)
+	authRouter.HandleFunc("/api/redirect/advancedregex", handleRedirectAdvancedRegex)
+	authRouter.HandleFunc("/api/redirect/advancedregex/check", handleRedirectAdvancedRegexCheck)
 	authRouter.HandleFunc("/api/redirect/case_sensitive", handleToggleRedirectCaseSensitivity)
 }
 
