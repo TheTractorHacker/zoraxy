@@ -128,10 +128,14 @@ func (c *ProxyRelayInstance) CloseAllUDPConnections() {
 
 // Write Proxy Protocol v2 header to UDP connection
 func WriteProxyProtocolHeaderUDP(conn *net.UDPConn, srcAddr, dstAddr *net.UDPAddr) error {
+	transport := proxyproto.UDPv6
+	if srcAddr.IP.To4() != nil && dstAddr.IP.To4() != nil {
+		transport = proxyproto.UDPv4
+	}
 	header := proxyproto.Header{
 		Version:           byte(convertProxyProtocolVersionToInt(ProxyProtocolV2)),
 		Command:           proxyproto.PROXY,
-		TransportProtocol: proxyproto.UDPv4,
+		TransportProtocol: transport,
 		SourceAddr:        srcAddr,
 		DestinationAddr:   dstAddr,
 	}

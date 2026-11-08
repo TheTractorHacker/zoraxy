@@ -56,7 +56,13 @@ func TestProxyProtocolHeaderIPv6(t *testing.T) {
 	defer ln.Close()
 
 	// a pseudo "client" connection: dial the listener, the accepted side has an IPv6 remote
-	go func() { c, _ := net.Dial("tcp", ln.Addr().String()); time.Sleep(time.Second); if c != nil { c.Close() } }()
+	go func() {
+		c, _ := net.Dial("tcp", ln.Addr().String())
+		time.Sleep(time.Second)
+		if c != nil {
+			c.Close()
+		}
+	}()
 	src, err := ln.Accept()
 	if err != nil {
 		t.Fatal(err)
