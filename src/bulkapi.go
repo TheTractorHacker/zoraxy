@@ -11,6 +11,8 @@ package main
 	GET  /api/proxy/templates/list  -> built in + custom templates
 	POST /api/proxy/templates/save  template (JSON RuleTemplate)     custom templates only
 	POST /api/proxy/templates/delete name
+	POST /api/proxy/templates/preview template (JSON), rule (optional rule name) -> {"changes":[{Field,Old,New}],"against":"..."}
+	                                   what the template would change on that rule (or on a fresh rule); never saves anything
 
 	New rules: POST /api/proxy/add accepts an optional "template" (name) which is applied before the rule goes live.
 */
@@ -35,6 +37,7 @@ func RegisterBulkAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/proxy/templates/list", HandleRuleTemplateList)
 	authRouter.HandleFunc("/api/proxy/templates/save", HandleRuleTemplateSave)
 	authRouter.HandleFunc("/api/proxy/templates/delete", HandleRuleTemplateDelete)
+	authRouter.HandleFunc("/api/proxy/templates/preview", HandleRuleTemplatePreview)
 }
 
 func listRuleTemplates() []*dynamicproxy.RuleTemplate {
@@ -73,34 +76,92 @@ func HandleRuleTemplateList(w http.ResponseWriter, r *http.Request) {
 	utils.SendJSONResponse(w, string(js))
 }
 
+// sendTemplateError answers with a valid JSON error even when the message contains quotes
+// (validation messages quote the offending header or tag name).
+func sendTemplateError(w http.ResponseWriter, msg string) {
+	js, _ := json.Marshal(map[string]string{"error": msg})
+	utils.SendJSONResponse(w, string(js))
+}
+
 func HandleRuleTemplateSave(w http.ResponseWriter, r *http.Request) {
 	raw, err := utils.PostPara(r, "template")
 	if err != nil {
-		utils.SendErrorResponse(w, "template not given")
+		sendTemplateError(w, "template not given")
 		return
 	}
 	t := &dynamicproxy.RuleTemplate{}
 	if err := json.Unmarshal([]byte(raw), t); err != nil {
-		utils.SendErrorResponse(w, "invalid template: "+err.Error())
+		sendTemplateError(w, "invalid template: "+err.Error())
 		return
 	}
 	t.Builtin = false
 	if err := t.Validate(); err != nil {
-		utils.SendErrorResponse(w, err.Error())
+		sendTemplateError(w, err.Error())
 		return
 	}
 	for _, b := range dynamicproxy.BuiltinRuleTemplates() {
 		if strings.EqualFold(b.Name, t.Name) {
-			utils.SendErrorResponse(w, "a built in template has that name")
+			sendTemplateError(w, "a built in template has that name")
 			return
 		}
 	}
 	sysdb.NewTable(ruleTemplateTable)
 	if err := sysdb.Write(ruleTemplateTable, t.Name, t); err != nil {
-		utils.SendErrorResponse(w, "unable to save the template")
+		sendTemplateError(w, "unable to save the template")
 		return
 	}
 	utils.SendOK(w)
+}
+
+// HandleRuleTemplatePreview validates a (possibly unsaved) template and reports what it would change on an
+// existing rule, or on a fresh rule with the defaults when no rule is named. Nothing is saved or applied.
+func HandleRuleTemplatePreview(w http.ResponseWriter, r *http.Request) {
+	raw, err := utils.PostPara(r, "template")
+	if err != nil {
+		sendTemplateError(w, "template not given")
+		return
+	}
+	t := &dynamicproxy.RuleTemplate{}
+	if err := json.Unmarshal([]byte(raw), t); err != nil {
+		sendTemplateError(w, "invalid template: "+err.Error())
+		return
+	}
+	t.Builtin = false
+	if err := t.Validate(); err != nil {
+		sendTemplateError(w, err.Error())
+		return
+	}
+	var ep *dynamicproxy.ProxyEndpoint
+	against := "a new rule with the default settings"
+	if rule, _ := utils.PostPara(r, "rule"); rule != "" {
+		if dynamicProxyRouter == nil {
+			sendTemplateError(w, "proxy router is not running")
+			return
+		}
+		target, err := dynamicProxyRouter.LoadProxy(rule)
+		if err != nil {
+			sendTemplateError(w, "rule not found: "+rule)
+			return
+		}
+		if ep = dynamicproxy.CopyEndpoint(target); ep == nil {
+			sendTemplateError(w, "unable to copy the rule")
+			return
+		}
+		against = "the rule " + rule
+	} else {
+		d := dynamicproxy.GetDefaultProxyEndpoint()
+		ep = &d
+	}
+	changes, err := dynamicproxy.ApplyRuleTemplate(ep, t)
+	if err != nil {
+		sendTemplateError(w, err.Error())
+		return
+	}
+	if changes == nil {
+		changes = []dynamicproxy.RuleChange{}
+	}
+	js, _ := json.Marshal(map[string]interface{}{"changes": changes, "against": against})
+	utils.SendJSONResponse(w, string(js))
 }
 
 func HandleRuleTemplateDelete(w http.ResponseWriter, r *http.Request) {

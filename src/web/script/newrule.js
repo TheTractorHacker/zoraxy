@@ -81,7 +81,7 @@
         '<div class="ui toggle checkbox" id="nrTlsBox"><input type="checkbox" id="nrTlsOn"><label for="nrTlsOn">Upstream uses HTTPS<span class="nrAuto" id="nrAuto" style="display:none;">detected</span></label></div>' +
         '<div class="ui checkbox" id="nrSkipBox" style="display:none;"><input type="checkbox" id="nrSkipVerify"><label for="nrSkipVerify">Ignore certificate errors (self-signed)</label></div>' +
         '</div></div>' +
-        '<div class="field"><label>Template</label><div class="nrTplGrid" id="nrTplGrid" role="radiogroup" aria-label="Template"></div></div>' +
+        '<div class="field"><label>Template <a href="#" id="nrManageTpl" class="nrHint" style="float:right;font-weight:400;">Manage templates</a></label><div class="nrTplGrid" id="nrTplGrid" role="radiogroup" aria-label="Template"></div></div>' +
         '<details class="nrMore" id="nrMore"><summary>More options</summary>' +
         '<div class="field"><label for="nrTags">Tags</label><input type="text" id="nrTags" placeholder="e.g. media, internal" list="nrTagList"><datalist id="nrTagList"></datalist></div>' +
         '<div class="field"><label for="nrAccess">Access rule</label><select id="nrAccess"><option value="default">Default (allow all)</option></select></div>' +
@@ -129,6 +129,12 @@
         $f("nrTlsOn").on("change", function () { st.tlsTouched = true; $f("nrAuto").hide(); syncTlsUi(); });
         $f("nrSkipVerify").on("change", function () { st.skipTouched = true; });
         $f("nrAdvanced").on("click", function (e) { e.preventDefault(); openAdvanced(); });
+        $f("nrManageTpl").on("click", function (e) {
+            e.preventDefault();
+            if (typeof openRuleTemplateManager !== "function") { return; }
+            $m.modal("hide");
+            setTimeout(openRuleTemplateManager, 400);
+        });
         $m.on("keydown", function (e) {
             if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); }
         });
@@ -389,6 +395,9 @@
     }
 
     /* ---------------------------------------------------------------- public */
+    // called by the template manager (script/ruletemplates.js) after a template was saved or deleted
+    window.resetNewRuleTemplates = function () { st.templates = null; };
+
     window.openNewRuleDialog = function (opts) {
         opts = opts || {};
         build();
