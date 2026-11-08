@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="zoraxy.csrf.Token" content="{{.csrfToken}}">
+    <link rel="stylesheet" href="../script/semantic/semantic.min.css">
+    <script src="../script/jquery-3.6.0.min.js"></script>
+    <script src="../script/semantic/semantic.min.js"></script>
+    <script src="../script/utils.js"></script>
+  </head>
+  <body>
+    <link rel="stylesheet" href="../darktheme.css">
+    <script src="../script/darktheme.js"></script>
+    <br>
+    <div class="ui container">
+      <div class="ui header">
+        <div class="content">
+          ACME Profiles &amp; Defaults
+          <div class="sub header">Saved certificate authorities, reusable DNS credentials and the default key type</div>
+        </div>
+      </div>
+
+      <h4>Default key type</h4>
+      <div class="ui form">
+        <div class="inline fields">
+          <div class="field">
+            <div class="ui selection dropdown" id="defKeyType">
+              <input type="hidden" value="">
+              <i class="dropdown icon"></i>
+              <div class="default text">RSA2048</div>
+              <div class="menu" id="defKeyTypeMenu"></div>
+            </div>
+          </div>
+          <button class="ui basic button" onclick="saveKeyType();"><i class="save icon"></i> Save</button>
+        </div>
+        <small>Used for new certificates when no key type is picked. EC keys are smaller and faster; RSA is the most compatible. Existing certificates keep their key type on renewal.</small>
+      </div>
+
+      <div class="ui divider"></div>
+      <h4>Saved certificate authorities</h4>
+      <p><small>Add a private ACME server, ZeroSSL or Google (External Account Binding) once and pick it when requesting certificates. Each CA keeps its own ACME account. The EAB key is never shown again after saving.</small></p>
+      <table class="ui very compact celled unstackable table">
+        <thead><tr><th>Name</th><th>Directory URL</th><th>EAB</th><th>Actions</th></tr></thead>
+        <tbody id="caProfileList"></tbody>
+      </table>
+      <div class="ui form" id="caForm">
+        <input type="hidden" id="caId" value="">
+        <div class="two fields">
+          <div class="field"><label>Name</label><input type="text" id="caName" placeholder="Internal CA"></div>
+          <div class="field"><label>ACME directory URL</label><input type="text" id="caDirectory" placeholder="https://ca.example.com/acme/directory"></div>
+        </div>
+        <div class="three fields">
+          <div class="field"><label>EAB key id (optional)</label><input type="text" id="caKid"></div>
+          <div class="field"><label>EAB HMAC key (optional)</label><input type="password" id="caHmac" autocomplete="off" placeholder="Leave unchanged to keep"></div>
+          <div class="field"><label>ACME profile (optional)</label><input type="text" id="caAcmeProfile"></div>
+        </div>
+        <div class="field"><div class="ui checkbox"><input type="checkbox" id="caSkipTLS"><label>Ignore TLS verification errors of the ACME server (private CAs with self-signed certificates only)</label></div></div>
+        <button class="ui basic button" onclick="saveCAProfile();"><i class="save icon"></i> Save CA</button>
+        <button class="ui basic button" onclick="resetCAForm();">Clear</button>
+      </div>
+
+      <div class="ui divider"></div>
+      <h4>Saved DNS credentials</h4>
+      <p><small>Create profiles from the certificate request dialog ("Save these credentials as a reusable profile"), or paste the provider credentials here as JSON. Secrets are stored in the system database like the per-certificate DNS credentials and are never shown again. The default profile is pre-selected when you pick a DNS challenge and is used when a certificate has no credentials of its own.</small></p>
+      <table class="ui very compact celled unstackable table">
+        <thead><tr><th>Name</th><th>Provider</th><th>Default</th><th>Actions</th></tr></thead>
+        <tbody id="dnsProfileList"></tbody>
+      </table>
+      <div class="ui form">
+        <input type="hidden" id="dnsId" value="">
+        <div class="three fields">
+          <div class="field"><label>Name</label><input type="text" id="dnsName" placeholder="cloudflare-main"></div>
+          <div class="field"><label>Provider (lego name)</label><input type="text" id="dnsProv" placeholder="cloudflare"></div>
+          <div class="field"><label>DNS servers (optional)</label><input type="text" id="dnsSrv" placeholder="1.1.1.1:53"></div>
+        </div>
+        <div class="field"><label>Credentials (JSON)</label><textarea rows="3" id="dnsCreds" style="font-family:monospace;" placeholder='{"CloudflareApiToken":"..."}'></textarea></div>
+        <button class="ui basic button" onclick="saveDNSProfile();"><i class="save icon"></i> Save DNS profile</button>
+        <button class="ui basic button" onclick="resetDNSForm();">Clear</button>
+        <button class="ui basic button" onclick="setDefaultDNS('');">No default</button>
+      </div>
+      <br>
+      <button class="ui basic button" style="float:right;" onclick="parent.hideSideWrapper();"><i class="remove icon"></i> Close</button>
+      <br><br><br>
+    </div>
+
+    <script>
+      $(".dropdown").dropdown();
+      $(".checkbox").checkbox();
+      function esc(t){ return $("<div>").text(t == undefined ? "" : t).html(); }
+      function fail(r){ if (r && r.error){ parent.msgbox(r.error, false, 8000); return true; } return false; }
+
+      function loadKeyType(){
+        $.get("/api/acme/keytype", function(d){
+          $("#defKeyTypeMenu").html("");
+          (d.options||[]).forEach(function(k){ $("#defKeyTypeMenu").append(`<div class="item" data-value="${esc(k)}">${esc(k)}</div>`); });
+          $("#defKeyType").dropdown("refresh");
+          $("#defKeyType").dropdown("set selected", d.default);
+        });
+      }
+      function saveKeyType(){
+        $.cjax({url:"/api/acme/keytype", method:"POST", data:{set:$("#defKeyType").dropdown("get value")}, success:function(r){ if(!fail(r)) parent.msgbox("Default key type saved"); }});
+      }
+
+      let caProfiles = [];
+      function loadCAProfiles(){
+        $.get("/api/acme/profiles/ca", function(d){
+          caProfiles = d.profiles || [];
+          $("#caProfileList").html("");
+          caProfiles.forEach(function(p, i){
+            $("#caProfileList").append(`<tr><td>${esc(p.name)}</td><td>${esc(p.directoryURL)}</td><td>${p.eabKid ? esc(p.eabKid) : "-"}</td>
+              <td><button class="ui mini basic button" onclick="editCA(${i});">Edit</button>
+              <button class="ui mini basic red button" onclick="deleteCA('${esc(p.id)}');">Delete</button></td></tr>`);
+          });
+          if (caProfiles.length == 0){ $("#caProfileList").append(`<tr><td colspan="4">No saved CAs. Built in: ${esc((d.builtin||[]).join(", "))}</td></tr>`); }
+        });
+      }
+      function editCA(i){
+        let p = caProfiles[i];
+        $("#caId").val(p.id); $("#caName").val(p.name); $("#caDirectory").val(p.directoryURL);
+        $("#caKid").val(p.eabKid); $("#caHmac").val(p.eabHmac); $("#caAcmeProfile").val(p.profile);
+        $("#caSkipTLS").prop("checked", p.skipTLS);
+      }
+      function resetCAForm(){ $("#caForm input[type=text], #caForm input[type=password], #caId").val(""); $("#caSkipTLS").prop("checked", false); }
+      function saveCAProfile(){
+        $.cjax({url:"/api/acme/profiles/ca", method:"POST", data:{
+          op:"save", id:$("#caId").val(), name:$("#caName").val(), directoryURL:$("#caDirectory").val(),
+          eabKid:$("#caKid").val(), eabHmac:$("#caHmac").val(), profile:$("#caAcmeProfile").val(), skipTLS:$("#caSkipTLS")[0].checked
+        }, success:function(r){ if(!fail(r)){ parent.msgbox("CA saved"); resetCAForm(); loadCAProfiles(); } }});
+      }
+      function deleteCA(id){
+        if (!confirm("Delete this CA profile? Certificates issued with it need another CA before they can be renewed.")) return;
+        $.cjax({url:"/api/acme/profiles/ca", method:"POST", data:{op:"delete", id:id}, success:function(r){ if(!fail(r)) loadCAProfiles(); }});
+      }
+
+      let dnsProfiles = [], dnsDefault = "";
+      function loadDNSProfiles(){
+        $.get("/api/acme/profiles/dns", function(d){
+          dnsProfiles = d.profiles || []; dnsDefault = d.default || "";
+          $("#dnsProfileList").html("");
+          dnsProfiles.forEach(function(p, i){
+            $("#dnsProfileList").append(`<tr><td>${esc(p.name)}</td><td>${esc(p.provider)}</td>
+              <td>${p.id == dnsDefault ? "<i class='green check icon'></i>" : `<a style="cursor:pointer;" onclick="setDefaultDNS('${esc(p.id)}');">make default</a>`}</td>
+              <td><button class="ui mini basic button" onclick="editDNS(${i});">Edit</button>
+              <button class="ui mini basic red button" onclick="deleteDNS('${esc(p.id)}');">Delete</button></td></tr>`);
+          });
+          if (dnsProfiles.length == 0){ $("#dnsProfileList").append(`<tr><td colspan="4">No saved DNS credentials</td></tr>`); }
+        });
+      }
+      function editDNS(i){
+        let p = dnsProfiles[i];
+        $("#dnsId").val(p.id); $("#dnsName").val(p.name); $("#dnsProv").val(p.provider); $("#dnsSrv").val(p.dnsServers);
+        $("#dnsCreds").val(p.credentials);
+      }
+      function resetDNSForm(){ $("#dnsId, #dnsName, #dnsProv, #dnsSrv").val(""); $("#dnsCreds").val(""); }
+      function saveDNSProfile(){
+        $.cjax({url:"/api/acme/profiles/dns", method:"POST", data:{
+          op:"save", id:$("#dnsId").val(), name:$("#dnsName").val(), provider:$("#dnsProv").val(), credentials:$("#dnsCreds").val(), dnsServers:$("#dnsSrv").val()
+        }, success:function(r){ if(!fail(r)){ parent.msgbox("DNS profile saved"); resetDNSForm(); loadDNSProfiles(); } }});
+      }
+      function deleteDNS(id){
+        if (!confirm("Delete this DNS credential profile?")) return;
+        $.cjax({url:"/api/acme/profiles/dns", method:"POST", data:{op:"delete", id:id}, success:function(r){ if(!fail(r)) loadDNSProfiles(); }});
+      }
+      function setDefaultDNS(id){
+        $.cjax({url:"/api/acme/profiles/dns", method:"POST", data:{op:"setDefault", id:id}, success:function(r){ if(!fail(r)) loadDNSProfiles(); }});
+      }
+
+      loadKeyType(); loadCAProfiles(); loadDNSProfiles();
+    </script>
+  </body>
+</html>

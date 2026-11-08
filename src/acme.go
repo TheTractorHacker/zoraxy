@@ -50,6 +50,7 @@ func initACME() *acme.ACMEHandler {
 
 	handler := acme.NewACME(strconv.Itoa(port), sysdb, SystemWideLogger, *acmeTestMode, keyFileMode, publicFileMode)
 	handler.CertStorePath = CONF_CERT_STORE
+	handler.OnEvent = acmeEventBridge
 	return handler
 }
 

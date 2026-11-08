@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="zoraxy.csrf.Token" content="{{.csrfToken}}">
+    <link rel="stylesheet" href="../script/semantic/semantic.min.css">
+    <script src="../script/jquery-3.6.0.min.js"></script>
+    <script src="../script/semantic/semantic.min.js"></script>
+    <script src="../script/utils.js"></script>
+  </head>
+  <body>
+    <link rel="stylesheet" href="../darktheme.css">
+    <script src="../script/darktheme.js"></script>
+    <br>
+    <div class="ui container">
+      <div class="ui header">
+        <div class="content">
+          Certificate Tools
+          <div class="sub header">Signing requests for your own CA, watched certificate folder and event hooks</div>
+        </div>
+      </div>
+
+      <div class="ui top attached tabular menu">
+        <a class="active item" data-tab="csr">Signing Requests (CSR)</a>
+        <a class="item" data-tab="mapdir">Certificate Folder</a>
+        <a class="item" data-tab="hooks">Event Hooks</a>
+      </div>
+
+      <!-- CSR -->
+      <div class="ui bottom attached active tab segment" data-tab="csr">
+        <p>Generate a private key and a certificate signing request (CSR) to be signed by an internal or enterprise CA. The private key stays on this server (file mode 0600) until you upload the issued certificate, which is checked against the key before it is installed.</p>
+        <div class="ui form">
+          <div class="two fields">
+            <div class="field"><label>Common name</label><input type="text" id="csrCN" placeholder="app.corp.example"></div>
+            <div class="field"><label>Alternative names (comma or one per line; DNS names, wildcards or IPs)</label><textarea rows="2" id="csrSANs" placeholder="app.corp.example, *.app.corp.example"></textarea></div>
+          </div>
+          <div class="three fields">
+            <div class="field"><label>Key type</label>
+              <div class="ui selection dropdown" id="csrKeyType"><input type="hidden" value=""><i class="dropdown icon"></i><div class="default text">RSA2048</div><div class="menu" id="csrKeyTypeMenu"></div></div>
+            </div>
+            <div class="field"><label>Certificate name in the store (optional)</label><input type="text" id="csrName" placeholder="defaults to the common name"></div>
+            <div class="field"><label>Organization (optional)</label><input type="text" id="csrOrg"></div>
+          </div>
+          <button class="ui basic button" onclick="generateCSR();"><i class="key icon"></i> Generate key and CSR</button>
+        </div>
+        <div id="csrResult" style="display:none; margin-top:1em;">
+          <label>CSR (send this to your CA)</label>
+          <textarea id="csrPem" rows="8" readonly style="width:100%; font-family:monospace;"></textarea>
+        </div>
+        <h4>Pending requests</h4>
+        <table class="ui very compact celled unstackable table">
+          <thead><tr><th>Name</th><th>Common name</th><th>Key</th><th>Created</th><th>Actions</th></tr></thead>
+          <tbody id="csrList"></tbody>
+        </table>
+        <div id="csrComplete" class="ui form" style="display:none;">
+          <h4>Install issued certificate for <span id="csrCompleteName"></span></h4>
+          <input type="hidden" id="csrCompleteId">
+          <div class="field"><label>Issued certificate (PEM, leaf first, with intermediates if any)</label><textarea id="csrCert" rows="8" style="font-family:monospace;"></textarea></div>
+          <div class="field"><input type="file" id="csrCertFile" accept=".pem,.crt,.cer"></div>
+          <div class="field"><div class="ui checkbox"><input type="checkbox" id="csrOverwrite"><label>Replace an existing certificate with the same name</label></div></div>
+          <div class="field"><div class="ui checkbox"><input type="checkbox" id="csrForce"><label>Install even if the certificate does not list all requested names</label></div></div>
+          <button class="ui basic green button" onclick="completeCSR();"><i class="check icon"></i> Verify and install</button>
+        </div>
+      </div>
+
+      <!-- Mapped directory -->
+      <div class="ui bottom attached tab segment" data-tab="mapdir">
+        <p>Zoraxy can import certificates from a folder managed by certbot, acme.sh, cert-manager or a secrets mount. Start Zoraxy with <code>-certs_dir /path/to/certs</code> (and optionally <code>-certs_dir_interval seconds</code>). Supported layouts: <code>fullchain.pem + privkey.pem</code> (also in <code>live/&lt;name&gt;/</code> and any sub folder), <code>&lt;name&gt;.crt + &lt;name&gt;.key</code>, <code>tls.crt + tls.key</code>.</p>
+        <p>Imported certificates are copies: the source files are never changed or deleted, a certificate whose key does not match is rejected, and Zoraxy will not try to renew them.</p>
+        <div id="mapdirState"><i class="loading spinner icon"></i></div>
+        <table class="ui very compact celled unstackable table" id="mapdirTable" style="display:none;">
+          <thead><tr><th>Name</th><th>Source</th><th>State</th><th>Checked</th></tr></thead>
+          <tbody id="mapdirList"></tbody>
+        </table>
+        <button class="ui basic button" id="mapdirScan" style="display:none;" onclick="scanMapDir();"><i class="refresh icon"></i> Scan now</button>
+      </div>
+
+      <!-- Hooks -->
+      <div class="ui bottom attached tab segment" data-tab="hooks">
+        <p>Get notified when a certificate is issued, fails to renew or is about to expire.</p>
+        <div id="offlineNote" class="ui warning message" style="display:none;">Offline mode (-offline) is on: webhooks are not sent.</div>
+        <h4>Webhooks</h4>
+        <table class="ui very compact celled unstackable table">
+          <thead><tr><th>Name</th><th>URL</th><th>Events</th><th>On</th><th>Actions</th></tr></thead>
+          <tbody id="hookList"></tbody>
+        </table>
+        <div class="ui form">
+          <input type="hidden" id="hookId">
+          <div class="two fields">
+            <div class="field"><label>Name</label><input type="text" id="hookName"></div>
+            <div class="field"><label>URL (https)</label><input type="text" id="hookURL" placeholder="https://hooks.example.com/zoraxy"></div>
+          </div>
+          <div class="two fields">
+            <div class="field"><label>Signing secret (optional, HMAC-SHA256)</label><input type="password" id="hookSecret" autocomplete="off"><small>Requests carry <code>X-Zoraxy-Signature: sha256=HMAC(secret, timestamp + "." + body)</code> and <code>X-Zoraxy-Timestamp</code>.</small></div>
+            <div class="field"><label>Events (none selected = all)</label>
+              <div class="ui checkbox"><input type="checkbox" class="hookEv" value="certificate.issued"><label>issued / renewed</label></div><br>
+              <div class="ui checkbox"><input type="checkbox" class="hookEv" value="certificate.renewal_failed"><label>renewal failed</label></div><br>
+              <div class="ui checkbox"><input type="checkbox" class="hookEv" value="certificate.expiring"><label>about to expire</label></div>
+            </div>
+          </div>
+          <div class="field"><div class="ui checkbox"><input type="checkbox" id="hookEnabled" checked><label>Enabled</label></div></div>
+          <button class="ui basic button" onclick="saveHook();"><i class="save icon"></i> Save webhook</button>
+          <button class="ui basic button" onclick="resetHook();">Clear</button>
+        </div>
+        <br>
+        <div class="ui form">
+          <div class="inline fields">
+            <div class="field"><div class="ui checkbox"><input type="checkbox" id="optPrivate"><label>Allow private, loopback and link-local targets (off by default to prevent SSRF into your network)</label></div></div>
+          </div>
+          <div class="inline fields">
+            <div class="field"><label>Warn this many days before expiry</label><input type="number" id="optWarn" min="1" max="365" style="width:6em;"></div>
+            <button class="ui basic button" onclick="saveOptions();">Save options</button>
+          </div>
+        </div>
+
+        <div class="ui divider"></div>
+        <h4>Command hook</h4>
+        <div id="cmdDisabled" class="ui message" style="display:none;">
+          Command hooks are disabled. They let an administrator make Zoraxy execute a program, so they are only available when Zoraxy was started with <code>-allow_hook_commands</code>.
+        </div>
+        <div class="ui form" id="cmdForm" style="display:none;">
+          <div class="two fields">
+            <div class="field"><label>Program (absolute path, run without a shell)</label><input type="text" id="cmdPath" placeholder="/usr/local/bin/cert-hook"></div>
+            <div class="field"><label>Arguments (JSON array, optional)</label><input type="text" id="cmdArgs" placeholder='["--flag"]'></div>
+          </div>
+          <p><small>The event is passed in environment variables: <code>ZORAXY_EVENT, ZORAXY_DOMAINS, ZORAXY_SUBJECT, ZORAXY_EXPIRY, ZORAXY_DAYS_LEFT, ZORAXY_CA, ZORAXY_ERROR, ZORAXY_EVENT_JSON</code>. 30 second timeout, output is logged (first 4 KB).</small></p>
+          <div class="field"><div class="ui checkbox"><input type="checkbox" id="cmdEnabled"><label>Enabled</label></div></div>
+          <button class="ui basic button" onclick="saveCommand();"><i class="save icon"></i> Save command hook</button>
+        </div>
+      </div>
+
+      <br>
+      <button class="ui basic button" style="float:right;" onclick="parent.hideSideWrapper();"><i class="remove icon"></i> Close</button>
+      <br><br><br>
+    </div>
+
+    <script>
+      $(".tabular.menu .item").tab();
+      $(".dropdown").dropdown();
+      $(".checkbox").checkbox();
+      function esc(t){ return $("<div>").text(t == undefined ? "" : t).html(); }
+      function fail(r){ if (r && r.error){ parent.msgbox(r.error, false, 9000); return true; } return false; }
+
+      /* CSR */
+      let csrPending = [];
+      function loadCSR(){
+        $.get("/api/cert/csr", function(d){
+          $("#csrKeyTypeMenu").html("");
+          (d.keyTypes || []).forEach(function(k){ $("#csrKeyTypeMenu").append(`<div class="item" data-value="${esc(k)}">${esc(k)}</div>`); });
+          $("#csrKeyType").dropdown("refresh");
+          csrPending = d.pending || [];
+          $("#csrList").html("");
+          csrPending.forEach(function(p, i){
+            $("#csrList").append(`<tr><td>${esc(p.name)}</td><td>${esc(p.request.commonName)}</td><td>${esc(p.request.keyType)}</td><td>${esc(new Date(p.created).toLocaleString())}</td>
+              <td><a class="ui mini basic button" href="/api/cert/csr?download=true&id=${esc(p.id)}"><i class="download icon"></i> CSR</a>
+              <button class="ui mini basic green button" onclick="openComplete(${i});">Install certificate</button>
+              <button class="ui mini basic red icon button" onclick="deleteCSR('${esc(p.id)}');"><i class="trash icon"></i></button></td></tr>`);
+          });
+          if (csrPending.length == 0){ $("#csrList").append(`<tr><td colspan="5">No pending requests</td></tr>`); }
+        });
+      }
+      function generateCSR(){
+        $.cjax({url:"/api/cert/csr", method:"POST", data:{
+          op:"generate", commonName:$("#csrCN").val(), sans:$("#csrSANs").val(), keyType:$("#csrKeyType").dropdown("get value"),
+          name:$("#csrName").val(), organization:$("#csrOrg").val()
+        }, success:function(r){
+          if (fail(r)) return;
+          $("#csrPem").val(r.csr); $("#csrResult").show(); loadCSR();
+          parent.msgbox("CSR generated. The private key is kept on this server.");
+        }});
+      }
+      function deleteCSR(id){
+        if (!confirm("Delete this request and its private key?")) return;
+        $.cjax({url:"/api/cert/csr", method:"POST", data:{op:"delete", id:id}, success:function(r){ if(!fail(r)) loadCSR(); }});
+      }
+      function openComplete(i){
+        $("#csrCompleteId").val(csrPending[i].id); $("#csrCompleteName").text(csrPending[i].name); $("#csrCert").val(""); $("#csrComplete").show();
+      }
+      $("#csrCertFile").on("change", function(){
+        let f = this.files[0]; if (!f) return;
+        let rd = new FileReader(); rd.onload = function(e){ $("#csrCert").val(e.target.result); }; rd.readAsText(f);
+      });
+      function completeCSR(){
+        $.cjax({url:"/api/cert/csr", method:"POST", data:{
+          op:"complete", id:$("#csrCompleteId").val(), cert:$("#csrCert").val(), overwrite:$("#csrOverwrite")[0].checked, force:$("#csrForce")[0].checked
+        }, success:function(r){
+          if (fail(r)) return;
+          parent.msgbox("Certificate " + r.name + " installed");
+          $("#csrComplete").hide(); loadCSR();
+          if (parent.initManagedDomainCertificateList) parent.initManagedDomainCertificateList();
+        }});
+      }
+
+      /* Mapped directory */
+      function loadMapDir(){
+        $.get("/api/cert/mapdir", function(d){
+          if (!d.enabled){
+            $("#mapdirState").html(`<div class="ui message">Not enabled. Start Zoraxy with <code>-certs_dir</code>.</div>`);
+            return;
+          }
+          $("#mapdirState").html(`Watching <code>${esc(d.dir)}</code> every ${esc(d.intervalSeconds)} seconds.`);
+          $("#mapdirTable, #mapdirScan").show();
+          $("#mapdirList").html("");
+          (d.items||[]).forEach(function(it){
+            $("#mapdirList").append(`<tr><td>${esc(it.name)}</td><td>${esc(it.source)}</td>
+              <td>${it.error ? "<i class='red times icon'></i>" + esc(it.error) : "<i class='green check icon'></i> imported"}</td><td>${esc(it.checkedAt)}</td></tr>`);
+          });
+          if ((d.items||[]).length == 0){ $("#mapdirList").append(`<tr><td colspan="4">No certificates found in the folder</td></tr>`); }
+        });
+      }
+      function scanMapDir(){
+        $.cjax({url:"/api/cert/mapdir", method:"POST", data:{op:"scan"}, success:function(){ loadMapDir(); if (parent.initManagedDomainCertificateList) parent.initManagedDomainCertificateList(); }});
+      }
+
+      /* Hooks */
+      let hooks = [];
+      function loadHooks(){
+        $.get("/api/notify/hooks", function(d){
+          hooks = d.webhooks || [];
+          $("#offlineNote").toggle(!!d.offline);
+          $("#hookList").html("");
+          hooks.forEach(function(h, i){
+            $("#hookList").append(`<tr><td>${esc(h.name)}</td><td>${esc(h.url)}</td><td>${esc((h.events||[]).join(", ") || "all")}</td><td>${h.enabled ? "<i class='green check icon'></i>" : ""}</td>
+              <td><button class="ui mini basic button" onclick="editHook(${i});">Edit</button>
+              <button class="ui mini basic button" onclick="testHook('${esc(h.id)}');">Test</button>
+              <button class="ui mini basic red icon button" onclick="deleteHook('${esc(h.id)}');"><i class="trash icon"></i></button></td></tr>`);
+          });
+          if (hooks.length == 0){ $("#hookList").append(`<tr><td colspan="5">No webhooks</td></tr>`); }
+          $("#optPrivate").prop("checked", d.allowPrivateTargets); $("#optWarn").val(d.expiryWarnDays);
+          if (d.commandsAllowed){
+            $("#cmdForm").show(); $("#cmdDisabled").hide();
+            $("#cmdPath").val(d.command.path); $("#cmdArgs").val((d.command.args||[]).length ? JSON.stringify(d.command.args) : ""); $("#cmdEnabled").prop("checked", d.command.enabled);
+          }else{ $("#cmdForm").hide(); $("#cmdDisabled").show(); }
+        });
+      }
+      function editHook(i){
+        let h = hooks[i];
+        $("#hookId").val(h.id); $("#hookName").val(h.name); $("#hookURL").val(h.url); $("#hookSecret").val(h.secret); $("#hookEnabled").prop("checked", h.enabled);
+        $(".hookEv").each(function(){ $(this).prop("checked", (h.events||[]).indexOf(this.value) >= 0); });
+      }
+      function resetHook(){ $("#hookId, #hookName, #hookURL, #hookSecret").val(""); $(".hookEv").prop("checked", false); $("#hookEnabled").prop("checked", true); }
+      function saveHook(){
+        let evs = $(".hookEv:checked").map(function(){ return this.value; }).get().join(",");
+        $.cjax({url:"/api/notify/hooks", method:"POST", data:{op:"saveWebhook", id:$("#hookId").val(), name:$("#hookName").val(), url:$("#hookURL").val(), secret:$("#hookSecret").val(), events:evs, enabled:$("#hookEnabled")[0].checked},
+          success:function(r){ if(!fail(r)){ parent.msgbox("Webhook saved"); resetHook(); loadHooks(); } }});
+      }
+      function deleteHook(id){ $.cjax({url:"/api/notify/hooks", method:"POST", data:{op:"deleteWebhook", id:id}, success:function(r){ if(!fail(r)) loadHooks(); }}); }
+      function testHook(id){ $.cjax({url:"/api/notify/hooks", method:"POST", data:{op:"testWebhook", id:id}, success:function(r){ if(!fail(r)) parent.msgbox("Test event delivered"); }}); }
+      function saveOptions(){
+        $.cjax({url:"/api/notify/hooks", method:"POST", data:{op:"setOptions", allowPrivateTargets:$("#optPrivate")[0].checked, expiryWarnDays:$("#optWarn").val()},
+          success:function(r){ if(!fail(r)) parent.msgbox("Options saved"); }});
+      }
+      function saveCommand(){
+        $.cjax({url:"/api/notify/hooks", method:"POST", data:{op:"saveCommand", path:$("#cmdPath").val(), args:$("#cmdArgs").val(), enabled:$("#cmdEnabled")[0].checked},
+          success:function(r){ if(!fail(r)) parent.msgbox("Command hook saved"); }});
+      }
+
+      loadCSR(); loadMapDir(); loadHooks();
+    </script>
+  </body>
+</html>

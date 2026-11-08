@@ -3,6 +3,7 @@ package plugins
 import (
 	"encoding/json"
 	"fmt"
+	"imuslab.com/zoraxy/mod/offline"
 	"io"
 	"net/http"
 	"os"
@@ -64,6 +65,9 @@ func (m *Manager) UpdateDownloadablePluginList() error {
 
 // Get the plugin list from the URL
 func (m *Manager) getPluginListFromURL(url string) ([]*DownloadablePlugin, error) {
+	if err := offline.Check(); err != nil {
+		return nil, err
+	}
 	//Get the plugin list from the URL
 	resp, err := http.Get(url)
 	if err != nil {
@@ -130,6 +134,9 @@ func (m *Manager) InstallPlugin(plugin *DownloadablePlugin) error {
 		return fmt.Errorf("no download URL available for the current platform")
 	}
 
+	if err := offline.Check(); err != nil {
+		return err
+	}
 	resp, err := http.Get(downloadURL)
 	if err != nil {
 		return fmt.Errorf("failed to download plugin: %w", err)

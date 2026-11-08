@@ -2,6 +2,7 @@ package access
 
 import (
 	"errors"
+	"imuslab.com/zoraxy/mod/offline"
 	"io"
 	"net"
 	"net/http"
@@ -48,6 +49,9 @@ func (c *Controller) StopPublicIPUpdater() {
 
 // Update the public IP address of the server
 func (c *Controller) UpdatePublicIP() error {
+	if err := offline.Check(); err != nil {
+		return err
+	}
 	req, err := http.NewRequest("GET", PUBLIC_IP_CHECK_URL, nil)
 	if err != nil {
 		return err

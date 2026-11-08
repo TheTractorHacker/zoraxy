@@ -3,6 +3,7 @@ package plugins
 import (
 	"encoding/json"
 	"fmt"
+	"imuslab.com/zoraxy/mod/offline"
 	"io"
 	"net/http"
 	"os"
@@ -206,6 +207,9 @@ func (m *Manager) UpdatePlugin(pluginID string) error {
 
 // downloadFileTo downloads the content of the given URL to the given file path
 func downloadFileTo(downloadURL string, destPath string) error {
+	if err := offline.Check(); err != nil {
+		return err
+	}
 	resp, err := http.Get(downloadURL)
 	if err != nil {
 		return err

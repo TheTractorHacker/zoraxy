@@ -132,17 +132,47 @@
         <div class="default text">Let's Encrypt</div>
         <div class="menu">
           <div class="item" data-value="Let's Encrypt">Let's Encrypt</div>
+          <div class="item" data-value="Let's Encrypt (Staging)">Let's Encrypt (Staging, untrusted test certificates)</div>
           <!-- <div class="item" data-value="Buypass">Buypass</div> -->
           <div class="item" data-value="ZeroSSL">ZeroSSL</div>
           <div class="item" data-value="Custom ACME Server">Custom ACME Server</div>
         </div>
       </div>
     </div>
+    <div class="field">
+      <label>Key Type</label>
+      <div class="ui selection dropdown" id="keyType">
+        <input type="hidden" name="keyType" value="">
+        <i class="dropdown icon"></i>
+        <div class="default text">Default</div>
+        <div class="menu" id="keyTypeMenu">
+          <div class="item" data-value="">Default</div>
+        </div>
+      </div>
+      <small>Leave on default to use the key type from the ACME settings (RSA2048 unless changed). Renewals keep the key type of the certificate.</small>
+    </div>
+    <div class="field">
+      <label>ACME Profile (optional)</label>
+      <input id="acmeProfile" type="text" placeholder="e.g. shortlived, tlsserver (only if your CA offers profiles)">
+    </div>
+    <div class="field"><small><a style="cursor:pointer;" onclick="parent.showSideWrapper('snippet/acmeprofiles.html?t=' + Date.now());"><i class="cog icon"></i> Manage saved CAs, DNS credential profiles and ACME defaults</a></small></div>
     <div class="field" id="dnsChallenge">
       <div class="ui checkbox">
         <input type="checkbox" id="useDnsChallenge" onchange="toggleDnsChallenge()">
         <label>Use a DNS Challenge<br>
       </div>
+    </div>
+    <div class="field dnsChallengeOnly" style="display:none;">
+      <label>Saved DNS Credentials</label>
+      <div class="ui selection dropdown" id="dnsProfile">
+        <input type="hidden" name="dnsProfile" value="">
+        <i class="dropdown icon"></i>
+        <div class="default text">Enter credentials below</div>
+        <div class="menu" id="dnsProfileMenu">
+          <div class="item" data-value="">Enter credentials below</div>
+        </div>
+      </div>
+      <small>Pick a saved profile to skip typing the provider and credentials. Renewals reuse it.</small>
     </div>
     <div class="field dnsChallengeOnly" style="display:none;">
       <label>DNS Provider</label>
@@ -171,6 +201,10 @@
           These credentials will be stored as plaintext in the database and in environment variables!
         </div>
       -->
+    </div>
+    <div class="field dnsChallengeOnly dnsManualOnly" style="display:none;">
+      <label>Save these credentials as a reusable profile (optional)</label>
+      <input id="dnsProfileSaveName" type="text" placeholder="Profile name, e.g. cloudflare-main">
     </div>
     <div class="field dnsChallengeOnly" style="display:none;">
       <label>Domain Name Server (optional)</label>
@@ -421,6 +455,40 @@
       });
     }
     initDomainFileList();
+
+    // Key types, saved CA profiles and DNS credential profiles
+    function escapeText(t){ return $("<div>").text(t).html(); }
+    $.get("/api/acme/keytype", function(d){
+      (d.options || []).forEach(function(k){
+        $("#keyTypeMenu").append(`<div class="item" data-value="${escapeText(k)}">${escapeText(k)}${k == d.default ? " (default)" : ""}</div>`);
+      });
+      $("#keyType").dropdown("refresh");
+    });
+    $.get("/api/acme/profiles/ca", function(d){
+      (d.profiles || []).forEach(function(p){
+        $("#ca .menu").append(`<div class="item" data-value="profile:${escapeText(p.id)}">${escapeText(p.name)} (saved CA)</div>`);
+      });
+      $("#ca").dropdown("refresh");
+    });
+    let defaultDnsProfile = "";
+    $.get("/api/acme/profiles/dns", function(d){
+      defaultDnsProfile = d.default || "";
+      (d.profiles || []).forEach(function(p){
+        $("#dnsProfileMenu").append(`<div class="item" data-value="${escapeText(p.id)}">${escapeText(p.name)} (${escapeText(p.provider)})</div>`);
+      });
+      $("#dnsProfile").dropdown("refresh");
+    });
+    $("#dnsProfile").dropdown({
+      onChange: function(value){
+        if (value != ""){
+          $("#dnsProvider, #dnsProviderAPIFields, .dnsManualOnly").closest(".field").hide();
+        }else{
+          $("#dnsProvider").closest(".field").show();
+          $("#dnsProviderAPIFields").closest(".field").show();
+          $(".dnsManualOnly").show();
+        }
+      }
+    });
 
     // Button click event handler for obtaining certificate
     $("#obtainButton").click(function() {
@@ -707,6 +775,51 @@
         return;
       }
 
+      if ($("#dnsProfile").dropdown("get value") != ""){
+        //A saved credential profile is used, nothing to store per certificate
+        if (callback != undefined){
+          callback(true);
+        }
+        return;
+      }
+
+      let profileName = $("#dnsProfileSaveName").val().trim();
+      if (profileName != ""){
+        let provider = $("#dnsProvider").dropdown("get value");
+        if (provider == ""){
+          parent.msgbox("DNS Provider cannot be empty", false, 5000);
+          if (callback != undefined){callback(false);}
+          return;
+        }
+        $.cjax({
+          url: "/api/acme/profiles/dns",
+          method: "POST",
+          data: {
+            op: "save",
+            name: profileName,
+            provider: provider,
+            credentials: JSON.stringify(readDnsCredentials()),
+            dnsServers: $("#dnsInput").val(),
+          },
+          success: function(response){
+            if (response.error){
+              parent.msgbox(response.error, false, 8000);
+              if (callback != undefined){callback(false);}
+              return;
+            }
+            $("#dnsProfileMenu").append(`<div class="item" data-value="${escapeText(response.id)}">${escapeText(profileName)} (${escapeText(provider)})</div>`);
+            $("#dnsProfile").dropdown("refresh");
+            $("#dnsProfile").dropdown("set selected", response.id);
+            if (callback != undefined){callback(true);}
+          },
+          error: function(){
+            parent.msgbox("Failed to save the DNS credential profile", false, 8000);
+            if (callback != undefined){callback(false);}
+          }
+        });
+        return;
+      }
+
       //Check if all fields is empty. If yes, do not update the config
       let allFieldsEmpty = true;
       $(".dnsConfigField").each(function(){
@@ -803,9 +916,14 @@
 
       var ca = $("#ca").dropdown("get value");
       var caURL = "";
+      var caProfile = "";
       if (ca == "Custom ACME Server") {
         ca = "custom";
         caURL = $("#caURL").val();
+      } else if (ca.startsWith("profile:")) {
+        caProfile = ca.substring(8);
+        ca = "custom";
+        caURL = "https://saved-ca-profile.invalid/"; //ignored by the server, the profile defines the directory
       }
 
       var dns = $("#useDnsChallenge")[0].checked;
@@ -827,7 +945,11 @@
           dns: dns,
           dnsServers: dnsServers,
           disable_recursive_nss_check: disableRecursiveNss,
-          disable_authoritative_nss_check: disableAuthoritativeNss
+          disable_authoritative_nss_check: disableAuthoritativeNss,
+          keyType: $("#keyType").dropdown("get value"),
+          acmeProfile: $("#acmeProfile").val().trim(),
+          caProfile: caProfile,
+          dnsProfile: dns ? $("#dnsProfile").dropdown("get value") : ""
         },
         success: function(response) {
           $("#obtainButton").removeClass("loading").removeClass("disabled");
@@ -868,7 +990,7 @@
     function validateDNSChallengeSupport(){
       if ($("#domainsInput").val().includes("*")){
         var ca = $("#ca").dropdown("get value");
-        if (ca == "Let's Encrypt" || ca == ""){
+        if (ca.startsWith("Let's Encrypt") || ca == ""){
           $("#caNoDNSSupportWarning").hide();
         }else{
           $("#caNoDNSSupportWarning").show();
@@ -896,9 +1018,13 @@
     function toggleDnsChallenge(){
       if ( $("#useDnsChallenge")[0].checked){
         $(".dnsChallengeOnly").show();
-        setTimeout(function(){
-          $("#dnsProvider").dropdown("set text", "Cloudflare");
-        }, 500);
+        if (defaultDnsProfile != "" && $("#dnsProfile").dropdown("get value") == ""){
+          $("#dnsProfile").dropdown("set selected", defaultDnsProfile);
+        }else if ($("#dnsProfile").dropdown("get value") == ""){
+          setTimeout(function(){
+            $("#dnsProvider").dropdown("set text", "Cloudflare");
+          }, 500);
+        }
       }else{
         $(".dnsChallengeOnly").hide();
       }

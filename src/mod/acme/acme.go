@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/go-acme/lego/v5/acme"
-	"github.com/go-acme/lego/v5/certcrypto"
 	"github.com/go-acme/lego/v5/certificate"
 	"github.com/go-acme/lego/v5/challenge/dns01"
 	"github.com/go-acme/lego/v5/challenge/http01"
@@ -50,6 +49,13 @@ type CertificateInfoJSON struct {
 	DNSServers                   []string `json:"dnsServers"`                      // DNS servers
 	DisableRecursiveNssCheck     bool     `json:"disable_recursive_nss_check"`     // Disable Recursive NSs Propagation Check
 	DisableAuthoritativeNssCheck bool     `json:"disable_authoritative_nss_check"` // Disable Authoritative NSs Propagation Check
+	KeyType                      string   `json:"key_type,omitempty"`              // Key type the certificate was issued with (RSA2048, EC256 ...)
+	AcmeProfile                  string   `json:"acme_profile,omitempty"`          // ACME profile requested from the CA
+	CAProfileID                  string   `json:"ca_profile_id,omitempty"`         // Saved CA profile that issued this certificate, reused on renewal
+	DNSProfileID                 string   `json:"dns_profile_id,omitempty"`        // Saved DNS credential profile used for the DNS challenge
+	ManagedBy                    string   `json:"managed_by,omitempty"`            // "" / "acme" = issued here; "upload", "mapdir", "csr" = external, never auto renewed
+	Source                       string   `json:"source,omitempty"`                // For managed_by=mapdir: the source path
+	IssuedAt                     int64    `json:"issued_at,omitempty"`             // Unix time of the last issuance by ACME
 }
 
 type EABConfig struct {
@@ -79,6 +85,11 @@ type ACMEHandler struct {
 	portMu sync.RWMutex
 	// beforeIssue is a test hook run once the issuance lock is held; a non nil error aborts ObtainCert
 	beforeIssue func() error
+
+	// OnEvent, when set, is called after every issuance attempt (success or failure). It must not block for long.
+	OnEvent func(CertEvent)
+	// logSink, when set (guarded by issueMu), additionally receives every log line of the running operation
+	logSink func(string)
 }
 
 // DefaultCertStorePath is used when ACMEHandler.CertStorePath is empty
@@ -109,6 +120,13 @@ func NewACME(
 }
 
 func (a *ACMEHandler) Logf(message string, err error) {
+	if a.logSink != nil {
+		line := message
+		if err != nil {
+			line += ": " + err.Error()
+		}
+		a.logSink(line)
+	}
 	a.Logger.PrintAndLog("ACME", message, err)
 }
 
@@ -131,6 +149,11 @@ func (a *ACMEHandler) writeFileWithMode(filename string, data []byte, mode os.Fi
 // ObtainCert obtains a certificate for the specified domains.
 // Only one issuance runs at a time: requests (manual clicks, auto renew, several names) queue up.
 func (a *ACMEHandler) ObtainCert(domains []string, certificateName string, email string, caName string, caUrl string, skipTLS bool, useDNS bool, propagationTimeout int, dnsServers string, disableRecursiveNssCheck bool, disableAuthoritativeNssCheck bool) (bool, error) {
+	return a.ObtainCertWithOptions(domains, certificateName, email, caName, caUrl, skipTLS, useDNS, propagationTimeout, dnsServers, disableRecursiveNssCheck, disableAuthoritativeNssCheck, ObtainOptions{})
+}
+
+// ObtainCertWithOptions is ObtainCert plus key type, ACME profile, saved CA profile and saved DNS profile selection.
+func (a *ACMEHandler) ObtainCertWithOptions(domains []string, certificateName string, email string, caName string, caUrl string, skipTLS bool, useDNS bool, propagationTimeout int, dnsServers string, disableRecursiveNssCheck bool, disableAuthoritativeNssCheck bool, opts ObtainOptions) (bool, error) {
 	a.issueMu.Lock()
 	defer a.issueMu.Unlock()
 	if a.beforeIssue != nil {
@@ -138,7 +161,7 @@ func (a *ACMEHandler) ObtainCert(domains []string, certificateName string, email
 			return false, err
 		}
 	}
-	return a.obtainCertLocked(domains, certificateName, email, caName, caUrl, skipTLS, useDNS, propagationTimeout, dnsServers, disableRecursiveNssCheck, disableAuthoritativeNssCheck)
+	return a.obtainAndNotify(domains, certificateName, email, caName, caUrl, skipTLS, useDNS, propagationTimeout, dnsServers, disableRecursiveNssCheck, disableAuthoritativeNssCheck, opts)
 }
 
 // ensureFreeChallengePort re-checks the HTTP-01 port right before use. The port is picked once
@@ -160,8 +183,42 @@ func (a *ACMEHandler) ensureFreeChallengePort() {
 	}
 }
 
-func (a *ACMEHandler) obtainCertLocked(domains []string, certificateName string, email string, caName string, caUrl string, skipTLS bool, useDNS bool, propagationTimeout int, dnsServers string, disableRecursiveNssCheck bool, disableAuthoritativeNssCheck bool) (bool, error) {
+func (a *ACMEHandler) obtainCertLocked(domains []string, certificateName string, email string, caName string, caUrl string, skipTLS bool, useDNS bool, propagationTimeout int, dnsServers string, disableRecursiveNssCheck bool, disableAuthoritativeNssCheck bool, opts ObtainOptions) (bool, error) {
 	ctx := context.TODO()
+
+	// Values remembered from the previous issuance of this certificate (renewal keeps them)
+	prevInfo, prevErr := LoadCertInfoJSON(a.certPath(certificateName + ".json"))
+	if prevErr != nil {
+		prevInfo = &CertificateInfoJSON{}
+	}
+	if opts.Profile == "" {
+		opts.Profile = prevInfo.AcmeProfile
+	}
+	if opts.DNSProfileID == "" {
+		opts.DNSProfileID = prevInfo.DNSProfileID
+	}
+	if _, kerr := NormalizeKeyType(opts.KeyType); kerr != nil {
+		return false, kerr
+	}
+	keyTypeName := a.resolveKeyType(opts.KeyType, prevInfo.KeyType)
+	legoKeyType, err := ParseKeyType(keyTypeName)
+	if err != nil {
+		return false, err
+	}
+
+	// A saved CA profile overrides the CA arguments
+	var caProfile *CAProfile
+	if opts.CAProfileID != "" {
+		caProfile, err = a.GetCAProfile(opts.CAProfileID)
+		if err != nil {
+			return false, err
+		}
+		caName, caUrl = "custom", caProfile.DirectoryURL
+		skipTLS = skipTLS || caProfile.SkipTLS
+		if opts.Profile == "" {
+			opts.Profile = caProfile.Profile
+		}
+	}
 
 	a.Logf("Obtaining certificate for: "+strings.Join(domains, ", "), nil)
 
@@ -278,27 +335,46 @@ func (a *ACMEHandler) obtainCertLocked(domains []string, certificateName string,
 
 	// setup how to receive challenge
 	if useDNS {
-		if !a.Database.TableExists("acme") {
-			a.Database.NewTable("acme")
-			return false, errors.New("DNS Provider and DNS Credential configuration required for ACME Provider (Error -1)")
+		var dnsCredentials, dnsProvider string
+		if opts.DNSProfileID == "" && !a.hasPerCertDNSCreds(certificateName) {
+			// nothing configured for this certificate: fall back to the default credential profile, if any
+			opts.DNSProfileID = a.DefaultDNSProfileID()
 		}
+		if opts.DNSProfileID != "" {
+			dp, perr := a.GetDNSProfile(opts.DNSProfileID)
+			if perr != nil {
+				a.Logf("DNS credential profile lookup failed", perr)
+				return false, perr
+			}
+			a.Logf("Using DNS credential profile "+dp.Name+" ("+dp.Provider+")", nil)
+			dnsCredentials, dnsProvider = dp.Credentials, dp.Provider
+			if dnsServers == "" && dp.DNSServers != "" {
+				dnsNameservers = strings.Split(dp.DNSServers, ",")
+				for i := range dnsNameservers {
+					dnsNameservers[i] = strings.TrimSpace(dnsNameservers[i])
+				}
+			}
+		} else {
+			if !a.Database.TableExists("acme") {
+				a.Database.NewTable("acme")
+				return false, errors.New("DNS Provider and DNS Credential configuration required for ACME Provider (Error -1)")
+			}
 
-		if !a.Database.KeyExists("acme", certificateName+"_dns_provider") || !a.Database.KeyExists("acme", certificateName+"_dns_credentials") {
-			return false, errors.New("DNS Provider and DNS Credential configuration required for ACME Provider (Error -2)")
-		}
+			if !a.Database.KeyExists("acme", certificateName+"_dns_provider") || !a.Database.KeyExists("acme", certificateName+"_dns_credentials") {
+				return false, errors.New("DNS Provider and DNS Credential configuration required for ACME Provider (Error -2)")
+			}
 
-		var dnsCredentials string
-		err := a.Database.Read("acme", certificateName+"_dns_credentials", &dnsCredentials)
-		if err != nil {
-			a.Logf("Read DNS credential failed", err)
-			return false, err
-		}
+			err := a.Database.Read("acme", certificateName+"_dns_credentials", &dnsCredentials)
+			if err != nil {
+				a.Logf("Read DNS credential failed", err)
+				return false, err
+			}
 
-		var dnsProvider string
-		err = a.Database.Read("acme", certificateName+"_dns_provider", &dnsProvider)
-		if err != nil {
-			a.Logf("Read DNS Provider failed", err)
-			return false, err
+			err = a.Database.Read("acme", certificateName+"_dns_provider", &dnsProvider)
+			if err != nil {
+				a.Logf("Read DNS Provider failed", err)
+				return false, err
+			}
 		}
 
 		provider, err := GetDnsChallengeProviderByName(dnsProvider, dnsCredentials, propagationTimeout)
@@ -358,30 +434,35 @@ func (a *ACMEHandler) obtainCertLocked(domains []string, certificateName string,
 		a.Logf("External Account Required for this ACME Provider", nil)
 		// IF KID and HmacEncoded is overidden
 
-		if !a.Database.TableExists("acme") {
-			a.Database.NewTable("acme")
-			return false, errors.New("kid and HmacEncoded configuration required for ACME Provider (Error -1)")
-		}
-
-		if !a.Database.KeyExists("acme", config.CADirURL+"_kid") || !a.Database.KeyExists("acme", config.CADirURL+"_hmacEncoded") {
-			return false, errors.New("kid and HmacEncoded configuration required for ACME Provider (Error -2)")
-		}
-
 		var kid string
 		var hmacEncoded string
-		err := a.Database.Read("acme", config.CADirURL+"_kid", &kid)
-		if err != nil {
-			a.Logf("Failed to read kid from database", err)
-			return false, err
+		if caProfile != nil && caProfile.EABKid != "" {
+			kid, hmacEncoded = caProfile.EABKid, caProfile.EABHmac
+		} else {
+			if !a.Database.TableExists("acme") {
+				a.Database.NewTable("acme")
+				return false, errors.New("kid and HmacEncoded configuration required for ACME Provider (Error -1)")
+			}
+
+			if !a.Database.KeyExists("acme", config.CADirURL+"_kid") || !a.Database.KeyExists("acme", config.CADirURL+"_hmacEncoded") {
+				return false, errors.New("kid and HmacEncoded configuration required for ACME Provider (Error -2)")
+			}
+
+			err := a.Database.Read("acme", config.CADirURL+"_kid", &kid)
+			if err != nil {
+				a.Logf("Failed to read kid from database", err)
+				return false, err
+			}
+
+			err = a.Database.Read("acme", config.CADirURL+"_hmacEncoded", &hmacEncoded)
+			if err != nil {
+				a.Logf("Failed to read HMAC from database", err)
+				return false, err
+			}
 		}
 
-		err = a.Database.Read("acme", config.CADirURL+"_hmacEncoded", &hmacEncoded)
-		if err != nil {
-			a.Logf("Failed to read HMAC from database", err)
-			return false, err
-		}
-
-		a.Logf("EAB Credential retrieved: "+kid+" / "+hmacEncoded, nil)
+		// Never log the HMAC key
+		a.Logf("EAB credential retrieved (key id "+kid+")", nil)
 		if kid != "" && hmacEncoded != "" {
 			reg, err = client.Registration.RegisterWithExternalAccountBinding(ctx, registration.RegisterEABOptions{
 				TermsOfServiceAgreed: true,
@@ -417,7 +498,8 @@ func (a *ACMEHandler) obtainCertLocked(domains []string, certificateName string,
 	request := certificate.ObtainRequest{
 		Domains: domains,
 		Bundle:  true,
-		KeyType: certcrypto.RSA2048,
+		KeyType: legoKeyType,
+		Profile: opts.Profile,
 	}
 
 	certificates, err := client.Certificate.Obtain(ctx, request)
@@ -449,6 +531,12 @@ func (a *ACMEHandler) obtainCertLocked(domains []string, certificateName string,
 		DNSServers:                   dnsNameservers,
 		DisableRecursiveNssCheck:     disableRecursiveNssCheck,
 		DisableAuthoritativeNssCheck: disableAuthoritativeNssCheck,
+		KeyType:                      keyTypeName,
+		AcmeProfile:                  opts.Profile,
+		CAProfileID:                  opts.CAProfileID,
+		DNSProfileID:                 opts.DNSProfileID,
+		ManagedBy:                    "acme",
+		IssuedAt:                     time.Now().Unix(),
 	}
 
 	certInfoBytes, err := json.Marshal(certInfo)
@@ -669,7 +757,17 @@ func (a *ACMEHandler) HandleRenewCertificate(w http.ResponseWriter, r *http.Requ
 	disableRecursiveNssCheck, _ := utils.PostBool(r, "disable_recursive_nss_check")
 	disableAuthoritativeNssCheck, _ := utils.PostBool(r, "disable_authoritative_nss_check")
 
-	result, err := a.ObtainCert(cleanedDomains, filename, email, ca, caUrl, skipTLS, dns, propagationTimeout, dnsServersString, disableRecursiveNssCheck, disableAuthoritativeNssCheck)
+	opts := ObtainOptions{}
+	opts.KeyType, _ = utils.PostPara(r, "keyType")
+	opts.Profile, _ = utils.PostPara(r, "acmeProfile")
+	opts.CAProfileID, _ = utils.PostPara(r, "caProfile")
+	opts.DNSProfileID, _ = utils.PostPara(r, "dnsProfile")
+	if _, kerr := NormalizeKeyType(opts.KeyType); kerr != nil {
+		utils.SendErrorResponse(w, jsonEscape(kerr.Error()))
+		return
+	}
+
+	result, err := a.ObtainCertWithOptions(cleanedDomains, filename, email, ca, caUrl, skipTLS, dns, propagationTimeout, dnsServersString, disableRecursiveNssCheck, disableAuthoritativeNssCheck, opts)
 	if err != nil {
 		utils.SendErrorResponse(w, jsonEscape(err.Error()))
 		return

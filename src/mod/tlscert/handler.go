@@ -261,8 +261,15 @@ func (m *Manager) HandleListCertificate(w http.ResponseWriter, r *http.Request) 
 			LastModifiedDate string
 			ExpireDate       string
 			RemainingDays    int
-			UseDNS           bool // Whether this cert is obtained via DNS challenge
-			IsFallback       bool // Whether this cert is the fallback/default cert
+			UseDNS           bool   // Whether this cert is obtained via DNS challenge
+			IsFallback       bool   // Whether this cert is the fallback/default cert
+			Issuer           string // CA that issued the certificate
+			KeyType          string // RSA2048, EC256 ...
+			ManagedBy        string // acme / upload / mapdir / csr
+			CAProfileID      string // saved CA profile used to issue it (acme)
+			DNSProfileID     string // saved DNS credential profile used (acme)
+			Renewable        bool   // can be renewed with the ACME renew button
+			Source           string // mapped directory source path
 		}
 
 		results := []*CertInfo{}
@@ -302,8 +309,15 @@ func (m *Manager) HandleListCertificate(w http.ResponseWriter, r *http.Request) 
 			}
 
 			certDomain := ""
+			issuer, keyType := "", ""
 			if cert := firstCertificate(certBtyes); cert != nil {
 				certDomain = cert.Subject.CommonName
+				issuer, keyType = IssuerOf(cert, certInfo), KeyTypeOf(cert)
+			}
+			managedBy := ManagedByOf(certInfo)
+			caProfile, dnsProfile, source := "", "", ""
+			if certInfo != nil {
+				caProfile, dnsProfile, source = certInfo.CAProfileID, certInfo.DNSProfileID, certInfo.Source
 			}
 
 			thisCertInfo := CertInfo{
@@ -314,6 +328,13 @@ func (m *Manager) HandleListCertificate(w http.ResponseWriter, r *http.Request) 
 				RemainingDays:    expiredIn,
 				UseDNS:           useDNSValidation,
 				IsFallback:       (filename == m.FallbackCert), // TODO: figure out a better implementation
+				Issuer:           issuer,
+				KeyType:          keyType,
+				ManagedBy:        managedBy,
+				CAProfileID:      caProfile,
+				DNSProfileID:     dnsProfile,
+				Renewable:        managedBy == ManagedACME || managedBy == ManagedUpload,
+				Source:           source,
 			}
 
 			results = append(results, &thisCertInfo)

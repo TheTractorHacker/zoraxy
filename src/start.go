@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"imuslab.com/zoraxy/mod/offline"
 	"log"
 	"net"
 	"net/http"
@@ -191,6 +192,7 @@ func startupSequence() {
 		GeoDB:              geodbStore,
 		ConfigFolder:       CONF_ACCESS_RULE,
 		TrustedProxiesFile: CONF_TRUSTED_PROXIES,
+		SkipPublicIPCheck:  offline.Enabled(), //no public IP lookup in offline mode
 	})
 	if err != nil {
 		panic(err)
@@ -362,6 +364,8 @@ func startupSequence() {
 	*/
 	//Create a table just to store acme related preferences
 	sysdb.NewTable("acmepref")
+	initCertHooks()
+	initCertMapDir()
 	acmeHandler = initACME()
 	acmeAutoRenewer, err = acme.NewAutoRenewer(
 		ACME_AUTORENEW_CONFIG_PATH,
@@ -437,6 +441,10 @@ func startupSequence() {
 
 	//Sync latest plugin list from the plugin store
 	go func() {
+		if offline.Enabled() {
+			SystemWideLogger.PrintAndLog("plugin-manager", "Offline mode: plugin store sync skipped", nil)
+			return
+		}
 		err = pluginManager.UpdateDownloadablePluginList()
 		if err != nil {
 			SystemWideLogger.PrintAndLog("plugin-manager", "Failed to sync plugin list from plugin store", err)
@@ -503,6 +511,9 @@ func ShutdownSeq() {
 		loadBalancer.Close()
 	}
 
+	if certExpiryWatcher != nil {
+		certExpiryWatcher.Stop()
+	}
 	SystemWideLogger.Println("Closing Certificates Auto Renewer")
 	if acmeAutoRenewer != nil {
 		acmeAutoRenewer.Close()

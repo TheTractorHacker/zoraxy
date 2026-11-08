@@ -124,3 +124,12 @@ Status: ✅ done · 🔧 in progress · 📋 planned
 - ✅ Opt-in rate limited logging of default site requests (upstream #578).
 - ✅ Run plugins as an unprivileged OS user, `-plugin_user` / `-plugin_group` (upstream #760). 📋 Per-plugin user, automatic ownership fix.
 - ✅ Network diagnostics: DNS lookup, TLS certificate inspector, HTTP request tester with metadata address guard.
+
+## 11. Certificates and ACME batch (`feat/certs-acme-2`)
+- ✅ ACME key type selection (#1123), staging CA + saved custom CA profiles with EAB (#408, #1267), reusable DNS credential profiles
+  with a default profile (#1332, #380), CSR generation + pairing (#433), certificates from a watched directory (#798), certificate
+  event webhooks and an opt-in command hook (#496/#899 certificate part), `-offline` mode (#782), richer certificate list with
+  renew-now log.
+- 📋 Notification sources beyond certificates (uptime, WAF) can reuse `mod/notify`; per-event retry persistence (undelivered webhooks are
+  dropped after the retry window); webhook delivery log in the UI; DNS profile selection inside the proxy rule dialog itself
+  (`httprp.html` is owned by the networking work); ARI (renewal information) support when lego exposes it; Encrypted Client Hello (#1319) is out of scope.

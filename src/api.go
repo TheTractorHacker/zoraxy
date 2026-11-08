@@ -15,6 +15,7 @@ import (
 	"imuslab.com/zoraxy/mod/ipscan"
 	"imuslab.com/zoraxy/mod/netstat"
 	"imuslab.com/zoraxy/mod/netutils"
+	"imuslab.com/zoraxy/mod/tlscert"
 	"imuslab.com/zoraxy/mod/utils"
 )
 
@@ -130,6 +131,9 @@ func RegisterTLSAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/cert/checkDefault", tlsCertManager.HandleDefaultCertCheck)
 	authRouter.HandleFunc("/api/cert/delete", tlsCertManager.HandleCertRemove)
 	authRouter.HandleFunc("/api/cert/selfsign", tlsCertManager.HandleSelfSignCertGenerate)
+	authRouter.HandleFunc("/api/cert/csr", tlsCertManager.HandleCSR)
+	authRouter.HandleFunc("/api/cert/mapdir", tlscert.HandleMapDir(certMapDirWatcher))
+	authRouter.HandleFunc("/api/cert/usage", handleCertUsage)
 }
 
 // Register the APIs for Authentication handlers like Forward Auth and OAUTH2
@@ -278,6 +282,11 @@ func RegisterACMEAndAutoRenewerAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/acme/autoRenew/renewPolicy", acmeAutoRenewer.HandleRenewPolicy)
 	authRouter.HandleFunc("/api/acme/autoRenew/renewNow", acmeAutoRenewer.HandleRenewNow)
 	authRouter.HandleFunc("/api/acme/dns/providers", acmedns.HandleServeProvidersJson)
+	authRouter.HandleFunc("/api/acme/keytype", acmeHandler.HandleKeyType)
+	authRouter.HandleFunc("/api/acme/profiles/ca", acmeHandler.HandleCAProfiles)
+	authRouter.HandleFunc("/api/acme/profiles/dns", acmeHandler.HandleDNSProfiles)
+	authRouter.HandleFunc("/api/acme/renewCert", acmeAutoRenewer.HandleRenewCertNow)
+	authRouter.HandleFunc("/api/notify/hooks", notifyManager.HandleHooks)
 	/* ACME Wizard */
 	authRouter.HandleFunc("/api/acme/wizard", acmewizard.HandleGuidedStepCheck)
 }

@@ -33,6 +33,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import (
 	"flag"
 	"fmt"
+	"imuslab.com/zoraxy/mod/offline"
 	"log"
 	"net"
 	"net/http"
@@ -70,6 +71,7 @@ func SetupCloseHandler() {
 func main() {
 	//Parse startup flags
 	flag.Parse()
+	offline.Set(*offlineMode) //-offline: no start-up / background outbound calls (mod/offline)
 
 	//Initialize path variables from flags
 	TMP_FOLDER = *path_tmp
