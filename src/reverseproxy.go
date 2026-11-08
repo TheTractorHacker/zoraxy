@@ -253,6 +253,9 @@ func ReverseProxyInit() {
 		SystemWideLogger.Println("Development mode disabled. Proxying with default Cache Control policy")
 	}
 
+	sanitiseClientIP := false
+	sysdb.Read("settings", "sanitiseClientIP", &sanitiseClientIP)
+
 	useProxyProtocol := false
 	sysdb.Read("settings", "useProxyProtocol", &useProxyProtocol)
 	if useProxyProtocol {
@@ -319,6 +322,8 @@ func ReverseProxyInit() {
 		ListenOnPort80:     listenOnPort80,
 		ForceHttpsRedirect: forceHttpsRedirect,
 		UseProxyProtocol:   useProxyProtocol,
+
+		SanitiseClientIPHeaders: sanitiseClientIP,
 		/* Routing Service Managers */
 		TlsManager:          tlsCertManager,
 		RedirectRuleTable:   redirectTable,
@@ -920,6 +925,9 @@ func ReverseProxyHandleEditEndpoint(w http.ResponseWriter, r *http.Request) {
 	// Force HTTP/1.1
 	forceHTTP11 := postBoolOr(r, "forceHTTP11", cur.ForceHTTP11)
 
+	// Drop spoofable client IP headers sent by untrusted peers
+	sanitiseClientIP := postBoolOr(r, "sanitiseClientIP", cur.SanitiseClientIPHeaders)
+
 	// WebSocket options
 	disableWebSocket := postBoolOr(r, "disableWebSocket", cur.DisableWebSocket)
 	websocketTimeout := cur.WebsocketTimeout
@@ -990,6 +998,7 @@ func ReverseProxyHandleEditEndpoint(w http.ResponseWriter, r *http.Request) {
 	newProxyEndpoint.DisableAutoFallback = disableAutoFallback
 	newProxyEndpoint.DisableChunkedTransferEncoding = disableChunkedEncoding
 	newProxyEndpoint.ForceHTTP11 = forceHTTP11
+	newProxyEndpoint.SanitiseClientIPHeaders = sanitiseClientIP
 	newProxyEndpoint.DisableWebSocket = disableWebSocket
 	newProxyEndpoint.WebsocketTimeout = websocketTimeout
 	newProxyEndpoint.EnableTimeoutRefreshOnActivity = enableTimeoutRefreshOnActivity
@@ -2096,6 +2105,19 @@ func HandleDevelopmentModeChange(w http.ResponseWriter, r *http.Request) {
 		utils.SendOK(w)
 	}
 
+}
+
+// HandleSanitiseClientIPChange reads or sets the global default of "Sanitise client IP headers"
+func HandleSanitiseClientIPChange(w http.ResponseWriter, r *http.Request) {
+	enable, err := utils.GetBool(r, "enable")
+	if err != nil {
+		js, _ := json.Marshal(dynamicProxyRouter.Option.SanitiseClientIPHeaders)
+		utils.SendJSONResponse(w, string(js))
+		return
+	}
+	dynamicProxyRouter.Option.SanitiseClientIPHeaders = enable
+	sysdb.Write("settings", "sanitiseClientIP", enable)
+	utils.SendOK(w)
 }
 
 // HandleProxyProtocolChange handles the PROXY protocol v1/v2 toggle

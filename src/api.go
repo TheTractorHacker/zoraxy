@@ -67,6 +67,7 @@ func RegisterHTTPProxyAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/proxy/listenPort80", HandleUpdatePort80Listener)
 	authRouter.HandleFunc("/api/proxy/requestIsProxied", HandleManagementProxyCheck)
 	authRouter.HandleFunc("/api/proxy/developmentMode", HandleDevelopmentModeChange)
+	authRouter.HandleFunc("/api/proxy/sanitiseClientIP", HandleSanitiseClientIPChange)
 	authRouter.HandleFunc("/api/proxy/proxyProtocol", HandleProxyProtocolChange)
 	authRouter.HandleFunc("/api/proxy/quic", HandleQuicToggle)
 	authRouter.HandleFunc("/api/proxy/timeouts", HandleGlobalProxyTimeoutSettings)

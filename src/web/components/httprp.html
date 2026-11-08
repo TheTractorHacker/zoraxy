@@ -412,6 +412,12 @@
                                 <label>Force HTTP/1.1<br>
                                     <small>Force the proxy to use HTTP/1.1 for upstream connections, disabling HTTP/2. This does not turn off connection reuse; use "Disable connection reuse" in the upstream settings for that.</small></label>
                             </div>
+                            <br>
+                            <div class="ui checkbox" style="margin-top: 0.4em;">
+                                <input type="checkbox" class="SanitiseClientIPHeaders">
+                                <label>Sanitise client IP headers<br>
+                                    <small>Drop X-Forwarded-For, X-Real-IP, Forwarded, CF-Connecting-IP, True-Client-IP... sent by clients that are not in the Trusted Proxy list, so the upstream only sees your real client address and visitors cannot spoof it. Leave off if this host sits behind a CDN or proxy that is not listed as a trusted proxy.</small></label>
+                            </div>
                             
                         </div>
                     </div>
@@ -1549,6 +1555,7 @@
         let enableUpgradeForwarding = $(editor).find(".EnableUpgradeForwarding")[0].checked;
         let disableChunkedTransferEncoding = $(editor).find(".DisableChunkedTransferEncoding")[0].checked;
         let forceHTTP11 = $(editor).find(".ForceHTTP11")[0].checked;
+        let sanitiseClientIP = $(editor).find(".SanitiseClientIPHeaders")[0].checked;
         let disableWebSocket = !$(editor).find(".EnableWebSocket")[0].checked;
         let websocketTimeout = parseInt($(editor).find(".WebsocketTimeout").val()) || 0;
         if (websocketTimeout < 0) websocketTimeout = 0;
@@ -1591,6 +1598,7 @@
                 "rate" :requireRateLimit,
                 "dChunkedEnc": disableChunkedTransferEncoding,
                 "forceHTTP11": forceHTTP11,
+                "sanitiseClientIP": sanitiseClientIP,
                 "disableWebSocket": disableWebSocket,
                 "websocketTimeout": websocketTimeout,
                 "enableTimeoutRefreshOnActivity": enableTimeoutRefreshOnActivity,
@@ -2254,6 +2262,12 @@
         editor.find(".ForceHTTP11").off("change");
         editor.find(".ForceHTTP11").prop("checked", subd.ForceHTTP11);
         editor.find(".ForceHTTP11").on("change", function() {
+            saveProxyInlineEdit(uuid);
+        });
+
+        editor.find(".SanitiseClientIPHeaders").off("change");
+        editor.find(".SanitiseClientIPHeaders").prop("checked", subd.SanitiseClientIPHeaders);
+        editor.find(".SanitiseClientIPHeaders").on("change", function() {
             saveProxyInlineEdit(uuid);
         });
 
