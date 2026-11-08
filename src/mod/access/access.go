@@ -164,7 +164,7 @@ func (c *Controller) ListAllAccessRules() []*AccessRule {
 		return true
 	})
 
-	return results
+	return SortRules(results, "manual")
 }
 
 // Check if an access rule exists given the rule id

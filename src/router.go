@@ -41,6 +41,11 @@ func FSHandler(handler http.Handler) http.Handler {
 			return
 		}
 
+		//Read-only (viewer) accounts must not reach plugin UIs or the web terminal
+		if !authAgent.RoleGuard(w, r) {
+			return
+		}
+
 		//For Plugin Routing
 		if strings.HasPrefix(r.URL.Path, "/plugin.ui/") {
 			//Extract the plugin ID from the request path

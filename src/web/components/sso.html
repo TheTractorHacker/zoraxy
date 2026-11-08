@@ -271,6 +271,22 @@
                 </div>
             </div>
             <div class="field">
+                <label for="oauth2AllowedClaims">Allowed claim values (roles, department, ...)</label>
+                <input type="text" id="oauth2AllowedClaims" name="oauth2AllowedClaims" placeholder="roles=admin,editor; department=it">
+                <small>Optional. <code>claim=value1,value2</code> rules separated by <code>;</code>. Every rule must match (any of its values). Works on any claim, nested paths like <code>realm_access.roles</code> included. Empty = not checked.</small>
+            </div>
+            <div class="two fields">
+                <div class="field">
+                    <label for="oauth2AllowedEmails">Allowed e-mail addresses</label>
+                    <input type="text" id="oauth2AllowedEmails" name="oauth2AllowedEmails" placeholder="alice@example.com,bob@example.com">
+                </div>
+                <div class="field">
+                    <label for="oauth2AllowedEmailDomains">Allowed e-mail domains</label>
+                    <input type="text" id="oauth2AllowedEmailDomains" name="oauth2AllowedEmailDomains" placeholder="example.com">
+                    <small>Exact domain only (subdomains are not included). The provider must not report the e-mail as unverified.</small>
+                </div>
+            </div>
+            <div class="field">
                 <label for="oauth2HeaderMappings">Upstream header mappings</label>
                 <input type="text" id="oauth2HeaderMappings" name="oauth2HeaderMappings" placeholder="X-Auth-User=preferred_username,X-Auth-Email=email,X-Auth-Groups=groups">
                 <small><code>Header=claim</code> pairs, comma separated. The listed headers are always removed from incoming requests (so clients cannot spoof them) and then set from the verified claims. List claims are joined with commas. Host, Authorization, Cookie and forwarding headers cannot be mapped.</small>
@@ -736,6 +752,9 @@
                 $('#oauth2Issuer').val(data.oauth2Issuer || "");
                 $('#oauth2GroupsClaim').val(data.oauth2GroupsClaim || "");
                 $('#oauth2AllowedGroups').val(data.oauth2AllowedGroups || "");
+                $('#oauth2AllowedClaims').val(data.oauth2AllowedClaims || "");
+                $('#oauth2AllowedEmails').val(data.oauth2AllowedEmails || "");
+                $('#oauth2AllowedEmailDomains').val(data.oauth2AllowedEmailDomains || "");
                 $('#oauth2HeaderMappings').val(data.oauth2HeaderMappings || "");
                 $('#oauth2EndSessionUrl').val(data.oauth2EndSessionUrl || "");
                 $('#oauth2PostLogoutRedirectUrl').val(data.oauth2PostLogoutRedirectUrl || "");

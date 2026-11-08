@@ -400,40 +400,10 @@ func RegisterAuthAPIs(requireAuth bool, targetMux *http.ServeMux) {
 			utils.SendErrorResponse(w, "Root management account already exists")
 		}
 	})
-	targetMux.HandleFunc("/api/auth/changePassword", func(w http.ResponseWriter, r *http.Request) {
-		username, err := authAgent.GetUserName(w, r)
-		if err != nil {
-			http.Error(w, "401 - Unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		oldPassword, err := utils.PostPara(r, "oldPassword")
-		if err != nil {
-			utils.SendErrorResponse(w, "empty current password")
-			return
-		}
-		newPassword, err := utils.PostPara(r, "newPassword")
-		if err != nil {
-			utils.SendErrorResponse(w, "empty new password")
-			return
-		}
-		confirmPassword, _ := utils.PostPara(r, "confirmPassword")
-
-		if newPassword != confirmPassword {
-			utils.SendErrorResponse(w, "confirm password not match")
-			return
-		}
-
-		//Check if the old password correct
-		oldPasswordCorrect, _ := authAgent.ValidateUsernameAndPasswordWithReason(username, oldPassword)
-		if !oldPasswordCorrect {
-			utils.SendErrorResponse(w, "Invalid current password given")
-			return
-		}
-
-		//Change the password of the root user
-		authAgent.UnregisterUser(username)
-		authAgent.CreateUserAccount(username, newPassword, "")
+	targetMux.HandleFunc("/api/auth/changePassword", authAgent.HandleChangeOwnPassword)
+	targetMux.HandleFunc("/api/auth/role", func(w http.ResponseWriter, r *http.Request) {
+		js, _ := json.Marshal(authAgent.RequestRole(r))
+		utils.SendJSONResponse(w, string(js))
 	})
 }
 
@@ -490,6 +460,13 @@ func initAPIs(targetMux *http.ServeMux) {
 	RegisterACMEAndAutoRenewerAPIs(authRouter)
 	RegisterStaticWebServerAPIs(authRouter)
 	RegisterPluginAPIs(authRouter)
+	RegisterAbuseAPIs(authRouter)
+	RegisterSecurityAPIs(authRouter)
+	RegisterBasicAuthExtAPIs(authRouter)
+	RegisterAuthAuditAPIs(authRouter)
+	RegisterAccessRuleExtraAPIs(authRouter)
+	authRouter.HandleFunc("/api/users/list", authAgent.HandleUserList)
+	authRouter.HandleFunc("/api/users/action", authAgent.HandleUserAction)
 
 	//Docker UX Optimizations
 	authRouter.HandleFunc("/api/docker/available", DockerUXOptimizer.HandleDockerAvailable)

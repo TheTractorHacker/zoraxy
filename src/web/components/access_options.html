@@ -1,0 +1,82 @@
+<h2>Rule options</h2>
+<p>Extra, optional settings of the selected access rule. Nothing here is active until you change it.</p>
+<div class="ui divider"></div>
+
+<h4>Rule list</h4>
+<div class="ui small buttons" id="aoOrderBtns">
+    <button class="ui basic button" id="aoUp"><i class="arrow up icon"></i> Move up</button>
+    <button class="ui basic button" id="aoDown"><i class="arrow down icon"></i> Move down</button>
+    <button class="ui basic button" id="aoSortName"><i class="sort alphabet down icon"></i> Sort by name</button>
+</div>
+<button class="ui small basic button" id="aoDup"><i class="copy outline icon"></i> Duplicate this rule</button>
+<p><small>The default rule is always listed first. Order is saved on the server.</small></p>
+<div class="ui divider"></div>
+
+<h4>Close the connection of blocked clients</h4>
+<div class="ui toggle checkbox"><input type="checkbox" id="aoDrop"><label>Drop the TCP connection without any HTTP response instead of showing the 403 page (blacklist and whitelist rejections)</label></div>
+<div class="ui divider"></div>
+
+<h4>Challenge countries</h4>
+<p>Visitors from these countries must solve the CAPTCHA of the proxy rule instead of being blocked. Blacklisted IPs and countries are still blocked.
+    A CAPTCHA provider must be configured on the proxy rule, otherwise visitors from these countries are <b>blocked</b>.</p>
+<div id="aoWarn" class="ui warning message" style="display:none"></div>
+<div id="aoChallenge"></div>
+<div class="ui action input">
+    <input type="text" id="aoCc" maxlength="2" placeholder="Country code, e.g. cn" style="width:12em">
+    <button class="ui basic button" id="aoCcAdd"><i class="plus icon"></i> Add</button>
+</div>
+<script>
+(function () {
+    function esc(s) { return $("<div>").text(s == null ? "" : String(s)).html(); }
+    function toast(m, ok) { if (window.msgbox) { msgbox(m, ok); } }
+    function ruleId() { return window.currentEditingAccessRule || "default"; }
+    function post(url, data, ok) {
+        $.cjax({ type: "POST", url: url, data: data, success: function (d) {
+            if (d && d.error) { toast(d.error, false); } else if (ok) { ok(d); }
+        } });
+    }
+    function ids() { return (window.currentListOfAccessRules || []).map(function (r) { return r.ID; }).filter(function (i) { return i !== "default"; }); }
+    function saveOrder(list, sel) {
+        post("/api/access/reorder", { ids: JSON.stringify(list) }, function () { reloadAccessRules(); });
+    }
+    $("#aoUp, #aoDown").on("click", function () {
+        var l = ids(), i = l.indexOf(ruleId()), d = this.id === "aoUp" ? -1 : 1;
+        if (i < 0 || i + d < 0 || i + d >= l.length) { return; }
+        l.splice(i + d, 0, l.splice(i, 1)[0]);
+        saveOrder(l);
+    });
+    $("#aoSortName").on("click", function () {
+        var rules = (window.currentListOfAccessRules || []).filter(function (r) { return r.ID !== "default"; });
+        rules.sort(function (a, b) { return a.Name.toLowerCase() < b.Name.toLowerCase() ? -1 : 1; });
+        saveOrder(rules.map(function (r) { return r.ID; }));
+    });
+    $("#aoDup").on("click", function () {
+        post("/api/access/duplicate", { id: ruleId() }, function () { toast("Rule duplicated", true); reloadAccessRules(); });
+    });
+    $("#aoDrop").on("change", function () {
+        post("/api/access/dropOnBlock", { id: ruleId(), enable: this.checked ? "true" : "false" }, function () { toast("Saved", true); });
+    });
+    function loadChallenge() {
+        $.get("/api/access/challenge/list?id=" + encodeURIComponent(ruleId()), function (d) {
+            var h = "";
+            Object.keys(d.Countries || {}).sort().forEach(function (cc) {
+                h += '<a class="ui label">' + esc(cc.toUpperCase()) + ' <i class="delete icon aoCcDel" data-cc="' + esc(cc) + '"></i></a>';
+            });
+            $("#aoChallenge").html(h || "<p><i>No challenge countries.</i></p>");
+            var hw = d.HostsWithoutCaptcha || [];
+            if (Object.keys(d.Countries || {}).length && hw.length) {
+                $("#aoWarn").html("No CAPTCHA configured on: <b>" + hw.map(esc).join(", ") + "</b>. Challenged visitors will be blocked there.").show();
+            } else { $("#aoWarn").hide(); }
+        });
+        $.get("/api/access/dropOnBlock?id=" + encodeURIComponent(ruleId()), function (v) { $("#aoDrop").prop("checked", v === true); });
+    }
+    $("#aoChallenge").on("click", ".aoCcDel", function () {
+        post("/api/access/challenge/remove", { id: ruleId(), cc: $(this).attr("data-cc") }, loadChallenge);
+    });
+    $("#aoCcAdd").on("click", function () {
+        post("/api/access/challenge/add", { id: ruleId(), cc: $("#aoCc").val() }, function () { $("#aoCc").val(""); loadChallenge(); });
+    });
+    window.accessOptionsRefresh = loadChallenge;
+    loadChallenge();
+})();
+</script>

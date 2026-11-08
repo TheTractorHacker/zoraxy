@@ -144,3 +144,11 @@ Status: ✅ done · 🔧 in progress · 📋 planned
 - ✅ Dynamic capture sniff payload carries the matched rule (#1351).
 - 📋 Persist the delivery log and undelivered messages across restarts; per-site statistics for the status-code/country dimension of the global map; notification
   events for auto-ban and certificate renewal are emitted by their own modules through `notify.Emit` (see DEVELOPMENT.md).
+## Security and access (feat/security-access-2)
+
+Done (all opt-in): built-in auto-ban + remote ban API, multiple admin accounts with viewer role and audit log, challenge countries,
+drop-on-block, access rule sort / duplicate, bot rules, header rules, shared basic auth lists + path scoped basic auth, auth audit and
+auto-tagging, OAuth2 / OIDC claim and e-mail allow-lists, Altcha CAPTCHA.
+
+Open: multiple OIDC / OAuth2 providers selectable per proxy rule (needs one `OAuth2Router` per provider and per-provider callback paths),
+FriendlyCaptcha, counting SSO redirect failures in the auto-ban, per-user admin API tokens, fine grained roles beyond admin / viewer.

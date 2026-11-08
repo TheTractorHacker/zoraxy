@@ -45,6 +45,7 @@ type Provider int
 const (
 	ProviderCloudflare Provider = 0
 	ProviderGoogle     Provider = 1
+	ProviderAltcha     Provider = 2 //self-hosted proof of work, see altcha.go
 )
 
 // ExceptionType defines the type of CAPTCHA exception rule
@@ -72,6 +73,7 @@ type Config struct {
 	Turnstile          *TurnstileOptions `json:"Turnstile,omitempty"`          // Cloudflare only
 	RecaptchaInvisible bool              `json:"RecaptchaInvisible,omitempty"` // v2 only: invisible badge instead of the checkbox
 	RecaptchaAction    string            `json:"RecaptchaAction,omitempty"`    // v3 only: action name, default "access", checked in siteverify
+	AltchaMaxNumber    int               `json:"AltchaMaxNumber,omitempty"`    // Altcha only: work factor (max secret number), default 100000
 	VerifyHostname     bool              `json:"VerifyHostname,omitempty"`     // reject tokens whose siteverify hostname differs from the requested host
 }
 
@@ -358,6 +360,14 @@ func HandleVerification(w http.ResponseWriter, r *http.Request, config *Config, 
 		token = strings.TrimSpace(token)
 	}
 
+	if config.Provider == ProviderAltcha {
+		//Altcha only reads its own field, a token of another provider is never interpreted
+		token = strings.TrimSpace(r.PostFormValue(AltchaField))
+		if token == "" {
+			token = strings.TrimSpace(r.FormValue(AltchaField))
+		}
+	}
+
 	if token == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
@@ -375,6 +385,8 @@ func HandleVerification(w http.ResponseWriter, r *http.Request, config *Config, 
 	switch config.Provider {
 	case ProviderCloudflare:
 		verifyErr = VerifyTurnstile(token, config.SecretKey, clientIP, exp)
+	case ProviderAltcha:
+		verifyErr = VerifyAltcha(token, config.SecretKey, time.Now())
 	case ProviderGoogle:
 		verifyErr = VerifyRecaptcha(token, config.SecretKey, clientIP, exp)
 	default:
@@ -446,6 +458,9 @@ func CheckSessionReason(r *http.Request, sessionStore *SessionStore) (bool, stri
 func (config *Config) IsConfigured() bool {
 	if config == nil {
 		return false
+	}
+	if config.Provider == ProviderAltcha {
+		return config.SecretKey != "" //no site key needed, the secret is the HMAC key
 	}
 	if config.SiteKey == "" || config.SecretKey == "" {
 		return false

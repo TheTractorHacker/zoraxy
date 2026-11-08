@@ -1113,3 +1113,115 @@ renewal sources live on other branches and call `notify.Emit` (types `notify.Eve
 
 ### Plugin sniff payload
 `DynamicSniffForwardRequest.rule = {name, uuid, tags}` (additive, omitted by older Zoraxy). Rules have no stored UUID, so `uuid` is a stable 16 hex digit hash of the rule key.
+
+## Security and access features (feat/security-access-2)
+
+Everything here is opt-in; with nothing configured the request chain and every config file behave as before. UI: the new
+**Security Center** page (Security group; `web/components/security.html` + one partial per tab in `web/components/security/`) and an
+**Options** tab on the Access Control page (`web/components/access_options.html`).
+
+Where the features sit in the request chain (`runEndpointChain`, Server.go): abuse ban lookup (before everything, in `ServeHTTP` /
+`handleNonTLSRequest`) -> allowed peers -> access rule (blacklist / whitelist / `DropOnBlock` / challenge countries) -> client cert ->
+path rules -> **header rules** -> **bot rules** -> plugin pre_auth -> WAF -> exploit detection -> rate limit -> CAPTCHA -> auth
+(basic with scope + credential lists / SSO) -> plugins.
+
+| Feature | Code | Config / storage | Upstream |
+| --- | --- | --- | --- |
+| Auto-ban ("fail2ban") | `mod/abuse`, `mod/dynamicproxy/abuse_hook.go`, `abusewire.go` | `<conf>/abuse/config.json`, `bans.json` | #22 #898 |
+| Admin accounts, roles, audit | `mod/auth/users.go`, `router.go` | `auth` table: `role/<u>`, `disabled/<u>`, `sessver/<u>`; `<conf>/auth_audit.log` | #89 #501 |
+| Challenge countries, drop on block, sort / duplicate rules | `mod/access/ruleextra.go`, `mod/dynamicproxy/country_challenge.go`, `accessextra.go` | access rule JSON (`SortOrder`, `DropOnBlock`, `ChallengeCountryCode`, all omitted when unset) | #281 #908 #762 |
+| Bot rules | `mod/botrules`, `bot_hook.go`, `securityapi.go` | `<conf>/botrules.json`; per rule `BotPolicy` | #615 |
+| Header rules | `mod/dynamicproxy/headerrules.go` | per rule `HeaderRules` | #1356 |
+| Basic auth lists and scope | `mod/dynamicproxy/basicauth_ext.go`, `securityapi_basic.go` | `<conf>/basicauth_lists.json` (0600); `BasicAuthListNames`, `BasicAuthScopePrefixes` | #621 #1006 |
+| Auth audit | `mod/dynamicproxy/authaudit.go`, `authauditapi.go` | tags `auth:<provider>`; setting `authAuditRequireAll` | #1109 |
+| OAuth2 / OIDC claim, e-mail allow-lists | `mod/auth/sso/oauth2/access.go` | db keys `oauth2AllowedClaims`, `oauth2AllowedEmails`, `oauth2AllowedEmailDomains` | #884 #1162 |
+| Altcha CAPTCHA | `mod/dynamicproxy/captcha/altcha.go` | `CaptchaConfig.Provider = 2` | #1198 |
+
+### Auto-ban
+
+* Detectors (`mod/abuse.Kind`): 401, 403, 404, 429 / rate limit, WAF block, exploit block, bot block, CAPTCHA failure, admin login failure.
+  Each has `Threshold` events within `WindowSec`. Status based detectors observe the final response status through a
+  response-writer wrapper (Hijack / Flush / Unwrap preserved, so websockets and streaming keep working); explicit events (WAF, exploit,
+  captcha, bot) are noted through the request context (`abuseNoteKind`) and win over the derived status.
+* The client IP is always `GetClientIPForEndpoint` (trusted proxy aware): a spoofed `X-Forwarded-For` from an untrusted peer can neither
+  ban a victim nor evade a ban. IPv4-mapped IPv6 is unmapped, IPv6 is tracked per `/64` (`IPv6Prefix`, 32..128).
+* Never banned: loopback, private, link-local, multicast, unspecified, the allow-list, trusted proxies and the server's public IP
+  (`Protect` callback), unless `BanPrivate` is set explicitly. Manual and remote bans obey the same rule.
+* Ban duration `BanSeconds`, escalated by `EscalationFactor` per repeat offence inside `OffenderMemory`, capped by `MaxBanSeconds`.
+  Memory is bounded (`MaxTracked` counters, `MaxBans` bans, expired entries swept every minute, state flushed every 5 s and on shutdown).
+* `DropConnection` closes banned connections without a response (see below). `PerEndpoint` keeps counters and bans per proxy rule.
+* Remote API for external tools (#898), outside CSRF and session: `POST /api/abuse/remote/ban|unban`, `GET|POST /api/abuse/remote/list`
+  with `Authorization: Bearer <token>`. The token is generated in the UI (shown once, only its SHA-256 is stored, compared in constant
+  time); no token = the API answers 401. Admin APIs: `/api/abuse/{list,config,setConfig,ban,unban,token}`.
+* Metrics: bans and rejections use the existing `zoraxy_access_blocked_total{reason="auto-ban"|"auto-ban-created"}` counter.
+* Not covered: SSO / ZorxAuth failures that answer with a redirect (302) are not counted; basic auth failures (401) are.
+
+### Dropping connections (`dropConnection`)
+
+HTTP/1.x: `Hijack()` + close (RST via `SetLinger(0)`). HTTP/2 cannot hijack, so the handler panics with `http.ErrAbortHandler`, which
+net/http turns into RST_STREAM without logging a stack trace. Used by auto-ban `DropConnection`, access rule `DropOnBlock`, header rule
+action `drop` and bot action `drop`. All default to off.
+
+### Admin accounts
+
+* `role/<user>` missing = admin, `sessver/<user>` missing = 0: an upgrade changes nothing for the existing account and keeps its sessions.
+  The role is always read from the database (30 s cache, invalidated on every write), never from the cookie.
+* Viewer = read only. `auth.RouterDef` refuses every method except GET / HEAD / OPTIONS for viewers (`viewerReadOnlyPOST` is the explicit,
+  currently empty, allow-list) and also GET on `/api/conf/export`, `/api/info/pprof`, `/api/users/`, `/api/abuse/config`, `/web.ssh/`,
+  `/plugin.ui/`. Mutations in this code base read their parameters with `PostPara` (form body), so a GET cannot mutate.
+  `adminroles_test.go` enumerates every registered managed route and checks viewer POST / PUT / DELETE is refused: a new route is covered
+  automatically, but remember to register it through the managed router.
+* The last enabled admin cannot be deleted, disabled or demoted; admins cannot delete / disable themselves. Password change, disable,
+  rename and delete bump the session generation (all sessions end; on a self password change the current session is re-issued).
+  New passwords need 8+ characters (the original admin keeps whatever it has). `-reset_ac` drops the whole `auth` table as before.
+* Audit log: JSON lines in `<conf>/auth_audit.log` (rotated at 2 MiB), last 200 entries in the UI. Logins, failed logins, account changes,
+  password changes. Passwords are never logged.
+
+### Header rules, bot rules
+
+* Header rules: `equals` compares SHA-256 digests with `subtle.ConstantTimeCompare` over all alternatives (no early exit), `regex` is RE2
+  with full match, values are capped (4 KiB, 8 values). Optional path scope uses the path-rule matcher (encoded dots / slashes, `;params`...).
+  Values are never logged and are masked in `/api/proxy/list|detail` and `/api/headerrules/get` (`MaskHeaderRuleSecrets`; an empty value in the
+  save API keeps the stored secret). Invalid stored rules answer 503 instead of opening the endpoint.
+* Bot rules: categories (`ai_crawler` is built from `exploits.AIBotPatterns()`, not a copy), custom substring / regex rules (first match
+  wins, regex max 200 chars, RE2), good bots verified by forward-confirmed reverse DNS (cached, at most 16 lookups in flight, otherwise "not
+  verified"), actions block / challenge / log / drop. All `User-Agent` header values are judged. The user agent is truncated to 512 bytes.
+  A User-Agent is spoofable: this stops lazy bots, not determined clients.
+
+### Challenge countries
+
+An access rule can list countries that get the endpoint CAPTCHA instead of a block (needs `CaptchaConfig` on the proxy rule; `RequireCaptcha`
+itself is not needed). Without a configured CAPTCHA the visitors are blocked (fail closed); the Options tab warns about proxy rules lacking
+one. Blacklist entries always win. A GeoIP lookup failure does not challenge anybody (same fail-open-for-country-only policy as the blacklist).
+
+### Basic auth lists and scope
+
+Lists live in a 0600 file with argon2id hashes; an endpoint accepts its own users OR any assigned list (unknown list names grant nothing,
+list users are verified with the same throttling / verification cache). `BasicAuthScopePrefixes` restricts basic auth to path prefixes:
+scope is matched liberally (any plausible reading of the path), a broken scope answers 503, and a client supplied `X-Remote-User` is removed
+outside the scope. Without a scope the whole host is protected as before.
+
+### Auth audit
+
+`/api/authaudit/get` lists each proxy rule's provider and weakening factors (exception rules, basic scope, exceptions trusting forwarded
+headers, basic auth without users). `autotag` replaces `auth:*` tags (other tags are kept). The "require auth on all rules" lint is report only.
+
+### OAuth2 / OIDC and Altcha
+
+* Claim rules `claim=v1,v2; claim2=v3` (all rules AND, values OR, exact match, nested claim paths), e-mail and e-mail domain allow-lists
+  (exact domain; `email_verified: false` is refused), AND-combined with the group list; a broken rule set denies. **Multiple providers per proxy
+  rule are not implemented**: `OAuth2Router` still holds a single configuration (sessions, JWKS cache and callback path are per router), so
+  that needs a router-per-provider refactor. The legacy single provider is untouched.
+* Altcha: `GET /.zoraxy/captcha/altcha` issues an HMAC signed SHA-256 challenge (secret = `SecretKey`, `SiteKey` unused, work factor
+  `AltchaMaxNumber` clamped to 1k..2M); the page solves it with WebCrypto (needs HTTPS or localhost) and POSTs the widget compatible payload as
+  field `altcha`. The server checks signature, hash, expiry (5 min) and single use (bounded replay cache). FriendlyCaptcha is not implemented.
+
+### Tests
+
+```bash
+cd src
+go vet ./...
+go test -timeout 500s ./...
+go test -race ./mod/abuse ./mod/botrules ./mod/access ./mod/auth/... ./mod/dynamicproxy/...
+```
+UI: `tools/ui-smoke/smoke.py` now also opens every Security Center tab and the Access rule Options tab.

@@ -36,9 +36,21 @@ func (h *ProxyHandler) handleAccessRouting(ruleID string, w http.ResponseWriter,
 	isBlocked, blockedReason := accessRequestBlocked(accessRule, h.Parent.Option.WebDirectory, w, r)
 	if isBlocked {
 		h.Parent.Option.Metrics.Event(metrics.EventAccessBlocked, endpointLabel(sep), blockedReason)
+		if accessRule.DropOnBlock {
+			//Opt-in (upstream #908): no response at all, the page was not written
+			h.Parent.logRequest(r, false, 444, blockedReason+"-dropped", r.Host, "", sep)
+			dropConnection(w)
+			return true
+		}
 		h.Parent.logRequest(r, false, 403, blockedReason, r.Host, "", sep)
+		return true
 	}
-	return isBlocked
+
+	//Opt-in (upstream #281): clients of the challenge countries solve the CAPTCHA instead of being blocked
+	if accessRule.IsCountryChallenged(accessRule.GetClientIP(r)) {
+		return h.Parent.countryChallenge(w, r, sep, accessRule)
+	}
+	return false
 }
 
 // Return boolean, return true if access is blocked
@@ -47,13 +59,15 @@ func accessRequestBlocked(accessRule *access.AccessRule, templateDirectory strin
 	//Check if this ip is in blacklist
 	clientIpAddr := accessRule.GetClientIP(r)
 	if accessRule.IsBlacklisted(clientIpAddr) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusForbidden)
-		template, err := os.ReadFile(filepath.Join(templateDirectory, "templates/blacklist.html"))
-		if err != nil {
-			w.Write(page_forbidden)
-		} else {
-			w.Write(template)
+		if !accessRule.DropOnBlock {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusForbidden)
+			template, err := os.ReadFile(filepath.Join(templateDirectory, "templates/blacklist.html"))
+			if err != nil {
+				w.Write(page_forbidden)
+			} else {
+				w.Write(template)
+			}
 		}
 
 		// Emit blacklisted IP blocked event
@@ -78,13 +92,15 @@ func accessRequestBlocked(accessRule *access.AccessRule, templateDirectory strin
 
 	//Check if this ip is in whitelist
 	if !accessRule.IsWhitelisted(clientIpAddr) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusForbidden)
-		template, err := os.ReadFile(filepath.Join(templateDirectory, "templates/whitelist.html"))
-		if err != nil {
-			w.Write(page_forbidden)
-		} else {
-			w.Write(template)
+		if !accessRule.DropOnBlock {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusForbidden)
+			template, err := os.ReadFile(filepath.Join(templateDirectory, "templates/whitelist.html"))
+			if err != nil {
+				w.Write(page_forbidden)
+			} else {
+				w.Write(template)
+			}
 		}
 		return true, "whitelist"
 	}

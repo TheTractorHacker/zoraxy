@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"imuslab.com/zoraxy/mod/abuse"
 	"imuslab.com/zoraxy/mod/dynamicproxy/dpcore"
 	"imuslab.com/zoraxy/mod/dynamicproxy/loadbalance"
 	"imuslab.com/zoraxy/mod/dynamicproxy/rewrite"
@@ -408,6 +409,14 @@ func (router *Router) logRequest(r *http.Request, succ bool, statusCode int, for
 
 	if BlockObserver != nil && endpoint != nil && forwardType == "waf-blocked" {
 		BlockObserver(endpoint.RootOrMatchingDomain, forwardType)
+	}
+
+	// Feed the abuse detectors with explicit block reasons (no-op unless abuse banning is on)
+	switch forwardType {
+	case "waf-blocked":
+		abuseNoteKind(r, abuse.KindWAF)
+	case "exploit-blocked":
+		abuseNoteKind(r, abuse.KindExploit)
 	}
 
 	// Notes: endpoint can be nil if the request has been handled before a host name can be resolved

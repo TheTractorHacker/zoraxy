@@ -219,6 +219,7 @@ func main() {
 	entryMux.Handle("/plugin/", pluginAPIMux)                                        //For plugins API access
 	entryMux.Handle("/", clusterMgr.GuardLocalEdits(csrfMiddleware(webminPanelMux))) //For webmin UI access, require csrf token
 	//Cluster sync endpoints authenticate with an HMAC bearer token (404 unless role=primary)
+	registerAbuseRemoteAPI(entryMux) //Token authenticated ban/unban API for external tools
 	entryMux.Handle(cluster.SnapshotPath, clusterMgr.SyncHandler())
 	entryMux.Handle(cluster.HeartbeatPath, clusterMgr.SyncHandler())
 	//Fleet hub endpoints (join token / per node key authentication, 404 unless role=hub)

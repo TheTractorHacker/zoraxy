@@ -28,6 +28,12 @@ type AuthAgent struct {
 	Database                *db.Database
 	LoginRedirectionHandler func(http.ResponseWriter, *http.Request)
 	Logger                  *logger.Logger
+
+	LoginGuard     func(r *http.Request) bool             //Optional: return false to refuse login attempts (e.g. auto-banned client)
+	OnLoginFailure func(r *http.Request, username string) //Optional: called after a failed login attempt
+
+	cache userCache //account state cache (role / disabled / session generation), see users.go
+	audit auditLog  //admin account audit log, see users.go
 }
 
 type AuthEndpoints struct {
@@ -95,6 +101,11 @@ func (a *AuthAgent) HandleCheckAuth(w http.ResponseWriter, r *http.Request, hand
 // Handle login request, require POST username and password
 func (a *AuthAgent) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
+	if a.LoginGuard != nil && !a.LoginGuard(r) {
+		http.Error(w, "429 - Too many failed attempts", http.StatusTooManyRequests)
+		return
+	}
+
 	//Get username from request using POST mode
 	username, err := utils.PostPara(r, "username")
 	if err != nil {
@@ -122,10 +133,14 @@ func (a *AuthAgent) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	//Check the database and see if this user is in the database
 	passwordCorrect, rejectionReason := a.ValidateUsernameAndPasswordWithReason(username, password)
 	//The database contain this user information. Check its password if it is correct
+	if passwordCorrect && !a.loginAllowed(username) {
+		passwordCorrect, rejectionReason = false, "This account is disabled"
+	}
 	if passwordCorrect {
 		//Password correct
 		// Set user as authenticated
 		a.LoginUserByRequest(w, r, username, rememberme)
+		a.Audit(username, "login", username, clientAddr(r), "")
 
 		//Print the login message to console
 		a.Logger.PrintAndLog("auth", username+" logged in.", nil)
@@ -133,6 +148,10 @@ func (a *AuthAgent) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	} else {
 		//Password incorrect
 		a.Logger.PrintAndLog("auth", username+" login request rejected: "+rejectionReason, nil)
+		a.Audit(username, "login.failed", username, clientAddr(r), "")
+		if a.OnLoginFailure != nil {
+			a.OnLoginFailure(r, username)
+		}
 
 		utils.SendErrorResponse(w, rejectionReason)
 		return
@@ -178,6 +197,7 @@ func (a *AuthAgent) LoginUserByRequest(w http.ResponseWriter, r *http.Request, u
 	session.Values["authenticated"] = true
 	session.Values["username"] = username
 	session.Values["rememberMe"] = rememberme
+	session.Values["sessver"] = a.loadState(username).ver
 
 	//Check if remember me is clicked. If yes, set the maxage to 1 week.
 	if rememberme {
@@ -231,10 +251,9 @@ func (a *AuthAgent) Logout(w http.ResponseWriter, r *http.Request) error {
 
 // Get the current session username from request
 func (a *AuthAgent) GetUserName(w http.ResponseWriter, r *http.Request) (string, error) {
-	if a.CheckAuth(r) {
+	if name, ok := a.sessionUser(r); ok {
 		//This user has logged in.
-		session, _ := a.SessionStore.Get(r, a.SessionName)
-		return session.Values["username"].(string), nil
+		return name, nil
 	} else {
 		//This user has not logged in.
 		return "", errors.New("user not logged in")
@@ -243,10 +262,8 @@ func (a *AuthAgent) GetUserName(w http.ResponseWriter, r *http.Request) (string,
 
 // Get the current session user email from request
 func (a *AuthAgent) GetUserEmail(w http.ResponseWriter, r *http.Request) (string, error) {
-	if a.CheckAuth(r) {
+	if username, ok := a.sessionUser(r); ok {
 		//This user has logged in.
-		session, _ := a.SessionStore.Get(r, a.SessionName)
-		username := session.Values["username"].(string)
 		userEmail := ""
 		err := a.Database.Read("auth", "email/"+username, &userEmail)
 		if err != nil {
@@ -350,16 +367,8 @@ func (a *AuthAgent) HandleRegisterWithoutEmail(w http.ResponseWriter, r *http.Re
 
 // Check authentication from request header's session value
 func (a *AuthAgent) CheckAuth(r *http.Request) bool {
-	session, err := a.SessionStore.Get(r, a.SessionName)
-	if err != nil {
-		return false
-	}
-
-	// Check if user is authenticated
-	if auth, ok := session.Values["authenticated"].(bool); !ok || !auth {
-		return false
-	}
-	return true
+	_, ok := a.sessionUser(r)
+	return ok
 }
 
 // Handle de-register of users. Require POST username.
@@ -400,6 +409,7 @@ func (a *AuthAgent) UnregisterUser(username string) error {
 	//OK! Remove the user from the database
 	a.Database.Delete("auth", "passhash/"+username)
 	a.Database.Delete("auth", "email/"+username)
+	a.invalidate(username)
 	return nil
 }
 
@@ -469,6 +479,7 @@ func (a *AuthAgent) CreateUserAccount(newusername string, password string, email
 		return errors.New("user with same name already exists")
 	}
 
+	defer a.invalidate(newusername)
 	key := newusername
 	hashedPassword := HashPassword(password)
 	err := a.Database.Write("auth", "passhash/"+key, hashedPassword)

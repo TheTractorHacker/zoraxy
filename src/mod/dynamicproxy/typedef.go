@@ -23,8 +23,10 @@ import (
 	"imuslab.com/zoraxy/mod/auth/sso/zorxauth"
 	"imuslab.com/zoraxy/mod/cluster"
 
+	"imuslab.com/zoraxy/mod/abuse"
 	"imuslab.com/zoraxy/mod/access"
 	"imuslab.com/zoraxy/mod/auth/sso/forward"
+	"imuslab.com/zoraxy/mod/botrules"
 	"imuslab.com/zoraxy/mod/dynamicproxy/captcha"
 	"imuslab.com/zoraxy/mod/dynamicproxy/dpcore"
 	"imuslab.com/zoraxy/mod/dynamicproxy/exploits"
@@ -101,6 +103,9 @@ type RouterOption struct {
 	PersistProxyEndpoint func(*ProxyEndpoint) error `json:"-"` //Optional, called to save an endpoint config after a basic auth hash upgrade
 	PluginManager        *plugins.Manager           //Plugin manager for handling plugin routing
 	Metrics              *metrics.Registry          //Optional Prometheus metrics registry (nil or disabled = no overhead)
+	BasicAuthLists       *CredentialLists           `json:"-"` //Optional named basic auth credential lists (basicauth_ext.go)
+	Bots                 *botrules.Engine           `json:"-"` //Optional bot (User-Agent) rules, see bot_hook.go
+	Abuse                *abuse.Manager             `json:"-"` //Optional automatic abuse banning (nil or disabled = no overhead), see abuse_hook.go
 
 	/* Timeouts */
 	ReadHeaderTimeout int64 //HTTP server read timeout in seconds
@@ -264,6 +269,8 @@ type AuthenticationProvider struct {
 	BasicAuthCredentials    []*BasicAuthCredentials   //Basic auth credentials
 	BasicAuthExceptionRules []*BasicAuthExceptionRule //Path to exclude in a basic auth enabled proxy target
 	BasicAuthGroupIDs       []string                  //Group IDs that are allowed to access this endpoint
+	BasicAuthListNames      []string                  `json:",omitempty"` //Named credential lists (CredentialLists) accepted in addition to BasicAuthCredentials
+	BasicAuthScopePrefixes  []string                  `json:",omitempty"` //Basic auth only applies below these path prefixes (empty = whole host)
 
 	/* Forward Auth Settings */
 	ForwardAuthURL                    string   // Full URL of the Forward Auth endpoint. Example: https://auth.example.com/api/authz/forward-auth
@@ -374,6 +381,8 @@ type ProxyEndpoint struct {
 	ClientCert        *ClientCertConfig `json:",omitempty"` //Inbound client certificate (mTLS) policy
 	PathRules         []*PathRule       `json:",omitempty"` //Ordered path scoped access control / rate limit rules
 	AllowedPeerCIDRs  []string          `json:",omitempty"` //Only accept connections whose TCP peer is in this set (empty = any)
+	BotPolicy         string            `json:",omitempty"` //Bot rules: "" follow the global switch, "on" apply even if globally off, "off" skip (bot_hook.go)
+	HeaderRules       []*HeaderRule     `json:",omitempty"` //Header based access rules (headerrules.go)
 	SecondaryPortsTLS bool              //Serve the secondary listening ports of this endpoint over TLS
 
 	//Fallback routing logic (Special Rule Sets Only)
@@ -385,13 +394,17 @@ type ProxyEndpoint struct {
 	detector *exploits.Detector         `json:"-"` //Exploit detector instance, excluded from JSON
 	wafRT    atomic.Pointer[wafRuntime] `json:"-"` //Resolved WAF (compiled instance shared between identical configs), excluded from JSON
 
-	clientCert    *clientCertRuntime  `json:"-"` //Compiled client certificate policy
-	clientCertErr error               `json:"-"` //Compile error, the endpoint then fails closed
-	pathRules     []*compiledPathRule `json:"-"` //Compiled path rules
-	pathRulesErr  error               `json:"-"`
-	peerSet       []netip.Prefix      `json:"-"` //Compiled allowed peer set
-	peerSetErr    error               `json:"-"`
-	Tags          []string            // Tags for the proxy endpoint
+	clientCert     *clientCertRuntime    `json:"-"` //Compiled client certificate policy
+	clientCertErr  error                 `json:"-"` //Compile error, the endpoint then fails closed
+	pathRules      []*compiledPathRule   `json:"-"` //Compiled path rules
+	pathRulesErr   error                 `json:"-"`
+	peerSet        []netip.Prefix        `json:"-"` //Compiled allowed peer set
+	peerSetErr     error                 `json:"-"`
+	headerRules    []*compiledHeaderRule `json:"-"` //Compiled header rules
+	headerRulesErr error                 `json:"-"`
+	basicScope     []*compiledPathRule   `json:"-"` //Compiled basic auth scope prefixes
+	basicScopeErr  error                 `json:"-"`
+	Tags           []string              // Tags for the proxy endpoint
 }
 
 /*

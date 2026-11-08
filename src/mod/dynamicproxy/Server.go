@@ -57,6 +57,13 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sep := h.Parent.GetProxyEndpointFromHostname(domainOnly)
 	if sep != nil && !sep.Disabled {
 		//Matching proxy rule found. Run the shared pre-proxy chain
+		//Automatic abuse banning (off by default): reject banned clients, feed the detectors
+		var abuseDone func()
+		var abuseRejected bool
+		if w, r, abuseDone, abuseRejected = h.Parent.abuseBegin(w, r, sep); abuseRejected {
+			return
+		}
+		defer abuseDone()
 		w = h.Parent.pluginWrapResponse(w, r, sep) //plugin response stage, no-op without response plugins
 		if h.runEndpointChain(w, r, sep, domainOnly) {
 			return
@@ -90,6 +97,14 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	/*
 		Root Router Handling
 	*/
+
+	//Automatic abuse banning for the default site
+	var abuseDone func()
+	var abuseRejected bool
+	if w, r, abuseDone, abuseRejected = h.Parent.abuseBegin(w, r, h.Parent.Root); abuseRejected {
+		return
+	}
+	defer abuseDone()
 
 	//Root access control based on default rule
 	blocked := h.handleAccessRouting("default", w, r, h.Parent.Root)
@@ -284,7 +299,7 @@ func (h *ProxyHandler) runEndpointChain(w http.ResponseWriter, r *http.Request, 
 	}
 
 	//Networking: client certificate policy (mTLS) and path scoped rules, see clientcert.go / pathrules.go
-	if h.enforceClientCert(w, r, sep) || h.handlePathRules(w, r, sep) {
+	if h.enforceClientCert(w, r, sep) || h.handlePathRules(w, r, sep) || h.handleHeaderRules(w, r, sep) || h.handleBotRules(w, r, sep) {
 		return true
 	}
 

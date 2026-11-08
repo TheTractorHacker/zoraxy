@@ -106,4 +106,6 @@ func (pe *ProxyEndpoint) initNetworkOptions() {
 	pe.initClientCert()
 	pe.initPathRules()
 	pe.initPeerSet()
+	pe.initHeaderRules()
+	pe.initBasicScope()
 }
