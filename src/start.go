@@ -207,9 +207,10 @@ func startupSequence() {
 
 	//Create authentication providers
 	forwardAuthRouter = forward.NewAuthRouter(&forward.AuthRouterOptions{
-		Address:  "",
-		Logger:   SystemWideLogger,
-		Database: sysdb,
+		Address:        "",
+		Logger:         SystemWideLogger,
+		Database:       sysdb,
+		IsTrustedProxy: accessController.IsTrustedProxy,
 	})
 
 	oauth2Router = oauth2.NewOAuth2Router(&oauth2.OAuth2RouterOptions{
