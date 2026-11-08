@@ -42,6 +42,7 @@ var viewerDeniedPrefixes = []string{
 	"/api/users/",        //account management
 	"/api/abuse/config",  //auto-ban settings
 	"/api/ech/export",    //ECH private key
+	"/api/zrok/logs",     //zrok tunnel output (share tokens, URLs)
 	"/api/proxy/script/", //Lua script source (may hold secrets); editing is admin only
 	"/web.ssh/",          //terminal
 	"/plugin.ui/",        //plugin UIs can mutate

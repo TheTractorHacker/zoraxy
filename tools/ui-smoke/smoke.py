@@ -225,6 +225,23 @@ def main():
             pg.goto(args.url + "/snippet/opsEditor.html#" + "%7B%22ept%22%3A%22host%22%2C%22ep%22%3A%22smoke-test.invalid%22%7D", wait_until="networkidle")
             pg.wait_for_timeout(600)
             pg.screenshot(path=os.path.join(args.out, "ops-editor.png"))
+            # platform features: Lua script editor (with a test run) and Sablier editor
+            hash_ = "#%7B%22ept%22%3A%22host%22%2C%22ep%22%3A%22smoke-test.invalid%22%7D"
+            current["page"] = "script-editor"
+            pg.goto(args.url + "/snippet/scriptEditor.html" + hash_, wait_until="networkidle")
+            pg.wait_for_timeout(500)
+            pg.click("button:has-text('Insert robots.txt sample')")
+            pg.fill("#tPath", "/robots.txt")
+            pg.click("button:has-text('Test run')")
+            pg.wait_for_selector("#tOut", state="visible", timeout=5000)
+            if "Disallow" not in pg.inner_text("#tBodyOut"):
+                fail("script", "test run did not return the script output: " + pg.inner_text("#tOut")[:200])
+            pg.screenshot(path=os.path.join(args.out, "script-editor.png"))
+            current["page"] = "sablier-editor"
+            pg.goto(args.url + "/snippet/sablierEditor.html" + hash_, wait_until="networkidle")
+            pg.wait_for_timeout(500)
+            pg.select_option("#sbStrategy", "blocking")
+            pg.screenshot(path=os.path.join(args.out, "sablier-editor.png"))
             pg.goto(args.url + "/snippet/globalErrorPages.html", wait_until="networkidle")
             pg.wait_for_timeout(400)
             pg.goto(args.url + "/", wait_until="networkidle")

@@ -489,6 +489,7 @@ func finalSequence() {
 
 	//Opt-in split-horizon DNS responder (off unless enabled), see dnsresponder_glue.go
 	startDNSResponder()
+	initZrok()
 }
 
 /* Shutdown Sequence */
@@ -502,6 +503,7 @@ func ShutdownSeq() {
 
 	stopAbuseManager()
 	stopEch()
+	stopZrok()
 
 	SystemWideLogger.Println("Closing Statistic Collector")
 	if statisticCollector != nil {

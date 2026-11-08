@@ -455,6 +455,7 @@ func initAPIs(targetMux *http.ServeMux) {
 	RegisterEchAPIs(authRouter)
 	RegisterScriptAPIs(authRouter)
 	RegisterSablierAPIs(authRouter)
+	RegisterZrokAPIs(authRouter)
 	RegisterTLSAPIs(authRouter)
 	RegisterAuthenticationHandlerAPIs(authRouter)
 	RegisterZorxAuthUserManagementAPIs(authRouter)
