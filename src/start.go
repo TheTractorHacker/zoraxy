@@ -208,6 +208,7 @@ func startupSequence() {
 		SystemUUID: nodeUUID,
 	})
 
+	zorxauth.DefaultConfigFolder = CONF_FOLDER + "/sso/zorxauth"
 	zorxAuthRouter = zorxauth.NewAuthRouter(sysdb, SystemWideLogger)
 
 	//Create a statistic collector

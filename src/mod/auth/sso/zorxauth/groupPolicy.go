@@ -56,7 +56,7 @@ func (ar *AuthRouter) initGroupPolicyStore() {
 func (ar *AuthRouter) groupPolicyFolder() string {
 	base := ar.Options.ConfigFolderPath
 	if base == "" {
-		base = "./conf/sso/zorxauth"
+		base = DefaultConfigFolder
 	}
 	return filepath.Join(base, GROUP_POLICY_FOLDER)
 }

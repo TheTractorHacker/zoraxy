@@ -79,10 +79,26 @@ func (m *Manager) HandleEditProxyConfigs(w http.ResponseWriter, r *http.Request)
 	newName, _ := utils.PostPara(r, "name")
 	listenAddr, _ := utils.PostPara(r, "listenAddr")
 	proxyAddr, _ := utils.PostPara(r, "proxyAddr")
-	useTCP, _ := utils.PostBool(r, "useTCP")
-	useUDP, _ := utils.PostBool(r, "useUDP")
-	proxyProtocolVersion, _ := utils.PostInt(r, "proxyProtocolVersion")
-	enableLogging, _ := utils.PostBool(r, "enableLogging")
+	// Absent parameters keep the current value of the rule (partial update)
+	current, err := m.GetConfigByUUID(configUUID)
+	if err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
+	}
+	useTCP, useUDP, enableLogging := current.UseTCP, current.UseUDP, current.EnableLogging
+	proxyProtocolVersion := int(current.ProxyProtocolVersion)
+	if _, has := r.Form["useTCP"]; has {
+		useTCP, _ = utils.PostBool(r, "useTCP")
+	}
+	if _, has := r.Form["useUDP"]; has {
+		useUDP, _ = utils.PostBool(r, "useUDP")
+	}
+	if _, has := r.Form["enableLogging"]; has {
+		enableLogging, _ = utils.PostBool(r, "enableLogging")
+	}
+	if _, has := r.Form["proxyProtocolVersion"]; has {
+		proxyProtocolVersion, _ = utils.PostInt(r, "proxyProtocolVersion")
+	}
 	accessRuleUUID, _ := utils.PostPara(r, "accessRuleUUID")
 
 	newTimeoutStr, _ := utils.PostPara(r, "timeout")

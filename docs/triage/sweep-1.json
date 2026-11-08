@@ -1,0 +1,1235 @@
+[
+  {
+    "upstream": 22,
+    "verdict": "deferred-feature",
+    "summary": "Fail2ban-style brute-force protection.",
+    "evidence": "No fail2ban integration in dev. Closest pieces: per-endpoint rate limit (ratelimit.go), WAF (Coraza/CRS), access blacklist; logs are plain text under the log folder so external fail2ban/CrowdSec can read them (see #578, #648). Roadmap sections 1 (admin login lockout) and 9 (structured JSON access logs) are the right vehicles. Value M, effort M (login lockout S, auto-ban from 401/403 counts M).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 33,
+    "verdict": "already-fixed",
+    "summary": "Forward authentication (Authelia/Authentik/Keycloak style) in the UI.",
+    "evidence": "AuthMethodForward in src/mod/dynamicproxy/authProviders.go (handleForwardAuth), generic forward auth module src/mod/auth/sso/forward, Authentik presets + OIDC in the fork (mod/auth/sso/forward/authentik_test.go, docs/authentik.md; ROADMAP section 4). Not verified against a real Authentik (fork issue #213).",
+    "fork_commit": null,
+    "proposed_close": true,
+    "proposed_comment": "Forward auth is available in the HTTP proxy rule editor (Authentication provider -> Forward Auth), including Authentik presets and OIDC on this fork (see `docs/authentik.md`). Closing; open specific bugs separately."
+  },
+  {
+    "upstream": 89,
+    "verdict": "deferred-feature",
+    "summary": "Multiple admin accounts for the management UI.",
+    "evidence": "Admin auth is a single user (src/mod/auth). ZorxAuth (site SSO) has multiple users but that is for proxied sites, not the admin panel. Effort L (user model, roles, audit); maintainers' stance upstream was 'put an auth gateway in front'. With OIDC support now in the fork, an SSO-protected admin panel is the more realistic route. Value M, effort L.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 136,
+    "verdict": "deferred-feature",
+    "summary": "Built-in Zrok support (like ZeroTier).",
+    "evidence": "Not present. Zrok can be run as a sidecar/plugin that exposes a local port. Better suited to the plugin system than core. Value low, effort M.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 166,
+    "verdict": "deferred-feature",
+    "summary": "Simplified Chinese UI.",
+    "evidence": "No i18n framework in the admin UI (strings hard-coded in src/web/*.html). Tied to #236. Value M, effort L (extract strings, translation files, language switch).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 183,
+    "verdict": "deferred-feature",
+    "summary": "Cluster / HA capability.",
+    "evidence": "Maps to ROADMAP section 6 (config sync, stateless sessions, certificate sync, keepalived guide). Already partly done in the fork: stateless CAPTCHA sessions. Cluster work is in flight elsewhere, so not touched. Interim answer from upstream thread: run two nodes with the same config and keepalived/VRRP.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 236,
+    "verdict": "deferred-feature",
+    "summary": "Multi-language UI.",
+    "evidence": "Same as #166: no i18n layer. Value M, effort L.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 238,
+    "verdict": "deferred-feature",
+    "summary": "Restrict access to a sub path (e.g. /admin LAN only).",
+    "evidence": "Access rules attach to a whole host endpoint (runEndpointChain in src/mod/dynamicproxy/Server.go), not to a vdir/path. Basic auth has path/CIDR exception rules but no path-scoped allow list. Related fork roadmap item: per-path rate limits (section 1) and WAF path-scoped rules (WAF custom SecLang can already deny a path from non-LAN IPs: SecRule REQUEST_URI \"@beginsWith /admin\" chained with REMOTE_ADDR !@ipMatch ...). Value H, effort M.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 281,
+    "verdict": "deferred-feature",
+    "summary": "Challenge (CAPTCHA) instead of block for selected countries.",
+    "evidence": "GeoIP block/allow exists; the fork has per-endpoint CAPTCHA with customisable pages (roadmap section 3, fork #77) but no 'challenge when country is X' action. Reasonable small addition: add a country list to the CAPTCHA trigger. Value M, effort M.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 313,
+    "verdict": "deferred-feature",
+    "summary": "Global error pages for upstream status codes (proxy_intercept_errors).",
+    "evidence": "Only the default-site 404 template (<webroot>/templates/notfound.html) and the host error page are customisable; upstream error status codes are passed through. Value M, effort M.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 314,
+    "verdict": "support-question",
+    "summary": "Odoo websocket (/websocket on port 8072) fails behind a virtual directory.",
+    "evidence": "Virtual directories strip the matching prefix before forwarding (rewriteURL in src/mod/dynamicproxy/proxyRequestHandler.go), so a vdir '/websocket' -> http://odoochat:8072 reaches Odoo as '/' not '/websocket' (nginx's proxy_pass without URI keeps the path). Unverified here (no Odoo). Suggested reply below.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "Zoraxy strips the vdir prefix, unlike `proxy_pass http://odoochat;`. Try giving the virtual directory `/websocket` the target `odoochat-host:8072/websocket` (include the path in the target) so the prefix is re-added upstream. Also make sure the proxied host keeps the original Host header and that Odoo has `proxy_mode = True`. If that still fails please post the websocket request/response headers."
+  },
+  {
+    "upstream": 331,
+    "verdict": "already-fixed",
+    "summary": "Route 53 DNS challenge: 'cannot unmarshal string into Config.MaxRetries of type int'.",
+    "evidence": "UI builds int fields from number inputs (class typeint in src/web/snippet/acme.html readDnsCredentials, parseInt) so the payload carries a JSON number. Test mod/acme/acme_dns_int_test.go (commit 583fb4d) shows numeric MaxRetries accepted and a string value still produces the quoted error, i.e. only a payload from an old UI/stale saved credentials can trigger it. Residual: credentials saved by an old UI keep the string; re-save them.",
+    "fork_commit": "583fb4d",
+    "proposed_close": true,
+    "proposed_comment": "Fixed: the ACME UI now sends integer provider fields (e.g. `MaxRetries`) as JSON numbers; covered by `TestRoute53IntCredentialFieldsAccepted`. If you saved Route 53 credentials with an old version, re-enter and save them once."
+  },
+  {
+    "upstream": 349,
+    "verdict": "deferred-feature",
+    "summary": "Filter statistics per site.",
+    "evidence": "Statistics are global (src/mod/statistic, analytic loader). The data model keeps per-host maps so a host filter is feasible. Overlaps #764 and #596. Value M, effort M.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 352,
+    "verdict": "deferred-feature",
+    "summary": "Exclude own IP from statistics.",
+    "evidence": "No ignore list in statistic.RecordRequest. Value M, effort S (ignore CIDR list option in the collector).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 366,
+    "verdict": "support-question",
+    "summary": "Source IP lost when forwarding SMTP via TCP stream proxy.",
+    "evidence": "Stream proxy supports PROXY protocol v1/v2 (ProxyProtocolV1/V2 in src/mod/streamproxy/streamproxy.go), which is exactly the answer for mail. Backend (Proxmox Mail Gateway/Postfix postscreen) must be configured to accept it. SWEEP-1: the stream proxy has a PROXY protocol v1/v2 option for TCP and v2 for UDP; the header was malformed for IPv6 clients, fixed in c18f3f0 / 0a7c6ef.",
+    "fork_commit": "c18f3f0",
+    "proposed_close": false,
+    "proposed_comment": "Enable **PROXY protocol** (v1 or v2) on the TCP proxy rule and configure the receiving MTA to expect it (Postfix: `postscreen_upstream_proxy_protocol = haproxy`). A plain TCP stream always shows Zoraxy's own IP as source, headers like X-Forwarded-For do not exist for SMTP."
+  },
+  {
+    "upstream": 367,
+    "verdict": "deferred-feature",
+    "summary": "Serve Lua scripts instead of a backend.",
+    "evidence": "Out of scope for core; plugin territory (fork roadmap section 8). Value low, effort L.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 370,
+    "verdict": "deferred-feature",
+    "summary": "Variables/aliases (e.g. {{external_ip}}) in rules.",
+    "evidence": "Not present. Low value; the same need is met by trusted-proxy lists and access rules. Effort M.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 380,
+    "verdict": "deferred-feature",
+    "summary": "Pre-select DNS challenge when creating a proxy rule.",
+    "evidence": "UI-only convenience: new-rule flow calls obtainCertificate(..., dns=false) in web/components/rules.html. Value L-M, effort S.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 382,
+    "verdict": "deferred-feature",
+    "summary": "REST API to list/create proxy records.",
+    "evidence": "Internal /api/* endpoints exist but are cookie+CSRF authenticated for the UI; plugins have API keys (ROADMAP section 8). A documented token-based API would be new. Related fork roadmap: Swagger docs (fork #197 mirrors upstream). Value H, effort M.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 386,
+    "verdict": "support-question",
+    "summary": "ACME HTTP-01 gets 404 (Docker, DDNS domain).",
+    "evidence": "A 404 for /.well-known/acme-challenge/<token> means the request did not reach Zoraxy's ACME relay (another service on port 80, router forwarding port 80 elsewhere) or Zoraxy was not listening on 80. dev fixes one real cause (c0d317e: host with a proxy rule + plain-HTTP listener returned 400 for challenges). Cannot verify reporter's network. SWEEP-1: separately found that ACME wrote/scanned ./conf/certs ignoring -conf (fixed in 613d635), a plausible cause for Docker setups that use a custom -conf: the cert never reached the store.",
+    "fork_commit": "613d635",
+    "proposed_close": false,
+    "proposed_comment": "A 404 from Let's Encrypt means the challenge request was answered by something other than Zoraxy. Check that external port 80 is forwarded to the Zoraxy container's port 80 (and that 'Enable HTTP server on port 80' is on), and that no other service (NAS web server, router UI) answers on 80. Test with `curl -v http://yourdomain/.well-known/acme-challenge/test` from outside; it should return 400/404 from Zoraxy, not a foreign page. If the domain also has an AAAA record make sure IPv6 reaches Zoraxy as well."
+  },
+  {
+    "upstream": 403,
+    "verdict": "needs-hardware-or-env",
+    "summary": "Uptime Kuma intermittently reports ECONNREFUSED / 'unable to verify the first certificate'.",
+    "evidence": "'unable to verify the first certificate' is the classic missing-intermediate-chain symptom: the served PEM must contain leaf + chain (Zoraxy serves the uploaded file as is). ECONNREFUSED comes from upstream/Docker networking. Not reproducible without the reporter's environment.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 408,
+    "verdict": "deferred-feature",
+    "summary": "Staging ACME provider.",
+    "evidence": "A global flag -acmetestmode switches every CA to its staging URL (src/def.go, src/mod/acme/ca.json 'Test' map), but there is no per-request toggle in the UI. Value M, effort S.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 410,
+    "verdict": "fixed-by-you",
+    "summary": "Hurricane Electric (he.net) DNS provider.",
+    "evidence": "Hurricane Electric (hurricane) DNS provider enabled in e39e0a8.",
+    "fork_commit": "e39e0a8",
+    "proposed_close": true,
+    "proposed_comment": "Fixed in the fork: the Hurricane Electric DNS provider is available in the ACME tool."
+  },
+  {
+    "upstream": 417,
+    "verdict": "support-question",
+    "summary": "How to proxy only /api, /local, /media of a host (nginx location regex).",
+    "evidence": "Virtual directories are prefix based, one per path. Default behaviour is that the host's own target handles everything else, so the 'other directories stop working' point suggests the proxy rule root target is missing/wrong rather than a Zoraxy limitation.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "Set the host rule's target to Home Assistant (`homeassistant:8123`); that already serves `/lovelace`, `/api`, `/local`, `/media` and everything else. Virtual directories are only needed to send a *path* to a *different* upstream. Create the three vdirs only if they must go elsewhere, one per prefix (no regex alternation)."
+  },
+  {
+    "upstream": 418,
+    "verdict": "support-question",
+    "summary": "Static files 404 when an app is mounted under a virtual directory /app/.",
+    "evidence": "Vdir strips the prefix (rewriteURL) but the app emits absolute links (/css/...). Zoraxy does not rewrite response bodies; the app must be configured with a base URL/path or be given its own sub-domain.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "Zoraxy forwards `/app/x` to the container as `/x` and does not rewrite HTML. If the app emits root-relative URLs (`/css/style.css`) the browser requests them without `/app`. Either set the app's base-URL/path option, or use a dedicated sub-domain (`app.example.com`) instead of a virtual directory."
+  },
+  {
+    "upstream": 431,
+    "verdict": "deferred-feature",
+    "summary": "robots.txt / static response per host or vdir.",
+    "evidence": "No static-response endpoint; closest is default-site templates. Could be a 'static response' vdir type or a WAF/response rule. Value M, effort S-M.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 433,
+    "verdict": "deferred-feature",
+    "summary": "Generate CSR in the UI.",
+    "evidence": "Not present (tlscert generates self-signed certs only). Value low, effort S-M (crypto/x509.CreateCertificateRequest).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 442,
+    "verdict": "deferred-feature",
+    "summary": "Mutual TLS (client certificate auth).",
+    "evidence": "Not implemented for proxy endpoints (tls.Config ClientAuth not set; only appears in cert generation). Needs per-host CA upload + tls.Config GetConfigForClient. Highly requested upstream. Value H, effort M-L.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 446,
+    "verdict": "support-question",
+    "summary": "Domoticz/OctoPrint resources return 404 behind Zoraxy.",
+    "evidence": "Same pattern as #418: sub-path (vdir) mounting with root-relative asset URLs. Reporter said no special rules, so more info (rule screenshot) needed.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "Please post the HTTP proxy rule and virtual directory configuration. If these apps are mounted under a path (e.g. `/domoticz`) the vdir prefix is stripped and absolute asset links break; serve them on their own sub-domain, or set the app's base path."
+  },
+  {
+    "upstream": 458,
+    "verdict": "needs-hardware-or-env",
+    "summary": "Punycode (IDN) domain fails with Infomaniak DNS challenge ('domain not found eu').",
+    "evidence": "Error comes from lego's Infomaniak provider zone lookup for the xn-- name (Infomaniak API appears to expect the Unicode form or the registered zone). Needs an Infomaniak account to reproduce; the fix might be passing the Unicode name to that provider only.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 461,
+    "verdict": "already-fixed",
+    "summary": "Prometheus metrics endpoint.",
+    "evidence": "Prometheus /metrics endpoint implemented in PR #252 (src/metrics.go, mod/metrics tests, mod/dynamicproxy/metrics_hook_test.go).",
+    "fork_commit": null,
+    "proposed_close": true,
+    "proposed_comment": "Implemented in the fork: Prometheus metrics endpoint."
+  },
+  {
+    "upstream": 494,
+    "verdict": "support-question",
+    "summary": "How to update a bare-metal Zoraxy.",
+    "evidence": "The fork has an in-app updater (System -> Update, DEVELOPMENT.md 'Updating / releasing'); for the source install: git pull, rebuild in src/ (go build), restart; the reporter built in the right place so 'no newer version' simply means their checkout was already current.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "On this fork use **System -> Update** (checks signed GitHub releases, one click install with rollback). For a source checkout: back up `conf/` and `sys.db`, `git pull`, `cd src && go build`, restart the service. Docker: pull the new image."
+  },
+  {
+    "upstream": 496,
+    "verdict": "deferred-feature",
+    "summary": "Hooks after certificate renewal.",
+    "evidence": "Not present (renewal in src/mod/acme/autorenew.go). Value M, effort S (run configured command/webhook after a successful renew).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 501,
+    "verdict": "deferred-feature",
+    "summary": "Change the admin username.",
+    "evidence": "Username is fixed at first-run setup; only the password can be changed (src/mod/auth). Value L, effort S (add field + migration of the stored hash key). Workaround: edit the database.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 504,
+    "verdict": "deferred-feature",
+    "summary": "IPv6 calculator in the toolbox.",
+    "evidence": "Only IPv4 calculator exists (web/components/utils.html). Pure front-end task. Value low, effort S.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 512,
+    "verdict": "already-fixed",
+    "summary": "Bulk import IPs/CIDRs into the blacklist.",
+    "evidence": "Implemented on dev: bulk blocklist import (PR #252), mod/access/blocklistimport tests incl. 200k entries.",
+    "fork_commit": null,
+    "proposed_close": true,
+    "proposed_comment": "Implemented in the fork: Access Control > bulk import of IP lists and blocklist sources."
+  },
+  {
+    "upstream": 513,
+    "verdict": "support-question",
+    "summary": "Let's Encrypt validates over IPv6 (AAAA) and hits a different server.",
+    "evidence": "LE prefers IPv6 when an AAAA record exists; Zoraxy does not control which family LE uses and cannot force the challenge client to IPv4. The 403 shows the AAAA address answering.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "Let's Encrypt chooses the address family itself: if the name has an AAAA record, validation goes to that IPv6 address (here a backend server, hence 403). Either remove the AAAA record for names Zoraxy must obtain certs for, forward IPv6 port 80/443 to Zoraxy too, or use the DNS challenge, which does not depend on reachability."
+  },
+  {
+    "upstream": 514,
+    "verdict": "support-question",
+    "summary": "Backend sees Zoraxy's IP instead of the client IP.",
+    "evidence": "Zoraxy sets X-Forwarded-For and X-Real-Ip on proxied requests; backends must be told to trust the proxy (Authelia: trusted proxies / X-Forwarded-For). If Zoraxy itself sits behind another hop, add that hop to Trusted proxies.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "Zoraxy already sends `X-Forwarded-For` / `X-Real-Ip`. The backend (Authelia here) must be configured to trust Zoraxy's address (`server.endpoints.authz.*.implementation: ForwardAuth` + trusted proxy list) and read the client IP from those headers. The TCP source address is always Zoraxy's in an HTTP reverse proxy."
+  },
+  {
+    "upstream": 518,
+    "verdict": "cannot-reproduce",
+    "summary": "Allow SMTP without authentication.",
+    "evidence": "email.go SendEmail already skips auth when the password is empty (smtp.SendMail with nil auth), and in dev nothing calls NewEmailSender (no 'forgot password' UI wired). Nothing to change/verify here.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "In the current code the mail sender sends without AUTH when no password is set, but the reset-by-email flow is not wired into the UI on this fork. Please re-open as a feature request if you still need it."
+  },
+  {
+    "upstream": 537,
+    "verdict": "cannot-reproduce",
+    "summary": "LE renewal error 400 'Error getting validation data'.",
+    "evidence": "LE reports it could not fetch the challenge from the host, i.e. reachability/DNS (CNAME to DDNS, IPv6, port 80 forwarding). One genuine Zoraxy cause is fixed by c0d317e (port 80 answered 400 for hosts with a proxy rule and no redirect) but the thread has no evidence this is the reporter's case. SWEEP-1: with a custom -conf, renewals were written to ./conf/certs and never reached the cert store (fixed in 613d635).",
+    "fork_commit": "613d635",
+    "proposed_close": false,
+    "proposed_comment": "That error is raised by Let's Encrypt, not Zoraxy: it could not fetch `http://<host>/.well-known/acme-challenge/...`. Check port 80 forwarding, the CNAME/DDNS target and any AAAA record. Recent fork builds also fix the port-80 listener rejecting challenges for hosts with a proxy rule when 'force HTTPS redirect' is off (c0d317e); please retest."
+  },
+  {
+    "upstream": 543,
+    "verdict": "support-question",
+    "summary": "Certificate warning for a proxied Synology on macvlan.",
+    "evidence": "Client-side name resolution/hairpin (macvlan shim, Pi-hole); if the browser reaches Zoraxy through a name/IP not covered by the certificate it gets the fallback cert. Not a Zoraxy defect.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "A browser warning with a valid cert means the request is being served with the fallback (self-signed) certificate, i.e. the hostname used did not match a proxy rule/cert (or SNI is missing because the client uses the IP). Verify that the local DNS record resolves the same name used in the proxy rule and open the exact hostname; `openssl s_client -connect ip:443 -servername host` shows which cert is served."
+  },
+  {
+    "upstream": 564,
+    "verdict": "deferred-feature",
+    "summary": "Sablier (scale-to-zero) compatibility.",
+    "evidence": "Plugin territory (upstream thread says a plugin is planned). Needs pre-request hook that waits for a container; ROADMAP section 8 hooks would enable it. Value L-M, effort M.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 578,
+    "verdict": "deferred-feature",
+    "summary": "Log requests answered by the default-site 404.",
+    "evidence": "Deliberate: Server.go (default-site branch) says 'Do not log default site requests to avoid flooding the logs', and serve404PageWithTemplate does not log. Making it optional is small. Value M, effort S (setting 'log unmatched-host requests').",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 590,
+    "verdict": "support-question",
+    "summary": "Backend shows Zoraxy IP not public IP.",
+    "evidence": "Same as #514/#676: HTTP reverse proxy sets forwarding headers; the backend must read them.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "Zoraxy sends `X-Forwarded-For`/`X-Real-Ip`. Configure the backend service to trust the proxy and use those headers. If another firewall/NAT sits in front and masquerades the source, Zoraxy sees that device's IP: fix at the firewall (disable source NAT / use PROXY protocol)."
+  },
+  {
+    "upstream": 596,
+    "verdict": "deferred-feature",
+    "summary": "Separate log files per site.",
+    "evidence": "Single log stream (src/mod/info/logger, rotation by month). Could add per-endpoint log file option. Overlaps #764 and ROADMAP section 9. Value M, effort M.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 611,
+    "verdict": "fixed-by-you",
+    "summary": "'Filename cannot be empty for certs containing multiple domains' when obtaining a cert for a host with aliases.",
+    "evidence": "Real bug in web/components/cert.html obtainCertificate(): filename was hard-coded to '' so any comma-separated domain list (alias) always took the error branch. Now the file is named after the first domain. JS-only change: no automated test possible in this repo, logic checked by reading; UI not click-tested.",
+    "fork_commit": "67036ea",
+    "proposed_close": true,
+    "proposed_comment": "Fixed on the fork (67036ea): requesting a certificate for a host with aliases now names the file after the primary domain instead of failing. Not click-tested in a browser; please confirm."
+  },
+  {
+    "upstream": 612,
+    "verdict": "support-question",
+    "summary": "Access rule blocks WireGuard clients (sees VPN server IP).",
+    "evidence": "The client's source is whatever address reaches Zoraxy; WireGuard server masquerading (SNAT) hides the client. Trusted proxies only helps with HTTP headers.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "If the WireGuard server NATs (masquerades) client traffic, Zoraxy only ever sees the VPN server's IP. Disable masquerade for the LAN-bound traffic (route the VPN subnet instead of NAT-ing it) and then allow the VPN subnet in the access rule."
+  },
+  {
+    "upstream": 615,
+    "verdict": "deferred-feature",
+    "summary": "Bot blocking (user-agent rules, known bad bot lists).",
+    "evidence": "No UA rule UI. The fork WAF (Coraza + CRS, ROADMAP section 7) already includes scanner/bot detection rules and accepts custom SecLang (e.g. block a User-Agent) so a lot is possible via WAF; a UI list and a bundled bad-bot list would be new. Value M, effort M.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 621,
+    "verdict": "deferred-feature",
+    "summary": "Basic auth only for a virtual directory (/admin).",
+    "evidence": "Basic auth is per host endpoint with exception paths (BasicAuthExceptionRules) but cannot be scoped to include only a path. Value M, effort M (per-vdir auth).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 622,
+    "verdict": "support-question",
+    "summary": "Websocket 'bad handshake' to graphql backend.",
+    "evidence": "Backend rejected the upgrade; upstream thread suggests config issue. Zoraxy forwards Upgrade headers and rewrites Origin for vdirs (proxyRequestHandler.go vdirRequest). A usual cause: vdir prefix stripping (/graphql -> /) or Origin/Host check on the backend. Cannot verify.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "'bad handshake' = the backend answered the websocket Upgrade with something other than 101. Check the backend log for the response code. Likely causes: the vdir prefix is stripped so the path differs from what the app expects (include the path in the vdir target), or the app validates Origin/Host. Try 'Skip WebSocket Origin Check' on the rule."
+  },
+  {
+    "upstream": 648,
+    "verdict": "support-question",
+    "summary": "CrowdSec needs live logs.",
+    "evidence": "HTTP access lines are written live to <logfolder>/zr_YYYY-M.log (src/mod/info/logger/logger.go); CrowdSec can tail that file with a custom acquisition + parser.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "Zoraxy writes request lines continuously to `log/zr_<year>-<month>.log` (one file per month; older months stay in the folder). Point a CrowdSec `file` acquisition at `log/zr_*.log`; a community parser/bouncer plugin exists (see the plugin list)."
+  },
+  {
+    "upstream": 652,
+    "verdict": "deferred-feature",
+    "summary": "Bypass forward-auth for server-to-server calls.",
+    "evidence": "Real gap: Basic auth and ZorxAuth have exception rules (authProviders.go) but handleForwardAuth/OAuth2 have none. Add IP/CIDR and path exception rules to all providers. Value H, effort S-M.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 655,
+    "verdict": "fixed-by-you",
+    "summary": "ACME relay logs 'connection refused' and answers 200 to scanner probes of /.well-known/acme-challenge/.",
+    "evidence": "Real (minor) bugs: the relay (src/acme.go) printed Printf errors and wrote an empty 200 when no issuance was running and never passed through the internal listener's status. Extracted serveACMEChallenge: 404 when the internal listener is down, status passthrough, token regex rejects names like my1.php with 400 (that part was already fixed). Test src/acme_challenge_test.go. NOT fixed: the ACME routing rule has UseSystemAccessControl=false so blacklisted IPs can still reach it (harmless while the listener is closed).",
+    "fork_commit": "45a5c89",
+    "proposed_close": false,
+    "proposed_comment": "Partly fixed on the fork (45a5c89): the challenge relay now answers 404 quietly when no certificate request is running and passes the real status through. The 'errors' were scanner probes of the well-known path, not a leak. Leaving open: ACME path ignores the IP blacklist."
+  },
+  {
+    "upstream": 663,
+    "verdict": "deferred-feature",
+    "summary": "Proxy to unix socket.",
+    "evidence": "Not present; dpcore transport could dial unix:// targets (DialContext). Upstream says plugin/non-Windows. Value M, effort M.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 665,
+    "verdict": "support-question",
+    "summary": "Certificate error when hitting the default site by IP.",
+    "evidence": "Answered in thread: the default site over HTTPS needs a fallback certificate that matches; IP access always warns because a cert cannot match an unknown host.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "That is expected: for requests by IP or unknown host Zoraxy serves the *fallback certificate* (self-signed unless you set one under TLS/SSL -> Set as fallback). A browser can only avoid the warning if the name used is covered by that certificate; a redirect is performed after the TLS handshake."
+  },
+  {
+    "upstream": 676,
+    "verdict": "support-question",
+    "summary": "Pass the real client IP instead of Cloudflare's.",
+    "evidence": "Zoraxy passes X-Real-Ip/X-Forwarded-For; with Cloudflare, add Cloudflare ranges to Trusted proxies (web/components/trustedproxy.html, access/trustedProxy tests) so the CF-Connecting-IP value is used for access control and forwarded.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "Add the Cloudflare IP ranges under the **Trusted Proxy** page so Zoraxy takes the client IP from `CF-Connecting-IP`/`X-Forwarded-For`, then configure Home Assistant (`http: use_x_forwarded_for: true`, `trusted_proxies: <zoraxy ip>`)."
+  },
+  {
+    "upstream": 677,
+    "verdict": "deferred-feature",
+    "summary": "Load balance by client IP/region/CIDR.",
+    "evidence": "Fork LB has IP hash and consistent hash (ROADMAP section 5, #79) but no GeoIP/CIDR routing. Value M, effort M (a 'geo' selection rule in loadbalance).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 680,
+    "verdict": "deferred-feature",
+    "summary": "Answer CORS preflight (OPTIONS) in the proxy.",
+    "evidence": "Custom headers exist, but no way to answer OPTIONS at the proxy without hitting the upstream. A 'CORS' option per endpoint would cover it. Value M, effort S-M.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 681,
+    "verdict": "support-question",
+    "summary": "How to configure PowerDNS provider (udmedia.de).",
+    "evidence": "Provider 'pdns' exists in providers.json: needs API key + Host URL; optional fields may be left empty.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "Choose provider `pdns`. Fill **APIKey** and **Host** (your PowerDNS API base URL, e.g. `https://ns.example.org`) and leave the optional fields at their defaults; **ServerName** is usually `localhost`."
+  },
+  {
+    "upstream": 689,
+    "verdict": "deferred-feature",
+    "summary": "Lookahead/lookbehind regex in redirect rules.",
+    "evidence": "Redirect rules use Go RE2 (error 'invalid or unsupported Perl syntax: (?!'). regexp2 (MIT) could be used, with ReDoS/timeouts considered. Value L-M, effort S-M.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 698,
+    "verdict": "needs-hardware-or-env",
+    "summary": "Authentik forward auth gives redirect errors / 400.",
+    "evidence": "Upstream feature has been reworked in the fork: Authentik forward auth uses the outpost callback path, server-built rd, Host preservation and X-authentik-* handling (ROADMAP 4, docs/authentik.md, src/mod/auth/sso/forward tests with fake outposts). Needs a real Authentik instance to confirm (fork issue #213).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 726,
+    "verdict": "deferred-feature",
+    "summary": "Rate limit by URI path.",
+    "evidence": "Fork has per-endpoint token-bucket rate limiting (ratelimit.go); optional per-path limits are listed in ROADMAP section 1. A bounded per-(endpoint,path-prefix) bucket map answers the maintainer's memory concern. Value M, effort M.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 741,
+    "verdict": "deferred-feature",
+    "summary": "CodeQL scanning.",
+    "evidence": ".github/workflows/ci.yaml runs go vet and go test only. Adding a codeql.yml workflow is a standalone 20-line addition; left untouched to avoid CI changes in a triage PR. Value L-M, effort S.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 749,
+    "verdict": "support-question",
+    "summary": "Authelia unreachable via domain (404).",
+    "evidence": "404 from Zoraxy means no matching proxy rule/host or default site; verify the rule hostname and the upstream scheme/port.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "A 404 page from Zoraxy means no proxy rule matched the requested hostname (or the rule is disabled). Check that the rule's *Matching Domain* is exactly `auth.mydomain.net`, that DNS points the name at Zoraxy, and that the target is `http://<container-ip>:9091`. Compare with the access log line for the request."
+  },
+  {
+    "upstream": 750,
+    "verdict": "support-question",
+    "summary": "Certificate for a LAN-only host.",
+    "evidence": "Use the DNS challenge (does not need inbound access) or exempt the ACME path from the access rule; the ACME routing rule is evaluated before host access rules.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "Use the **DNS challenge** for that name (no inbound connection to the host required). The HTTP challenge path `/.well-known/acme-challenge/` is handled before the host's access rules, so it works with a LAN-only rule as long as port 80 is reachable by Let's Encrypt."
+  },
+  {
+    "upstream": 754,
+    "verdict": "deferred-feature",
+    "summary": "Tracker: plugin system improvements.",
+    "evidence": "Tracker for plugin API-key auth etc. Plugin package is being reworked elsewhere (ROADMAP section 8), nothing to verify here.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 760,
+    "verdict": "deferred-feature",
+    "summary": "Run plugins as an unprivileged user.",
+    "evidence": "Plugins are started by the plugin manager as Zoraxy's user. Setting SysProcAttr.Credential on Linux is small, but the plugins package is being edited elsewhere, so not touched. Value H (security), effort S.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 761,
+    "verdict": "deferred-feature",
+    "summary": "Only accept connections from Cloudflare IPs.",
+    "evidence": "Access rules evaluate the (possibly forwarded) client IP; there is no 'direct peer must be in set' rule. Needs an option to match on RemoteAddr after trusted-proxy handling. Value M, effort S-M.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 762,
+    "verdict": "deferred-feature",
+    "summary": "Sort and duplicate access rules.",
+    "evidence": "UI list is unsorted (web/components/access.html) and there is no clone. Value L, effort S.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 764,
+    "verdict": "deferred-feature",
+    "summary": "Per-proxy statistics and logs view.",
+    "evidence": "See #349/#596; also realtime per-host view. ROADMAP section 9 (per-upstream stats). Value M-H, effort M-L.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 769,
+    "verdict": "deferred-feature",
+    "summary": "Internal DNS resolver on port 53 that answers with the proxy's IP for every hosted domain.",
+    "evidence": "No such feature in dev. Not on the fork roadmap. Value low-medium (homelab convenience, split-horizon DNS), effort L (DNS server, lifecycle, security exposure of port 53). Better as a plugin (roadmap section 8) or documented with Pi-hole/CoreDNS wildcard records.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 770,
+    "verdict": "support-question",
+    "summary": "High CPU under a synthetic wrk load (1024 connections, 100 threads).",
+    "evidence": "Not a defect report: no profile or comparison was supplied. CPU scales with TLS termination, access-rule/GeoIP checks and request logging per request. Draft reply: 1024 connections x 100 threads on a TLS listener will saturate all cores on any Go proxy. To find a hotspot, compare (a) an endpoint with logging and statistics disabled, (b) with GeoIP/country rules removed, (c) `-fastgeoip=true` (default, trades RAM for CPU), (d) HTTP vs HTTPS. A `net/http/pprof` flag would help users profile; suggest adding one (S).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 775,
+    "verdict": "support-question",
+    "summary": "How to restrict an app to a Keycloak group.",
+    "evidence": "dev has OIDC SSO with a group allow-list: mod/auth/sso/oauth2/claims.go (groups claim, default 'groups') and the 'Groups claim' / 'Allowed groups' fields in web/components/sso.html. Draft reply: in Keycloak add a 'Group Membership' mapper to the client so the token carries a `groups` claim, then in Zoraxy SSO/OAuth2 set the issuer (discovery URL), client id/secret, Groups claim = `groups` and Allowed groups = the group name(s). Oauth2-proxy is no longer needed. Caveat: the allow-list is global to the OAuth2 provider, not per proxy rule (roadmap section 4, per-route group policies).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 782,
+    "verdict": "deferred-feature",
+    "summary": "-offline option to skip GeoIP update and public-IP lookups in air-gapped installs.",
+    "evidence": "Public IP lookup: mod/access/loopback.go UpdatePublicIP uses http.Client{} with no timeout against checkip.amazonaws.com. GeoIP auto-update is already optional (mod/geodb/updater.go SetGeoDBAutoUpdate). Effort S: add `-offline` flag that skips the public-IP updater and geodb auto-update, plus a 10 s timeout on the public-IP client (the missing timeout is the real cause of slow start-up when the network is black-holed).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 793,
+    "verdict": "support-question",
+    "summary": "Authelia forward-auth shows the site without a login.",
+    "evidence": "Reporter solved it in the thread: the forward-auth address must be an internal URI that is not proxied by Zoraxy itself (maintainer of Authelia confirmed). dev's forward auth has an X-Original-* switch and fails closed (TestForwardAuthFailsClosedWhenAuthServerDown). No code change needed. Could be added to docs: use `http://authelia:9091/api/authz/forward-auth` (container name), not the public auth URL.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 798,
+    "verdict": "deferred-feature",
+    "summary": "Use certificates dropped into a mapped volume (certbot fullchain/privkey).",
+    "evidence": "No folder watcher in dev. Certs are loaded from conf/certs (mod/tlscert). Effort S-M: watch/scan a configurable folder for `<name>.pem`+`.key` pairs (or certbot `live/<domain>/fullchain.pem`+`privkey.pem`) and import. Same ask as #1119. Related: fork HA/cert sync (#81).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 816,
+    "verdict": "cannot-reproduce",
+    "summary": "Zoraxy memory grows without bound after a wrongly configured Authelia forward-auth URL.",
+    "evidence": "dev's forward-auth client (mod/auth/sso/forward/forward.go) has a 15 s overall timeout, never follows redirects (ErrUseLastResponse), and caps the copied auth response with io.LimitReader (MaxAuthResponseBody). A dead or non-HTTP auth server fails closed with a 500 (TestForwardAuthFailsClosedWhenAuthServerDown). A second reporter sees the same growth without any auth, which points at statistics/uptime rather than forward auth: dev has the statistics soft cap (-stats_max_entries, mod/statistic/bounded.go) and the uptime-monitor connection leak fix (#1241). Not reproduced (no heap profile available). Suggest the reporters re-test on dev and, if it persists, capture `pprof heap`. A pprof flag would make this diagnosable (S).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 826,
+    "verdict": "deferred-feature",
+    "summary": "Header templates applied to new proxy rules.",
+    "evidence": "No default/template headers in dev. Effort M: a global 'default headers' preset (security headers, HSTS) applied when creating a rule. Same family as #877. Value medium-high (security headers).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 831,
+    "verdict": "already-fixed",
+    "summary": "Geo access rules behind Cloudflare see Cloudflare's IP; asked for CF-IPCountry support.",
+    "evidence": "The reporter later found that Cloudflare forwards the real IP. dev has the trusted proxy list (mod/access/trustedProxy.go, default Cloudflare ranges in default_trusted_proxies.csv) so X-Real-IP/CF-Connecting-IP of trusted peers is used for access rules, GeoIP, logs and statistics (tests in mod/dynamicproxy/captcha_gating_test.go, ratelimit_test.go). Using CF-IPCountry itself is not implemented and not needed once the real IP is trusted. Note: enabling it is per access rule ('trust proxy headers' toggle). See #1087 for the migration surprise.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 877,
+    "verdict": "deferred-feature",
+    "summary": "Defaults/templates for new proxy hosts and virtual directories (HSTS, uptime monitor, headers).",
+    "evidence": "No template mechanism in dev. Effort M. Merge with #826 into one 'proxy rule defaults/templates' feature.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 884,
+    "verdict": "deferred-feature",
+    "summary": "Allow OAuth2 login only for users with specific role claim values; later: several IdPs, selectable per host.",
+    "evidence": "Global part exists: group/role allow-list with a configurable claim name (oauth2GroupsClaim, oauth2AllowedGroups; claims.go). Multiple OAuth2 profiles / per-host selection are not implemented (ROADMAP section 4: group policies per route). Effort M-L. Reply: set the claim name to `role` in the OAuth2 settings.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 890,
+    "verdict": "cannot-reproduce",
+    "summary": "Virtual directories answer 404/307 from the base proxy when accessed over plain HTTP.",
+    "evidence": "TestNonTLS_VirtualDirectoryIsProxied (537f83d) proves that vdirs are routed and the missing-trailing-slash redirect works on the plain-HTTP path (handleNonTLSRequest). Vdir matching is case-sensitive (strings.HasPrefix in endpoints.go GetVirtualDirectoryHandlerFromRequestURI): the report mixes `/Server1/` and `/server1`. Likely reporter-side: lowercase vs configured case, or the hostname not matching the rule (admin UI on `/` answered with 307 /login.html). Ask for rule screenshot with 'Allow plain HTTP access' and exact URL; consider case-insensitive vdir matching (S, behaviour change).",
+    "fork_commit": "537f83d",
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 895,
+    "verdict": "support-question",
+    "summary": "How to configure Authentik forward auth.",
+    "evidence": "dev has an Authentik preset (forward auth through the proxy outpost, X-authentik-* headers, `/outpost.goauthentik.io` callback proxying) with tests against a fake outpost (mod/auth/sso/forward/authentik_test.go) and docs/authentik.md. Draft reply: use the Authentik preset in SSO > Forward Auth, set the outpost URL (e.g. `http://authentik:9000`), enable 'Preserve Host' and the callback proxy. Real Authentik verification is still open (fork issue #213), so mark as unverified.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 898,
+    "verdict": "deferred-feature",
+    "summary": "API/plugin to ban and unban IPs remotely (fail2ban).",
+    "evidence": "Blacklist endpoints exist (/api/blacklist/ip/add and /api/blacklist/list among others, api.go) and are reachable from plugins through the plugin API-key mechanism (plugin_api.go). What is missing is a static API token for external tools such as fail2ban. Effort S-M. Roadmap section 8/9 (plugin and API work); note the in-flight plugin package rewrite.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 899,
+    "verdict": "deferred-feature",
+    "summary": "Webhooks on certificate renew / events.",
+    "evidence": "An internal event system exists (mod/eventsystem) used by plugins, but there is no webhook sender. Effort M: webhook subscriber plugin or built-in sink for cert renew/obtain, blacklist and uptime events. Same family as #1046. Roadmap section 8.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 908,
+    "verdict": "deferred-feature",
+    "summary": "Close the TCP connection instead of the 403 page for blacklisted IPs.",
+    "evidence": "Closing is feasible: the exploit 'Drop Connection' action and DefaultSite_NoResponse already use http.Hijacker and conn.Close() (dynamicproxy.go). accessRequestBlocked (mod/dynamicproxy/access.go) always writes a 403 page. Effort S: access rule option 'drop connection on blacklist'. The maintainer's remark that this is impossible at the application layer is not accurate. Value medium.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 909,
+    "verdict": "deferred-feature",
+    "summary": "Configurable plain-HTTP (port 80) listener for host-network Docker on Synology.",
+    "evidence": "Port 80 is hardcoded in mod/dynamicproxy/dynamicproxy.go (httpServer Addr ':80', condition Option.Port != 80). Only -default_inbound_port exists in def.go. Secondary listening ports exist but are HTTP only. Effort S: add `-default_http_port` flag / setting. Value medium (NAS users).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 922,
+    "verdict": "already-fixed",
+    "summary": "INWX DNS challenge: '[id] expected type int, got unconvertible type string'.",
+    "evidence": "Caused by an INWX API change; fixed in lego v4.29.0 ('inwx: fix API breaking changes with record IDs', CHANGELOG.md of lego). dev builds against lego v5.5.2 (go.mod) which contains it. Not verified against the live INWX API.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "The INWX record-id decoding problem was fixed upstream in lego v4.29.0; `dev` ships lego v5.5.2. Please confirm with the next release (cannot be tested without an INWX account)."
+  },
+  {
+    "upstream": 924,
+    "verdict": "deferred-feature",
+    "summary": "Bulk edit of HTTP proxy rules, bigger edit button.",
+    "evidence": "No bulk edit in dev. Effort M-L. Value medium for many-rule users; could build on tags (select tag -> apply setting). Related to proxy-rule templates (#877).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 934,
+    "verdict": "already-fixed",
+    "summary": "Receive PROXY protocol (HAProxy send-proxy-v2) on the TLS listener.",
+    "evidence": "dev has a PROXY protocol v1/v2 toggle on the TLS listener (Option.UseProxyProtocol, HandleProxyProtocolChange in reverseproxy.go, 'PROXY Protocol' switch in web/components/globalsettings.html). It is mutually exclusive with HTTP/3 and is still marked experimental upstream (reported to break Nextcloud). No automated test; not exercised against a real HAProxy. Port-80 listener does not accept PROXY protocol (TLS listener only).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 950,
+    "verdict": "cannot-reproduce",
+    "summary": "OpenSpeedTest through Zoraxy reports 25+ Gbit/s upload on a 10 GbE network.",
+    "evidence": "Zoraxy streams request bodies through httputil-style copying and cannot exceed the link; the dashboard graph reads kernel NIC counters (hence the Docker/loopback double counting). The browser's upload progress measures bytes handed to the socket, which a buffering intermediary inflates. Not reproducible without the reporter's network. Suggest iperf3 or curl --upload-file as ground truth and testing with `-disablehttp2` / `-h2_conn_buffer`.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 954,
+    "verdict": "already-fixed",
+    "summary": "Pick from Docker Containers crashes with 'Cannot read properties of null (reading map)'.",
+    "evidence": "web/snippet/dockerContainersList.html normalises container.Ports (Array.isArray ? Ports : []) since 9a01fe8 ('fix: normalize null container ports'). UI code, verified by reading only (no browser run).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "Fixed on `dev` in upstream 9a01fe8: containers with `Ports: null` are treated as having no ports. Not browser-tested here."
+  },
+  {
+    "upstream": 958,
+    "verdict": "needs-hardware-or-env",
+    "summary": "Forward auth with VoidAuth ends in a redirect loop.",
+    "evidence": "Requires a running VoidAuth. Generic forward-auth settings in dev (preserve host, X-Original headers, cookie/header allow-lists) cover the common causes; an auth cookie whose domain does not cover the app host causes exactly this loop. Need: VoidAuth proxyauth config, its cookie domain, and Zoraxy forward-auth options used.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 959,
+    "verdict": "support-question",
+    "summary": "How to configure Google as OAuth2/OIDC provider.",
+    "evidence": "dev supports OIDC discovery by issuer (mod/auth/sso/oauth2/oidc.go) with PKCE and a discovery test button. Draft reply: Issuer/Auth URL `https://accounts.google.com`, client id/secret from the Google Cloud console, and register the redirect URI that the Zoraxy SSO page shows with Google; scopes `openid email profile`. Selecting OAuth2 must be done per rule under Security > Authentication Provider.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 969,
+    "verdict": "already-fixed",
+    "summary": "Mark rc releases as GitHub pre-releases.",
+    "evidence": "Fork process: DEVELOPMENT.md 'Cutting a release' says to tick pre-release for the beta channel and the in-app updater's beta channel only offers pre-releases (mod/updater). Upstream's release practice is outside the fork.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "In this fork release candidates are published as GitHub pre-releases and are only offered on the updater's `beta` channel (see DEVELOPMENT.md)."
+  },
+  {
+    "upstream": 971,
+    "verdict": "cannot-reproduce",
+    "summary": "Uptime monitor fails against an IPMI with self-signed certificate despite 'Skip Verification'.",
+    "evidence": "TestGetWebsiteStatusSelfSignedCertificate (70c7d3e): with skip-verification the monitor reports 200 against a self-signed TLS server. 'tls: handshake failure' in the report is a TLS version/cipher mismatch with the old IPMI firmware, not certificate verification. The 'https://host:80' log line comes from the monitor's http<->https fallback retry. Needs the IPMI's TLS versions/ciphers. The 521 through the proxy has the same cause (Go cannot handshake).",
+    "fork_commit": "70c7d3e",
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 974,
+    "verdict": "cannot-reproduce",
+    "summary": "Secure WebSocket (wss) towards HTTP upstreams.",
+    "evidence": "The request is not well defined: wss implies TLS to the upstream, which is the 'Require TLS' upstream option; plain-HTTP upstreams use ws. Upgrade/WebSocket handling is covered by dpcore tests. Ask the reporter for the failing request (Beszel/Bezsel hub) and logs; the usual cause of 400 is the WebSocket origin check ('Skip WebSocket Origin Check').",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 993,
+    "verdict": "support-question",
+    "summary": "reCAPTCHA breaks iOS/Android apps that use the proxied API.",
+    "evidence": "Mobile apps cannot solve a browser challenge. dev has CAPTCHA exception rules by path prefix and CIDR (mod/dynamicproxy/captcha/captcha.go ExceptionRule), but they are only editable in the config JSON. Draft reply: exclude the app's API paths (or the app's source IPs) with a CAPTCHA exception rule. A UI for these rules is tracked with #1161.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 996,
+    "verdict": "deferred-feature",
+    "summary": "OpenAPI/Swagger documentation of the admin API.",
+    "evidence": "No OpenAPI spec in dev. Effort M (spec for ~150 handlers; could be generated from api.go route table). Value medium, helps plugin/automation authors.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1006,
+    "verdict": "deferred-feature",
+    "summary": "Reusable list of Basic Auth credentials.",
+    "evidence": "Credentials are stored per proxy rule (AuthenticationProvider.BasicAuthCredentials). Effort M: named credential groups referenced from rules. Maintainer acknowledged it.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1012,
+    "verdict": "already-fixed",
+    "summary": "Headscale (TS2021 Upgrade) does not work through Zoraxy: 'No Upgrade header in TS2021 request'.",
+    "evidence": "dev forwards generic HTTP Upgrade requests when the per-rule option 'Enable Upgrade Forwarding' (EnableUpgradeForwarding) is on: dpcore AllowUpgrade, tests TestUpgradeTunnelsBidirectionally, TestUpgradeIsBlockedByDefault etc. (commit 6a74358) all pass. Not exercised against a real Headscale/Tailscale client. Reporters must enable 'Enable Upgrade Forwarding' on the rule. Marked unverified with a real client, so not proposed for closing.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1029,
+    "verdict": "fixed-by-you",
+    "summary": "NetBird behind Zoraxy (needs h2c / gRPC to plain-HTTP upstream).",
+    "evidence": "Per-upstream h2c option (94eaabc) with dpcore h2c tests; NetBird gRPC needs it. Not tried against a real NetBird.",
+    "fork_commit": "94eaabc",
+    "proposed_close": true,
+    "proposed_comment": "Fixed in the fork: tick \"h2c\" on the plain-HTTP upstream for gRPC backends such as NetBird."
+  },
+  {
+    "upstream": 1032,
+    "verdict": "needs-hardware-or-env",
+    "summary": "oauth2-proxy via forward auth behind Cloudflare Tunnel loops/fails.",
+    "evidence": "Needs the full cloudflared + oauth2-proxy + Entra ID setup. Most likely causes: cookie domain/path (`cookie_path=/oauth2` and `samesite=none`), the auth URL pointing at the public hostname instead of an internal one (see #793), or Host/X-Forwarded-* rewriting by the tunnel. Ask for forward-auth address, header lists and a HAR of the redirect chain.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1042,
+    "verdict": "deferred-feature",
+    "summary": "Secondary listening ports have no TLS.",
+    "evidence": "startSecondaryListeners (dynamicproxy.go) starts plain http.Servers via handleNonTLSRequest; no TLS config. The UI text suggests otherwise. Effort M: serve TLS on secondary ports using the same certificate manager (tlsConfig of the primary server). Value medium-high (exposing selected hosts on a different port). Also fix the misleading UI description in the meantime.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1046,
+    "verdict": "deferred-feature",
+    "summary": "Notifications (shoutrrr) from the uptime monitor.",
+    "evidence": "No notification sender in dev. Effort M: reuse the event system (#899): notification sink + uptime up/down events. Roadmap section 9 (observability).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1067,
+    "verdict": "fixed-by-you",
+    "summary": "selfhost.de DNS challenge: 'missing record mapping' - no UI field for the RID mapping.",
+    "evidence": "Fixed on dev by e39e0a8 (map typed DNS credentials, selfhost.de RecordsMapping); tests in mod/acme (acme_dns_maps tests).",
+    "fork_commit": "e39e0a8",
+    "proposed_close": true,
+    "proposed_comment": "Fixed in the fork: selfhost.de now has a \"RecordsMapping\" text area (domain:id[:id] list)."
+  },
+  {
+    "upstream": 1070,
+    "verdict": "deferred-feature",
+    "summary": "Multi-node sync / cluster mode.",
+    "evidence": "Not implemented; ROADMAP section 6 (High availability) and fork issue #81. Effort L; in flight by another agent (cluster code).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1073,
+    "verdict": "already-fixed",
+    "summary": "Passkey (WebAuthn) support in Zoraxy Auth.",
+    "evidence": "dev has ZorxAuth passkeys (mod/auth/sso/zorxauth/passkey.go: register begin/complete, list, remove, auth begin/complete, go-webauthn) and TOTP 2FA (typedef.go TOTPSecret, Enable2FA). No automated tests; not exercised with a real authenticator.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "`dev` already contains experimental passkey login/registration and TOTP for ZorxAuth (mod/auth/sso/zorxauth/passkey.go). Needs a manual check with a real authenticator before closing."
+  },
+  {
+    "upstream": 1075,
+    "verdict": "already-fixed",
+    "summary": "Access control for the stream proxy.",
+    "evidence": "dev has per-stream-rule access rules: ProxyRelayInstance.AccessRuleUUID, getEffectiveAccessRule and AllowIpAccess checks for TCP and UDP (mod/streamproxy/streamproxy.go, udpprox.go; commit e41031a 'add stream proxy access rules'). The new UDP test TestUDPIdleSessionsAreReleased exercises the same relay. SWEEP-1: rejected stream clients no longer stall the accept loop (c18f3f0, test TestRejectedClientDoesNotStallAcceptLoop).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "Implemented on `dev` (upstream e41031a): each stream proxy rule can select an access rule (blacklist/whitelist/country), applied to TCP connections and new UDP clients."
+  },
+  {
+    "upstream": 1087,
+    "verdict": "support-question",
+    "summary": "3.3.2 returns 403 for Cloudflare users with a country whitelist; downgrade fixes it.",
+    "evidence": "SWEEP-1: tobychui reproduced that the reporter's client 100.67.181.105 (Tailscale/CGNAT) resolves to the zone \"CarrierNAT\", not DE, so a country whitelist rejects it. The IPv6 2a00:20:... resolves to DE (asserted in mod/geodb TestResolveCountryCodeFromIP). Not a geodb defect: allow zone \"CarrierNAT\" or the CIDR 100.64.0.0/10 in the whitelist. UX gap (zones are not documented in the UI) left open.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "The source address in your log is a CGNAT/Tailscale address (100.64.0.0/10), which Zoraxy classifies as zone \"CarrierNAT\", not a country. Add \"CarrierNAT\" (or the CIDR) to the whitelist, or disable the whitelist for that rule."
+  },
+  {
+    "upstream": 1095,
+    "verdict": "support-question",
+    "summary": "Custom 521 error page.",
+    "evidence": "Supported: serveProxyRequestError (mod/dynamicproxy/proxyRequestHandler.go) loads `<webroot>/templates/rperror.html` for 521 (also `hosterror.html` for 404 host-not-found and `forbidden.html`). Draft reply: put the page at `www/templates/rperror.html` (webroot is the `-webroot` flag, default ./www; in Docker the mapped www folder). The maintainer's statement that there is no 521 template is outdated.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1100,
+    "verdict": "already-fixed",
+    "summary": "Import a list of IPs into the blacklist.",
+    "evidence": "Implemented on dev: bulk blocklist import (PR #252), mod/access/blocklistimport tests incl. 200k entries.",
+    "fork_commit": null,
+    "proposed_close": true,
+    "proposed_comment": "Implemented in the fork: Access Control > bulk import of IP lists and blocklist sources."
+  },
+  {
+    "upstream": 1102,
+    "verdict": "support-question",
+    "summary": "Transmission web UI gives 521 behind Zoraxy.",
+    "evidence": "521 means Zoraxy could not connect to the upstream. Transmission also validates the Host header (rpc-host-whitelist) and redirects /transmission/web, but those produce 4xx, not 521. Draft reply: check the upstream is `10.10.100.223:9091` (or a hostname resolvable from the Zoraxy host - `transmission.internal` must resolve on the proxy host), test `curl` from the proxy host, and look at the proxy log line (`[router:host-http]`) and the 'upstream' column.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1107,
+    "verdict": "already-fixed",
+    "summary": "'Require Rate Limit' value is shared between proxy rules in the UI.",
+    "evidence": "UI bug in the shared editor; fixed in dc05233 (web/components/httprp.html loads the saved value with .val() per proxy). Verified by reading the code only (no browser run). The backend stores the value per rule.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "Fixed on `dev` in upstream dc05233 (the shared editor now loads each rule's saved rate limit). UI-only, not browser-tested here."
+  },
+  {
+    "upstream": 1109,
+    "verdict": "deferred-feature",
+    "summary": "Auto-tag proxy rules with their auth provider and audit/enforce.",
+    "evidence": "Not implemented. Separately, a likely cause of the reporter's 'AuthMethod silently became None' was found: ReverseProxyHandleEditEndpoint defaulted a missing `authprovider` form value to \"0\" (None), so any stale cached UI/API client/plugin posting an edit without it removed the authentication. Fixed in 4eac194 (a missing parameter now keeps the current method). This is a hypothesis for the report; other fields in that handler (rate limit, captcha, exploit blocking) still reset to off when absent. Follow-up (S-M): make the edit handler a true partial update for all security fields, or require a schema/version parameter. Auto-tagging itself: effort S, value low-medium.",
+    "fork_commit": "4eac194",
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1118,
+    "verdict": "support-question",
+    "summary": "Pass the OIDC user name to Navidrome via X-Auth-User (Pocket ID).",
+    "evidence": "dev maps claims to upstream headers: 'Header=claim' pairs (OAuth2HeaderMappings, mod/auth/sso/oauth2/claims.go ParseHeaderMappings; field in web/components/sso.html). Custom headers in the proxy rule are static strings, which is why `${username}` is passed literally. Draft reply: in SSO/OAuth2 settings set header mappings to `X-Auth-User=preferred_username` (or `sub`/`email`) and remove the static X-Auth-User header from the rule.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1123,
+    "verdict": "deferred-feature",
+    "summary": "Choose ACME key type (RSA2048/3072/4096, EC256/384).",
+    "evidence": "Hardcoded: mod/acme/acme.go line ~361 KeyType: certcrypto.RSA2048. Effort S-M: add `keyType` to the obtain request, persist in <name>.json (CertificateInfoJSON) so renewals keep it, dropdown in the ACME tool. Default stays RSA2048. zen8841 was asked to take it.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1156,
+    "verdict": "fixed-by-you",
+    "summary": "Plesk DNS challenge always fails with 'plesk: missing server base URL'.",
+    "evidence": "Root cause: lego's plesk.Config.baseURL is an unexported field, so the JSON-based provider factory dropped the UI value. Fixed in 3dca06d (mod/acme/acme_dns_plesk.go sets the field with reflect/unsafe, special-cased in acme_dns.go); test TestDNSProviderPleskBaseURL failed before (error 'missing server base URL') and passes now. Verified with provider construction only; no live Plesk server. Other lego providers with unexported config fields would need the same treatment (none found in the provider list besides Plesk).",
+    "fork_commit": "3dca06d",
+    "proposed_close": true,
+    "proposed_comment": "Fixed in the fork: the Plesk provider's base URL was silently discarded (lego keeps it in an unexported field). It is now applied; see `TestDNSProviderPleskBaseURL`. Please re-test against a real Plesk server."
+  },
+  {
+    "upstream": 1161,
+    "verdict": "deferred-feature",
+    "summary": "Path-level CAPTCHA exemptions.",
+    "evidence": "Backend exists: captcha.ExceptionRule (path prefix or CIDR) evaluated in the CAPTCHA gating (tests in mod/dynamicproxy/captcha/captcha_exception_test.go and captcha_gating_test.go). But buildCaptchaConfigFromRequest (reverseproxy.go) never reads exception rules from the request and there is no UI, so they are config-file only and are dropped when the rule is edited (fork issue #200). Effort S-M: UI + API fields for ExceptionRules and keep them on edit. Crawler exemption (Googlebot, second reporter) needs UA + reverse-DNS verification and is a separate feature.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1162,
+    "verdict": "deferred-feature",
+    "summary": "Path-level OAuth2 exemptions (and per-route provider, email allow-list).",
+    "evidence": "No ignored-paths option for OAuth2 in dev; forward auth has 'Ignored Paths' (mod/auth/sso/forward/ignoredpaths.go) and ZorxAuth/Basic have exception rules. OAuth2 allow-list by group exists globally. Effort M: reuse the forward-auth ignored-path matcher for OAuth2. Value high (manifest.json, webhooks, API paths). Roadmap section 4.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1165,
+    "verdict": "already-fixed",
+    "summary": "Bypass Zoraxy Auth for LAN subnets.",
+    "evidence": "ZorxAuth exception rules support path prefix/regex and IP/CIDR (dynamicproxy.ZorxAuthExceptionRule, zorxAuthExceptionMatched in mod/dynamicproxy/authProviders.go, 'ZorxAuth Exceptions' editor in the proxy rule UI). Not covered by a ZorxAuth-specific unit test; the identical Basic Auth CIDR matcher is (TestBasicAuthExceptionMatchedCIDR).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "Implemented on `dev`: proxy rule > Security > ZorxAuth Exceptions accepts IP/CIDR and path rules that bypass ZorxAuth."
+  },
+  {
+    "upstream": 1174,
+    "verdict": "support-question",
+    "summary": "Maintainer announcement: looking for a Docker maintainer.",
+    "evidence": "Not a bug or feature; project governance. Nothing to do for the fork (the fork does not maintain the Docker image).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1186,
+    "verdict": "deferred-feature",
+    "summary": "Show stream proxy rules in the Status page network diagram.",
+    "evidence": "Not implemented. Effort S-M (UI only). Value low-medium.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1193,
+    "verdict": "fixed-by-you",
+    "summary": "Cert deletion leaves <name>.json and acme DB keys; no UI to rotate DNS credentials.",
+    "evidence": "Part (a) fixed in d66b8e5: tlscert.Manager.RemoveCert now also deletes <name>.json and calls OnCertRemoved, which start.go wires to delete the acme/<name>_dns_provider|_dns_credentials|_dns_servers keys; test TestRemoveCertDeletesAcmeMetadata. Parts (b) credential editor and (c) reset-all remain open. Remaining (b): expose HandleSetDNS as an 'edit DNS credentials' action (M). Related #1332. Stale state previously also forced ObtainCert to use the old challenge type via certInfo.UseDNS.",
+    "fork_commit": "d66b8e5",
+    "proposed_close": false,
+    "proposed_comment": "Part (a) of the report (cleanup on delete) is fixed in the fork. Parts (b) (edit stored DNS credentials) and (c) (reset all ACME state) remain open."
+  },
+  {
+    "upstream": 1198,
+    "verdict": "deferred-feature",
+    "summary": "More CAPTCHA providers (Altcha, FriendlyCaptcha).",
+    "evidence": "Providers are Cloudflare Turnstile and Google reCAPTCHA only (captcha.Provider). Effort M: Altcha is self-hosted proof-of-work (no third party, fits air-gapped installs). Roadmap section 3. Value medium-high for privacy-minded users.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1201,
+    "verdict": "cannot-reproduce",
+    "summary": "UI dropdown/sidebar glitches in 3.3.3.",
+    "evidence": "Reporter confirmed it was a stale 3.3.2 browser cache; only cosmetic wishes (chevron animation, divider) remain. Nothing to fix.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1208,
+    "verdict": "deferred-feature",
+    "summary": "limit_rate (bandwidth limit) for HTTP proxies.",
+    "evidence": "Not implemented; the rate limiter is requests per second only. Effort M: wrap the response writer with a token-bucket throttle per request or per IP. Value medium (Nextcloud downloads).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1243,
+    "verdict": "deferred-feature",
+    "summary": "Access-log viewer with filtering in the admin UI.",
+    "evidence": "Not implemented; a contributor announced a plan in the thread (per-site monthly logs, backend filter API). Effort M-L. Roadmap section 9 (structured logging) overlaps.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1267,
+    "verdict": "deferred-feature",
+    "summary": "Multiple ACME CAs/profiles with per-certificate assignment.",
+    "evidence": "Single global CA today. The 'skipTLS key case mismatch' mentioned in the thread does not exist on dev: UI and handler both use `skipTLS` (acme.go). Effort L (account/EAB separation, migration). Value medium (internal step-ca + public CA).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1297,
+    "verdict": "already-fixed",
+    "summary": "WAF / Coraza integration.",
+    "evidence": "The fork added a core WAF (Coraza + OWASP CRS v4) per endpoint: mod/dynamicproxy/waf, WAF-HOOK in Server.go, tests waf_integration_test.go and TestNonTLS_WAFBlocksAttackAndPassesCleanRequest. The request for a plugin inspection hook is tracked separately (fork issue #83, ROADMAP section 8).",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": "Covered in the fork by the built-in Coraza/CRS WAF (ROADMAP section 7). The plugin pre-auth/inspect hook part stays with fork issue #83."
+  },
+  {
+    "upstream": 1319,
+    "verdict": "deferred-feature",
+    "summary": "Encrypted Client Hello (ECH).",
+    "evidence": "Not implemented; go.mod is Go 1.26 which has server-side ECH in crypto/tls. Effort L (key management, rotation, DNS publication guidance, tests). Value low-medium. Needs security review.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1332,
+    "verdict": "deferred-feature",
+    "summary": "Reuse DNS-challenge credentials across certificates.",
+    "evidence": "Credentials are stored per certificate name (acme/<name>_dns_*). Effort M: named credential sets. Related to the open part of #1193. zen8841 planned a provider-settings store.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1344,
+    "verdict": "deferred-feature",
+    "summary": "Toggle to exclude blocked requests from statistics.",
+    "evidence": "Blocked requests are recorded through logRequest with succ=false (proxyRequestHandler.go); no toggle. Effort S: global/endpoint setting that skips RecordRequest for forward types blacklist/whitelist/captcha/waf. Value medium.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1351,
+    "verdict": "deferred-feature",
+    "summary": "Tell plugins which proxy rule matched in the dynamic capture sniff payload.",
+    "evidence": "HandleRoute already receives sep.Tags; DynamicSniffForwardRequest has no rule fields. Effort S, additive JSON fields (matched_rule, tags). Roadmap section 8 / fork #83. Touches the plugins package that is being rewritten, so not done here.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1354,
+    "verdict": "deferred-feature",
+    "summary": "Show full URLs (host + query) in 'Top Requested Paths'.",
+    "evidence": "Statistics store host+escaped path without query by design (logRequest: RequestURL = r.Host + EscapedPath()). Effort S-M and privacy sensitive (query strings carry tokens); needs an opt-in plus masking as the reporter suggests.",
+    "fork_commit": null,
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1356,
+    "verdict": "deferred-feature",
+    "summary": "Header-based access rules (require header X-Origin-Auth, drop otherwise).",
+    "evidence": "Already expressible with the per-endpoint WAF custom SecLang rules: TestWAFCustomRuleRequiresHeader (889873a) rejects requests without/with a wrong header and passes the right one. Missing relative to the request: silently dropping the connection, stripping the header before forwarding, UI for simple header conditions. Draft workaround: `SecRule &REQUEST_HEADERS:X-Origin-Auth \"@eq 0\" \"id:100001,phase:1,deny,status:403\"` and `SecRule REQUEST_HEADERS:X-Origin-Auth \"!@streq <token>\" \"id:100002,phase:1,deny,status:403\"`. Maintainer suggested a plugin (fork #83).",
+    "fork_commit": "889873a",
+    "proposed_close": false,
+    "proposed_comment": ""
+  },
+  {
+    "upstream": 1359,
+    "verdict": "fixed-by-you",
+    "summary": "Clients can spoof X-Forwarded-For/X-Real-IP/CF-Connecting-IP forwarded to upstreams.",
+    "evidence": "Fixed in aa42d1d for access rules with 'trust proxy headers' enabled: StripUntrustedClientIPHeaders (mod/access/trustedProxy.go), called from handleAccessRouting (mod/dynamicproxy/access.go), removes X-Forwarded-For, X-Real-Ip, Forwarded, CF-Connecting-IP, Fastly-Client-IP, True-Client-IP, X-Client-IP from requests whose TCP peer is not in the trusted list, so dpcore rebuilds them from the real peer. Test TestUntrustedClientIPHeadersAreStripped fails without the call and passes with it; rules that never enabled the option behave exactly as before. Residual gap (open): with the option OFF (the default) Zoraxy still forwards client-supplied headers unchanged to preserve existing setups behind CDNs. Possible follow-up (S-M): make the option on by default for new installs or add a separate 'sanitise client IP headers' switch; also decide leftmost vs rightmost X-Forwarded-For when the peer is trusted.",
+    "fork_commit": "aa42d1d",
+    "proposed_close": true,
+    "proposed_comment": "Partially fixed in the fork: with 'trust proxy headers' enabled, client-IP headers from non-trusted peers are now removed before forwarding (test `TestUntrustedClientIPHeadersAreStripped`). With the option off the headers are still passed through for backward compatibility, so this issue stays open for the default case."
+  }
+]

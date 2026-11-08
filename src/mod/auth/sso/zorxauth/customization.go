@@ -127,7 +127,7 @@ func getDefaultBranding() *BrandingConfig {
 func (ar *AuthRouter) brandingFolder() string {
 	base := ar.Options.ConfigFolderPath
 	if base == "" {
-		base = "./conf/sso/zorxauth"
+		base = DefaultConfigFolder
 	}
 	return filepath.Join(base, BRANDING_FOLDER)
 }

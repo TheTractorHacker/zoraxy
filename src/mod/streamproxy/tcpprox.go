@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	proxyproto "github.com/pires/go-proxyproto"
@@ -33,16 +34,16 @@ func isValidPort(port string) bool {
 }
 
 func (c *ProxyRelayInstance) connCopy(conn1 net.Conn, conn2 net.Conn, wg *sync.WaitGroup, accumulator *int64) {
+	// Always release the wait group: a read error (connection reset) used to skip it and
+	// left forward() blocked forever with both sockets open.
+	defer wg.Done()
 	n, err := io.Copy(conn1, conn2)
-	if err != nil {
-		return
-	}
-	*accumulator += n //Add to accumulator
+	atomic.AddInt64(accumulator, n) //Add to accumulator, both directions run concurrently
 	conn1.Close()
+	if err != nil {
+		conn2.Close()
+	}
 	c.LogMsg("[←] close the connect at local:["+conn1.LocalAddr().String()+"] and remote:["+conn1.RemoteAddr().String()+"]", nil)
-	//conn2.Close()
-	//c.LogMsg("[←] close the connect at local:["+conn2.LocalAddr().String()+"] and remote:["+conn2.RemoteAddr().String()+"]", nil)
-	wg.Done()
 }
 
 func WriteProxyProtocolHeader(dst net.Conn, src net.Conn, version ProxyProtocolVersion) error {
@@ -52,10 +53,14 @@ func WriteProxyProtocolHeader(dst net.Conn, src net.Conn, version ProxyProtocolV
 		return errors.New("invalid TCP address for proxy protocol")
 	}
 
+	transport := proxyproto.TCPv6
+	if clientAddr.IP.To4() != nil && proxyAddr.IP.To4() != nil {
+		transport = proxyproto.TCPv4
+	}
 	header := proxyproto.Header{
 		Version:           byte(convertProxyProtocolVersionToInt(version)),
 		Command:           proxyproto.PROXY,
-		TransportProtocol: proxyproto.TCPv4,
+		TransportProtocol: transport,
 		SourceAddr:        clientAddr,
 		DestinationAddr:   proxyAddr,
 	}
@@ -77,6 +82,15 @@ func (c *ProxyRelayInstance) forward(conn1 net.Conn, conn2 net.Conn, aTob *int64
 	wg.Wait()
 }
 
+// rejectAfterDelay closes a rejected connection after a short delay (slows down scanners)
+// without blocking the accept loop, so a blocked client cannot stall everybody else.
+func rejectAfterDelay(conn net.Conn) {
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		conn.Close()
+	}()
+}
+
 func (c *ProxyRelayInstance) accept(listener net.Listener) (net.Conn, error) {
 	conn, err := listener.Accept()
 	if err != nil {
@@ -88,14 +102,12 @@ func (c *ProxyRelayInstance) accept(listener net.Listener) (net.Conn, error) {
 		accessRule := c.getEffectiveAccessRule()
 		if accessRule != nil {
 			if !accessRule.AllowConnectionAccess(conn) {
-				time.Sleep(300 * time.Millisecond)
-				conn.Close()
+				rejectAfterDelay(conn)
 				c.LogMsg("[x] Connection from "+addr.IP.String()+" rejected by access control policy", nil)
 				return nil, errors.New("Connection from " + addr.IP.String() + " rejected by access control policy")
 			}
 		} else if !c.parent.Options.AccessControlHandler(conn) {
-			time.Sleep(300 * time.Millisecond)
-			conn.Close()
+			rejectAfterDelay(conn)
 			c.LogMsg("[x] Connection from "+addr.IP.String()+" rejected by access control policy", nil)
 			return nil, errors.New("Connection from " + addr.IP.String() + " rejected by access control policy")
 		}
