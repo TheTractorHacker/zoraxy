@@ -88,3 +88,11 @@ Status: ✅ done · 🔧 in progress · 📋 planned
 
 ## 9. Observability
 - 📋 Prometheus metrics endpoint, structured JSON access logs, per-upstream latency/error stats.
+
+## 10. Triage batch 2 (fixed in `fix/triage-bugs-2`)
+- ✅ Per-upstream connection reuse switch (#1343), ACME issuance serialised (#1117), proxy rule edit is a true partial update (#1109),
+  precompiled IP blacklist index (#986), opt-in client IP header sanitising (#1359), map typed ACME DNS credentials incl. selfhost.de
+  and Hurricane Electric (#1067, #410), per-upstream h2c (#1029).
+- 🔧 GeoIP (#1334): Malaysian IPv6 prefixes are pinned by an overrides table. 📋 Switch to a maintained dataset (licence decision) and
+  regenerate `geoipv4.csv` / `geoipv6.csv`; `tools` updater still downloads the deprecated npm package.
+- 📋 Whitelist lookup still scans linearly (same index idea as the blacklist). 📋 h2c: apply the response-header timeout.
