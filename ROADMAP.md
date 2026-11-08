@@ -51,6 +51,8 @@ Status: ✅ done · 🔧 in progress · 📋 planned
   - ✅ OIDC: discovery by issuer, PKCE S256, state (browser bound) + nonce, ID token validation with cached JWKS,
     refresh, RP-initiated logout, group allow-list, claim to header mapping, discovery test button.
   - 📋 Verified only against fake outpost/OIDC servers so far; run the checklist in `docs/authentik.md` against a real Authentik.
+- ✅ Per-endpoint exception rules (path prefix / exact / regex, IP / CIDR) for Forward Auth and OAuth2/OIDC, trusted-proxy aware and
+  traversal safe (upstream #652).
 - 🔧 Generic OIDC hardening: ✅ discovery, PKCE, token refresh, logout. 📋 group-based policies per route (the
   allow-list is currently global to the OAuth2 provider); 📋 stateless/shared sessions (see HA).
 

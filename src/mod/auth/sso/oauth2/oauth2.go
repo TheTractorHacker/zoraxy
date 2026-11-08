@@ -901,3 +901,14 @@ func (ar *OAuth2Router) handleLogout(w http.ResponseWriter, r *http.Request, o *
 	http.Redirect(w, r, target, http.StatusFound)
 	return errors.New("logged out")
 }
+
+// ScrubIdentityHeaders removes every header that is mapped from OAuth2 claims, so requests that
+// skip authentication through an exception rule cannot carry a forged identity to the upstream.
+func (ar *OAuth2Router) ScrubIdentityHeaders(r *http.Request) {
+	if ar == nil || r == nil {
+		return
+	}
+	o := ar.snapshot()
+	mappings, _ := ParseHeaderMappings(o.OAuth2HeaderMappings)
+	applyHeaderMappings(r, mappings, nil)
+}

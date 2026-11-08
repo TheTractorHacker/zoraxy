@@ -43,6 +43,13 @@ func handleAuthProviderRouting(sep *ProxyEndpoint, w http.ResponseWriter, r *htt
 			return true
 		}
 	case AuthMethodForward:
+		if h.Parent.externalAuthExempt(sep, r) {
+			//Exception rule matched: skip the SSO check, but never forward client supplied identity headers
+			if fr := h.Parent.Option.ForwardAuthRouter; fr != nil {
+				fr.ScrubIdentityHeaders(r)
+			}
+			break
+		}
 		err := h.handleForwardAuth(w, r)
 		if err != nil {
 			clientIP := h.Parent.GetClientIPForEndpoint(r, sep)
@@ -50,6 +57,12 @@ func handleAuthProviderRouting(sep *ProxyEndpoint, w http.ResponseWriter, r *htt
 			return true
 		}
 	case AuthMethodOauth2:
+		if h.Parent.externalAuthExempt(sep, r) {
+			if or := h.Parent.Option.OAuth2Router; or != nil {
+				or.ScrubIdentityHeaders(r)
+			}
+			break
+		}
 		err := h.handleOAuth2Auth(w, r)
 		if err != nil {
 			clientIP := h.Parent.GetClientIPForEndpoint(r, sep)

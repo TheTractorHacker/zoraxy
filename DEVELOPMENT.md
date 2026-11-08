@@ -605,3 +605,22 @@ Package `src/mod/access/blocklistimport` (parser, fetcher, source manager + sche
 * **Performance:** 200k entries parse and import in about a second (3 s under -race) (test: `TestLargeImport200k`). Request-time matching is the job of the
   `mod/access` lookup (`IsIPBlacklisted`); the admin UI renders at most 1000 rows of a list (rest still enforced).
 * **Tests:** `go test -race ./mod/access/... ` (SSRF tests use an httptest TLS server plus a stub resolver / dialer).
+
+## Forward Auth / OAuth2 exception rules
+
+Per proxy rule, `AuthenticationProvider.ExternalAuthExceptionRules []*AuthExceptionRule` (type in `mod/dynamicproxy/typedef.go`, matching and
+validation in `mod/dynamicproxy/authexceptions.go`, API in `src/authexceptions.go`, UI `web/snippet/ssoExceptionEditor.html` opened from the
+"Forward Auth / OAuth2 Exceptions" button of the proxy rule editor). One list serves both providers; ZorxAuth and Basic Auth keep their own
+rule lists and matchers (unchanged). `handleAuthProviderRouting` consults the list before calling the provider.
+
+* Rule = path (`prefix` on segment boundaries, `exact`, or `regex` that must match the whole normalised path; optional ignore-case) or an
+  IP / CIDR. Any matching rule skips the SSO check. `/` as prefix and `/0` CIDRs are refused.
+* **Client IP** is `Router.GetClientIPForEndpoint` (trusted-proxy aware). Unlike the older Basic/ZorxAuth rules there is no per-rule
+  "trust proxy headers" flag: headers are only honoured when the access rule has `TrustProxyHeadersOnly` and the peer is in the trusted
+  proxy list. (Existing Basic/ZorxAuth rules with `UseTrustedProxy=true` still read the raw headers, see the warning in their UI.)
+* **Fail-closed paths:** a path rule only applies to a request target that is already canonical. Dot segments, `//`, anything that decodes
+  into them (`%2e%2e`, `%2f`), `;` path parameters (`/public/..;/admin`), `\`, control characters and a `%` left after one decoding round
+  (double encoding) never match, the normal SSO check runs instead.
+* Requests that skip SSO get the provider's identity headers scrubbed (`ScrubIdentityHeaders` on the forward auth and OAuth2 routers:
+  configured response headers, `X-authentik-*` in Authentik mode, mapped OAuth2 claim headers).
+* Tests: `go test -race ./mod/dynamicproxy -run 'AuthException|CanonicalException|ForwardAuthException|OAuth2Exceptions'`.
