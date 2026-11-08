@@ -79,7 +79,7 @@ def main():
                 if r["scenario"] in commits:
                     r["commits"] = commits[r["scenario"]]
     if only:
-        a.out = a.out.replace(".json", ".partial.json")
+        a.out = os.path.join(HERE, ".build", "e2e-admin.partial.json")
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     json.dump(res, open(a.out, "w"), indent=1)
     if not only:

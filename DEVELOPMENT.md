@@ -1594,7 +1594,7 @@ third party is used.
 PY=$HOME/ui-test-tools/py.sh          # python with playwright+chromium (only the ui-* scenarios and perf need it)
 tools/e2e-admin/run.sh                # builds src/ into tools/e2e-admin/.build and runs everything (about 20 min)
 tools/e2e-admin/run.sh --list
-tools/e2e-admin/run.sh --only api-certs,fleet-hub        # prefix match; partial runs write e2e-admin.partial.json
+tools/e2e-admin/run.sh --only api-certs,fleet-hub        # prefix match; partial runs write tools/e2e-admin/.build/e2e-admin.partial.json
 E2E_SKIP_BUILD=1 tools/e2e-admin/run.sh --only updater   # reuse the last build
 ```
 
