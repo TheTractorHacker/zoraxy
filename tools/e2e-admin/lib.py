@@ -61,6 +61,7 @@ class Client:
         self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.jar),
                                                   urllib.request.HTTPSHandler(context=ctx), NoRedirect)
         self.csrf = None
+        self.retry_refused = 0  # seconds; set > 0 for processes that restart themselves
 
     def raw(self, method, path, data=None, headers=None, timeout=30):
         h = dict(headers or {})
@@ -73,10 +74,20 @@ class Client:
         if self.csrf and method != "GET":
             h.setdefault("X-CSRF-Token", self.csrf)
         req = urllib.request.Request(self.base + path, data=body, method=method, headers=h)
-        try:
-            r = self.opener.open(req, timeout=timeout)
-        except urllib.error.HTTPError as e:
-            r = e
+        end = time.time() + self.retry_refused
+        while True:
+            try:
+                r = self.opener.open(req, timeout=timeout)
+                break
+            except urllib.error.HTTPError as e:
+                r = e
+                break
+            except urllib.error.URLError as e:
+                # the process may be restarting itself (cluster apply, config import, updater): retry refused connections
+                if isinstance(getattr(e, "reason", None), ConnectionRefusedError) and time.time() < end:
+                    time.sleep(0.5)
+                    continue
+                raise
         return (r.status if hasattr(r, "status") else r.code), r.read(), dict(r.headers)
 
     def refresh_csrf(self):
@@ -157,6 +168,7 @@ class Instance:
                                      start_new_session=True)
         _procs.append(self.proc)
         self.client = Client(self.url)
+        self.client.retry_refused = 0
         if wait:
             self.wait_up()
         return self

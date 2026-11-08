@@ -1,12 +1,13 @@
 [
  {
-  "scenario": "api-sablier-gate-and-test",
+  "scenario": "fleet-hub-two-nodes",
   "issues": [
-   "120",
-   "564"
+   "81",
+   "183",
+   "1070"
   ],
-  "status": "PASS",
-  "evidence": "Sablier: connection test (waiting), dynamic strategy serves Sablier's waiting page without hitting the upstream, ready proxies, names forwarded, Sablier answering 500 without the session header => 503 (fail closed). Real Sablier + Docker providers NOT-TESTABLE (rerun: tools/e2e-admin/run.sh --only api-sablier-gate-and-test)",
+  "status": "FAIL",
+  "evidence": "exception: urllib.error.URLError: <urlopen error [Errno 111] Connection refused> | urllib/request.py\", line 504, in _open\n    result = self._call_chain(self.handle_open, protocol, protocol +\n                              '_open', req)\n  File \"/usr/lib/python3.14/urllib/request.py\", line 464, in _call_chain\n    result = func(*args)\n  File \"/usr/lib/python3.14/urllib/request.py\", line 1350, in http_open\n    return self.do_open(http.client.HTTPConnection, req)\n           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/urllib/request.py\", line 1324, in do_open\n    raise URLError(err)\nurllib.error.URLError: <urlopen error [Errno 111] Connection refused>\n (rerun: tools/e2e-admin/run.sh --only fleet-hub-two-nodes)",
   "commits": [],
   "notes": ""
  }

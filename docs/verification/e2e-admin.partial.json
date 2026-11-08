@@ -1,0 +1,14 @@
+[
+ {
+  "scenario": "fleet-hub-two-nodes",
+  "issues": [
+   "81",
+   "183",
+   "1070"
+  ],
+  "status": "PASS",
+  "evidence": "hub + 2 node processes: join tokens (single-use, bogus refused), rule publish immediate to both nodes (verified by proxying real requests through each node), node-local rule preserved, per-node {{node.x}} variables (applied; undefined variable blocks publish; quote injection rejected), managed rule read-only on node (403) while local rules stay editable, drift detection after hand-editing a managed file, canary publish -> promotion, rollback to the older version, key rotation (node keeps syncing), revoke (status revoked), audit log entries for the actions (rerun: tools/e2e-admin/run.sh --only fleet-hub-two-nodes)",
+  "commits": [],
+  "notes": ""
+ }
+]
