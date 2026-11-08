@@ -46,6 +46,7 @@ const (
 // Provider ids exposed to templates as {{.Provider}}.
 const (
 	ProviderIDAltcha      = "altcha"
+	ProviderIDFriendly    = "friendly"
 	ProviderIDTurnstile   = "turnstile"
 	ProviderIDRecaptchaV2 = "recaptcha_v2"
 	ProviderIDRecaptchaV3 = "recaptcha_v3"
@@ -68,9 +69,12 @@ type ClientConfig struct {
 	VerifyPath string `json:"verifyPath"`
 	Field      string `json:"field"` // form field name the token is POSTed as
 	AltchaPath string `json:"altchaPath,omitempty"`
-	Preview    bool   `json:"preview"`
-	ShowLoader bool   `json:"showLoader"`
-	S          struct {
+	// Friendly Captcha: widget API endpoint ("global" or "eu") and the pinned SDK release
+	FriendlyEndpoint   string `json:"friendlyEndpoint,omitempty"`
+	FriendlySDKVersion string `json:"friendlySdk,omitempty"`
+	Preview            bool   `json:"preview"`
+	ShowLoader         bool   `json:"showLoader"`
+	S                  struct {
 		Verifying string `json:"verifying"`
 		Success   string `json:"success"`
 		Failed    string `json:"failed"`
@@ -131,10 +135,20 @@ func providerID(c *Config) string {
 	if c.Provider == ProviderAltcha {
 		return ProviderIDAltcha
 	}
+	if c.Provider == ProviderFriendly {
+		return ProviderIDFriendly
+	}
 	if c.RecaptchaVersion == "v3" {
 		return ProviderIDRecaptchaV3
 	}
 	return ProviderIDRecaptchaV2
+}
+
+func cfgFriendlyEndpoint(c *Config) string {
+	if c == nil {
+		return ""
+	}
+	return c.FriendlyEndpoint
 }
 
 func pick(v, def string) string {
@@ -252,6 +266,11 @@ func buildData(cfg *Config, kind PageKind, domain, nonce string, opts RenderOpti
 		c.Field = AltchaField
 		c.AltchaPath = AltchaChallengePath
 		d.ShowLoader = true
+	case ProviderIDFriendly:
+		c.Field = FriendlyField
+		c.FriendlyEndpoint = NormalizeFriendlyEndpoint(cfgFriendlyEndpoint(cfg))
+		c.FriendlySDKVersion = FriendlySDKVersion
+		d.ShowLoader = false
 	case ProviderIDRecaptchaV2:
 		c.Field = "g-recaptcha-response"
 		c.Invisible = cfg != nil && cfg.RecaptchaInvisible
@@ -287,6 +306,13 @@ func contentSecurityPolicy(prov string, kind PageKind, nonce string, relaxed, pr
 	connect := "'self'"
 	if kind == PageChallenge {
 		switch prov {
+		case ProviderIDAltcha:
+			//self-hosted, nothing is loaded from a third party
+		case ProviderIDFriendly:
+			// SDK from jsDelivr; the widget solves in a blob: worker (WebAssembly) and talks to the frcapi endpoint
+			script += " https://cdn.jsdelivr.net/npm/@friendlycaptcha/ 'wasm-unsafe-eval'"
+			connect += " https://global.frcapi.com https://eu.frcapi.com https://cdn.jsdelivr.net"
+			style = "'unsafe-inline'" // the widget injects inline styles that cannot carry a nonce
 		case ProviderIDTurnstile:
 			script += " https://challenges.cloudflare.com"
 			frame = "https://challenges.cloudflare.com"
@@ -315,6 +341,9 @@ func contentSecurityPolicy(prov string, kind PageKind, nonce string, relaxed, pr
 	}
 	if frame != "" {
 		parts = append(parts, "frame-src "+frame)
+	}
+	if kind == PageChallenge && prov == ProviderIDFriendly {
+		parts = append(parts, "worker-src blob:")
 	}
 	return strings.Join(parts, "; ")
 }
@@ -413,6 +442,7 @@ func ValidateCustomTemplate(content string) error {
 		{Provider: ProviderCloudflare, SiteKey: "sample-site-key"},
 		{Provider: ProviderGoogle, RecaptchaVersion: "v2", SiteKey: "sample-site-key"},
 		{Provider: ProviderGoogle, RecaptchaVersion: "v3", SiteKey: "sample-site-key"},
+		{Provider: ProviderFriendly, SiteKey: "sample-site-key"},
 	}
 	for _, cfg := range samples {
 		data := buildData(cfg, PageChallenge, "example.com", "sample-nonce", RenderOptions{})

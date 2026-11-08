@@ -269,6 +269,42 @@
 
         if (cfg.provider === 'recaptcha_v3' && cfg.preview) { run(); return; }
 
+        if (cfg.provider === 'friendly') {
+            // Friendly Captcha v2: declarative widget, the SDK renders every .frc-captcha element
+            if (cfg.preview) { submit('preview'); return; }
+            var host = document.getElementById('zx-widget');
+            host.className = 'frc-captcha';
+            host.setAttribute('data-sitekey', cfg.siteKey);
+            host.setAttribute('data-api-endpoint', cfg.friendlyEndpoint === 'eu' ? 'eu' : 'global');
+            host.setAttribute('data-start', 'auto');
+            host.setAttribute('data-theme', pageIsDark() ? 'dark' : 'light');
+            host.setAttribute('data-form-field-name', cfg.field);
+            var sent = false, polls = 0;
+            var take = function (resp) { if (resp && resp.charAt(0) !== '.' && !sent) { sent = true; submit(resp); } };
+            host.addEventListener('frc:widget.complete', function (e) { take(e.detail && e.detail.response); });
+            host.addEventListener('frc:widget.error', function () { fail(cfg.s.error); });
+            host.addEventListener('frc:widget.expire', function () { sent = false; hideStatus(); });
+            // fallback for SDK builds whose events do not reach us: poll the hidden response field
+            var poll = setInterval(function () {
+                var inp = host.querySelector('input[name="' + cfg.field + '"]');
+                if (inp) take(inp.value);
+                if (sent || ++polls > 600) clearInterval(poll);
+            }, 500);
+            if (retryEl) retryEl.addEventListener('click', function () { window.location.reload(); });
+            var fs = document.createElement('script');
+            fs.type = 'module'; fs.async = true;
+            fs.src = 'https://cdn.jsdelivr.net/npm/@friendlycaptcha/sdk@' + cfg.friendlySdk + '/site.min.js';
+            if (nonce) fs.setAttribute('nonce', nonce);
+            fs.onerror = function () { fail(cfg.s.error); };
+            document.head.appendChild(fs);
+            var fc = document.createElement('script');
+            fc.noModule = true; fc.async = true;
+            fc.src = 'https://cdn.jsdelivr.net/npm/@friendlycaptcha/sdk@' + cfg.friendlySdk + '/site.compat.min.js';
+            if (nonce) fc.setAttribute('nonce', nonce);
+            document.head.appendChild(fc);
+            return;
+        }
+
         if (cfg.provider === 'altcha') {
             // Self-hosted proof of work: nothing is loaded from a third party
             if (cfg.preview) { submit('preview'); return; }

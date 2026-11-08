@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 
 	"imuslab.com/zoraxy/mod/dynamicproxy/captcha"
@@ -54,7 +55,7 @@ func TestCaptchaExceptionRuleAddRemove(t *testing.T) {
 		{7, "x", false},              //unknown type
 	}
 	for _, a := range adds {
-		err := addCaptchaExceptionRule(cfg, a.typ, a.value)
+		err := addCaptchaExceptionRule(cfg, captchaExceptionSpec{Type: a.typ, Value: a.value})
 		if (err == nil) != a.ok {
 			t.Errorf("add(%d,%q): err=%v, want ok=%v", a.typ, a.value, err, a.ok)
 		}
@@ -62,16 +63,54 @@ func TestCaptchaExceptionRuleAddRemove(t *testing.T) {
 	if len(cfg.ExceptionRules) != 4 || cfg.ExceptionRules[0].PathPrefix != "/public" {
 		t.Fatalf("unexpected rules: %+v", cfg.ExceptionRules)
 	}
-	if err := removeCaptchaExceptionRule(cfg, 0, "/public/"); err != nil {
+	if err := removeCaptchaExceptionRule(cfg, captchaExceptionSpec{Type: 0, Value: "/public/"}); err != nil {
 		t.Fatalf("remove normalised path: %v", err)
 	}
-	if err := removeCaptchaExceptionRule(cfg, 1, "10.0.0.1"); err != nil {
+	if err := removeCaptchaExceptionRule(cfg, captchaExceptionSpec{Type: 1, Value: "10.0.0.1"}); err != nil {
 		t.Fatal(err)
 	}
-	if removeCaptchaExceptionRule(cfg, 1, "10.0.0.1") == nil {
+	if removeCaptchaExceptionRule(cfg, captchaExceptionSpec{Type: 1, Value: "10.0.0.1"}) == nil {
 		t.Error("removing a missing rule must fail")
 	}
 	if len(cfg.ExceptionRules) != 2 {
 		t.Fatalf("rules left: %+v", cfg.ExceptionRules)
+	}
+}
+
+func TestCaptchaExceptionModesAddRemove(t *testing.T) {
+	cfg := &captcha.Config{}
+	add := func(spec captchaExceptionSpec) error { return addCaptchaExceptionRule(cfg, spec) }
+	if err := add(captchaExceptionSpec{Type: 0, Value: "/status", Mode: "exact"}); err != nil {
+		t.Fatal(err)
+	}
+	//same value, other mode: a different rule
+	if err := add(captchaExceptionSpec{Type: 0, Value: "/status"}); err != nil {
+		t.Fatal(err)
+	}
+	if add(captchaExceptionSpec{Type: 0, Value: "status/", Mode: "exact"}) == nil {
+		t.Fatal("duplicate exact rule accepted")
+	}
+	if err := add(captchaExceptionSpec{Type: 0, Value: `/v[0-9]+/hooks/.*`, Mode: "regex", NoCase: true}); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []captchaExceptionSpec{
+		{Type: 0, Value: "(unclosed", Mode: "regex"}, {Type: 0, Value: "/x", Mode: "glob"},
+		{Type: 0, Value: "", Mode: "regex"}, {Type: 0, Value: strings.Repeat("a", 600), Mode: "regex"},
+	} {
+		if add(bad) == nil {
+			t.Errorf("%+v accepted", bad)
+		}
+	}
+	if len(cfg.ExceptionRules) != 3 || cfg.ExceptionRules[0].MatchMode != "exact" || cfg.ExceptionRules[1].MatchMode != "" || !cfg.ExceptionRules[2].CaseInsensitive {
+		t.Fatalf("%+v", cfg.ExceptionRules)
+	}
+	if err := removeCaptchaExceptionRule(cfg, captchaExceptionSpec{Type: 0, Value: `/v[0-9]+/hooks/.*`, Mode: "regex", NoCase: true}); err != nil {
+		t.Fatal(err)
+	}
+	if removeCaptchaExceptionRule(cfg, captchaExceptionSpec{Type: 0, Value: "/status", Mode: "regex"}) == nil {
+		t.Fatal("removed a rule of another mode")
+	}
+	if err := removeCaptchaExceptionRule(cfg, captchaExceptionSpec{Type: 0, Value: "/status", Mode: "exact"}); err != nil || len(cfg.ExceptionRules) != 1 {
+		t.Fatal(err, cfg.ExceptionRules)
 	}
 }

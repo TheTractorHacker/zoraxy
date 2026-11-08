@@ -103,6 +103,9 @@ func parseCaptchaPageSettings(r *http.Request, cfg *captcha.Config) {
 	cfg.RecaptchaInvisible, _ = utils.PostBool(r, "captchaRecaptchaInvisible")
 	cfg.RecaptchaAction = postText(r, "captchaRecaptchaAction")
 	cfg.VerifyHostname, _ = utils.PostBool(r, "captchaVerifyHostname")
+	if cfg.Provider == captcha.ProviderFriendly {
+		cfg.FriendlyEndpoint = captcha.NormalizeFriendlyEndpoint(postText(r, "captchaFriendlyEndpoint"))
+	}
 }
 
 // buildCaptchaConfigFromRequest builds and validates a CAPTCHA config from the

@@ -238,6 +238,9 @@ func (c *Config) ValidatePageSettings() error {
 	if err := c.Turnstile.Validate(); err != nil {
 		return err
 	}
+	if c.FriendlyEndpoint != "" && c.FriendlyEndpoint != FriendlyEndpointGlobal && c.FriendlyEndpoint != FriendlyEndpointEU {
+		return errors.New("Friendly Captcha endpoint must be \"global\" or \"eu\"")
+	}
 	if c.RecaptchaAction != "" && !actionNameRe.MatchString(c.RecaptchaAction) {
 		return errors.New("reCAPTCHA action may only contain letters, digits, '-' and '_' (max 32 characters)")
 	}
