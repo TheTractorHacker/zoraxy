@@ -327,6 +327,7 @@ func (router *Router) StartProxyService() error {
 // handleNonTLSRequest handles HTTP requests for endpoints that allow plain HTTP access
 // This is the common handler logic used by both port 80 listener and secondary listeners
 func (router *Router) handleNonTLSRequest(w http.ResponseWriter, r *http.Request, sep *ProxyEndpoint) {
+	router.echObserve(r) //secondary TLS listeners carry ECH too (no-op on plain HTTP)
 	proxyHandler := router.mux.(*ProxyHandler)
 	if router.Option.Metrics.Enabled() {
 		var done func()
