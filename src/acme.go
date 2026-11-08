@@ -90,52 +90,7 @@ func acmeRegisterSpecialRoutingRule() {
 			return strings.HasPrefix(parsedURL.Path, "/.well-known/acme-challenge/")
 		},
 		RoutingHandler: func(w http.ResponseWriter, r *http.Request) {
-			parsedURL, err := url.ParseRequestURI(r.RequestURI)
-			if err != nil {
-				http.Error(w, "Invalid request URI", http.StatusBadRequest)
-				return
-			}
-
-			// HTTP-01 challenges (RFC 8555) use only the path, no query string.
-			// Reject requests with query parameters as they are unexpected.
-			if parsedURL.RawQuery != "" {
-				http.Error(w, "Query string not allowed in ACME challenge", http.StatusBadRequest)
-				return
-			}
-
-			// Whitelist: RFC 8555 token is base64url encoded [A-Za-z0-9_-].
-			// Extract and validate the token part after the fixed prefix.
-			prefix := "/.well-known/acme-challenge/"
-			token := strings.TrimPrefix(parsedURL.Path, prefix)
-			if len(token) == 0 || len(token) > 255 || !acmeTokenRegex.MatchString(token) {
-				http.Error(w, "Invalid ACME challenge token", http.StatusBadRequest)
-				return
-			}
-
-			// Build internal URL using only the validated path component,
-			// preventing SSRF via userinfo injection in the raw URI.
-			internalURL := "http://localhost:" + acmeHandler.Getport() + parsedURL.Path
-
-			req, err := http.NewRequest(http.MethodGet, internalURL, nil)
-			if err != nil {
-				fmt.Printf("client: could not create request: %s\n", err)
-				return
-			}
-			req.Host = r.Host
-
-			res, err := http.DefaultClient.Do(req)
-			if err != nil {
-				fmt.Printf("client: error making http request: %s\n", err)
-				return
-			}
-			defer res.Body.Close()
-
-			resBody, err := io.ReadAll(res.Body)
-			if err != nil {
-				fmt.Printf("error reading: %s\n", err)
-				return
-			}
-			w.Write(resBody)
+			serveACMEChallenge(w, r, acmeHandler.Getport())
 		},
 		Enabled:                true,
 		UseSystemAccessControl: false,
@@ -261,4 +216,59 @@ func HandleACMEPreferredCA(w http.ResponseWriter, r *http.Request) {
 		SystemWideLogger.Println("Updating prefered ACME CA to " + ca)
 		utils.SendOK(w)
 	}
+}
+
+// serveACMEChallenge relays an HTTP-01 challenge request to the temporary
+// internal ACME listener on the given port and passes its status code and body
+// back to the validating CA. When the listener is not running (no issuance in
+// progress, e.g. scanners probing the well-known path) it answers 404 quietly
+// instead of an empty "200 OK".
+func serveACMEChallenge(w http.ResponseWriter, r *http.Request, port string) {
+	parsedURL, err := url.ParseRequestURI(r.RequestURI)
+	if err != nil {
+		http.Error(w, "Invalid request URI", http.StatusBadRequest)
+		return
+	}
+
+	// HTTP-01 challenges (RFC 8555) use only the path, no query string.
+	// Reject requests with query parameters as they are unexpected.
+	if parsedURL.RawQuery != "" {
+		http.Error(w, "Query string not allowed in ACME challenge", http.StatusBadRequest)
+		return
+	}
+
+	// Whitelist: RFC 8555 token is base64url encoded [A-Za-z0-9_-].
+	// Extract and validate the token part after the fixed prefix.
+	prefix := "/.well-known/acme-challenge/"
+	token := strings.TrimPrefix(parsedURL.Path, prefix)
+	if len(token) == 0 || len(token) > 255 || !acmeTokenRegex.MatchString(token) {
+		http.Error(w, "Invalid ACME challenge token", http.StatusBadRequest)
+		return
+	}
+
+	// Build internal URL using only the validated path component,
+	// preventing SSRF via userinfo injection in the raw URI.
+	internalURL := "http://localhost:" + port + parsedURL.Path
+
+	req, err := http.NewRequest(http.MethodGet, internalURL, nil)
+	if err != nil {
+		fmt.Printf("client: could not create request: %s\n", err)
+		return
+	}
+	req.Host = r.Host
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		http.Error(w, "No ACME challenge in progress", http.StatusNotFound)
+		return
+	}
+	defer res.Body.Close()
+
+	resBody, err := io.ReadAll(res.Body)
+	if err != nil {
+		fmt.Printf("error reading: %s\n", err)
+		return
+	}
+	w.WriteHeader(res.StatusCode)
+	w.Write(resBody)
 }
