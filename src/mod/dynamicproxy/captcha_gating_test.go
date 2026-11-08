@@ -170,3 +170,32 @@ func TestHandleCaptchaGating_VerificationSendsTrustedProxyClientIP(t *testing.T)
 		t.Errorf("remoteip sent to provider = %q, expected the trusted proxy client IP 198.51.100.7", got)
 	}
 }
+
+// A visitor who solved the CAPTCHA must not be challenged again after Zoraxy
+// restarts, and the session must be accepted by a second node with the same secret.
+func TestHandleCaptchaGating_SessionSurvivesRouterRestart(t *testing.T) {
+	endpoint := newTestCaptchaEndpoint("")
+	issuer := captcha.NewSessionStoreWithSecret("node-uuid-1234")
+	token, _ := issuer.Issue("host.example.com", 3600)
+
+	router := newTestCaptchaRouter(t, false)
+	router.captchaSessionStore = captcha.NewSessionStoreWithSecret("node-uuid-1234") // "restarted"
+
+	r := newTestRequest("203.0.113.5:44321", nil)
+	r.Host = "host.example.com"
+	r.AddCookie(&http.Cookie{Name: captcha.CookieName, Value: token})
+	if handled, challenged := router.handleCaptchaGating(httptest.NewRecorder(), r, endpoint); handled || challenged {
+		t.Fatalf("verified visitor was challenged again after restart (handled=%v challenged=%v)", handled, challenged)
+	}
+
+	// Without the cookie they are challenged, and told why.
+	w := httptest.NewRecorder()
+	r2 := newTestRequest("203.0.113.5:44321", nil)
+	r2.Host = "host.example.com"
+	if _, challenged := router.handleCaptchaGating(w, r2, endpoint); !challenged {
+		t.Fatal("visitor without a session was not challenged")
+	}
+	if got := w.Header().Get("X-Zoraxy-Captcha-Reason"); got != captcha.ReasonMissing {
+		t.Errorf("X-Zoraxy-Captcha-Reason = %q, want %q", got, captcha.ReasonMissing)
+	}
+}

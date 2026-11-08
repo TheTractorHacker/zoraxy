@@ -2,9 +2,11 @@ package captcha
 
 import (
 	"bytes"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	_ "embed"
-	"encoding/hex"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,8 +17,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"imuslab.com/zoraxy/mod/pathmatch"
@@ -81,80 +83,126 @@ type ExceptionRule struct {
 	CIDR       string        `json:"CIDR"`       // For IP-based exceptions
 }
 
-// SessionStore manages active CAPTCHA sessions
+// SessionStore issues and validates CAPTCHA sessions.
+//
+// Sessions are stateless: the cookie value is a signed token carrying the
+// expiry time and the host it was issued for, so nothing is kept in memory.
+// A session therefore survives a Zoraxy restart, and every node that shares
+// the same secret accepts it (needed for high availability). The trade-off is
+// that a single session cannot be revoked early; rotate the secret to
+// invalidate all of them.
 type SessionStore struct {
-	sessions sync.Map // map[sessionID]expiryTime
-	stopChan chan struct{}
+	key []byte
 }
 
-// NewSessionStore creates a new CAPTCHA session store
+// Reasons returned by CheckSessionReason, useful when debugging re-challenges.
+const (
+	ReasonOK      = "ok"
+	ReasonMissing = "no-cookie"
+	ReasonInvalid = "invalid"
+	ReasonExpired = "expired"
+	ReasonHost    = "wrong-host"
+)
+
+const (
+	// MinSessionDuration and MaxSessionDuration bound the configurable
+	// session length (seconds). Values outside the range are clamped.
+	MinSessionDuration = 60
+	MaxSessionDuration = 30 * 24 * 3600
+	tokenVersion       = "v1"
+)
+
+// NewSessionStore creates a session store with a random secret. Sessions
+// issued by it are lost on restart; use NewSessionStoreWithSecret for
+// restart-proof sessions.
 func NewSessionStore() *SessionStore {
-	store := &SessionStore{
-		stopChan: make(chan struct{}),
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		panic("captcha: cannot read system randomness: " + err.Error())
 	}
-	go store.cleanupExpiredSessions()
-	return store
+	return &SessionStore{key: key}
 }
 
-// generateSessionID creates a random session ID
-func generateSessionID() (string, error) {
-	bytes := make([]byte, 32)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
+// NewSessionStoreWithSecret creates a session store whose signing key is
+// derived from secret (for example the node UUID). Stores built from the same
+// secret accept each other's sessions.
+func NewSessionStoreWithSecret(secret string) *SessionStore {
+	sum := sha256.Sum256([]byte("zoraxy-captcha-session-v1|" + secret))
+	return &SessionStore{key: sum[:]}
+}
+
+// ClampSessionDuration forces a duration (seconds) into the allowed range.
+// Zero or negative means "use the default".
+func ClampSessionDuration(seconds int) int {
+	if seconds <= 0 {
+		return DefaultSessionDuration
 	}
-	return hex.EncodeToString(bytes), nil
-}
-
-// AddSession adds a new session with the specified duration
-func (s *SessionStore) AddSession(sessionID string, durationSeconds int) {
-	expiryTime := time.Now().Add(time.Duration(durationSeconds) * time.Second)
-	s.sessions.Store(sessionID, expiryTime)
-}
-
-// IsValidSession checks if a session is valid and not expired
-func (s *SessionStore) IsValidSession(sessionID string) bool {
-	value, exists := s.sessions.Load(sessionID)
-	if !exists {
-		return false
+	if seconds < MinSessionDuration {
+		return MinSessionDuration
 	}
-	expiryTime, ok := value.(time.Time)
-	if !ok {
-		return false
+	if seconds > MaxSessionDuration {
+		return MaxSessionDuration
 	}
-	return time.Now().Before(expiryTime)
+	return seconds
 }
 
-// RemoveSession removes a session from the store
-func (s *SessionStore) RemoveSession(sessionID string) {
-	s.sessions.Delete(sessionID)
-}
-
-// Close stops the cleanup goroutine and releases resources
-func (s *SessionStore) Close() {
-	close(s.stopChan)
-}
-
-// cleanupExpiredSessions periodically removes expired sessions
-func (s *SessionStore) cleanupExpiredSessions() {
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			now := time.Now()
-			s.sessions.Range(func(key, value interface{}) bool {
-				expiryTime, ok := value.(time.Time)
-				if !ok || now.After(expiryTime) {
-					s.sessions.Delete(key)
-				}
-				return true
-			})
-		case <-s.stopChan:
-			return
-		}
+func normalizeHost(host string) string {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
 	}
+	return strings.ToLower(strings.TrimSuffix(host, "."))
 }
+
+func (s *SessionStore) sign(payload string) []byte {
+	mac := hmac.New(sha256.New, s.key)
+	mac.Write([]byte(payload))
+	return mac.Sum(nil)
+}
+
+// Issue creates a signed session token for host that expires after
+// durationSeconds (clamped to the allowed range).
+func (s *SessionStore) Issue(host string, durationSeconds int) (token string, expires time.Time) {
+	expires = time.Now().Add(time.Duration(ClampSessionDuration(durationSeconds)) * time.Second)
+	payload := tokenVersion + "|" + strconv.FormatInt(expires.Unix(), 10) + "|" + normalizeHost(host)
+	return base64.RawURLEncoding.EncodeToString([]byte(payload)) + "." +
+		base64.RawURLEncoding.EncodeToString(s.sign(payload)), expires
+}
+
+// Validate checks a token against host and returns the reason it was accepted
+// or rejected (one of the Reason constants).
+func (s *SessionStore) Validate(host, token string) (bool, string) {
+	encPayload, encMac, found := strings.Cut(token, ".")
+	if !found {
+		return false, ReasonInvalid
+	}
+	payloadBytes, err1 := base64.RawURLEncoding.DecodeString(encPayload)
+	gotMac, err2 := base64.RawURLEncoding.DecodeString(encMac)
+	if err1 != nil || err2 != nil {
+		return false, ReasonInvalid
+	}
+	payload := string(payloadBytes)
+	if !hmac.Equal(gotMac, s.sign(payload)) {
+		return false, ReasonInvalid
+	}
+	parts := strings.SplitN(payload, "|", 3)
+	if len(parts) != 3 || parts[0] != tokenVersion {
+		return false, ReasonInvalid
+	}
+	exp, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return false, ReasonInvalid
+	}
+	if time.Now().Unix() >= exp {
+		return false, ReasonExpired
+	}
+	if parts[2] != normalizeHost(host) {
+		return false, ReasonHost
+	}
+	return true, ReasonOK
+}
+
+// Close is kept for API compatibility; the store holds no resources.
+func (s *SessionStore) Close() {}
 
 // CloudflareTurnstileResponse represents the response from Cloudflare Turnstile API
 type CloudflareTurnstileResponse struct {
@@ -548,25 +596,18 @@ func HandleVerification(w http.ResponseWriter, r *http.Request, config *Config, 
 		return fmt.Errorf("verification failed: %v", errorMsg)
 	}
 
-	// Create session
-	sessionID, err := generateSessionID()
-	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return err
-	}
+	// Create a signed session bound to this host
+	duration := ClampSessionDuration(config.SessionDuration)
+	sessionToken, expires := sessionStore.Issue(r.Host, duration)
 
-	duration := config.SessionDuration
-	if duration == 0 {
-		duration = DefaultSessionDuration
-	}
-	sessionStore.AddSession(sessionID, duration)
-
-	// Set cookie
+	// Set cookie. Expires is set as well as MaxAge so clients that ignore
+	// MaxAge still expire the session at the same moment.
 	cookie := &http.Cookie{
 		Name:     CookieName,
-		Value:    sessionID,
+		Value:    sessionToken,
 		Path:     "/",
 		MaxAge:   duration,
+		Expires:  expires,
 		HttpOnly: true,
 		Secure:   r.TLS != nil,
 		SameSite: http.SameSiteLaxMode,
@@ -586,11 +627,17 @@ func HandleVerification(w http.ResponseWriter, r *http.Request, config *Config, 
 
 // CheckSession checks if a request has a valid CAPTCHA session
 func CheckSession(r *http.Request, sessionStore *SessionStore) bool {
+	ok, _ := CheckSessionReason(r, sessionStore)
+	return ok
+}
+
+// CheckSessionReason is CheckSession plus the reason for the decision.
+func CheckSessionReason(r *http.Request, sessionStore *SessionStore) (bool, string) {
 	cookie, err := r.Cookie(CookieName)
 	if err != nil {
-		return false
+		return false, ReasonMissing
 	}
-	return sessionStore.IsValidSession(cookie.Value)
+	return sessionStore.Validate(r.Host, cookie.Value)
 }
 
 // IsConfigured checks if the CAPTCHA config is properly set up
