@@ -94,6 +94,9 @@ func (m *RouteManager) stopGroupLocked(key string, g *healthGroup) {
 
 // StopHealthChecks stops the active health checks of one endpoint and waits for them to end
 func (m *RouteManager) StopHealthChecks(key string) {
+	if m == nil {
+		return
+	}
 	m.hcMu.Lock()
 	defer m.hcMu.Unlock()
 	if g, ok := m.hcGroups[key]; ok {
