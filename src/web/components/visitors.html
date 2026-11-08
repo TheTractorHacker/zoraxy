@@ -367,6 +367,8 @@
             } else {
                 $("#vrBody .vEmpty").closest("tr").remove();
             }
+        }, function(err){
+            if (reset) $("#vrBody").html('<tr><td colspan="8"><div class="vEmpty"><i class="exclamation triangle icon"></i>Unable to load recent visits (' + esc(err) + ")</div></td></tr>");
         });
     }
 
