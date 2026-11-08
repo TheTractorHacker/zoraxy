@@ -50,7 +50,16 @@ type OAuth2RouterOptions struct {
 	OAuth2EndSessionUrl         string //Optional override of the provider's end_session_endpoint
 	OAuth2PostLogoutRedirectUrl string //Optional post_logout_redirect_uri sent on RP-initiated logout
 
-	SystemUUID string //Node UUID, the session cookie signing key is derived from it
+	// Provider identity (registry entries only; the router level options leave these empty)
+	ProviderID     string
+	ProviderName   string
+	ProviderPreset string
+
+	SystemUUID string //Node UUID (or the key material derived from the cluster secret): session cookie signing key and at-rest encryption key
+	SharedKey  bool   //SystemUUID is derived from a cluster secret shared by several nodes (enables portable tickets)
+
+	// InUse returns the proxy rules (host names) that use a provider; a provider in use cannot be deleted.
+	InUse func(providerID string) []string
 
 	Logger   *logger.Logger
 	Database *database.Database
@@ -61,18 +70,11 @@ type OAuth2RouterOptions struct {
 
 type OAuth2Router struct {
 	mu      sync.RWMutex
-	options *OAuth2RouterOptions
+	options *OAuth2RouterOptions //router level options (database, logger, keys); the legacy provider values are only used for the first migration
+	provs   map[string]*providerState
 
 	client *http.Client
 	store  *sessionStore
-	jwks   *jwksCache
-
-	metaMu  sync.Mutex
-	meta    *providerMeta
-	metaKey string
-	metaErr time.Time
-	lastErr error
-	errKey  string
 
 	now func() time.Time
 }
@@ -115,39 +117,36 @@ func NewOAuth2Router(options *OAuth2RouterOptions) *OAuth2Router {
 		client = newHTTPClient()
 	}
 
-	return &OAuth2Router{
+	ar := &OAuth2Router{
 		options: options,
+		provs:   map[string]*providerState{},
 		client:  client,
-		store:   newSessionStore(options.SystemUUID),
-		jwks:    &jwksCache{},
-		now:     time.Now,
+		store: newSessionStoreOpt(storeOptions{
+			nodeSecret: options.SystemUUID, shared: options.SharedKey, db: options.Database,
+		}),
+		now: time.Now,
 	}
+	legacy := *options
+	ar.loadProviders(&legacy)
+	return ar
 }
 
 // Close stops the background session janitors.
 func (ar *OAuth2Router) Close() { ar.store.close() }
 
+// snapshot returns a copy of the default provider's settings (zero value when it is not configured).
 func (ar *OAuth2Router) snapshot() *OAuth2RouterOptions {
-	ar.mu.RLock()
-	defer ar.mu.RUnlock()
-	cp := *ar.options
-	return &cp
+	if ps := ar.prov(DefaultProviderID); ps != nil {
+		cp := *ps.config()
+		return &cp
+	}
+	return &OAuth2RouterOptions{}
 }
 
 func (ar *OAuth2Router) log(msg string, err error) {
 	if ar.options.Logger != nil {
 		ar.options.Logger.PrintAndLog(logTitle, msg, err)
 	}
-}
-
-func (ar *OAuth2Router) flushCaches() {
-	ar.metaMu.Lock()
-	ar.meta = nil
-	ar.metaKey = ""
-	ar.lastErr = nil
-	ar.metaMu.Unlock()
-	ar.store.sessions.DeleteAll()
-	ar.store.pending.DeleteAll()
 }
 
 /* Settings API */
@@ -168,7 +167,11 @@ func (ar *OAuth2Router) HandleSetOAuth2Settings(w http.ResponseWriter, r *http.R
 
 func (ar *OAuth2Router) handleSetOAuthSettingsGET(w http.ResponseWriter, r *http.Request) {
 	o := ar.snapshot()
-	//Return the current settings
+	ct := DefaultOAuth2ConfigCacheTime
+	if o.OAuth2ConfigurationCacheTime != nil {
+		ct = *o.OAuth2ConfigurationCacheTime
+	}
+	//Return the current settings of the default provider
 	js, _ := json.Marshal(map[string]interface{}{
 		"oauth2WellKnownUrl":           o.OAuth2WellKnownUrl,
 		"oauth2ServerUrl":              o.OAuth2ServerURL,
@@ -178,7 +181,7 @@ func (ar *OAuth2Router) handleSetOAuthSettingsGET(w http.ResponseWriter, r *http
 		"oauth2ClientSecret":           o.OAuth2ClientSecret,
 		"oauth2ClientId":               o.OAuth2ClientId,
 		"oauth2CodeChallengeMethod":    o.OAuth2CodeChallengeMethod,
-		"oauth2ConfigurationCacheTime": o.OAuth2ConfigurationCacheTime.String(),
+		"oauth2ConfigurationCacheTime": ct.String(),
 		"oauth2Issuer":                 o.OAuth2Issuer,
 		"oauth2GroupsClaim":            o.OAuth2GroupsClaim,
 		"oauth2AllowedGroups":          o.OAuth2AllowedGroups,
@@ -199,143 +202,35 @@ func jsonError(w http.ResponseWriter, msg string) {
 	w.Write(b)
 }
 
+// The legacy single-provider endpoints operate on the provider "default".
 func (ar *OAuth2Router) handleSetOAuthSettingsPOST(w http.ResponseWriter, r *http.Request) {
-	opt := func(key string) string {
-		v, _ := utils.PostPara(r, key)
-		return strings.TrimSpace(v)
-	}
-
-	oauth2ClientId, err := utils.PostPara(r, "oauth2ClientId")
+	prev := ar.recordOf(DefaultProviderID)
+	rec, err := parseRecord(r, DefaultProviderID, prev, true)
 	if err != nil {
-		utils.SendErrorResponse(w, "oauth2ClientId not found")
+		jsonError(w, err.Error())
 		return
 	}
-
-	oauth2ClientSecret, err := utils.PostPara(r, "oauth2ClientSecret")
-	if err != nil {
-		utils.SendErrorResponse(w, "oauth2ClientSecret not found")
+	if prev != nil {
+		rec.Name, rec.Preset = prev.Name, prev.Preset
+	} else {
+		rec.Name = "Default"
+	}
+	if err := ar.saveProvider(rec); err != nil {
+		jsonError(w, "could not save: "+err.Error())
 		return
 	}
-
-	oauth2CodeChallengeMethod := opt("oauth2CodeChallengeMethod")
-	switch oauth2CodeChallengeMethod {
-	case "", "plain", "PKCE", "PKCE_S256": // "plain" (UI label "None") means no PKCE
-	default:
-		utils.SendErrorResponse(w, "oauth2CodeChallengeMethod must be empty, plain, PKCE or PKCE_S256")
-		return
-	}
-
-	cacheTime := DefaultOAuth2ConfigCacheTime
-	oauth2ConfigurationCacheTime := &cacheTime
-	if d, err := utils.PostDuration(r, "oauth2ConfigurationCacheTime"); err == nil && d != nil && *d > 0 {
-		oauth2ConfigurationCacheTime = d
-	}
-
-	oauth2WellKnownUrl := opt("oauth2WellKnownUrl")
-	oauth2Issuer := strings.TrimSpace(opt("oauth2Issuer"))
-	oauth2ServerUrl := opt("oauth2ServerUrl")
-	oauth2TokenURL := opt("oauth2TokenUrl")
-	oauth2UserInfoUrl := opt("oauth2UserInfoUrl")
-	oauth2Scopes := opt("oauth2Scopes")
-
-	if oauth2WellKnownUrl == "" && oauth2Issuer == "" {
-		// Manual endpoint configuration needs the three endpoints (legacy behavior)
-		if oauth2ServerUrl == "" || oauth2TokenURL == "" {
-			utils.SendErrorResponse(w, "set an issuer / well-known URL, or both the authorization and token endpoints")
-			return
-		}
-	}
-	for name, v := range map[string]string{
-		"oauth2WellKnownUrl": oauth2WellKnownUrl, "oauth2Issuer": oauth2Issuer, "oauth2ServerUrl": oauth2ServerUrl,
-		"oauth2TokenUrl": oauth2TokenURL, "oauth2UserInfoUrl": oauth2UserInfoUrl,
-		"oauth2EndSessionUrl": opt("oauth2EndSessionUrl"), "oauth2PostLogoutRedirectUrl": opt("oauth2PostLogoutRedirectUrl"),
-	} {
-		if v != "" {
-			if err := validateHTTPURL(v); err != nil {
-				utils.SendErrorResponse(w, "invalid "+name)
-				return
-			}
-		}
-	}
-	headerMappings := opt("oauth2HeaderMappings")
-	if _, err := ParseHeaderMappings(headerMappings); err != nil {
-		jsonError(w, "oauth2HeaderMappings: "+err.Error())
-		return
-	}
-
-	allowedClaims := opt("oauth2AllowedClaims")
-	if _, err := ParseClaimRules(allowedClaims); err != nil {
-		jsonError(w, "oauth2AllowedClaims: "+err.Error())
-		return
-	}
-
-	ar.mu.Lock()
-	o := ar.options
-	o.OAuth2WellKnownUrl = oauth2WellKnownUrl
-	o.OAuth2ServerURL = oauth2ServerUrl
-	o.OAuth2TokenURL = oauth2TokenURL
-	o.OAuth2UserInfoUrl = oauth2UserInfoUrl
-	o.OAuth2ClientId = oauth2ClientId
-	o.OAuth2ClientSecret = oauth2ClientSecret
-	o.OAuth2Scopes = oauth2Scopes
-	o.OAuth2CodeChallengeMethod = oauth2CodeChallengeMethod
-	o.OAuth2ConfigurationCacheTime = oauth2ConfigurationCacheTime
-	o.OAuth2Issuer = oauth2Issuer
-	o.OAuth2GroupsClaim = opt("oauth2GroupsClaim")
-	o.OAuth2AllowedGroups = opt("oauth2AllowedGroups")
-	o.OAuth2AllowedClaims = allowedClaims
-	o.OAuth2AllowedEmails = opt("oauth2AllowedEmails")
-	o.OAuth2AllowedEmailDomains = opt("oauth2AllowedEmailDomains")
-	o.OAuth2HeaderMappings = headerMappings
-	o.OAuth2EndSessionUrl = opt("oauth2EndSessionUrl")
-	o.OAuth2PostLogoutRedirectUrl = opt("oauth2PostLogoutRedirectUrl")
-	ar.mu.Unlock()
-
-	//Write changes to database
-	wr := func(key string, v any) { ar.options.Database.Write(dbTable, key, v) }
-	wr("oauth2WellKnownUrl", oauth2WellKnownUrl)
-	wr("oauth2ServerUrl", oauth2ServerUrl)
-	wr("oauth2TokenUrl", oauth2TokenURL)
-	wr("oauth2UserInfoUrl", oauth2UserInfoUrl)
-	wr("oauth2ClientId", oauth2ClientId)
-	wr("oauth2ClientSecret", oauth2ClientSecret)
-	wr("oauth2Scopes", oauth2Scopes)
-	wr("oauth2CodeChallengeMethod", oauth2CodeChallengeMethod)
-	wr("oauth2ConfigurationCacheTime", oauth2ConfigurationCacheTime)
-	wr("oauth2Issuer", oauth2Issuer)
-	wr("oauth2GroupsClaim", o.OAuth2GroupsClaim)
-	wr("oauth2AllowedGroups", o.OAuth2AllowedGroups)
-	wr("oauth2AllowedClaims", o.OAuth2AllowedClaims)
-	wr("oauth2AllowedEmails", o.OAuth2AllowedEmails)
-	wr("oauth2AllowedEmailDomains", o.OAuth2AllowedEmailDomains)
-	wr("oauth2HeaderMappings", headerMappings)
-	wr("oauth2EndSessionUrl", o.OAuth2EndSessionUrl)
-	wr("oauth2PostLogoutRedirectUrl", o.OAuth2PostLogoutRedirectUrl)
-
-	// Flush caches and sessions: changed group rules / secrets must apply immediately
-	ar.flushCaches()
-
 	utils.SendOK(w)
 }
 
 func (ar *OAuth2Router) handleSetOAuthSettingsDELETE(w http.ResponseWriter, r *http.Request) {
-	ar.mu.Lock()
-	o := ar.options
-	o.OAuth2WellKnownUrl, o.OAuth2ServerURL, o.OAuth2TokenURL, o.OAuth2UserInfoUrl = "", "", "", ""
-	o.OAuth2ClientId, o.OAuth2ClientSecret, o.OAuth2Scopes, o.OAuth2CodeChallengeMethod = "", "", "", ""
-	o.OAuth2Issuer, o.OAuth2GroupsClaim, o.OAuth2AllowedGroups, o.OAuth2HeaderMappings = "", "", "", ""
-	o.OAuth2EndSessionUrl, o.OAuth2PostLogoutRedirectUrl = "", ""
-	o.OAuth2AllowedClaims, o.OAuth2AllowedEmails, o.OAuth2AllowedEmailDomains = "", "", ""
-	ar.mu.Unlock()
-
-	for _, k := range []string{"oauth2WellKnownUrl", "oauth2ServerUrl", "oauth2TokenUrl", "oauth2UserInfoUrl",
-		"oauth2ClientId", "oauth2ClientSecret", "oauth2Scopes", "oauth2CodeChallengeMethod", "oauth2ConfigurationCacheTime",
-		"oauth2Issuer", "oauth2GroupsClaim", "oauth2AllowedGroups", "oauth2HeaderMappings", "oauth2EndSessionUrl",
-		"oauth2PostLogoutRedirectUrl", "oauth2AllowedClaims", "oauth2AllowedEmails", "oauth2AllowedEmailDomains"} {
-		ar.options.Database.Delete(dbTable, k)
+	if ar.prov(DefaultProviderID) == nil {
+		utils.SendOK(w)
+		return
 	}
-	ar.flushCaches()
-
+	if err := ar.deleteProvider(DefaultProviderID); err != nil {
+		jsonError(w, err.Error())
+		return
+	}
 	utils.SendOK(w)
 }
 
@@ -447,10 +342,10 @@ func (ar *OAuth2Router) httpCtx(ctx context.Context) context.Context {
 	return context.WithValue(ctx, oauth2.HTTPClient, ar.client)
 }
 
-// provider resolves the provider endpoints. Manually configured endpoints take precedence over
+// resolve resolves the provider endpoints. Manually configured endpoints take precedence over
 // discovery, like they always did. Metadata is cached for OAuth2ConfigurationCacheTime and a stale
 // copy is used if the provider is temporarily unreachable.
-func (ar *OAuth2Router) provider(ctx context.Context, o *OAuth2RouterOptions) (*providerMeta, error) {
+func (ps *providerState) resolve(ctx context.Context, o *OAuth2RouterOptions) (*providerMeta, error) {
 	key := strings.Join([]string{o.OAuth2WellKnownUrl, o.OAuth2Issuer, o.OAuth2ServerURL, o.OAuth2TokenURL,
 		o.OAuth2UserInfoUrl, o.OAuth2EndSessionUrl}, "|")
 	ttl := DefaultOAuth2ConfigCacheTime
@@ -458,10 +353,10 @@ func (ar *OAuth2Router) provider(ctx context.Context, o *OAuth2RouterOptions) (*
 		ttl = *o.OAuth2ConfigurationCacheTime
 	}
 
-	ar.metaMu.Lock()
-	defer ar.metaMu.Unlock()
-	if ar.meta != nil && ar.metaKey == key && time.Since(ar.meta.fetched) < ttl {
-		return ar.meta, nil
+	ps.metaMu.Lock()
+	defer ps.metaMu.Unlock()
+	if ps.meta != nil && ps.metaKey == key && time.Since(ps.meta.fetched) < ttl {
+		return ps.meta, nil
 	}
 
 	meta := &providerMeta{fetched: time.Now()}
@@ -472,26 +367,26 @@ func (ar *OAuth2Router) provider(ctx context.Context, o *OAuth2RouterOptions) (*
 	manualComplete := o.OAuth2ServerURL != "" && o.OAuth2TokenURL != ""
 	if wk != "" {
 		// Do not hammer an unreachable provider: back off 5s after a failure (all callers share the result).
-		if ar.lastErr != nil && ar.errKey == key && time.Since(ar.metaErr) < 5*time.Second {
-			if ar.meta != nil && ar.metaKey == key {
-				return ar.meta, nil
+		if ps.lastErr != nil && ps.errKey == key && time.Since(ps.metaErr) < 5*time.Second {
+			if ps.meta != nil && ps.metaKey == key {
+				return ps.meta, nil
 			}
-			return nil, ar.lastErr
+			return nil, ps.lastErr
 		}
-		doc, err := fetchDiscovery(ctx, ar.client, wk, o.OAuth2Issuer)
+		doc, err := fetchDiscovery(ctx, ps.ar.client, wk, o.OAuth2Issuer)
 		if err != nil {
-			ar.metaErr, ar.lastErr, ar.errKey = time.Now(), err, key
-			if ar.meta != nil && ar.metaKey == key && time.Since(ar.meta.fetched) < 24*time.Hour {
-				ar.log("Discovery refresh failed, using cached provider metadata", err)
-				return ar.meta, nil
+			ps.metaErr, ps.lastErr, ps.errKey = time.Now(), err, key
+			if ps.meta != nil && ps.metaKey == key && time.Since(ps.meta.fetched) < 24*time.Hour {
+				ps.ar.log("Discovery refresh failed, using cached provider metadata", err)
+				return ps.meta, nil
 			}
 			if !manualComplete {
 				return nil, err
 			}
-			ar.log("Discovery failed, using manually configured endpoints", err)
+			ps.ar.log("Discovery failed, using manually configured endpoints", err)
 		} else {
 			meta = doc.toMeta()
-			ar.lastErr = nil
+			ps.lastErr = nil
 		}
 	}
 	if o.OAuth2ServerURL != "" {
@@ -512,8 +407,8 @@ func (ar *OAuth2Router) provider(ctx context.Context, o *OAuth2RouterOptions) (*
 	if meta.AuthURL == "" || meta.TokenURL == "" {
 		return nil, errors.New("authorization or token endpoint missing")
 	}
-	ar.jwks.reset(meta.JWKSURI)
-	ar.meta, ar.metaKey = meta, key
+	ps.jwks.reset(meta.JWKSURI)
+	ps.meta, ps.metaKey = meta, key
 	return meta, nil
 }
 
@@ -530,6 +425,7 @@ func scopesFor(o *OAuth2RouterOptions, meta *providerMeta) []string {
 }
 
 func (ar *OAuth2Router) oauthConfig(r *http.Request, o *OAuth2RouterOptions, meta *providerMeta) *oauth2.Config {
+	cb := callbackPathFor(o.ProviderID)
 	sch := "http"
 	if r.TLS != nil {
 		sch = "https"
@@ -537,16 +433,16 @@ func (ar *OAuth2Router) oauthConfig(r *http.Request, o *OAuth2RouterOptions, met
 	return &oauth2.Config{
 		ClientID:     o.OAuth2ClientId,
 		ClientSecret: o.OAuth2ClientSecret,
-		RedirectURL:  sch + "://" + r.Host + callbackPrefix,
+		RedirectURL:  sch + "://" + r.Host + cb,
 		Endpoint:     oauth2.Endpoint{AuthURL: meta.AuthURL, TokenURL: meta.TokenURL},
 		Scopes:       scopesFor(o, meta),
 	}
 }
 
-func (ar *OAuth2Router) verifier(o *OAuth2RouterOptions, meta *providerMeta) *idTokenVerifier {
+func (ar *OAuth2Router) verifier(ps *providerState, o *OAuth2RouterOptions, meta *providerMeta) *idTokenVerifier {
 	return &idTokenVerifier{
 		issuer: meta.Issuer, clientID: o.OAuth2ClientId, clientSecret: o.OAuth2ClientSecret,
-		meta: meta, jwks: ar.jwks, client: ar.client, now: ar.now,
+		meta: meta, jwks: ps.jwks, client: ar.client, now: ar.now,
 	}
 }
 
@@ -567,21 +463,60 @@ func validRequestHost(h string) bool {
 	return !strings.ContainsAny(h, " /\\?#@\r\n\t")
 }
 
-// HandleOAuth2Auth is the internal handler for OAuth authentication.
+// RuleOptions are the per proxy rule settings of an OAuth2 protected endpoint.
+type RuleOptions struct {
+	ProviderID          string //provider to use, "" = default
+	AllowedGroups       string //additional group allow-list (AND with the provider's)
+	AllowedClaims       string //additional "claim=v1,v2; ..." allow-list
+	AllowedEmails       string //additional e-mail allow-list
+	AllowedEmailDomains string //additional e-mail domain allow-list
+}
+
+// ValidateRuleOptions checks the syntax of the per rule allow-lists.
+func ValidateRuleOptions(ro RuleOptions) error {
+	if _, err := ParseClaimRules(ro.AllowedClaims); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ruleAllowed applies the per rule allow-lists on top of the provider's.
+func ruleAllowed(ro RuleOptions, groupsClaim string, claims map[string]any) bool {
+	if !groupsAllowed(claims, groupsClaim, splitList(ro.AllowedGroups)) {
+		return false
+	}
+	rules, err := ParseClaimRules(ro.AllowedClaims)
+	if err != nil || !claimRulesAllowed(claims, rules) {
+		return false
+	}
+	return emailAllowed(claims, splitList(ro.AllowedEmails), splitList(ro.AllowedEmailDomains))
+}
+
+// HandleOAuth2Auth authenticates a request with the default provider (legacy entry point).
+func (ar *OAuth2Router) HandleOAuth2Auth(w http.ResponseWriter, r *http.Request) error {
+	return ar.HandleOAuth2AuthFor(w, r, RuleOptions{})
+}
+
+// HandleOAuth2AuthFor is the internal handler for OAuth authentication of one proxy rule.
 // It returns nil when the request is authenticated (and may continue to the upstream) and a
 // non-nil error when a response (redirect / error) has already been written.
-func (ar *OAuth2Router) HandleOAuth2Auth(w http.ResponseWriter, r *http.Request) error {
-	o := ar.snapshot()
+func (ar *OAuth2Router) HandleOAuth2AuthFor(w http.ResponseWriter, r *http.Request, ro RuleOptions) error {
 	if !validRequestHost(r.Host) {
 		return deny(w, http.StatusBadRequest, "Bad request")
 	}
+	ps := ar.prov(ro.ProviderID)
+	if ps == nil {
+		ar.log("OAuth2 provider \""+normProvider(ro.ProviderID)+"\" is not configured", nil)
+		return deny(w, http.StatusInternalServerError, "OAuth2 is not configured")
+	}
+	o := ps.config()
 	if o.OAuth2ClientId == "" {
 		ar.log("OAuth2 is not configured", nil)
 		return deny(w, http.StatusInternalServerError, "OAuth2 is not configured")
 	}
 
 	ctx := ar.httpCtx(r.Context())
-	meta, err := ar.provider(ctx, o)
+	meta, err := ps.resolve(ctx, o)
 	if err != nil {
 		ar.log("Failed to resolve OIDC provider configuration", err)
 		return deny(w, http.StatusInternalServerError, "Authentication provider unavailable")
@@ -598,23 +533,26 @@ func (ar *OAuth2Router) HandleOAuth2Auth(w http.ResponseWriter, r *http.Request)
 	cfg := ar.oauthConfig(r, o, meta)
 
 	switch r.URL.Path {
-	case callbackPrefix:
-		return ar.handleCallback(ctx, w, r, o, meta, cfg)
-	case logoutPath:
+	case callbackPathFor(o.ProviderID):
+		return ar.handleCallback(ctx, w, r, ps, o, meta, cfg, ro)
+	case logoutPathFor(o.ProviderID):
 		return ar.handleLogout(w, r, o, meta)
 	}
 
-	id, sess := ar.store.lookup(r)
+	id, sess := ar.store.lookup(r, o.ProviderID)
 	if sess != nil {
-		ok, claims := ar.ensureFresh(ctx, o, meta, cfg, sess)
+		ok, claims := ar.ensureFresh(ctx, ps, o, meta, cfg, sess)
 		if !ok {
 			ar.store.destroy(id)
-			expireCookie(w, r, sessionCookie)
+			expireCookie(w, r, cookieNameFor(sessionCookie, o.ProviderID))
+			expireCookie(w, r, cookieNameFor(ticketCookie, o.ProviderID))
 			return ar.startLogin(w, r, o, meta, cfg)
 		}
-		if !accessAllowed(o, claims) {
-			return ar.forbidden(w)
+		if !accessAllowed(o, claims) || !ruleAllowed(ro, o.OAuth2GroupsClaim, claims) {
+			return ar.forbidden(w, o.ProviderID)
 		}
+		ar.store.refreshTicket(w, r, sess)
+		ar.scrubAll(r)
 		mappings, _ := ParseHeaderMappings(o.OAuth2HeaderMappings)
 		applyHeaderMappings(r, mappings, claims)
 		return nil
@@ -624,18 +562,19 @@ func (ar *OAuth2Router) HandleOAuth2Auth(w http.ResponseWriter, r *http.Request)
 	return ar.startLogin(w, r, o, meta, cfg)
 }
 
-func (ar *OAuth2Router) forbidden(w http.ResponseWriter) error {
+func (ar *OAuth2Router) forbidden(w http.ResponseWriter, provider string) error {
 	noStore(w)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusForbidden)
 	fmt.Fprintf(w, "<!doctype html><title>Access denied</title><h1>Access denied</h1>"+
 		"<p>Your account is not allowed to access this application.</p><p><a href=\"%s\">Sign out</a></p>",
-		html.EscapeString(logoutPath))
+		html.EscapeString(logoutPathFor(provider)))
 	return errors.New("forbidden")
 }
 
 func (ar *OAuth2Router) startLogin(w http.ResponseWriter, r *http.Request, o *OAuth2RouterOptions, meta *providerMeta, cfg *oauth2.Config) error {
 	p := &pendingLogin{
+		provider:   normProvider(o.ProviderID),
 		host:       r.Host,
 		nonce:      randomToken(24),
 		returnPath: safeReturnPath(r.URL.RequestURI()),
@@ -662,7 +601,7 @@ func (ar *OAuth2Router) startLogin(w http.ResponseWriter, r *http.Request, o *OA
 	return errors.New("unauthorized")
 }
 
-func (ar *OAuth2Router) handleCallback(ctx context.Context, w http.ResponseWriter, r *http.Request, o *OAuth2RouterOptions, meta *providerMeta, cfg *oauth2.Config) error {
+func (ar *OAuth2Router) handleCallback(ctx context.Context, w http.ResponseWriter, r *http.Request, ps *providerState, o *OAuth2RouterOptions, meta *providerMeta, cfg *oauth2.Config, ro RuleOptions) error {
 	if r.Method != http.MethodGet {
 		return deny(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
@@ -685,8 +624,8 @@ func (ar *OAuth2Router) handleCallback(ctx context.Context, w http.ResponseWrite
 	if cerr == nil {
 		bind, bok = ar.store.unsign("bind", bindCookie.Value)
 	}
-	if !bok || bind != p.bind || p.host != r.Host {
-		ar.log("OAuth2 callback rejected: state is not bound to this browser or host", nil)
+	if !bok || bind != p.bind || p.host != r.Host || p.provider != normProvider(o.ProviderID) {
+		ar.log("OAuth2 callback rejected: state is not bound to this browser, host or provider", nil)
 		return deny(w, http.StatusBadRequest, "Login attempt expired or invalid, please try again")
 	}
 	if e := q.Get("error"); e != "" {
@@ -711,7 +650,7 @@ func (ar *OAuth2Router) handleCallback(ctx context.Context, w http.ResponseWrite
 		return deny(w, http.StatusUnauthorized, "Unauthorized")
 	}
 
-	idClaims, rawID, err := ar.verifyIDToken(ctx, o, meta, cfg, token, p.nonce, true)
+	idClaims, rawID, err := ar.verifyIDToken(ctx, ps, o, meta, cfg, token, p.nonce, true)
 	if err != nil {
 		ar.log("ID token validation failed", err)
 		return deny(w, http.StatusUnauthorized, "Unauthorized")
@@ -730,13 +669,13 @@ func (ar *OAuth2Router) handleCallback(ctx context.Context, w http.ResponseWrite
 		return deny(w, http.StatusUnauthorized, "Unauthorized")
 	}
 
-	if !accessAllowed(o, claims) {
+	if !accessAllowed(o, claims) || !ruleAllowed(ro, o.OAuth2GroupsClaim, claims) {
 		ar.log(fmt.Sprintf("User %v denied by the group / claim / e-mail allow-list", claims["sub"]), nil)
-		return ar.forbidden(w)
+		return ar.forbidden(w, o.ProviderID)
 	}
 
 	now := ar.now()
-	sess := &session{host: r.Host, claims: claims, idToken: rawID, refreshToken: token.RefreshToken}
+	sess := &session{provider: normProvider(o.ProviderID), host: r.Host, claims: claims, idToken: rawID, refreshToken: token.RefreshToken}
 	sess.accessExpiry = token.Expiry
 	if sess.accessExpiry.IsZero() {
 		sess.accessExpiry = now.Add(noExpiryLife)
@@ -747,7 +686,8 @@ func (ar *OAuth2Router) handleCallback(ctx context.Context, w http.ResponseWrite
 		sess.hardExpiry = sess.accessExpiry
 	}
 	cookieVal := ar.store.create(sess)
-	http.SetCookie(w, newCookie(r, sessionCookie, cookieVal, sess.hardExpiry))
+	http.SetCookie(w, newCookie(r, cookieNameFor(sessionCookie, o.ProviderID), cookieVal, sess.hardExpiry))
+	ar.store.refreshTicket(w, r, sess)
 	// Retire cookies of the previous implementation
 	expireCookie(w, r, legacyToken)
 	expireCookie(w, r, legacyVerifier)
@@ -759,7 +699,7 @@ func (ar *OAuth2Router) handleCallback(ctx context.Context, w http.ResponseWrite
 
 // verifyIDToken validates the ID token carried by tok (if any). It returns nil claims when the
 // provider issued none and the openid scope was not requested (plain OAuth2 provider).
-func (ar *OAuth2Router) verifyIDToken(ctx context.Context, o *OAuth2RouterOptions, meta *providerMeta, cfg *oauth2.Config, tok *oauth2.Token, nonce string, required bool) (map[string]any, string, error) {
+func (ar *OAuth2Router) verifyIDToken(ctx context.Context, ps *providerState, o *OAuth2RouterOptions, meta *providerMeta, cfg *oauth2.Config, tok *oauth2.Token, nonce string, required bool) (map[string]any, string, error) {
 	if !containsStr(cfg.Scopes, "openid") {
 		// Plain OAuth2: identity comes from the userinfo endpoint, any id_token is ignored.
 		return nil, "", nil
@@ -774,7 +714,7 @@ func (ar *OAuth2Router) verifyIDToken(ctx context.Context, o *OAuth2RouterOption
 	if meta.Issuer == "" {
 		return nil, "", errors.New("cannot verify id_token without an issuer")
 	}
-	claims, err := ar.verifier(o, meta).verify(ctx, raw, nonce)
+	claims, err := ar.verifier(ps, o, meta).verify(ctx, raw, nonce)
 	return claims, raw, err
 }
 
@@ -829,7 +769,7 @@ func mergeClaims(id, ui map[string]any) (map[string]any, error) {
 
 // ensureFresh refreshes the session's tokens when the access token is about to expire. It
 // returns false when the session is no longer valid.
-func (ar *OAuth2Router) ensureFresh(ctx context.Context, o *OAuth2RouterOptions, meta *providerMeta, cfg *oauth2.Config, s *session) (bool, map[string]any) {
+func (ar *OAuth2Router) ensureFresh(ctx context.Context, ps *providerState, o *OAuth2RouterOptions, meta *providerMeta, cfg *oauth2.Config, s *session) (bool, map[string]any) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := ar.now()
@@ -847,7 +787,7 @@ func (ar *OAuth2Router) ensureFresh(ctx context.Context, o *OAuth2RouterOptions,
 		ar.log("Token refresh failed", err)
 		return false, nil
 	}
-	idClaims, rawID, err := ar.verifyIDToken(ctx, o, meta, cfg, tok, "", false)
+	idClaims, rawID, err := ar.verifyIDToken(ctx, ps, o, meta, cfg, tok, "", false)
 	if err != nil {
 		ar.log("ID token validation after refresh failed", err)
 		return false, nil
@@ -887,11 +827,15 @@ func (ar *OAuth2Router) ensureFresh(ctx context.Context, o *OAuth2RouterOptions,
 	if s.accessExpiry.IsZero() {
 		s.accessExpiry = now.Add(noExpiryLife)
 	}
-	return true, s.claims
+	claimsOut := s.claims
+	if ar.store.persist != nil {
+		ar.store.persist.saveHeld(s) //persist the rotated tokens
+	}
+	return true, claimsOut
 }
 
 func (ar *OAuth2Router) handleLogout(w http.ResponseWriter, r *http.Request, o *OAuth2RouterOptions, meta *providerMeta) error {
-	id, sess := ar.store.lookup(r)
+	id, sess := ar.store.lookup(r, o.ProviderID)
 	idToken := ""
 	if sess != nil {
 		sess.mu.Lock()
@@ -899,7 +843,8 @@ func (ar *OAuth2Router) handleLogout(w http.ResponseWriter, r *http.Request, o *
 		sess.mu.Unlock()
 	}
 	ar.store.destroy(id)
-	expireCookie(w, r, sessionCookie)
+	expireCookie(w, r, cookieNameFor(sessionCookie, o.ProviderID))
+	expireCookie(w, r, cookieNameFor(ticketCookie, o.ProviderID))
 	expireCookie(w, r, legacyToken)
 	noStore(w)
 
@@ -924,13 +869,20 @@ func (ar *OAuth2Router) handleLogout(w http.ResponseWriter, r *http.Request, o *
 	return errors.New("logged out")
 }
 
-// ScrubIdentityHeaders removes every header that is mapped from OAuth2 claims, so requests that
-// skip authentication through an exception rule cannot carry a forged identity to the upstream.
+// ScrubIdentityHeaders removes every header that is mapped from OAuth2 claims by any provider, so
+// requests that skip authentication through an exception rule cannot carry a forged identity to the upstream.
 func (ar *OAuth2Router) ScrubIdentityHeaders(r *http.Request) {
 	if ar == nil || r == nil {
 		return
 	}
-	o := ar.snapshot()
-	mappings, _ := ParseHeaderMappings(o.OAuth2HeaderMappings)
-	applyHeaderMappings(r, mappings, nil)
+	ar.scrubAll(r)
+}
+
+func (ar *OAuth2Router) scrubAll(r *http.Request) {
+	ar.mu.RLock()
+	defer ar.mu.RUnlock()
+	for _, ps := range ar.provs {
+		mappings, _ := ParseHeaderMappings(ps.config().OAuth2HeaderMappings)
+		applyHeaderMappings(r, mappings, nil)
+	}
 }

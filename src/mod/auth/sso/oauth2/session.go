@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jellydator/ttlcache/v3"
+	"imuslab.com/zoraxy/mod/database"
 )
 
 /*
@@ -28,6 +29,7 @@ const (
 	logoutPath     = callbackPrefix + "/logout"
 
 	sessionCookie  = "z-session"
+	ticketCookie   = "z-ticket"
 	pendingPrefix  = "z-oidc-"
 	legacyToken    = "z-token"
 	legacyVerifier = "z-verifier"
@@ -41,6 +43,9 @@ const (
 
 type session struct {
 	mu           sync.Mutex
+	id           string
+	provider     string
+	ticketFor    time.Time //access expiry the portable ticket was last issued for
 	host         string
 	claims       map[string]any
 	idToken      string
@@ -51,6 +56,7 @@ type session struct {
 
 // pendingLogin is the state of one in-flight authorization code flow.
 type pendingLogin struct {
+	provider   string
 	host       string
 	nonce      string
 	verifier   string
@@ -59,14 +65,30 @@ type pendingLogin struct {
 }
 
 type sessionStore struct {
-	key      []byte
-	sessions *ttlcache.Cache[string, *session]
-	pending  *ttlcache.Cache[string, *pendingLogin]
+	key       []byte
+	persist   *sessionPersister //nil = in-memory only
+	shared    bool              //cluster secret in use: portable tickets are issued and accepted
+	ticketKey []byte
+	sessions  *ttlcache.Cache[string, *session]
+	pending   *ttlcache.Cache[string, *pendingLogin]
+}
+
+// storeOptions configures the session store
+type storeOptions struct {
+	nodeSecret string             //node UUID or the key material derived from the cluster secret
+	shared     bool               //nodeSecret is shared by several nodes (cluster secret)
+	db         *database.Database //nil = sessions are not persisted
+	maxPersist int
 }
 
 func newSessionStore(nodeUUID string) *sessionStore {
-	secret := []byte(strings.TrimSpace(nodeUUID))
-	if len(secret) == 0 {
+	return newSessionStoreOpt(storeOptions{nodeSecret: nodeUUID})
+}
+
+func newSessionStoreOpt(o storeOptions) *sessionStore {
+	secret := []byte(strings.TrimSpace(o.nodeSecret))
+	stable := len(secret) > 0
+	if !stable {
 		// No node identity available: use a per process random secret. Sessions then do not
 		// survive a restart, which is also true for the in-memory session table anyway.
 		secret = make([]byte, 32)
@@ -77,7 +99,8 @@ func newSessionStore(nodeUUID string) *sessionStore {
 		panic(err)
 	}
 	s := &sessionStore{
-		key: key,
+		key:    key,
+		shared: o.shared && stable,
 		sessions: ttlcache.New[string, *session](
 			ttlcache.WithTTL[string, *session](maxSessionLife),
 			ttlcache.WithCapacity[string, *session](cacheCapacity),
@@ -89,6 +112,16 @@ func newSessionStore(nodeUUID string) *sessionStore {
 			ttlcache.WithDisableTouchOnHit[string, *pendingLogin](),
 		),
 	}
+	if stable && o.db != nil {
+		s.persist = newSessionPersister(o.db, secret, o.maxPersist)
+	}
+	if stable {
+		tk, err := hkdf.Key(sha256.New, secret, []byte("zoraxy-oauth2-session-v1"), "portable-ticket", 32)
+		if err != nil {
+			panic(err)
+		}
+		s.ticketKey = tk
+	}
 	go s.sessions.Start()
 	go s.pending.Start()
 	return s
@@ -97,6 +130,9 @@ func newSessionStore(nodeUUID string) *sessionStore {
 func (s *sessionStore) close() {
 	s.sessions.Stop()
 	s.pending.Stop()
+	if s.persist != nil {
+		s.persist.close()
+	}
 }
 
 func randomToken(n int) string {
@@ -131,18 +167,38 @@ func (s *sessionStore) unsign(purpose, signed string) (string, bool) {
 
 func (s *sessionStore) create(sess *session) string {
 	id := randomToken(32)
+	sess.id = id
 	ttl := time.Until(sess.hardExpiry)
 	if ttl <= 0 {
 		ttl = time.Second
 	}
 	s.sessions.Set(id, sess, ttl)
+	s.save(sess)
 	return s.sign("session", id)
 }
 
-// lookup returns the session for the request, or nil. A session is only valid for the host it was
-// created on, so a cookie planted from a sibling subdomain cannot be replayed elsewhere.
-func (s *sessionStore) lookup(r *http.Request) (string, *session) {
-	c, err := r.Cookie(sessionCookie)
+// save writes the session to the encrypted store (no-op without persistence).
+func (s *sessionStore) save(sess *session) {
+	if s.persist == nil || sess == nil || sess.id == "" {
+		return
+	}
+	s.persist.save(sess)
+}
+
+// cookieNameFor returns the session cookie of a provider. The default provider keeps the
+// historical name, other providers get their own so two providers on one host never collide.
+func cookieNameFor(base, provider string) string {
+	if provider == "" || provider == DefaultProviderID {
+		return base
+	}
+	return base + "-" + provider
+}
+
+// lookup returns the session for the request, or nil. A session is only valid for the host and
+// provider it was created for, so a cookie planted from a sibling subdomain, or one issued by
+// another provider, cannot be replayed.
+func (s *sessionStore) lookup(r *http.Request, provider string) (string, *session) {
+	c, err := r.Cookie(cookieNameFor(sessionCookie, provider))
 	if err != nil || c.Value == "" {
 		return "", nil
 	}
@@ -150,22 +206,70 @@ func (s *sessionStore) lookup(r *http.Request) (string, *session) {
 	if !ok {
 		return "", nil
 	}
-	item := s.sessions.Get(id)
-	if item == nil {
+	var sess *session
+	if item := s.sessions.Get(id); item != nil {
+		sess = item.Value()
+	} else if s.persist != nil {
+		if ps := s.persist.load(id); ps != nil {
+			s.sessions.Set(id, ps, time.Until(ps.hardExpiry))
+			sess = ps
+		}
+	}
+	if sess == nil && s.shared {
+		if tc, err := r.Cookie(cookieNameFor(ticketCookie, provider)); err == nil {
+			if ts := s.openTicket(tc.Value, id, provider, r.Host); ts != nil {
+				s.sessions.Set(id, ts, time.Until(ts.hardExpiry))
+				s.save(ts)
+				sess = ts
+			}
+		}
+	}
+	if sess == nil {
 		return "", nil
 	}
-	sess := item.Value()
 	sess.mu.Lock()
 	defer sess.mu.Unlock()
-	if sess.host != r.Host || time.Now().After(sess.hardExpiry) {
+	if sess.host != r.Host || sess.provider != normProvider(provider) || time.Now().After(sess.hardExpiry) {
 		return "", nil
 	}
 	return id, sess
 }
 
+func normProvider(p string) string {
+	if p == "" {
+		return DefaultProviderID
+	}
+	return p
+}
+
 func (s *sessionStore) destroy(id string) {
 	if id != "" {
 		s.sessions.Delete(id)
+		if s.persist != nil {
+			s.persist.delete(id)
+		}
+	}
+}
+
+// purgeProvider drops every session and pending login of a provider (provider edited or deleted).
+func (s *sessionStore) purgeProvider(provider string) {
+	provider = normProvider(provider)
+	for id, item := range s.sessions.Items() {
+		sess := item.Value()
+		sess.mu.Lock()
+		match := sess.provider == provider
+		sess.mu.Unlock()
+		if match {
+			s.destroy(id)
+		}
+	}
+	for st, item := range s.pending.Items() {
+		if item.Value().provider == provider {
+			s.pending.Delete(st)
+		}
+	}
+	if s.persist != nil {
+		s.persist.purgeProvider(provider)
 	}
 }
 

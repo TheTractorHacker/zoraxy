@@ -71,7 +71,9 @@ func ParseHeaderMappings(s string) ([]HeaderMapping, error) {
 }
 
 // claimValue resolves a claim by name. A name containing dots is first tried literally (URL style
-// claims) and then as a nested path (e.g. realm_access.roles).
+// claims such as https://example.com/roles) and then as a nested path (realm_access.roles).
+// Path segments may themselves contain dots (Keycloak client ids: resource_access.my.app.roles):
+// at every level the longest matching key wins.
 func claimValue(claims map[string]any, name string) (any, bool) {
 	if v, ok := claims[name]; ok {
 		return v, true
@@ -79,18 +81,25 @@ func claimValue(claims map[string]any, name string) (any, bool) {
 	if !strings.Contains(name, ".") {
 		return nil, false
 	}
-	var cur any = claims
-	for _, seg := range strings.Split(name, ".") {
-		m, ok := cur.(map[string]any)
+	return resolveClaimPath(claims, strings.Split(name, "."))
+}
+
+func resolveClaimPath(cur map[string]any, parts []string) (any, bool) {
+	for n := len(parts); n >= 1; n-- {
+		v, ok := cur[strings.Join(parts[:n], ".")]
 		if !ok {
-			return nil, false
+			continue
 		}
-		cur, ok = m[seg]
-		if !ok {
-			return nil, false
+		if n == len(parts) {
+			return v, true
+		}
+		if m, isMap := v.(map[string]any); isMap {
+			if r, found := resolveClaimPath(m, parts[n:]); found {
+				return r, true
+			}
 		}
 	}
-	return cur, true
+	return nil, false
 }
 
 // claimStrings flattens a claim into a list of strings (string, []string, []any of scalars).

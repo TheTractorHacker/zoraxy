@@ -22,6 +22,7 @@ import (
 const (
 	PurposeCaptchaSession = "captcha-session"
 	PurposeStickySession  = "lb-sticky-session"
+	PurposeOAuth2Session  = "oauth2-session"
 	PurposeSyncToken      = "sync-token"
 	PurposeSyncSign       = "sync-signature"
 	PurposeSyncEncrypt    = "sync-encryption"

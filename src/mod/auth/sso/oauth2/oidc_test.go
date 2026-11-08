@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
+	"imuslab.com/zoraxy/mod/info/logger"
 )
 
 const appURL = "http://app.example.com"
@@ -350,7 +351,7 @@ func TestES256AndHS256Accepted(t *testing.T) {
 func TestJWKSRefreshOnUnknownKid(t *testing.T) {
 	idp := newFakeIdP(t)
 	ar := newTestRouter(t, idp, nil)
-	ar.jwks.minRefresh = time.Millisecond
+	ar.prov("").jwks.minRefresh = time.Millisecond
 	mustLogin(t, newBrowser(t, ar), idp)
 	first := idp.jwksFetches
 	if first != 1 {
@@ -719,20 +720,21 @@ func TestLegacyManualEndpointsPlainOAuth2(t *testing.T) {
 
 func TestLegacySettingsKeysLoadedFromDatabase(t *testing.T) {
 	idp := newFakeIdP(t)
-	ar := newTestRouter(t, idp, nil)
-	db := ar.options.Database
+	db := newTestDB(t)
+	//A database written by the single-provider version: legacy keys only, no registry
+	db.NewTable("oauth2")
 	db.Write("oauth2", "oauth2WellKnownUrl", idp.URL+"/application/o/app/.well-known/openid-configuration")
 	db.Write("oauth2", "oauth2ClientId", testClientID)
 	db.Write("oauth2", "oauth2ClientSecret", testClientSecret)
 	db.Write("oauth2", "oauth2CodeChallengeMethod", "PKCE_S256")
 	d := 2 * time.Minute
 	db.Write("oauth2", "oauth2ConfigurationCacheTime", &d)
-	lg := ar.options.Logger
-	ar2 := NewOAuth2Router(&OAuth2RouterOptions{Logger: lg, Database: db})
+	lg, _ := logger.NewFmtLogger()
+	ar2 := NewOAuth2Router(&OAuth2RouterOptions{Logger: lg, Database: db, SystemUUID: "11111111-2222-3333-4444-555555555555"})
 	defer ar2.Close()
 	o := ar2.snapshot()
 	if o.OAuth2ClientId != testClientID || o.OAuth2CodeChallengeMethod != "PKCE_S256" || *o.OAuth2ConfigurationCacheTime != d ||
-		o.OAuth2WellKnownUrl == "" || o.OAuth2Issuer != "" || o.OAuth2AllowedGroups != "" {
+		o.OAuth2WellKnownUrl == "" || o.OAuth2Issuer != "" || o.OAuth2AllowedGroups != "" || o.ProviderID != DefaultProviderID {
 		t.Fatalf("unexpected options %+v", o)
 	}
 	mustLogin(t, newBrowser(t, ar2), idp)

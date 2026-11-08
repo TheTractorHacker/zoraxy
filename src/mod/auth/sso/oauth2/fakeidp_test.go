@@ -294,6 +294,16 @@ func (f *fakeIdP) userinfo(w http.ResponseWriter, r *http.Request) {
 
 /* test harness */
 
+func newTestDB(t *testing.T) *database.Database {
+	t.Helper()
+	db, err := database.NewDatabase(filepath.Join(t.TempDir(), "o.db"), database.GetRecommendedBackendType())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(db.Close)
+	return db
+}
+
 func newTestRouter(t *testing.T, idp *fakeIdP, mutate func(o *OAuth2RouterOptions)) *OAuth2Router {
 	t.Helper()
 	db, err := database.NewDatabase(filepath.Join(t.TempDir(), "o.db"), database.GetRecommendedBackendType())
