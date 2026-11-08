@@ -1227,3 +1227,9 @@ body.darkTheme .ui.checkbox input:checked ~ .box::after,
 body.darkTheme .ui.checkbox input:checked ~ label::after {
     color: var(--text_color_inverted) !important;
 }
+/* UX overhaul: menu filter box in the dark theme */
+body.darkTheme .navFilter .ui.input > input {
+    background: var(--theme_bg_primary, #1a1a1e);
+    color: var(--text_color, #eee);
+    border-color: rgba(255, 255, 255, 0.15);
+}

@@ -134,6 +134,74 @@ def main():
             fail("nav", "scroll chaining: page scrolled once the nav hit its end")
         pg.screenshot(path=os.path.join(args.out, "nav-scrolled-short.png"))
 
+        # ---- UX kit: menu filter, "/" shortcut, aria labels ----
+        current["page"] = "uxkit"
+        pg.set_viewport_size({"width": 1366, "height": 800})
+        pg.evaluate("openTabById('status')")
+        pg.wait_for_timeout(300)
+        pg.keyboard.press("/")
+        if pg.evaluate("document.activeElement && document.activeElement.id") != "navFilterInput":
+            fail("uxkit", "'/' did not focus the menu filter")
+        pg.keyboard.type("updat")
+        pg.wait_for_timeout(200)
+        vis = pg.evaluate("[...document.querySelectorAll('#mainmenu a.item[tag]')].filter(a => a.offsetParent !== null).map(a => a.getAttribute('tag'))")
+        if vis != ["updater"]:
+            fail("uxkit", f"menu filter 'updat' should leave only the updater item, got {vis}")
+        pg.screenshot(path=os.path.join(args.out, "nav-filter.png"))
+        pg.keyboard.press("Escape")
+        pg.wait_for_timeout(200)
+        n = pg.evaluate("[...document.querySelectorAll('#mainmenu a.item[tag]')].filter(a => a.offsetParent !== null).length")
+        if n < 5:
+            fail("uxkit", "clearing the filter did not restore the menu")
+        unlabeled = pg.evaluate("""() => [...document.querySelectorAll('button, a.button')].filter(b => b.offsetParent !== null
+            && !b.textContent.trim() && !b.getAttribute('aria-label') && !b.getAttribute('title')).map(b => b.outerHTML.slice(0, 90))""")
+        if unlabeled:
+            fail("a11y", f"{len(unlabeled)} visible icon-only buttons without a label, e.g. {unlabeled[0]}")
+
+        # ---- HTTP proxy rule editor: create a rule, open editor, unsaved-changes guard ----
+        current["page"] = "editor"
+        pg.evaluate("openTabById('httprp')")
+        settle(pg)
+        host = "smoke-test.invalid"
+        pg.evaluate("""host => new Promise(res => $.cjax({url: '/api/proxy/add', method: 'POST',
+            data: {type: 'host', rootname: host, ep: '127.0.0.1:9', tls: false, tlsval: false, bypassGlobalTLS: false}, success: res, error: res}))""", host)
+        pg.evaluate("listProxyEndpoints()")
+        settle(pg, 900)
+        try:
+            pg.screenshot(path=os.path.join(args.out, "httprp-with-rule.png"))
+            pg.click("#httpProxyList .editBtn")
+            pg.wait_for_selector("#httprpEditModal", state="visible", timeout=5000)
+            settle(pg, 800)
+            pg.screenshot(path=os.path.join(args.out, "httprp-editor.png"))
+            pg.click("#httprpEditModalWrapper .httpProxyEditClosePC")  # clean: closes at once
+            pg.wait_for_selector("#httprpEditModal", state="hidden", timeout=5000)
+            pg.click("#httpProxyList .editBtn")
+            pg.wait_for_selector("#httprpEditModal", state="visible", timeout=5000)
+            settle(pg, 800)
+            inp = pg.locator("#httprpEditModalWrapper input[type=text]:visible").first
+            inp.press("x")  # real keystroke = user edit
+            pg.click("#httprpEditModalWrapper .httpProxyEditClosePC")
+            pg.wait_for_timeout(400)
+            if not pg.is_visible("#confirmBox"):
+                fail("editor", "closing a modified editor did not ask for confirmation")
+            elif not pg.is_visible("#httprpEditModal"):
+                fail("editor", "editor closed before the confirmation was answered")
+            else:
+                pg.screenshot(path=os.path.join(args.out, "httprp-editor-unsaved.png"))
+                pg.click("#confirmBox .ui.red.button")  # keep editing
+                pg.wait_for_timeout(300)
+                if not pg.is_visible("#httprpEditModal"):
+                    fail("editor", "editor closed although 'keep editing' was chosen")
+                pg.click("#httprpEditModalWrapper .httpProxyEditClosePC")
+                pg.wait_for_timeout(300)
+                pg.click("#confirmBox .ui.green.button")  # discard
+                pg.wait_for_selector("#httprpEditModal", state="hidden", timeout=5000)
+        except Exception as ex:
+            fail("editor", f"editor flow failed: {" ".join(str(ex).split()[:30])}"); pg.screenshot(path=os.path.join(args.out, "editor-failure.png"))
+        finally:
+            pg.evaluate("""host => new Promise(res => $.cjax({url: '/api/proxy/del', method: 'POST', data: {ep: host}, success: res, error: res}))""", host)
+            pg.evaluate("listProxyEndpoints()")
+
         # ---- narrow / mobile layout ----
         current["page"] = "mobile"
         pg.set_viewport_size({"width": 390, "height": 700})

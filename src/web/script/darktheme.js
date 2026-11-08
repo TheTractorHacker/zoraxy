@@ -44,8 +44,25 @@ function _darkThemeHandleApplyChange(){
     }
 }
 
-if (localStorage.getItem("theme") == "dark"){
+//No stored choice yet: follow the operating system preference ("auto") until the user picks a theme
+function _systemPrefersDark(){
+    try {
+        return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    } catch (e) {
+        return false;
+    }
+}
+
+var _storedTheme = null;
+try { _storedTheme = localStorage.getItem("theme"); } catch (e) {}
+if (_storedTheme == "dark"){
     setDarkTheme(true);
+}else if (_storedTheme == null && _systemPrefersDark()){
+    setDarkTheme(true);
+    try { localStorage.removeItem("theme"); } catch (e) {} //keep "auto" until the user toggles
 }else{
     setDarkTheme(false);
+    if (_storedTheme == null){
+        try { localStorage.removeItem("theme"); } catch (e) {}
+    }
 }

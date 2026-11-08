@@ -1085,3 +1085,70 @@ body.darkTheme .menudivider{
         white-space: normal;
     }
 }
+
+/*
+    UX overhaul: menu filter, focus rings, toast
+*/
+.navFilter {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding: 0.6em 0 0.5em 0;
+    background: var(--theme_bg, #fafafa);
+}
+.navFilter .ui.input > input {
+    border-radius: 2em;
+}
+.navFilterEmpty {
+    font-size: 0.85em;
+    color: #9c9c9c;
+    padding: 0.6em 0.4em;
+}
+#mainmenu .navHidden {
+    display: none !important;
+}
+#mainmenu.navFiltering .menugroup-items {
+    display: block !important;
+}
+#mainmenu.navFiltering .recent-section-header,
+#mainmenu.navFiltering #group-recent,
+#mainmenu.navFiltering .recent-section-divider {
+    display: none !important;
+}
+
+/* Visible keyboard focus */
+#mainmenu a.item:focus-visible,
+.menugroup-header:focus-visible,
+.recent-section-header:focus-visible,
+.recent-item:focus-visible,
+.ui.button:focus-visible,
+button:focus-visible,
+a:focus-visible,
+.ui.checkbox input:focus-visible ~ label::before,
+.ui.dropdown:focus-visible {
+    outline: 2px solid #4b75ff !important;
+    outline-offset: 2px;
+}
+
+/* Toast: above the confirm box, readable, never wider than the screen */
+#messageBox {
+    max-width: min(300px, calc(100vw - 2em));
+    z-index: 1001;
+}
+@media (prefers-reduced-motion: reduce) {
+    * { scroll-behavior: auto !important; }
+}
+
+@media screen and (max-width: 748px) {
+    /* Wide tables scroll inside their own box instead of being cut off */
+    .functiontab table.ui.table {
+        display: block;
+        max-width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .functiontab table.ui.table td,
+    .functiontab table.ui.table th {
+        white-space: normal;
+    }
+}
