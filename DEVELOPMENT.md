@@ -1301,3 +1301,12 @@ otherwise each rule is applied independently on a copy and reported (partial upd
 
 Tests: `go test -race ./mod/dynamicproxy/...` (ops_test.go through `ProxyHandler.ServeHTTP`, bulk_test.go, unix_upstream_test.go,
 loadbalance/clientrules_test.go, redirection/advanced_test.go).
+
+## Closure verification notes (branch fix/closure-bugs)
+
+* `docs/triage/closure-bugs.md|json` list, per fork issue, the test or audit that backs the verdict and the reply text to post.
+* Targeted UI regression scenarios (mocked API, headless Chromium): `PY=$HOME/ui-test-tools/py.sh tools/ui-smoke/regress.sh` (default port 28784). Scenarios: Docker picker with null lists (#954), multi-domain certificate request (#611), updater early-access label (#969).
+* Forward auth behind a TLS-terminating tunnel (Cloudflare Tunnel): add the tunnel source address to Trusted Proxies; the auth subrequest then carries the tunnel's `X-Forwarded-Proto` and `CF-Connecting-IP` (`forward.AuthRouterOptions.IsTrustedProxy`).
+* Host names are compared in punycode (`utils.NormalizeHostname`): use it for any new place that compares or stores a domain.
+* Upstreams with "Skip Verification" use `utils.InsecureUpstreamTLSConfig` (legacy TLS versions and RSA suites allowed) for IPMI-class devices.
+* Soak the forward-auth module for leaks: `ZORAXY_LEAK_SECONDS=300 go test ./mod/auth/sso/forward -run Leak -v`.

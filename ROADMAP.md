@@ -162,3 +162,8 @@ FriendlyCaptcha, counting SSO redirect failures in the auto-ban, per-user admin 
 - ✅ `{{host}}` `{{client_ip}}` `{{request_id}}` `{{rule_name}}` `{{external_ip}}` in headers, redirects, static responses; rule templates; bulk edit (upstream #370 #826 #877 #924).
 - ✅ API tokens + `/api/v1` + OpenAPI (upstream #382 #714 #996), response bandwidth limit (upstream #1208), plain HTTP listener address (#909), IP calculators (#504), opt-in split-horizon DNS responder (#769).
 - 📋 UI editor for custom rule templates (API exists), bandwidth limit for WebSocket traffic.
+
+### Closure verification follow-ups (fix/closure-bugs)
+
+* Optional: "Reset all ACME state" button (upstream #1193 c), literal `CF-IPCountry` support gated on trusted peers (#831), smoother nav chevron + divider under default site (#1201, belongs to the nav rework).
+* Open for reporter evidence: Infomaniak punycode zone (#458), Authelia v3.2.3 redirect (#698), VoidAuth (#958), oauth2-proxy behind Cloudflare Tunnel (#1032), Uptime Kuma chain (#403), Let's Encrypt 400 (#537). See `docs/triage/closure-bugs.md`.
