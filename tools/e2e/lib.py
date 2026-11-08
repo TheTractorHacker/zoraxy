@@ -122,7 +122,7 @@ class Proc:
 class Zoraxy:
     """A throw-away Zoraxy instance: own conf/db/tmp dir, admin port, proxy port."""
 
-    def __init__(self, tls=False, extra_args=None, noauth=True, name="z", certs=(), env=None):
+    def __init__(self, tls=False, extra_args=None, noauth=True, name="z", certs=(), env=None, plugins=()):
         self.dir = tempfile.mkdtemp(prefix="zx-e2e-" + name + "-")
         self.admin = free_port()
         self.proxy = free_port()
@@ -134,6 +134,12 @@ class Zoraxy:
         self.csrf = ""
         self.opener = None
         os.symlink(os.path.join(SRC, "web"), os.path.join(self.dir, "web"))
+        # plugins: iterable of (folder_name, binary_path) seeded into ./plugins/<folder>/<folder>
+        for nm, binp in plugins:
+            pd = os.path.join(self.dir, "plugins", nm)
+            os.makedirs(pd, exist_ok=True)
+            shutil.copy(binp, os.path.join(pd, nm))
+            os.chmod(os.path.join(pd, nm), 0o755)
         # certs: iterable of (name, crt_path, key_path) pre-seeded into conf/certs (name.pem / name.key)
         for nm, crt, key in certs:
             cd = os.path.join(self.dir, "conf", "certs")
@@ -587,3 +593,13 @@ class FakeHTTPS:
 
     def __exit__(self, *a):
         self.close()
+
+
+def build_example_plugin(name):
+    """Builds example/plugins/<name> (needs only the SDK copy that is committed in its mod/ dir)."""
+    out = os.path.join(tempfile.gettempdir(), "zoraxy-e2e-plugin-" + name)
+    d = os.path.join(ROOT, "example", "plugins", name)
+    env = dict(os.environ, GOFLAGS="-mod=mod", GOTMPDIR=os.path.expanduser("~/.cache/go-tmp"))
+    os.makedirs(env["GOTMPDIR"], exist_ok=True)
+    subprocess.check_call(["go", "build", "-o", out, "."], cwd=d, env=env)
+    return out

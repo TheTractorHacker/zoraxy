@@ -1,5 +1,6 @@
 """Client IP handling (trusted proxies, forwarded headers, PROXY protocol), access rules, bulk import, GeoIP."""
 import json
+import urllib.parse
 import socket
 import struct
 
@@ -208,3 +209,61 @@ def country_block_geoip():
         info2 = z.get("/api/info/geoip", ip="81.2.69.142")
         check(other.status == 200 or "US" in json.dumps(info2), "non-US client blocked (%d, geo %s)" % (other.status, json.dumps(info2)[:80]))
         return "US (8.8.8.8 via trusted proxy) -> %d; 81.2.69.142 -> %d" % (us.status, other.status)
+
+
+@scenario("country_challenge", ["281"])
+def country_challenge():
+    """Access-rule challenge countries get the rule's CAPTCHA instead of a block; others pass."""
+    with Zoraxy() as z, Backend(name="cc") as b:
+        info = z.get("/api/info/geoip", ip="8.8.8.8")
+        if "US" not in json.dumps(info):
+            raise Skip("GeoIP database has no entry for 8.8.8.8: %s" % json.dumps(info)[:120])
+        z.add_rule("cc.test", b.addr)
+        z.api("/api/trustedproxy/add", ip="127.0.0.8", desc="e2e")
+        z.api("/api/whitelist/trustProxy", enable=True, id="default")
+        z.api("/api/access/challenge/add", id="default", cc="US", comment="e2e")
+        # without a CAPTCHA configured on the rule the country is blocked (fail closed)
+        no_captcha = z.req("cc.test", src="127.0.0.8", headers={"X-Forwarded-For": "8.8.8.8"})
+        check(no_captcha.status == 403 and "altcha" not in no_captcha.text.lower(), "no CAPTCHA configured: expected block, got %d" % no_captcha.status)
+        z.edit_rule("cc.test", captcha=True, captchaProvider=2, captchaSecretKey="e2e-altcha-secret-0123456789abcdef0123456789")
+        us = z.req("cc.test", src="127.0.0.8", headers={"X-Forwarded-For": "8.8.8.8", "Accept": "text/html"})
+        check(us.status == 403 and "zoraxy/captcha" in us.text.lower(), "US visitor did not get the CAPTCHA page (%d)" % us.status)
+        # a client from another country passes straight through (the rule has no RequireCaptcha for everyone)
+        other = z.req("cc.test", src="127.0.0.8", headers={"X-Forwarded-For": "81.2.69.142"})
+        check(other.status in (200, 403), "unexpected %d" % other.status)
+        return "US (via trusted proxy): no CAPTCHA configured => %d block; with Altcha configured => challenge page; GB-ish client => %d" % (no_captcha.status, other.status)
+
+
+@scenario("plain_http_listener_chain", ["core"])
+def plain_http_listener_chain():
+    """TLS proxy + optional plain-HTTP listener on a high port: rules that allow plain HTTP are served there and still go through
+    WAF / redirects / access rules; rules that do not are not reachable in plain text."""
+    d = tempfile.mkdtemp(prefix="zx-plain-")
+    try:
+        ca = make_ca(d)
+        crt = make_leaf(d, "tls.test", ca)
+        with Zoraxy(tls=True, certs=[("tls.test", crt[0], crt[1])]) as z, Backend(name="app") as b:
+            plain = free_port()
+            z.add_rule("tls.test", b.addr, bypassGlobalTLS=False)
+            z.add_rule("open.test", b.addr, bypassGlobalTLS=True)
+            z.api("/api/proxy/httpListenAddr", addr="127.0.0.1:%d" % plain)
+            z.api("/api/proxy/listenPort80", enable=True)
+            wait_for(lambda: socket.create_connection(("127.0.0.1", plain), 0.5), msg="plain listener")
+            # TLS proxy port still serves tls.test
+            t = http_req("127.0.0.1", z.proxy, "tls.test", "/", tls=True)
+            check(t.status == 200, "TLS rule broken: %d" % t.status)
+            o = http_req("127.0.0.1", plain, "open.test", "/p?q=1")
+            check(o.status == 200 and o.json()["backend"] == "app", "plain HTTP for bypassGlobalTLS rule: %d" % o.status)
+            n = len(b.log)
+            closed = http_req("127.0.0.1", plain, "tls.test", "/")
+            check(closed.status != 200 or len(b.log) == n, "TLS-only rule reachable over plain HTTP")
+            # the shared chain: WAF on the plain path blocks attacks
+            z.api("/api/waf/set", rootname="open.test", config=json.dumps({"Mode": "block"}))
+            atk = http_req("127.0.0.1", plain, "open.test", "/s?q=" + urllib.parse.quote("' OR 1=1 UNION SELECT a FROM b--"))
+            check(atk.status == 403, "WAF skipped on the plain HTTP listener (%d)" % atk.status)
+            # redirect rule applies on the plain path
+            z.api("/api/redirect/add", redirectUrl="old.open.test", destUrl="https://new.open.test/", forwardChildpath="false", redirectType="302")
+            rd = http_req("127.0.0.1", plain, "old.open.test", "/x")
+            return "plain listener :%d serves bypass rule (200), TLS-only rule => %d, WAF blocks attack on plain path (403), redirect on plain path => %d" % (plain, closed.status, rd.status)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
