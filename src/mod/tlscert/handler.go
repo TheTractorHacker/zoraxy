@@ -214,16 +214,12 @@ func (m *Manager) HandleListDomains(w http.ResponseWriter, r *http.Request) {
 			continue
 		} else {
 			// Cert loaded. Check its expiry time
-			block, _ := pem.Decode(certBtyes)
-			if block != nil {
-				cert, err := x509.ParseCertificate(block.Bytes)
-				if err == nil {
-					certname := strings.TrimSuffix(filepath.Base(certFilepath), filepath.Ext(certFilepath))
-					for _, dnsName := range cert.DNSNames {
-						certnameToDomainMap[dnsName] = certname
-					}
-					certnameToDomainMap[cert.Subject.CommonName] = certname
+			if cert := firstCertificate(certBtyes); cert != nil {
+				certname := strings.TrimSuffix(filepath.Base(certFilepath), filepath.Ext(certFilepath))
+				for _, dnsName := range cert.DNSNames {
+					certnameToDomainMap[dnsName] = certname
 				}
+				certnameToDomainMap[cert.Subject.CommonName] = certname
 			}
 		}
 	}
@@ -289,17 +285,13 @@ func (m *Manager) HandleListCertificate(w http.ResponseWriter, r *http.Request) 
 				continue
 			} else {
 				// Cert loaded. Check its expire time
-				block, _ := pem.Decode(certBtyes)
-				if block != nil {
-					cert, err := x509.ParseCertificate(block.Bytes)
-					if err == nil {
-						certExpireTime = cert.NotAfter.Format("2006-01-02 15:04:05")
+				if cert := firstCertificate(certBtyes); cert != nil {
+					certExpireTime = cert.NotAfter.Format("2006-01-02 15:04:05")
 
-						duration := time.Until(cert.NotAfter)
+					duration := time.Until(cert.NotAfter)
 
-						// Convert the duration to days
-						expiredIn = int(duration.Hours() / 24)
-					}
+					// Convert the duration to days
+					expiredIn = int(duration.Hours() / 24)
 				}
 			}
 			certInfoFilename := filepath.Join(m.CertStore, filename+".json")
@@ -310,12 +302,8 @@ func (m *Manager) HandleListCertificate(w http.ResponseWriter, r *http.Request) 
 			}
 
 			certDomain := ""
-			block, _ := pem.Decode(certBtyes)
-			if block != nil {
-				cert, err := x509.ParseCertificate(block.Bytes)
-				if err == nil {
-					certDomain = cert.Subject.CommonName
-				}
+			if cert := firstCertificate(certBtyes); cert != nil {
+				certDomain = cert.Subject.CommonName
 			}
 
 			thisCertInfo := CertInfo{

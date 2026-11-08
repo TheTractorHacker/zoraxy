@@ -1,9 +1,31 @@
 package tlscert
 
 import (
+	"crypto/x509"
+	"encoding/pem"
 	"path/filepath"
 	"strings"
 )
+
+// firstCertificate returns the first parseable CERTIFICATE block of a PEM
+// bundle, skipping any other blocks (e.g. a PUBLIC KEY or PRIVATE KEY block in
+// front of the chain). It returns nil if the bundle holds no certificate.
+func firstCertificate(pemBytes []byte) *x509.Certificate {
+	rest := pemBytes
+	for {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			return nil
+		}
+		if block.Type != "CERTIFICATE" {
+			continue
+		}
+		if cert, err := x509.ParseCertificate(block.Bytes); err == nil {
+			return cert
+		}
+	}
+}
 
 // This remove the certificates in the list where either the
 // public key or the private key is missing

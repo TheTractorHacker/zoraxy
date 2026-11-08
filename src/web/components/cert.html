@@ -246,11 +246,16 @@
                 //if there are only 1 domain
                 filename = domains;
             }else{
-                msgbox("Filename cannot be empty for certs containing multiple domains.")
-                if (callback != undefined){
-                    callback(false);
+                //Multiple domains (e.g. a host with aliases). The certificate store matches certs by the
+                //names inside the certificate, so name the file after the first (primary) domain.
+                filename = domains.split(",")[0].trim();
+                if (filename == ""){
+                    msgbox("Filename cannot be empty for certs containing multiple domains.")
+                    if (callback != undefined){
+                        callback(false);
+                    }
+                    return;
                 }
-                return;
             }
             //Filename cannot contain wildcards, and wildcards are possible with DNS challenges
             filename = filename.replace("*", "_");

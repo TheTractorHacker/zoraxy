@@ -131,3 +131,18 @@ func TestSessionSecretSelection(t *testing.T) {
 		t.Fatal("session secret ignored")
 	}
 }
+
+// The port-80 listener has its own handler; the health path must be answered
+// there too, before any redirect or host routing.
+func TestHealthServedOnPort80Handler(t *testing.T) {
+	router := newHealthTestRouter(cluster.NewHealthEndpoint("test"))
+	router.Running = true
+	router.Root = &ProxyEndpoint{}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "http://unknown.example.com/.zoraxy/health", nil)
+	r.RemoteAddr = "198.51.100.7:5555"
+	router.handlePort80Request(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("health on the port-80 handler got %d, want 200 (body %q)", w.Code, w.Body.String())
+	}
+}
