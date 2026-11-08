@@ -5,6 +5,10 @@
             visitor sessions (CAPTCHA, load balancer stickiness) valid on every node. A <b>primary</b> can push its proxy
             configuration to <b>followers</b>, which pull a signed, encrypted snapshot. Standalone nodes (the default) are unaffected.</p>
     </div>
+    <div class="ui small info message"><b>Legacy shared-secret mode.</b> This page configures the original primary/follower mirror, where every node knows one
+        cluster secret. For central management of several nodes with per-node credentials, scoped config, groups, staged rollouts and rollback, use the
+        <a href="#" onclick="$('[tag=fleet]').first().click(); return false;">Fleet</a> page. Both modes keep working; a node uses one of them.
+        <span id="clFleetRole" style="display:none;"></span></div>
     <div class="ui divider"></div>
 
     <div id="clMsg" class="ui small message" style="display:none;"></div>
@@ -138,6 +142,10 @@
 
     function render(s){
         st = s;
+        if (s.role == "hub" || s.role == "node") {
+            $("#clFleetRole").show().text(" This node is a Fleet " + s.role + "; the roles below do not apply.");
+        } else $("#clFleetRole").hide();
+        $("#clSaveBtn").prop("disabled", s.role == "hub" || s.role == "node");
         if (!dirty) {
         $("input[name=clRole][value=" + s.role + "]").prop("checked", true);
         showRoleFields();

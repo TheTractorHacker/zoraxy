@@ -165,13 +165,13 @@ type HubSettings struct {
 }
 
 type hubState struct {
-	HubID    string                `json:"hubId"`
-	Settings HubSettings           `json:"settings"`
-	Nodes    map[string]*FleetNode `json:"nodes"`
+	HubID    string                 `json:"hubId"`
+	Settings HubSettings            `json:"settings"`
+	Nodes    map[string]*FleetNode  `json:"nodes"`
 	Groups   map[string]*FleetGroup `json:"groups"`
-	Tokens   []JoinToken           `json:"tokens"`
-	Versions []VersionMeta         `json:"versions"`
-	NextVer  int64                 `json:"nextVersion"`
+	Tokens   []JoinToken            `json:"tokens"`
+	Versions []VersionMeta          `json:"versions"`
+	NextVer  int64                  `json:"nextVersion"`
 }
 
 // NodeStats is the bounded telemetry a node reports. Counters are cumulative

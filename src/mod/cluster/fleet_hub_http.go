@@ -453,7 +453,11 @@ func (m *Manager) HandleFleetHub(w http.ResponseWriter, r *http.Request) {
 		case "audit":
 			writeJSON(w, h.AuditLog(200))
 		case "joinInfo":
-			writeJSON(w, map[string]any{"hubId": h.HubID()})
+			fp := ""
+			if m.opt.HubFingerprint != nil {
+				fp = m.opt.HubFingerprint()
+			}
+			writeJSON(w, map[string]any{"hubId": h.HubID(), "tlsFingerprint": fp})
 		case "diff":
 			a, _ := strconv.ParseInt(r.URL.Query().Get("a"), 10, 64)
 			b, _ := strconv.ParseInt(r.URL.Query().Get("b"), 10, 64)

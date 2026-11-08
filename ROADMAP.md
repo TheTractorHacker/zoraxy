@@ -74,6 +74,14 @@ Status: ✅ done · 🔧 in progress · 📋 planned
   📋 Database-stored settings (inbound port, SSO provider config, ZorxAuth users) are not synced yet.
 - ✅ Certificate sync with a single ACME issuer (#81): optional, primary only (followers get renewal switched off).
 - ✅ Virtual IP failover guide (keepalived/VRRP, HAProxy/nginx) and `GET /.zoraxy/health` (+ `-health_port`) (#81).
+- ✅ **Central management (Fleet)**: hub role with one time join tokens and per node keys (revoke, rotate), pinned https join,
+  pluggable config scopes (proxy rules with tag filter, redirects, access + trusted proxies, path rules, stream proxy, ACME,
+  certificates) with node-local objects kept and hub-wins conflicts reported, groups and per node variables, versioned config with
+  diff, immediate / manual / canary rollout with automatic halt and rollback, Fleet dashboard (status, drift, bounded telemetry,
+  aggregates), audit log. No remote command execution. See DEVELOPMENT.md "Central management (Fleet)".
+  📋 Central WAF scope (register a `cluster.Scope` once `feat/central-waf` is merged); 📋 settings stored in the database (inbound
+  port, SSO provider config, ZorxAuth users) are not part of any scope yet; 📋 hub high availability (one hub, cold standby by copying
+  `conf/.cluster`); 📋 mTLS / Ed25519 signed bundles instead of HMAC.
 
 ## 7. WAF
 - ✅ Request inspection layer after access rules (`Server.go`, marker `WAF-HOOK`) built on **Coraza** with the

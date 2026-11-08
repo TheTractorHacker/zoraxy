@@ -640,7 +640,9 @@ func TestCanaryFailedApplyHaltsAndRollsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, newHash := s.h.DesiredHash("a")
-	s.beat("a", func(hb *fleetHeartbeat) { hb.AttemptHash, hb.LastResult, hb.LastError = newHash, "error", "validation failed" })
+	s.beat("a", func(hb *fleetHeartbeat) {
+		hb.AttemptHash, hb.LastResult, hb.LastError = newHash, "error", "validation failed"
+	})
 	g := s.group()
 	if g.Rollout.State != RolloutHalted || !strings.Contains(g.Rollout.Reason, "validation failed") {
 		t.Fatalf("rollout not halted: %+v", g.Rollout)
@@ -835,11 +837,17 @@ func TestDriftAndAggregation(t *testing.T) {
 	clk := s2.e.clock
 	for i, id := range []string{"x", "y"} {
 		base := uint64(1000 * (i + 1))
-		s2.beat(id, func(hb *fleetHeartbeat) { hb.Stats = NodeStats{Health: "ok", Requests: base, Errors: 0, WAFEvents: 0, Endpoints: 3, WAFMode: "block"} })
+		s2.beat(id, func(hb *fleetHeartbeat) {
+			hb.Stats = NodeStats{Health: "ok", Requests: base, Errors: 0, WAFEvents: 0, Endpoints: 3, WAFMode: "block"}
+		})
 	}
 	clk.Add(60 * time.Second)
-	s2.beat("x", func(hb *fleetHeartbeat) { hb.Stats = NodeStats{Health: "ok", Requests: 1600, Errors: 60, WAFEvents: 6, Endpoints: 3, WAFMode: "block"} })
-	s2.beat("y", func(hb *fleetHeartbeat) { hb.Stats = NodeStats{Health: "ok", Requests: 2300, Errors: 0, WAFEvents: 0, Endpoints: 3, WAFMode: "detection_only"} })
+	s2.beat("x", func(hb *fleetHeartbeat) {
+		hb.Stats = NodeStats{Health: "ok", Requests: 1600, Errors: 60, WAFEvents: 6, Endpoints: 3, WAFMode: "block"}
+	})
+	s2.beat("y", func(hb *fleetHeartbeat) {
+		hb.Stats = NodeStats{Health: "ok", Requests: 2300, Errors: 0, WAFEvents: 0, Endpoints: 3, WAFMode: "detection_only"}
+	})
 	agg := s2.h.Overview()["aggregate"].(Aggregate)
 	if agg.ReqPerMin < 899 || agg.ReqPerMin > 901 || agg.ErrPerMin < 59 || agg.ErrPerMin > 61 {
 		t.Fatalf("rates req=%v err=%v", agg.ReqPerMin, agg.ErrPerMin)

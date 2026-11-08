@@ -64,6 +64,9 @@ type Options struct {
 	// Stats returns the bounded telemetry a fleet node reports in its
 	// heartbeat. Optional.
 	Stats func() NodeStats
+	// HubFingerprint returns the SHA-256 fingerprint of this node's own admin
+	// TLS certificate ("" when the admin port is plain http). Optional.
+	HubFingerprint func() string
 }
 
 // Manager owns the cluster configuration and both roles of the sync.
