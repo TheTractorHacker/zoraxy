@@ -964,6 +964,10 @@ func ReverseProxyHandleEditEndpoint(w http.ResponseWriter, r *http.Request) {
 		newProxyEndpoint.RateLimitBurst = proxyRateLimitBurst
 	}
 	newProxyEndpoint.RequireCaptcha = requireCaptcha
+	//The form does not carry the CAPTCHA exception rules, keep the stored ones
+	if targetProxyEntry != nil {
+		preserveCaptchaExceptionRules(captchaConfig, targetProxyEntry.CaptchaConfig)
+	}
 	newProxyEndpoint.CaptchaConfig = captchaConfig
 	newProxyEndpoint.UseStickySession = useStickySession
 	newProxyEndpoint.DisableUptimeMonitor = disbleUtm
