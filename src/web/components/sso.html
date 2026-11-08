@@ -25,10 +25,48 @@
             <li><a href="https://oauth2-proxy.github.io/oauth2-proxy/" rel=”noopener noreferrer” target="_blank">OAuth2 Proxy</a></li>
         </ul>
         <form class="ui form" action="#" id="forwardAuthSettings">
+            <div class="ui segment" id="forwardAuthPresets">
+                <h4 class="ui header" style="margin-bottom:0.3em;">Quick setup presets</h4>
+                <p style="margin-top:0;"><small>Enter the base URL of your authorization server, then click a preset. It only fills in the form; review the values and press <b>Apply Change</b> to save. See <code>docs/authentik.md</code> for the matching Authentik provider settings.</small></p>
+                <div class="field">
+                    <label for="forwardAuthPresetBase">Authorization server base URL</label>
+                    <input type="text" id="forwardAuthPresetBase" placeholder="https://auth.example.com   or   http://outpost:9000">
+                    <small>For Authentik this is the URL of the proxy outpost (the embedded outpost is served by the Authentik server itself). No path, no trailing slash.</small>
+                </div>
+                <button class="ui basic small button" type="button" id="presetAuthentikSingle"><i class="shield alternate icon"></i> Authentik: single application</button>
+                <button class="ui basic small button" type="button" id="presetAuthentikDomain"><i class="globe icon"></i> Authentik: domain level</button>
+                <button class="ui basic small button" type="button" id="presetAuthelia"><i class="lock icon"></i> Authelia</button>
+            </div>
             <div class="field">
                 <label for="forwardAuthAddress">Address</label>
                 <input type="text" id="forwardAuthAddress" name="forwardAuthAddress" placeholder="Enter Forward Auth Address">
-                <small>The full remote address or URL of the authorization servers forward auth endpoint. <strong>Example:</strong> http://127.0.0.1:9091/authz/forward-auth<br><b>Using Authentik in single-application (per-app) mode?</b> You also need to set <b>Ignored Paths</b> under Advanced Options below, and add a matching Virtual Directory on each protected host, see the note on that field.</small>
+                <small>The full remote address or URL of the authorization servers forward auth endpoint. <strong>Example:</strong> http://127.0.0.1:9091/authz/forward-auth<br><b>Authentik:</b> <code>https://auth.example.com/outpost.goauthentik.io/auth/nginx</code> (or <code>/auth/traefik</code>, <code>/auth/caddy</code>, <code>/auth/envoy</code>). Use a preset above and fill in the outpost options below instead of Ignored Paths / Virtual Directories.</small>
+            </div>
+            <div class="ui segment" id="forwardAuthOutpostBox">
+                <h4 class="ui header" style="margin-bottom:0.3em;">Authentik outpost options</h4>
+                <div class="field">
+                    <label for="forwardAuthOutpostUrl">Outpost URL</label>
+                    <input type="text" id="forwardAuthOutpostUrl" placeholder="https://auth.example.com">
+                    <small>Base URL of the Authentik proxy outpost. When set, Zoraxy reverse proxies <code>/outpost.goauthentik.io/</code> (callback, start, sign_out, static files) on every Forward Auth protected host to this URL <b>without</b> authentication. Authentik requires this so the session cookie is set on the application's own domain. Leave empty for Authelia and other servers.</small>
+                </div>
+                <div class="field">
+                    <label for="forwardAuthStartRedirect">When not signed in</label>
+                    <div class="ui selection dropdown" id="forwardAuthStartRedirectDropdown">
+                        <input type="hidden" id="forwardAuthStartRedirect" value="">
+                        <i class="dropdown icon"></i>
+                        <div class="default text">Pass the auth server response through</div>
+                        <div class="menu">
+                            <div class="item" data-value="">Pass the auth server response through</div>
+                            <div class="item" data-value="local">Redirect to /outpost.goauthentik.io/start on the protected host (single application)</div>
+                            <div class="item" data-value="outpost">Redirect to the Outpost URL's /outpost.goauthentik.io/start (domain level)</div>
+                        </div>
+                    </div>
+                    <small>Authentik answers <code>401</code> with an HTML page for unauthenticated browsers. With a redirect mode Zoraxy sends browsers to <code>.../outpost.goauthentik.io/start?rd=&lt;original URL&gt;</code> instead. The <code>rd</code> value is built by Zoraxy from the request it received; nothing supplied by the client is reflected. API/XHR clients still get a plain 401.</small>
+                </div>
+                <div class="ui checkbox">
+                    <input type="checkbox" id="forwardAuthPreserveHost" name="forwardAuthPreserveHost">
+                    <label for="forwardAuthPreserveHost">Send the protected host as the Host header of the auth subrequest<br><small>Required for Authentik: the outpost picks the application by Host. Leave off for Authelia.</small></label>
+                </div>
             </div>
             <div class="ui basic segment advanceoptions" style="margin-top:0.6em;">
                 <div class="ui advancedSSOForwardAuthOptions accordion">
@@ -91,7 +129,7 @@
                             <input type="text" id="forwardAuthIgnoredPaths" name="forwardAuthIgnoredPaths" placeholder="/outpost.goauthentik.io">
                             <small>
                                 Comma-separated list of request path prefixes that are <b>excluded from Forward Auth</b>. Matching is normalized (path traversal and prefix-boundary tricks are rejected). <br>
-                                <strong>Authentik (single application):</strong> set this to <code>/outpost.goauthentik.io</code> and add a Virtual Directory for the same path pointing to your outpost, so the login callback can complete.
+                                <strong>Authentik:</strong> no longer needed. Set the <b>Outpost URL</b> above and Zoraxy proxies <code>/outpost.goauthentik.io/</code> to the outpost itself. This field and the bulk Virtual Directory tool below are only a legacy alternative.
                             </small>
                             <div class="ui visible warning message" style="margin-top: 0.5em;">
                                 <i class="exclamation triangle icon"></i>
@@ -134,7 +172,21 @@
         <div class="ui bottom attached tab segment" data-tab="oauth2_tab">
         <!-- OAuth 2.0 -->
         <h2>OAuth 2.0</h2>
-        <p>Configuration settings for OAuth 2.0 authentication provider.</p>
+        <p>Configuration settings for OAuth 2.0 / OpenID Connect authentication provider.</p>
+        <div class="ui info message">
+            <b>Redirect (callback) URI</b> to register at your identity provider, one per protected host:
+            <code>https://&lt;protected-host&gt;/internal/oauth2</code>. Logout URL: <code>https://&lt;protected-host&gt;/internal/oauth2/logout</code> (clears the Zoraxy session and, if the provider supports it, ends the provider session too).
+            Sessions are kept in memory; restarting Zoraxy sends users through the (usually silent) sign-in again.
+        </div>
+        <div class="ui segment" id="oauth2Presets">
+            <h4 class="ui header" style="margin-bottom:0.3em;">Quick setup presets</h4>
+            <div class="ui form"><div class="field">
+                <label for="oauth2PresetIssuer">Authentik issuer URL</label>
+                <input type="text" id="oauth2PresetIssuer" placeholder="https://auth.example.com/application/o/my-app-slug/">
+                <small>Shown on the Authentik OAuth2/OpenID provider page as "OpenID Configuration Issuer". It ends with the application slug and a slash.</small>
+            </div></div>
+            <button class="ui basic small button" style="margin-top:0.6em;" type="button" id="presetAuthentikOIDC"><i class="shield alternate icon"></i> Authentik (OIDC)</button>
+        </div>
 
         <form class="ui form" action="#" id="oauth2Settings">
             <div class="field">
@@ -153,24 +205,32 @@
                 <div class="ui selection dropdown" id="oauth2CodeChallengeMethod">
                     <input type="hidden" name="oauth2CodeChallengeMethod">
                     <i class="dropdown icon"></i>
-                    <div class="default text">Plain</div>
+                    <div class="default text">None</div>
                     <div class="menu">
-                        <div class="item" data-value="plain">Plain</div>
+                        <div class="item" data-value="plain">None (no PKCE)</div>
                         <div class="item" data-value="PKCE">PKCE</div>
                         <div class="item" data-value="PKCE_S256">PKCE (S256)</div>
                     </div>
                 </div>
                 <small>Options: <br>
-                    Plain: No code challenge is used.<br>
-                    PKCE: Uses a code challenge for added security.<br>
-                    PKCE (S256): Uses a hashed code challenge (SHA-256) for maximum protection.<br>
-                    <strong>Note:</strong> PKCE (especially S256) is recommended for better security.
+                    None: No code challenge is used (legacy).<br>
+                    PKCE: Uses the code verifier itself as challenge ("plain" method). Only for providers without S256.<br>
+                    PKCE (S256): Uses a hashed code challenge (SHA-256). <strong>Recommended</strong>, supported by Authentik.
                 </small>
+            </div>
+            <div class="field">
+                <label for="oauth2Issuer">Issuer URL (OIDC)</label>
+                <input type="text" id="oauth2Issuer" name="oauth2Issuer" placeholder="https://auth.example.com/application/o/my-app-slug/">
+                <small>OpenID Connect issuer. Zoraxy fetches <code>&lt;issuer&gt;/.well-known/openid-configuration</code>, checks that the provider reports the same issuer and validates ID token signature, <code>iss</code>, <code>aud</code>, <code>exp</code> and <code>nonce</code> against the provider's JWKS. Replaces the Discovery URL below.</small>
+                <div style="margin-top:0.6em;">
+                    <button class="ui basic small button" type="button" id="oauth2TestDiscovery"><i class="plug icon"></i> Test discovery</button>
+                </div>
+                <div id="oauth2DiscoveryResult" style="margin-top:0.6em;"></div>
             </div>
             <div class="field">
                 <label for="oauth2WellKnownUrl">Discovery URL</label>
                 <input type="text" id="oauth2WellKnownUrl" name="oauth2WellKnownUrl" placeholder="Enter Well-Known URL">
-                <small>URL to the OpenID Connect 1.0 Discovery document (usually ending with /.well-known/openid-configuration). Used to automatically fetch provider settings.</small>
+                <small>Optional alternative to the Issuer URL: the full URL to the OpenID Connect 1.0 Discovery document (ending with /.well-known/openid-configuration).</small>
             </div>
 
             <div class="field">
@@ -194,7 +254,38 @@
             <div class="field">
                 <label for="oauth2Scopes">Scopes</label>
                 <input type="text" id="oauth2Scopes" name="oauth2Scopes" placeholder="Enter Scopes">
-                <small>Scopes required by the OAuth2 provider to retrieve information about the authenticated user. Refer to your OAuth2 provider documentation for more information about this. Optional if Well-Known url is configured.</small>
+                <small>Comma or space separated. Defaults to <code>openid profile email</code> (plus <code>offline_access</code> when the provider supports it, which Authentik needs to issue refresh tokens). Without the <code>openid</code> scope the login is treated as plain OAuth 2.0 and the user is identified through the User Info URL.</small>
+            </div>
+
+            <h4 class="ui dividing header">Access control and identity headers</h4>
+            <div class="two fields">
+                <div class="field">
+                    <label for="oauth2GroupsClaim">Groups claim</label>
+                    <input type="text" id="oauth2GroupsClaim" name="oauth2GroupsClaim" placeholder="groups">
+                    <small>Claim that lists the user's groups. Defaults to <code>groups</code>. Dots address nested claims (<code>realm_access.roles</code>).</small>
+                </div>
+                <div class="field">
+                    <label for="oauth2AllowedGroups">Allowed groups</label>
+                    <input type="text" id="oauth2AllowedGroups" name="oauth2AllowedGroups" placeholder="admins,family">
+                    <small>Comma separated. A user must be in <b>at least one</b> of these groups. Empty allows every user who can sign in. If the claim is missing the user is denied (403).</small>
+                </div>
+            </div>
+            <div class="field">
+                <label for="oauth2HeaderMappings">Upstream header mappings</label>
+                <input type="text" id="oauth2HeaderMappings" name="oauth2HeaderMappings" placeholder="X-Auth-User=preferred_username,X-Auth-Email=email,X-Auth-Groups=groups">
+                <small><code>Header=claim</code> pairs, comma separated. The listed headers are always removed from incoming requests (so clients cannot spoof them) and then set from the verified claims. List claims are joined with commas. Host, Authorization, Cookie and forwarding headers cannot be mapped.</small>
+            </div>
+            <div class="two fields">
+                <div class="field">
+                    <label for="oauth2EndSessionUrl">End session URL (optional)</label>
+                    <input type="text" id="oauth2EndSessionUrl" name="oauth2EndSessionUrl" placeholder="taken from discovery">
+                    <small>Overrides the provider's <code>end_session_endpoint</code> for RP-initiated logout.</small>
+                </div>
+                <div class="field">
+                    <label for="oauth2PostLogoutRedirectUrl">Post logout redirect URL (optional)</label>
+                    <input type="text" id="oauth2PostLogoutRedirectUrl" name="oauth2PostLogoutRedirectUrl" placeholder="https://app.example.com/">
+                    <small>Sent as <code>post_logout_redirect_uri</code>; it must be registered at the provider. Empty sends none.</small>
+                </div>
             </div>
 
             <div class="field">
@@ -422,6 +513,10 @@
                 } else {
                     $('#forwardAuthIgnoredPaths').val("");
                 }
+                $('#forwardAuthOutpostUrl').val(data.outpostUrl || "");
+                $('#forwardAuthStartRedirect').val(data.startRedirect || "");
+                $('#forwardAuthStartRedirectDropdown').dropdown('set selected', data.startRedirect || "");
+                $("#forwardAuthPreserveHost").parent().checkbox(data.preserveHost ? "set checked" : "set unchecked");
             },
             error: function(jqXHR, textStatus, errorThrown) {
                 console.error('Error fetching SSO settings:', textStatus, errorThrown);
@@ -444,6 +539,9 @@
         const requestIncludeBody = $('#forwardAuthRequestIncludeBody').is(':checked');
         const useXOriginalHeaders = $('#forwardAuthRequestUseXOriginalHeaders').is(':checked');
         const ignoredPaths = $('#forwardAuthIgnoredPaths').val();
+        const outpostUrl = $('#forwardAuthOutpostUrl').val();
+        const startRedirect = $('#forwardAuthStartRedirect').val();
+        const preserveHost = $('#forwardAuthPreserveHost').is(':checked');
 
         console.log(`Updating Forward Auth settings. Address: ${address}. Response Headers: ${responseHeaders}. Response Client Headers: ${responseClientHeaders}. Request Headers: ${requestHeaders}. Request Included Cookies: ${requestIncludedCookies}. Request Excluded Cookies: ${requestExcludedCookies}. Request Include Body: ${requestIncludeBody}. Use X-Original-* Headers: ${useXOriginalHeaders}.`);
 
@@ -460,6 +558,9 @@
                 requestIncludeBody: requestIncludeBody,
                 useXOriginalHeaders: useXOriginalHeaders,
                 ignoredPaths: ignoredPaths,
+                outpostUrl: outpostUrl,
+                startRedirect: startRedirect,
+                preserveHost: preserveHost,
             },
             success: function(data) {
                 if (data.error !== undefined) {
@@ -472,6 +573,65 @@
             error: function(jqXHR, textStatus, errorThrown) {
                 console.error('Error updating Forward Auth settings:', textStatus, errorThrown);
             }
+        });
+    });
+
+
+    /*
+        Forward Auth presets (they only fill the form, nothing is saved until "Apply Change")
+    */
+    $('#forwardAuthStartRedirectDropdown').dropdown();
+    function ssoPresetBase() {
+        const base = ($('#forwardAuthPresetBase').val() || "").trim().replace(/\/+$/, "");
+        if (!/^https?:\/\/[^\/\s]+(\/[^\s]*)?$/i.test(base)) {
+            msgbox("Enter the base URL of the authorization server first, e.g. https://auth.example.com", false);
+            return null;
+        }
+        return base;
+    }
+    function fillForwardAuthPreset(p) {
+        $('#forwardAuthAddress').val(p.address);
+        $('#forwardAuthResponseHeaders').val(p.responseHeaders);
+        $('#forwardAuthResponseClientHeaders').val(p.responseClientHeaders);
+        $('#forwardAuthRequestHeaders').val("");
+        $('#forwardAuthRequestIncludedCookies').val("");
+        $('#forwardAuthRequestExcludedCookies').val("");
+        $('#forwardAuthIgnoredPaths').val("");
+        $('#forwardAuthOutpostUrl').val(p.outpostUrl);
+        $('#forwardAuthStartRedirect').val(p.startRedirect);
+        $('#forwardAuthStartRedirectDropdown').dropdown('set selected', p.startRedirect);
+        $("#forwardAuthRequestUseXOriginalHeaders").parent().checkbox(p.useXOriginal ? "set checked" : "set unchecked");
+        $("#forwardAuthRequestIncludeBody").parent().checkbox("set unchecked");
+        $("#forwardAuthPreserveHost").parent().checkbox(p.preserveHost ? "set checked" : "set unchecked");
+        msgbox("Preset loaded. Review the values, then press Apply Change to save.", true);
+    }
+    const authentikHeaders = "X-authentik-username,X-authentik-groups,X-authentik-entitlements,X-authentik-email,X-authentik-name,X-authentik-uid,X-authentik-jwt,X-authentik-meta-jwks,X-authentik-meta-outpost,X-authentik-meta-provider,X-authentik-meta-app,X-authentik-meta-version,X-authentik-meta-*";
+    function authentikPreset(startRedirect) {
+        const base = ssoPresetBase();
+        if (base === null) return;
+        fillForwardAuthPreset({
+            address: base + "/outpost.goauthentik.io/auth/nginx",
+            outpostUrl: base,
+            startRedirect: startRedirect,
+            useXOriginal: true,
+            preserveHost: true,
+            responseHeaders: authentikHeaders,
+            responseClientHeaders: "Set-Cookie"
+        });
+    }
+    $('#presetAuthentikSingle').on('click', function() { authentikPreset("local"); });
+    $('#presetAuthentikDomain').on('click', function() { authentikPreset("outpost"); });
+    $('#presetAuthelia').on('click', function() {
+        const base = ssoPresetBase();
+        if (base === null) return;
+        fillForwardAuthPreset({
+            address: base + "/api/authz/forward-auth",
+            outpostUrl: "",
+            startRedirect: "",
+            useXOriginal: false,
+            preserveHost: false,
+            responseHeaders: "Remote-User,Remote-Groups,Remote-Name,Remote-Email",
+            responseClientHeaders: ""
         });
     });
 
@@ -573,7 +733,13 @@
                 $('#oauth2ClientSecret').val(data.oauth2ClientSecret);
                 $('#oauth2Scopes').val(data.oauth2Scopes);
                 $('#oauth2ConfigurationCacheTime').val(data.oauth2ConfigurationCacheTime);
-                $('[data-value="'+data.oauth2CodeChallengeMethod+'"]').click();
+                $('#oauth2Issuer').val(data.oauth2Issuer || "");
+                $('#oauth2GroupsClaim').val(data.oauth2GroupsClaim || "");
+                $('#oauth2AllowedGroups').val(data.oauth2AllowedGroups || "");
+                $('#oauth2HeaderMappings').val(data.oauth2HeaderMappings || "");
+                $('#oauth2EndSessionUrl').val(data.oauth2EndSessionUrl || "");
+                $('#oauth2PostLogoutRedirectUrl').val(data.oauth2PostLogoutRedirectUrl || "");
+                $('#oauth2CodeChallengeMethod').dropdown('set selected', data.oauth2CodeChallengeMethod || "plain");
             },
             error: function(jqXHR, textStatus, errorThrown) {
                 console.error('Error fetching SSO settings:', textStatus, errorThrown);
@@ -593,9 +759,9 @@
             return;
         }
 
-        if ($('#oauth2WellKnownUrl').val().length === 0) {
-            if ($('#oauth2ServerUrl').val().length === 0 || $('#oauth2TokenUrl').val().length === 0 || $('#oauth2UserInfoUrl').val().length === 0 || $('#oauth2Scopes').val().length === 0) {
-                msgbox("You must specify either the Well Known URL or configure the Authorization URL, Token URL, User Info URL, and Scopes.", false);
+        if ($('#oauth2Issuer').val().length === 0 && $('#oauth2WellKnownUrl').val().length === 0) {
+            if ($('#oauth2ServerUrl').val().length === 0 || $('#oauth2TokenUrl').val().length === 0) {
+                msgbox("You must specify either the Issuer URL, the Discovery URL, or the Authorization URL and Token URL.", false);
 
                 return;
             }
@@ -616,6 +782,69 @@
             error: function(jqXHR, textStatus, errorThrown) {
                 console.error('Error updating OAuth2 settings:', textStatus, errorThrown);
                 msgbox('Error updating OAuth2 settings, check console', false);
+            }
+        });
+    });
+
+
+    /* OIDC discovery test and Authentik preset */
+    $('#presetAuthentikOIDC').on('click', function() {
+        let issuer = ($('#oauth2PresetIssuer').val() || "").trim();
+        if (!/^https?:\/\/[^\/\s]+\/application\/o\/[^\/\s]+\/?$/i.test(issuer)) {
+            msgbox("Enter the Authentik issuer URL, e.g. https://auth.example.com/application/o/my-app-slug/", false);
+            return;
+        }
+        if (!issuer.endsWith("/")) issuer += "/";
+        $('#oauth2Issuer').val(issuer);
+        $('#oauth2WellKnownUrl').val("");
+        $('#oauth2ServerUrl').val("");
+        $('#oauth2TokenUrl').val("");
+        $('#oauth2UserInfoUrl').val("");
+        $('#oauth2Scopes').val("openid profile email offline_access");
+        $('#oauth2CodeChallengeMethod').dropdown('set selected', 'PKCE_S256');
+        $('#oauth2GroupsClaim').val("groups");
+        $('#oauth2HeaderMappings').val("X-Auth-User=preferred_username,X-Auth-Email=email,X-Auth-Name=name,X-Auth-Groups=groups");
+        msgbox("Authentik preset loaded. Enter the Client ID and Secret from the provider, then Apply Change.", true);
+    });
+
+    $('#oauth2TestDiscovery').on('click', function() {
+        const box = $('#oauth2DiscoveryResult');
+        box.empty().append($('<div class="ui active mini inline loader"></div>'));
+        $.cjax({
+            url: '/api/sso/OAuth2/discovery',
+            method: 'POST',
+            data: {
+                oauth2Issuer: $('#oauth2Issuer').val(),
+                oauth2WellKnownUrl: $('#oauth2WellKnownUrl').val()
+            },
+            dataType: 'json',
+            success: function(d) {
+                box.empty();
+                if (d.error !== undefined) {
+                    box.append($('<div class="ui negative message"></div>').text("Discovery failed: " + d.error));
+                    return;
+                }
+                const ok = d.pkceS256Supported && d.jwksReachable && d.jwksKeyCount > 0;
+                const msg = $('<div class="ui message"></div>').addClass(ok ? 'positive' : 'warning');
+                const list = $('<ul class="ui list"></ul>');
+                const row = (k, v) => list.append($('<li></li>').append($('<b></b>').text(k + ': ')).append(document.createTextNode(v === "" || v == null ? "-" : String(v))));
+                row("Issuer", d.issuer);
+                row("Authorization endpoint", d.authorizationEndpoint);
+                row("Token endpoint", d.tokenEndpoint);
+                row("Userinfo endpoint", d.userinfoEndpoint);
+                row("End session endpoint", d.endSessionEndpoint);
+                row("JWKS", d.jwksUri + (d.jwksReachable ? " (reachable, " + d.jwksKeyCount + " key(s))" : " (NOT reachable)"));
+                row("PKCE S256 supported", d.pkceS256Supported ? "yes" : "no");
+                row("ID token algorithms", (d.idTokenSigningAlgs || []).join(", "));
+                row("Refresh tokens", d.refreshSupported ? "supported" + (d.offlineAccessScope ? " (request offline_access)" : "") : "not advertised");
+                msg.append(list);
+                (d.warnings || []).forEach(function(w) {
+                    msg.append($('<div></div>').append($('<i class="exclamation triangle icon"></i>')).append(document.createTextNode(" " + w)));
+                });
+                box.append(msg);
+            },
+            error: function() {
+                box.empty().append($('<div class="ui negative message"></div>').text("Request failed, check console"));
             }
         });
     });

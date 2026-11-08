@@ -207,9 +207,9 @@ func (ar *OAuth2Router) handleSetOAuthSettingsPOST(w http.ResponseWriter, r *htt
 
 	oauth2CodeChallengeMethod := opt("oauth2CodeChallengeMethod")
 	switch oauth2CodeChallengeMethod {
-	case "", "PKCE", "PKCE_S256":
+	case "", "plain", "PKCE", "PKCE_S256": // "plain" (UI label "None") means no PKCE
 	default:
-		utils.SendErrorResponse(w, "oauth2CodeChallengeMethod must be empty, PKCE or PKCE_S256")
+		utils.SendErrorResponse(w, "oauth2CodeChallengeMethod must be empty, plain, PKCE or PKCE_S256")
 		return
 	}
 
