@@ -1,11 +1,11 @@
 [
  {
-  "scenario": "api-autoban-manual-remote-token",
+  "scenario": "api-per-site-log-files",
   "issues": [
-   "22"
+   "596"
   ],
   "status": "PASS",
-  "evidence": "manual ban/unban, remote token (generate, bad token 401, remote ban/unban, revoke), and detector-driven auto-ban of a 404 flood verified with real traffic (rerun: tools/e2e-admin/run.sh --only api-autoban-manual-remote-token)",
+  "evidence": "per-site log: default off, enabling one rule in json mode writes only that rule's file under log/sites/<rule>/ with just its requests (rerun: tools/e2e-admin/run.sh --only api-per-site-log-files)",
   "commits": [],
   "notes": ""
  }

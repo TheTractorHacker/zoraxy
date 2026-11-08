@@ -99,6 +99,12 @@ class Client:
         st, body, _ = self.raw("POST", path, form)
         return st, _j(body)
 
+    def post_json(self, path, obj):
+        if not self.csrf:
+            self.refresh_csrf()
+        st, body, _ = self.raw("POST", path, json.dumps(obj), {"Content-Type": "application/json"})
+        return st, _j(body)
+
     def ok(self, path, method="POST", **form):
         """call and require HTTP 200 and no {"error":...}; returns parsed body"""
         st, js = (self.post(path, **form) if method == "POST" else self.get(path, **form))
