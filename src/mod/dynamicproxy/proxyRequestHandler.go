@@ -10,13 +10,16 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"imuslab.com/zoraxy/mod/abuse"
 	"imuslab.com/zoraxy/mod/dynamicproxy/dpcore"
 	"imuslab.com/zoraxy/mod/dynamicproxy/loadbalance"
 	"imuslab.com/zoraxy/mod/dynamicproxy/rewrite"
+	"imuslab.com/zoraxy/mod/netutils"
 	"imuslab.com/zoraxy/mod/statistic"
 	"imuslab.com/zoraxy/mod/utils"
+	"imuslab.com/zoraxy/mod/visitors"
 	"imuslab.com/zoraxy/mod/websocketproxy"
 )
 
@@ -461,39 +464,65 @@ func (router *Router) logRequest(r *http.Request, succ bool, statusCode int, for
 		router.Option.Logger.LogHTTPRequestSite(siteKey, r, forwardType, statusCode, originalHostname, upstreamHostname, clientIP)
 	}
 
-	if endpoint == nil || router.Option.StatisticCollector == nil {
-		// Cannot determine the endpoint for this request, or statistic collector is not set, skip statistic collection
+	if endpoint == nil || endpoint.DisableStatisticCollection {
+		// Cannot determine the endpoint for this request, or statistics are switched off for it
+		return
+	}
+	collector := router.Option.StatisticCollector
+	tracker := router.Option.VisitorTracker
+	if collector == nil && tracker == nil {
 		return
 	}
 
-	if !endpoint.DisableStatisticCollection {
-		// Collect statistic from request
+	// Everything read from the request is captured here, before the handler returns
+	var via, viaHeader string
+	if tracker != nil {
+		via, viaHeader = visitors.Attribute(netutils.GetRequesterIPUntrusted(r), clientIP, r.Header)
+	}
+	keepQuery := tracker != nil && tracker.Settings().KeepQuery
+	pathForVisitor := r.URL.EscapedPath()
+	if keepQuery && r.URL.RawQuery != "" {
+		pathForVisitor += "?" + r.URL.RawQuery
+	}
+	method, ua, referer := r.Method, r.UserAgent(), r.Referer()
+	statURL := ""
+	if collector != nil {
+		statURL = statistic.BuildStatURL(r.Host, r.URL.EscapedPath(), r.URL.RawQuery, collector.QueryMode())
+	}
+	blocked := statistic.IsBlockedForwardType(forwardType)
 
-		go func() {
-			countryISOCode := ""
-			if router.Option.GeodbStore != nil {
-				if countryInfo, err := router.Option.GeodbStore.ResolveCountryCodeFromIP(clientIP); err == nil {
-					countryISOCode = countryInfo.CountryIsoCode
-				}
+	go func() {
+		countryISOCode := ""
+		if router.Option.GeodbStore != nil {
+			if countryInfo, err := router.Option.GeodbStore.ResolveCountryCodeFromIP(clientIP); err == nil {
+				countryISOCode = countryInfo.CountryIsoCode
 			}
-			requestInfo := statistic.RequestInfo{
+		}
+		if tracker != nil {
+			tracker.Record(visitors.Event{
+				Time: time.Now(), IP: clientIP, Host: originalHostname, Rule: endpoint.RootOrMatchingDomain,
+				Method: method, Path: pathForVisitor, UA: ua, Country: countryISOCode,
+				Via: via, ViaHeader: viaHeader, Status: statusCode, Blocked: blocked,
+			})
+		}
+		if collector != nil {
+			collector.RecordRequest(statistic.RequestInfo{
 				IpAddr:                        clientIP,
 				RequestOriginalCountryISOCode: countryISOCode,
 				Succ:                          succ,
 				StatusCode:                    statusCode,
 				ForwardType:                   forwardType,
-				RequestMethod:                 r.Method,
-				Referer:                       r.Referer(),
-				UserAgent:                     r.UserAgent(),
-				RequestURL:                    statistic.BuildStatURL(r.Host, r.URL.EscapedPath(), r.URL.RawQuery, router.Option.StatisticCollector.QueryMode()),
+				RequestMethod:                 method,
+				Referer:                       referer,
+				UserAgent:                     ua,
+				RequestURL:                    statURL,
 				Target:                        originalHostname,
 				Upstream:                      upstreamHostname,
 				Site:                          endpoint.RootOrMatchingDomain,
-				Blocked:                       statistic.IsBlockedForwardType(forwardType),
-			}
-			router.Option.StatisticCollector.RecordRequest(requestInfo)
-		}()
-	}
+				Blocked:                       blocked,
+			})
+		}
+	}()
 }
 
 // Serve error page with status code

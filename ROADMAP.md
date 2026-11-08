@@ -181,3 +181,8 @@ FriendlyCaptcha, counting SSO redirect failures in the auto-ban, per-user admin 
 - ✅ CAPTCHA path exceptions in exact and regex mode with canonical-path-only matching (fork #222 / upstream #1161).
 - ✅ Role claim shapes (Keycloak realm / client roles, Entra roles and groups, Authentik groups, Google hd) tested and documented (fork #172).
 - 📋 Per path (not per rule) provider selection; a rule-level override that widens (instead of narrowing) the provider's allow-lists; real-IdP verification of Entra, Google and GitHub presets.
+## UI performance, Status page, Visitors (`feat/ui-perf-status-visitors`)
+- ✅ Idle admin UI CPU cut (endless accordion re-init loop, background polling of hidden pages, MutationObserver scans, canvas traffic map); `tools/ui-perf`.
+- ✅ Status page: KPI cards with skeletons, traffic over time chart, upstream / certificate / alert lists, latest visitors, traffic map hide / pause.
+- ✅ Visitors list (per IP, recent visits, Cloudflare aware, retention, export, purge, per IP delete, optional new-country notification).
+- 📋 Visitors: city level GeoIP, per-host retention, hourly history chart on the Status page, virtualised rows for very large pages.

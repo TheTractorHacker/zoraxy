@@ -373,6 +373,73 @@
         color: var(--text_color);
         margin-top: 0.15em;
     }
+
+    /* ---- Status page redesign: KPI cards, cards with headers, health lists ---- */
+    #status .dashboard-card{ box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+    #status .cardHead{ display: flex; justify-content: space-between; align-items: flex-start; gap: 0.8em; flex-wrap: wrap; margin-bottom: 0.4em; }
+    #status .cardHead h4{ margin: 0 0 0.15em; }
+    #status .cardHead .cardSubtitle{ margin: 0; }
+    #status .cardLink{ font-size: 0.88em; white-space: nowrap; }
+    #status .kpiGrid{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.8em; }
+    #status .kpiCard{
+        position: relative; display: flex; flex-direction: column; gap: 0.1em; min-height: 5.8em;
+        padding: 0.9em 1em 0.8em 1.15em; overflow: hidden;
+        background: var(--theme_bg_primary); border: 1px solid var(--divider_color); border-radius: 1em;
+    }
+    #status .kpiCard::before{ content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--kpi-accent, #94a3b8); }
+    #status .kpiCard.accentBlue{ --kpi-accent: #3b82f6; }
+    #status .kpiCard.ok{ --kpi-accent: #21ba45; }
+    #status .kpiCard.warn{ --kpi-accent: #f2711c; }
+    #status .kpiCard.bad{ --kpi-accent: #db2828; }
+    #status .kpiLabel{ font-size: 0.85em; color: var(--text_color_secondary); }
+    #status .kpiValue{ font-size: 1.7em; font-weight: 600; line-height: 1.25; color: var(--text_color); }
+    #status .kpiValue.ok{ color: #21ba45; } #status .kpiValue.warn{ color: #f2711c; } #status .kpiValue.bad{ color: #db2828; }
+    #status .kpiSub{ font-size: 0.8em; color: var(--text_color_secondary); word-break: break-word; min-height: 1.1em; }
+    #status .skel .kpiValue, #status .skel .kpiSub{
+        color: transparent; border-radius: 0.3em; width: 60%;
+        background: linear-gradient(90deg, rgba(128,128,128,0.15), rgba(128,128,128,0.28), rgba(128,128,128,0.15)); background-size: 200% 100%;
+        animation: statusShimmer 1.4s linear infinite;
+    }
+    #status .skel .kpiSub{ width: 85%; }
+    @keyframes statusShimmer{ from{ background-position: 200% 0; } to{ background-position: -200% 0; } }
+    #status .trafficChartWrapper{ position: relative; height: 200px; width: 100%; margin-top: 0.4em; }
+    #status .chartLegend{ display: flex; gap: 1em; font-size: 0.85em; color: var(--text_color_secondary); flex-wrap: wrap; }
+    #status .legendDot{ display: inline-block; width: 0.7em; height: 0.7em; border-radius: 50%; margin-right: 0.3em; }
+    #status .chartEmpty{ color: var(--text_color_secondary); text-align: center; padding: 1.5em 1em; }
+    #status .trafficChartWrapper .chartEmpty{ position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+    #status .diagramCard{ display: flex; flex-direction: column; }
+    #status .diagramCard #trafficFlowDiagramWrapper{ flex: 1; min-height: 440px; height: auto; }
+    #status .diagramTools{ display: flex; gap: 0.4em; }
+    #status .diagramTools .ui.button{ margin: 0; }
+    #status .healthGrid{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1em; }
+    #status .healthList{ margin-top: 0.3em; }
+    #status .healthItem{ display: flex; align-items: center; gap: 0.6em; padding: 0.5em 0; border-bottom: 1px solid var(--divider_color); font-size: 0.93em; }
+    #status .healthItem:last-child{ border-bottom: none; }
+    #status .healthItem .hName{ flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #status .healthItem .hMeta{ color: var(--text_color_secondary); font-size: 0.88em; white-space: nowrap; }
+    #status .healthItem .hDot{ width: 0.7em; height: 0.7em; border-radius: 50%; flex: none; background: #94a3b8; }
+    #status .healthItem .hDot.ok{ background: #21ba45; } #status .healthItem .hDot.warn{ background: #f2711c; } #status .healthItem .hDot.bad{ background: #db2828; }
+    #status .healthItem .hBadge{ font-size: 0.8em; font-weight: 600; padding: 0.05em 0.6em; border-radius: 1em; white-space: nowrap; }
+    #status .healthItem .hBadge.ok{ background: rgba(33,186,69,0.15); color: #1a9a3a; }
+    #status .healthItem .hBadge.warn{ background: rgba(242,113,28,0.16); color: #d9660a; }
+    #status .healthItem .hBadge.bad{ background: rgba(219,40,40,0.14); color: #c62828; }
+    #status .healthEmpty{ color: var(--text_color_secondary); padding: 1em 0.2em; text-align: center; font-size: 0.93em; }
+    #status .healthEmpty i.icon{ display: block; margin: 0 auto 0.3em; font-size: 1.8em; opacity: 0.5; }
+    #status .healthSkel{ height: 1.1em; margin: 0.9em 0; border-radius: 0.3em; background: linear-gradient(90deg, rgba(128,128,128,0.15), rgba(128,128,128,0.28), rgba(128,128,128,0.15)); background-size: 200% 100%; animation: statusShimmer 1.4s linear infinite; }
+    #status .certChips{ display: flex; flex-wrap: wrap; gap: 0.9em; margin-top: 0.6em; padding-top: 0.6em; border-top: 1px solid var(--divider_color); font-size: 0.88em; color: var(--text_color_secondary); }
+    #status .resourceGrid{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.4em; margin-top: 0.6em; }
+    #status .resourceGrid .resourceBarRow{ margin-bottom: 0.2em; }
+    @media screen and (max-width: 1100px){ #status .healthGrid{ grid-template-columns: 1fr; } }
+    @media screen and (max-width: 768px){
+        #status .diagramCard #trafficFlowDiagramWrapper{ min-height: 380px; }
+        #status .trafficChartWrapper{ height: 170px; }
+        #status .kpiGrid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        #status .diagramTools .ui.button span{ display: none; }
+    }
+    @media (prefers-reduced-motion: reduce){
+        #status .skel .kpiValue, #status .skel .kpiSub, #status .healthSkel{ animation: none; }
+        #status .resourceBarTrack .resourceBarFill{ transition: none; }
+    }
 </style>
 
 <!-- Server Status Hero Banner -->
@@ -415,92 +482,61 @@
     </div>
 </div>
 
-<!-- At a glance: rates, alerts, certificates and upstream health (GET /api/stats/glance) -->
+<!-- At a glance: KPI cards (GET /api/stats/glance, refreshed while this page is visible) -->
 <div class="standardContainer nobottom" id="glancePanel">
-    <style>
-        #glancePanel .glanceGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.8em; }
-        #glancePanel .glanceCard { padding: 0.9em 1em; border: 1px solid rgba(128,128,128,0.25); border-radius: 8px; }
-        #glancePanel .glanceLabel { font-size: 0.85em; opacity: 0.7; display: block; }
-        #glancePanel .glanceValue { font-size: 1.6em; font-weight: 600; }
-        #glancePanel .glanceSub { font-size: 0.8em; opacity: 0.7; word-break: break-word; }
-        #glancePanel .glanceBad { color: #db2828; }
-        #glancePanel .glanceWarn { color: #f2711c; }
-        #glancePanel .glanceOk { color: #21ba45; }
-        #glancePanel .glanceSpark { display: block; margin-top: 0.3em; }
-    </style>
-    <div class="glanceGrid">
-        <div class="glanceCard">
-            <span class="glanceLabel"><i class="exchange icon"></i> Requests / min (5 min avg)</span>
-            <span class="glanceValue" id="glanceRpm">-</span>
-            <span id="glanceSpark" class="glanceSpark"></span>
+    <div class="kpiGrid">
+        <div class="kpiCard accentBlue skel" id="kpiRpm">
+            <span class="kpiLabel"><i class="exchange icon"></i> Requests / min</span>
+            <span class="kpiValue" id="glanceRpm">-</span>
+            <span class="kpiSub" id="glanceRpmSub">5 minute average</span>
         </div>
-        <div class="glanceCard">
-            <span class="glanceLabel"><i class="exclamation circle icon"></i> Error rate</span>
-            <span class="glanceValue" id="glanceErr">-</span>
-            <span class="glanceSub" id="glanceErrSub"></span>
+        <div class="kpiCard skel" id="kpiErr">
+            <span class="kpiLabel"><i class="exclamation circle icon"></i> Error rate</span>
+            <span class="kpiValue" id="glanceErr">-</span>
+            <span class="kpiSub" id="glanceErrSub"></span>
         </div>
-        <div class="glanceCard">
-            <span class="glanceLabel"><i class="ban icon"></i> Blocked today</span>
-            <span class="glanceValue" id="glanceBlocked">-</span>
-            <span class="glanceSub" id="glanceBlockedSub"></span>
+        <div class="kpiCard skel" id="kpiBlocked">
+            <span class="kpiLabel"><i class="ban icon"></i> Blocked today</span>
+            <span class="kpiValue" id="glanceBlocked">-</span>
+            <span class="kpiSub" id="glanceBlockedSub"></span>
         </div>
-        <div class="glanceCard">
-            <span class="glanceLabel"><i class="heartbeat icon"></i> Upstream health</span>
-            <span class="glanceValue" id="glanceUp">-</span>
-            <span class="glanceSub" id="glanceUpSub"></span>
+        <div class="kpiCard skel" id="kpiUp">
+            <span class="kpiLabel"><i class="heartbeat icon"></i> Upstream health</span>
+            <span class="kpiValue" id="glanceUp">-</span>
+            <span class="kpiSub" id="glanceUpSub"></span>
         </div>
-        <div class="glanceCard">
-            <span class="glanceLabel"><i class="lock icon"></i> Certificates</span>
-            <span class="glanceValue" id="glanceCert">-</span>
-            <span class="glanceSub" id="glanceCertSub"></span>
+        <div class="kpiCard skel" id="kpiCert">
+            <span class="kpiLabel"><i class="lock icon"></i> Certificates</span>
+            <span class="kpiValue" id="glanceCert">-</span>
+            <span class="kpiSub" id="glanceCertSub"></span>
         </div>
-        <div class="glanceCard">
-            <span class="glanceLabel"><i class="bell icon"></i> Alerts</span>
-            <span class="glanceValue" id="glanceAlerts">-</span>
-            <span class="glanceSub" id="glanceAlertsSub"></span>
+        <div class="kpiCard skel" id="kpiAlerts">
+            <span class="kpiLabel"><i class="bell icon"></i> Alerts</span>
+            <span class="kpiValue" id="glanceAlerts">-</span>
+            <span class="kpiSub" id="glanceAlertsSub"></span>
         </div>
     </div>
-    <script>
-        (function(){
-            function esc(t){ return $("<div>").text(t == null ? "" : String(t)).html(); }
-            function spark(values){
-                if (!values || values.length < 2){ return ""; }
-                let max = Math.max.apply(null, values); if (max <= 0){ max = 1; }
-                let w = 160, h = 24;
-                let pts = values.map((v, i) => (i * w / (values.length - 1)).toFixed(1) + "," + (h - 2 - (v / max) * (h - 4)).toFixed(1)).join(" ");
-                return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="requests per minute, last 30 minutes"><polyline fill="none" stroke="#2185d0" stroke-width="1.5" points="${pts}"/></svg>`;
-            }
-            function bytes(n){
-                if (n > 1073741824) return (n / 1073741824).toFixed(2) + " GB";
-                if (n > 1048576) return (n / 1048576).toFixed(1) + " MB";
-                return (n / 1024).toFixed(0) + " KB";
-            }
-            function loadGlance(){
-                if (!document.getElementById("glancePanel") || $("#glancePanel").is(":hidden")){ return; }
-                $.getJSON("/api/stats/glance", function(d){
-                    if (d.error){ return; }
-                    $("#glanceRpm").text(d.Rates.RequestsPerMin.toFixed(1));
-                    $("#glanceSpark").html(spark(d.Rates.Series));
-                    let er = d.Rates.ErrorRate * 100;
-                    $("#glanceErr").text(er.toFixed(1) + "%").attr("class", "glanceValue " + (er >= 20 ? "glanceBad" : er >= 5 ? "glanceWarn" : "glanceOk"));
-                    $("#glanceErrSub").text(d.Rates.ErrorsPerMin.toFixed(1) + " errors/min");
-                    $("#glanceBlocked").text(d.BlockedToday);
-                    $("#glanceBlockedSub").text(d.Rates.BlockedPerMin.toFixed(1) + "/min - traffic today " + bytes(d.BandwidthRx + d.BandwidthTx));
-                    let down = d.UpstreamsDown || [];
-                    $("#glanceUp").text(down.length == 0 ? "All up" : down.length + " down").attr("class", "glanceValue " + (down.length ? "glanceBad" : "glanceOk"));
-                    $("#glanceUpSub").html(d.UpstreamsTotal + " monitored" + (down.length ? ": " + down.slice(0, 3).map(x => esc(x.Name)).join(", ") : ""));
-                    let ce = d.CertsExpiring || [];
-                    $("#glanceCert").text(ce.length == 0 ? "OK" : ce[0].DaysLeft + " d").attr("class", "glanceValue " + (ce.length == 0 ? "glanceOk" : ce[0].DaysLeft < 7 ? "glanceBad" : "glanceWarn"));
-                    $("#glanceCertSub").html(ce.length == 0 ? d.CertsTotal + " certificates, none expiring within " + d.WarnDays + " days" : "soonest: " + esc(ce[0].Name) + (ce.length > 1 ? " (+" + (ce.length - 1) + " more)" : ""));
-                    $("#glanceAlerts").text(d.AlertsFailed ? d.AlertsFailed + " failed" : (d.AlertsRecent.length ? d.AlertsRecent.length + " recent" : "none")).attr("class", "glanceValue " + (d.AlertsFailed ? "glanceWarn" : ""));
-                    let r = (d.AlertsRecent || [])[0];
-                    $("#glanceAlertsSub").html(r ? esc(r.event) + " &rarr; " + esc(r.channel) + " (" + esc(r.status) + ") " : '<a href="snippet/notifications.html" target="_blank">Set up notifications</a>');
-                });
-            }
-            loadGlance();
-            setInterval(loadGlance, 15000);
-        })();
-    </script>
+</div>
+
+<!-- Traffic over time -->
+<div class="standardContainer nobottom">
+    <div class="dashboard-card">
+        <div class="cardHead">
+            <div>
+                <h4>Traffic over time</h4>
+                <p class="cardSubtitle">Requests per minute, last 30 minutes</p>
+            </div>
+            <div class="chartLegend">
+                <span><i class="legendDot" style="background:#3b82f6"></i> Requests</span>
+                <span><i class="legendDot" style="background:#ef4444"></i> Errors</span>
+                <span><i class="legendDot" style="background:#f59e0b"></i> Blocked</span>
+            </div>
+        </div>
+        <div class="trafficChartWrapper">
+            <canvas id="trafficChart" role="img" aria-label="Requests, errors and blocked requests per minute over the last 30 minutes"></canvas>
+            <div class="chartEmpty" id="trafficChartEmpty" style="display:none;"><i class="chart line icon"></i> No traffic in the last 30 minutes</div>
+        </div>
+    </div>
 </div>
 
 <!-- Traffic Flow Diagram (left) + Realtime Network In / Out (right) -->
@@ -508,8 +544,21 @@
     <div class="statusTopRow">
         <!-- Left: Architectural flow diagram -->
         <div class="statusFlowCol">
-            <div id="trafficFlowDiagramWrapper">
-                <iframe id="trafficFlowDiagram" src="snippet/trafficFlowDiagram.html" allowfullscreen></iframe>
+            <div class="dashboard-card diagramCard">
+                <div class="cardHead">
+                    <div>
+                        <h4>Traffic map</h4>
+                        <p class="cardSubtitle">Internet, proxy rules and upstream servers</p>
+                    </div>
+                    <div class="diagramTools">
+                        <button class="ui mini basic button" id="diagramAnimBtn" title="Pause or resume the moving dashes"><i class="pause icon"></i> <span>Pause animation</span></button>
+                        <button class="ui mini basic button" id="diagramHideBtn" title="Hide the map (also stops its updates)"><i class="eye slash icon"></i> <span>Hide</span></button>
+                    </div>
+                </div>
+                <div id="trafficFlowDiagramWrapper">
+                    <iframe id="trafficFlowDiagram" title="Traffic map" data-src="snippet/trafficFlowDiagram.html" allowfullscreen></iframe>
+                </div>
+                <div id="diagramHiddenMsg" style="display:none;" class="chartEmpty"><i class="sitemap icon"></i> The traffic map is hidden. <a href="#" id="diagramShowLink">Show it</a></div>
             </div>
         </div>
         <!-- Right: Realtime network input (top) / output (bottom) -->
@@ -539,6 +588,49 @@
                 </div>
             </div>
         </div>
+    </div>
+</div>
+
+<!-- Health: upstreams, certificates, alerts -->
+<div class="standardContainer nobottom">
+    <div class="healthGrid">
+        <div class="dashboard-card">
+            <div class="cardHead">
+                <div><h4>Upstream health</h4><p class="cardSubtitle" id="upstreamSubtitle">Uptime monitor targets</p></div>
+                <a class="cardLink" href="#" onclick="openTabById('utm'); return false;">Open monitor</a>
+            </div>
+            <div class="healthList" id="upstreamList"><div class="healthSkel"></div><div class="healthSkel"></div><div class="healthSkel"></div></div>
+        </div>
+        <div class="dashboard-card">
+            <div class="cardHead">
+                <div><h4>Certificates</h4><p class="cardSubtitle" id="certSubtitle">Soonest to expire</p></div>
+                <a class="cardLink" href="#" onclick="openTabById('cert'); return false;">Manage</a>
+            </div>
+            <div class="healthList" id="certList"><div class="healthSkel"></div><div class="healthSkel"></div><div class="healthSkel"></div></div>
+            <div class="certChips">
+                <span title="Total certificates in the store"><i class="blue info circle icon"></i> <b id="certTotal">-</b> total</span>
+                <span title="Expiring within 30 days"><i class="yellow shield alternate icon"></i> <b id="certExpiringSoon">-</b> expiring</span>
+                <span title="Already expired"><i class="red times circle icon"></i> <b id="certExpired">-</b> expired</span>
+            </div>
+        </div>
+        <div class="dashboard-card">
+            <div class="cardHead">
+                <div><h4>Recent alerts</h4><p class="cardSubtitle">Notification deliveries</p></div>
+                <a class="cardLink" href="snippet/notifications.html" target="_blank">Notification centre</a>
+            </div>
+            <div class="healthList" id="alertList"><div class="healthSkel"></div><div class="healthSkel"></div><div class="healthSkel"></div></div>
+        </div>
+    </div>
+</div>
+
+<!-- Latest visitors (from the Visitors page) -->
+<div class="standardContainer nobottom">
+    <div class="dashboard-card">
+        <div class="cardHead">
+            <div><h4>Latest visitors</h4><p class="cardSubtitle">Most recent requests, including traffic that came through Cloudflare</p></div>
+            <a class="cardLink" href="#" onclick="openTabById('visitors'); return false;">All visitors</a>
+        </div>
+        <div class="healthList" id="latestVisitors"><div class="healthSkel"></div><div class="healthSkel"></div><div class="healthSkel"></div></div>
     </div>
 </div>
 
@@ -663,55 +755,32 @@
     </div>
 </div>
 
-<!-- SSL/TLS Overview & System Resources -->
+<!-- System Resources -->
 <div class="standardContainer">
-    <div class="ui two column stackable grid" style="margin: 0;">
-        <div class="column" style="padding-left: 0;">
-            <div class="dashboard-card">
-                <h4>SSL / TLS Overview</h4>
-                <p class="cardSubtitle">Certificates in the local certificate store</p>
-                <div class="certOverviewBox">
-                    <div class="certOverviewItem">
-                        <div class="certOverviewLabel"><i class="blue info circle icon"></i>Total Certificates</div>
-                        <div class="certOverviewValue" id="certTotal">-</div>
-                    </div>
-                    <div class="certOverviewItem">
-                        <div class="certOverviewLabel"><i class="yellow shield alternate icon"></i>Expiring Soon</div>
-                        <div class="certOverviewValue" id="certExpiringSoon">-</div>
-                    </div>
-                    <div class="certOverviewItem">
-                        <div class="certOverviewLabel"><i class="red times circle icon"></i>Expired</div>
-                        <div class="certOverviewValue" id="certExpired">-</div>
-                    </div>
+    <div class="dashboard-card">
+        <h4>System Resources</h4>
+        <p class="cardSubtitle" id="hostInfoLine">Loading host information</p>
+        <div class="resourceGrid">
+            <div class="resourceBarRow">
+                <div class="resourceLabel">
+                    <span>CPU Usage</span>
+                    <span id="cpuUsageText">-</span>
                 </div>
-                <button class="ui fluid basic small button" style="margin-top: 1em;" onclick="openTabById('cert');">Manage Certificates</button>
+                <div class="resourceBarTrack"><div class="resourceBarFill" id="cpuUsageBar" style="width: 0%;"></div></div>
             </div>
-        </div>
-        <div class="column" style="padding-right: 0;">
-            <div class="dashboard-card">
-                <h4>System Resources</h4>
-                <p class="cardSubtitle" id="hostInfoLine">Loading host information</p>
-                <div class="resourceBarRow">
-                    <div class="resourceLabel">
-                        <span>CPU Usage</span>
-                        <span id="cpuUsageText">-</span>
-                    </div>
-                    <div class="resourceBarTrack"><div class="resourceBarFill" id="cpuUsageBar" style="width: 0%;"></div></div>
+            <div class="resourceBarRow">
+                <div class="resourceLabel">
+                    <span>Memory Usage</span>
+                    <span id="ramUsageText">-</span>
                 </div>
-                <div class="resourceBarRow">
-                    <div class="resourceLabel">
-                        <span>Memory Usage</span>
-                        <span id="ramUsageText">-</span>
-                    </div>
-                    <div class="resourceBarTrack"><div class="resourceBarFill" id="ramUsageBar" style="width: 0%;"></div></div>
+                <div class="resourceBarTrack"><div class="resourceBarFill" id="ramUsageBar" style="width: 0%;"></div></div>
+            </div>
+            <div class="resourceBarRow">
+                <div class="resourceLabel">
+                    <span>Disk Usage</span>
+                    <span id="diskUsageText">-</span>
                 </div>
-                <div class="resourceBarRow" style="margin-bottom: 0.2em;">
-                    <div class="resourceLabel">
-                        <span>Disk Usage</span>
-                        <span id="diskUsageText">-</span>
-                    </div>
-                    <div class="resourceBarTrack"><div class="resourceBarFill" id="diskUsageBar" style="width: 0%;"></div></div>
-                </div>
+                <div class="resourceBarTrack"><div class="resourceBarFill" id="diskUsageBar" style="width: 0%;"></div></div>
             </div>
         </div>
     </div>
@@ -1391,4 +1460,204 @@
             worldMap.updateSize();
         }
     });
+</script>
+
+<script>
+/*
+    Status board: KPI cards, traffic chart, health lists, latest visitors and the traffic map controls.
+    Everything refreshes every 15 s, and only while this page is on screen (perfkit.js skips the tick
+    of a hidden page; the explicit visibility check below makes the intent obvious).
+*/
+(function(){
+    function esc(t){ return String(t == null ? "" : t).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+    function onScreen(){ return !document.hidden && document.getElementById("status") && $("#status").is(":visible"); }
+    function ago(sec){
+        var d = Math.max(0, Math.floor(Date.now() / 1000) - sec);
+        if (d < 60) return d + "s ago";
+        if (d < 3600) return Math.floor(d / 60) + "m ago";
+        if (d < 86400) return Math.floor(d / 3600) + "h ago";
+        return Math.floor(d / 86400) + "d ago";
+    }
+    function bytes(n){
+        if (n > 1073741824) return (n / 1073741824).toFixed(2) + " GB";
+        if (n > 1048576) return (n / 1048576).toFixed(1) + " MB";
+        return (n / 1024).toFixed(0) + " KB";
+    }
+    function empty(icon, html){ return '<div class="healthEmpty"><i class="' + icon + ' icon"></i>' + html + '</div>'; }
+    function setKpi(id, cls){ $("#" + id).removeClass("skel ok warn bad accentBlue").addClass(cls || ""); }
+
+    /* ---- traffic chart ---- */
+    var trafficChart;
+    function initTrafficChart(){
+        var el = document.getElementById("trafficChart");
+        if (!el || typeof Chart === "undefined") return;
+        function ds(label, color, fill){
+            return {label: label, data: [], borderColor: color, backgroundColor: fill || color, borderWidth: 2, pointRadius: 0, pointHoverRadius: 3, tension: 0.3, fill: !!fill};
+        }
+        trafficChart = new Chart(el, {
+            type: "line",
+            data: {labels: [], datasets: [ds("Requests", "#3b82f6", "rgba(59,130,246,0.15)"), ds("Errors", "#ef4444"), ds("Blocked", "#f59e0b")]},
+            options: {
+                animation: false, responsive: true, maintainAspectRatio: false,
+                interaction: {mode: "index", intersect: false},
+                plugins: {legend: {display: false}},
+                scales: {
+                    x: {grid: {display: false}, border: {display: false}, ticks: {color: "#9ca3af", font: {size: 10}, maxRotation: 0, autoSkip: true, maxTicksLimit: 6}},
+                    y: {beginAtZero: true, border: {display: false}, grid: {color: "rgba(128,128,128,0.12)"}, ticks: {color: "#9ca3af", font: {size: 10}, precision: 0, maxTicksLimit: 5}}
+                }
+            }
+        });
+    }
+    var lastSeriesKey = "";
+    function updateTrafficChart(r){
+        if (!trafficChart || !r.Series) return;
+        var key = [r.Series, r.ErrorSeries, r.BlockedSeries].map(function(a){ return (a || []).join(","); }).join("|");
+        if (key === lastSeriesKey) return;     // identical numbers: skip the redraw
+        lastSeriesKey = key;
+        var now = Date.now(), labels = [];
+        for (var i = 0; i < r.Series.length; i++){
+            labels.push(new Date(now - (r.Series.length - 1 - i) * 60000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit", hour12: false}));
+        }
+        trafficChart.data.labels = labels;
+        trafficChart.data.datasets[0].data = r.Series;
+        trafficChart.data.datasets[1].data = r.ErrorSeries || [];
+        trafficChart.data.datasets[2].data = r.BlockedSeries || [];
+        trafficChart.update("none");
+        var total = r.Series.reduce(function(a, b){ return a + b; }, 0);
+        $("#trafficChartEmpty").toggle(total === 0);
+    }
+
+    /* ---- KPI cards and lists ---- */
+    function renderGlance(d){
+        var R = d.Rates || {};
+        $("#glanceRpm").text((R.RequestsPerMin || 0).toFixed(1));
+        setKpi("kpiRpm", "accentBlue");
+        var er = (R.ErrorRate || 0) * 100, ec = er >= 20 ? "bad" : er >= 5 ? "warn" : "ok";
+        $("#glanceErr").text(er.toFixed(1) + "%").attr("class", "kpiValue " + ec);
+        $("#glanceErrSub").text((R.ErrorsPerMin || 0).toFixed(1) + " errors/min");
+        setKpi("kpiErr", ec);
+        $("#glanceBlocked").text(d.BlockedToday || 0);
+        $("#glanceBlockedSub").text((R.BlockedPerMin || 0).toFixed(1) + "/min - traffic today " + bytes((d.BandwidthRx || 0) + (d.BandwidthTx || 0)));
+        setKpi("kpiBlocked", (R.BlockedPerMin || 0) > 0 ? "warn" : "ok");
+        var down = d.UpstreamsDown || [], uc = d.UpstreamsTotal === 0 ? "" : down.length ? "bad" : "ok";
+        $("#glanceUp").text(d.UpstreamsTotal === 0 ? "None" : down.length === 0 ? "All up" : down.length + " down").attr("class", "kpiValue " + uc);
+        $("#glanceUpSub").html(d.UpstreamsTotal === 0 ? "no monitored upstream" : d.UpstreamsTotal + " monitored" + (down.length ? ": " + down.slice(0, 3).map(function(x){ return esc(x.Name); }).join(", ") : ""));
+        setKpi("kpiUp", uc);
+        var ce = d.CertsExpiring || [], cc = ce.length === 0 ? "ok" : ce[0].DaysLeft < 7 ? "bad" : "warn";
+        if (d.CertsTotal === 0) cc = "";
+        $("#glanceCert").text(d.CertsTotal === 0 ? "None" : ce.length === 0 ? "OK" : ce[0].DaysLeft + " d").attr("class", "kpiValue " + cc);
+        $("#glanceCertSub").html(d.CertsTotal === 0 ? "no certificates yet" : ce.length === 0 ? d.CertsTotal + " certificates, none expiring within " + d.WarnDays + " days" : "soonest: " + esc(ce[0].Name) + (ce.length > 1 ? " (+" + (ce.length - 1) + " more)" : ""));
+        setKpi("kpiCert", cc);
+        var ac = d.AlertsFailed ? "warn" : "";
+        $("#glanceAlerts").text(d.AlertsFailed ? d.AlertsFailed + " failed" : ((d.AlertsRecent || []).length ? d.AlertsRecent.length + " recent" : "none")).attr("class", "kpiValue " + ac);
+        var r0 = (d.AlertsRecent || [])[0];
+        $("#glanceAlertsSub").html(r0 ? esc(r0.event) + " &rarr; " + esc(r0.channel) + " (" + esc(r0.status) + ")" : '<a href="snippet/notifications.html" target="_blank">Set up notifications</a>');
+        setKpi("kpiAlerts", ac);
+
+        // upstream list
+        var ups = d.Upstreams || [];
+        $("#upstreamSubtitle").text(ups.length ? (ups.length - down.length) + " of " + d.UpstreamsTotal + " online" : "Uptime monitor targets");
+        $("#upstreamList").html(ups.length === 0 ? empty("heartbeat", 'No upstream is monitored yet.<br><a href="#" onclick="openTabById(\'utm\'); return false;">Set up the uptime monitor</a>') :
+            ups.slice(0, 8).map(function(u){
+                return '<div class="healthItem"><i class="hDot ' + (u.Online ? "ok" : "bad") + '"></i><span class="hName" title="' + esc(u.URL) + '">' + esc(u.Name) + '</span>' +
+                    (u.Online ? '<span class="hMeta">' + (u.LatencyMs ? u.LatencyMs + " ms" : "up") + "</span>" : '<span class="hBadge bad">' + (u.StatusCode ? "HTTP " + u.StatusCode : "down") + "</span>") + "</div>";
+            }).join("") + (ups.length > 8 ? '<div class="healthItem"><span class="hMeta">+ ' + (ups.length - 8) + " more in the uptime monitor</span></div>" : ""));
+
+        // certificate list
+        var certs = d.CertList || [];
+        $("#certList").html(certs.length === 0 ? empty("lock open", 'No certificates in the store yet.<br><a href="#" onclick="openTabById(\'cert\'); return false;">Add or request a certificate</a>') :
+            certs.slice(0, 6).map(function(c){
+                var cls = c.DaysLeft < 7 ? "bad" : c.DaysLeft < 30 ? "warn" : "ok";
+                return '<div class="healthItem"><i class="hDot ' + cls + '"></i><span class="hName" title="' + esc(c.Name) + '">' + esc(c.Name) + '</span><span class="hBadge ' + cls + '" title="' + esc(new Date(c.NotAfter * 1000).toLocaleDateString()) + '">' + (c.DaysLeft < 0 ? "expired" : c.DaysLeft + " d") + "</span></div>";
+            }).join(""));
+
+        // alerts
+        var al = d.AlertsRecent || [];
+        $("#alertList").html(al.length === 0 ? empty("bell slash", 'No alerts were sent.<br><a href="snippet/notifications.html" target="_blank">Set up notifications</a>') :
+            al.map(function(a){
+                var cls = a.status === "failed" ? "bad" : "ok";
+                return '<div class="healthItem"><i class="hDot ' + cls + '"></i><span class="hName" title="' + esc(a.error || "") + '">' + esc(a.event) + (a.subject ? " - " + esc(a.subject) : "") + '</span><span class="hMeta">' + esc(a.channel) + '</span><span class="hMeta">' + esc(ago(Math.floor(new Date(a.time).getTime() / 1000))) + "</span></div>";
+            }).join(""));
+
+        updateTrafficChart(R);
+    }
+    function loadGlance(){
+        if (!onScreen()) return;
+        $.getJSON("/api/stats/glance", function(d){ if (!d.error) renderGlance(d); })
+            .fail(function(){ $("#glancePanel .kpiCard").removeClass("skel"); });
+    }
+    function loadLatestVisitors(){
+        if (!onScreen()) return;
+        $.getJSON("/api/visitors/recent?limit=6", function(d){
+            if (d.error){ $("#latestVisitors").html(empty("user clock", esc(d.error))); return; }
+            var vs = d.Visits || [];
+            $("#latestVisitors").html(vs.length === 0 ? empty("user clock", "No visits recorded yet. They show up here as soon as requests reach one of your proxy rules.") :
+                vs.map(function(v){
+                    var flag = "";
+                    if (v.country && v.country.length === 2){ var A = 0x1F1E6, u = v.country.toUpperCase(); flag = String.fromCodePoint(A + u.charCodeAt(0) - 65, A + u.charCodeAt(1) - 65) + " "; }
+                    var via = v.via === "cloudflare" ? "Cloudflare" : v.via === "proxy" ? "Proxy" : "Direct";
+                    return '<div class="healthItem"><i class="hDot ' + (v.blocked ? "bad" : v.status >= 500 ? "warn" : "ok") + '"></i><span class="hName"><b>' + flag + esc(v.ip) + "</b> &nbsp;" + esc(v.host) + esc(v.path) + '</span><span class="hMeta">' + esc(via) + '</span><span class="hMeta">' + esc(ago(v.t)) + "</span></div>";
+                }).join(""));
+        }).fail(function(){ $("#latestVisitors").html(empty("user clock", "The visitor list is not available.")); });
+    }
+
+    /* ---- traffic map controls ---- */
+    var frame = document.getElementById("trafficFlowDiagram");
+    function lsGet(k){ try { return localStorage.getItem(k); } catch (e) { return null; } }
+    function lsSet(k, v){ try { localStorage.setItem(k, v); } catch (e) {} }
+    function tell(msg){ try { frame.contentWindow.postMessage(Object.assign({type: "zoraxy-diagram"}, msg), window.location.origin); } catch (e) {} }
+    function syncDiagramButtons(){
+        var animOn = lsGet("zoraxy_trafficflow_anim") !== "off";
+        $("#diagramAnimBtn i").attr("class", (animOn ? "pause" : "play") + " icon");
+        $("#diagramAnimBtn span").text(animOn ? "Pause animation" : "Resume animation");
+        var hidden = lsGet("zoraxy_status_diagram") === "hidden";
+        $("#diagramHideBtn i").attr("class", (hidden ? "eye" : "eye slash") + " icon");
+        $("#diagramHideBtn span").text(hidden ? "Show" : "Hide");
+        $("#trafficFlowDiagramWrapper").toggle(!hidden);
+        $("#diagramHiddenMsg").toggle(hidden);
+        $("#diagramAnimBtn").toggle(!hidden);
+        if (hidden){ if (frame.getAttribute("src")) frame.removeAttribute("src"); }          // unload: no timers, no memory
+        else if (!frame.getAttribute("src")) frame.setAttribute("src", frame.getAttribute("data-src"));
+    }
+    $("#diagramAnimBtn").on("click", function(){
+        var on = lsGet("zoraxy_trafficflow_anim") === "off";
+        lsSet("zoraxy_trafficflow_anim", on ? "on" : "off");
+        tell({anim: on});
+        syncDiagramButtons();
+    });
+    $("#diagramHideBtn").on("click", function(){ lsSet("zoraxy_status_diagram", lsGet("zoraxy_status_diagram") === "hidden" ? "shown" : "hidden"); syncDiagramButtons(); });
+    $("#diagramShowLink").on("click", function(e){ e.preventDefault(); lsSet("zoraxy_status_diagram", "shown"); syncDiagramButtons(); });
+    window.addEventListener("storage", function(e){ if (e.key === "zoraxy_trafficflow_anim") syncDiagramButtons(); });
+
+    // The dashes freeze after 45 s without mouse / keyboard activity (a dashboard left open on a
+    // second monitor should not burn CPU) and move again as soon as someone touches the page.
+    var idleTimer = null, idleNow = false, lastActive = 0;
+    function setIdle(v){ if (v !== idleNow){ idleNow = v; tell({idle: v}); } }
+    function activity(){
+        var t = Date.now();
+        if (t - lastActive < 1500) return;
+        lastActive = t;
+        setIdle(false);
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(function(){ setIdle(true); }, 45000);
+    }
+    ["pointermove", "keydown", "touchstart", "wheel"].forEach(function(ev){ document.addEventListener(ev, activity, {passive: true}); });
+    frame.addEventListener("load", function(){ idleNow = false; activity(); });
+    activity();
+
+    initTrafficChart();
+    syncDiagramButtons();
+    loadGlance();
+    loadLatestVisitors();
+    setInterval(loadGlance, 15000);
+    setInterval(loadLatestVisitors, 15000);
+
+    var prevSwitch = tabSwitchEventBind["status"];
+    tabSwitchEventBind["status"] = function(){
+        if (prevSwitch) prevSwitch();
+        if (trafficChart) trafficChart.resize();
+        loadGlance();
+        loadLatestVisitors();
+    };
+})();
 </script>

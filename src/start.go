@@ -236,6 +236,7 @@ func startupSequence() {
 	}
 	statisticCollector.SetAutoSave(STATISTIC_AUTO_SAVE_INTERVAL)
 	loadStatSettings()
+	initVisitors()
 
 	//Start the static web server
 	staticWebServer = webserv.NewWebServer(&webserv.WebServerOptions{
@@ -506,6 +507,11 @@ func ShutdownSeq() {
 	}
 
 	stopAbuseManager()
+
+	if visitorTracker != nil {
+		SystemWideLogger.Println("Saving the visitor list")
+		visitorTracker.Close()
+	}
 
 	SystemWideLogger.Println("Closing Statistic Collector")
 	if statisticCollector != nil {

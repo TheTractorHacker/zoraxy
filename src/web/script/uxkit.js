@@ -146,7 +146,7 @@
     }
 
     function labelIconButtons(root) {
-        $(root).find("button, a.button, a.icon").each(function () {
+        $(root).find("button, a.button, a.icon").addBack("button, a.button, a.icon").each(function () {
             var $b = $(this);
             if ($b.attr("aria-label") || $b.attr("aria-labelledby")) { return; }
             if ($.trim($b.text()) !== "") { return; }
@@ -188,21 +188,42 @@
         });
     }
 
+    // Only the nodes that were added since the last run are scanned (scanning document.body on every
+    // DOM change cost several ms per run on pages that update text every second). Mutations that only
+    // touch text / chart readouts add no element with a button, so they are ignored cheaply.
     var a11yTimer = null;
-    function scheduleA11y() {
-        if (a11yTimer) { return; }
+    var a11yPending = [];
+    var a11yMenuDirty = false;
+
+    function onA11yMutations(records) {
+        for (var i = 0; i < records.length; i++) {
+            var added = records[i].addedNodes;
+            for (var j = 0; j < added.length; j++) {
+                var n = added[j];
+                if (n.nodeType !== 1) { continue; }
+                if (a11yPending.length < 200) { a11yPending.push(n); }
+                else { a11yPending = [document.body]; }
+                if (!a11yMenuDirty && (n.id === "mainmenu" || (records[i].target && records[i].target.closest && records[i].target.closest("#mainmenu")))) { a11yMenuDirty = true; }
+            }
+        }
+        if (a11yPending.length === 0 || a11yTimer) { return; }
         a11yTimer = setTimeout(function () {
             a11yTimer = null;
-            labelIconButtons(document.body);
-            makeMenuAccessible($("#mainmenu"));
+            var nodes = a11yPending; a11yPending = [];
+            var menu = a11yMenuDirty; a11yMenuDirty = false;
+            for (var k = 0; k < nodes.length; k++) {
+                if (nodes[k].isConnected) { labelIconButtons(nodes[k]); }
+            }
+            if (menu) { makeMenuAccessible($("#mainmenu")); }
         }, 250);
     }
 
     function initA11y() {
-        scheduleA11y();
+        labelIconButtons(document.body);
+        makeMenuAccessible($("#mainmenu"));
         initKeyboardMenu();
         if (window.MutationObserver) {
-            new MutationObserver(scheduleA11y).observe(document.body, { childList: true, subtree: true });
+            new MutationObserver(onA11yMutations).observe(document.body, { childList: true, subtree: true });
         }
     }
 

@@ -515,6 +515,65 @@ def main():
             for pid in ("idpa", "idpb"):
                 pg.evaluate("p => new Promise(res => $.cjax({url: '/api/sso/OAuth2/providers?id=' + p, method: 'DELETE', success: res, error: res}))", pid)
 
+        # ---- Status board: skeletons resolved, empty states, traffic map controls ----
+        current["page"] = "status-board"
+        pg.set_viewport_size({"width": 1366, "height": 800})
+        pg.evaluate("openTabById('status')")
+        settle(pg, 1500)
+        if pg.evaluate("document.querySelectorAll('#glancePanel .kpiCard.skel').length") > 0:
+            fail("status", "KPI cards are still in the loading (skeleton) state")
+        for sel in ("#upstreamList", "#certList", "#alertList", "#latestVisitors"):
+            st = pg.evaluate("sel => { const e = document.querySelector(sel); return {skel: e.querySelectorAll('.healthSkel').length, text: e.innerText.trim().length} }", sel)
+            if st["skel"] or st["text"] < 5:
+                fail("status", f"{sel} did not render (skeleton {st['skel']}, text {st['text']})")
+        pg.click("#diagramHideBtn")
+        if pg.evaluate("!!document.getElementById('trafficFlowDiagram').getAttribute('src')"):
+            fail("status", "hiding the traffic map did not unload the iframe")
+        pg.click("#diagramHideBtn")
+        pg.wait_for_timeout(500)
+        if not pg.evaluate("!!document.getElementById('trafficFlowDiagram').getAttribute('src')"):
+            fail("status", "showing the traffic map did not reload the iframe")
+        pg.click("#diagramAnimBtn")
+        pg.wait_for_timeout(300)
+        if "Resume" not in pg.inner_text("#diagramAnimBtn"):
+            fail("status", "pause animation button did not switch to Resume")
+        pg.click("#diagramAnimBtn")
+        pg.screenshot(path=os.path.join(args.out, "status-board.png"), full_page=True)
+
+        # ---- Visitors page ----
+        current["page"] = "visitors"
+        pg.evaluate("openTabById('visitors')")
+        settle(pg, 1200)
+        if pg.evaluate("document.querySelectorAll('#vBody .vSkel').length") > 0:
+            fail("visitors", "table is still showing the loading skeleton")
+        if pg.evaluate("document.getElementById('vBody').innerText.trim().length") < 10:
+            fail("visitors", "table shows neither rows nor the empty state")
+        api = pg.evaluate("""async () => { const o = {}; for (const u of ['/api/visitors/list?sort=password', '/api/visitors/list?via=evil', '/api/visitors/detail?ip=nope', '/api/visitors/export?format=xml'])
+            o[u] = (await (await fetch(u)).json()).error || ''; return o }""")
+        for u, err in api.items():
+            if not err:
+                fail("visitors", f"{u} was accepted")
+        ex = pg.evaluate("""async () => { const r = await fetch('/api/visitors/export?format=csv'); return [r.status, r.headers.get('content-disposition') || '', (await r.text()).split('\\n')[0]] }""")
+        if ex[0] != 200 or "attachment" not in ex[1] or not ex[2].startswith("ip,country"):
+            fail("visitors", f"CSV export wrong: {ex}")
+        pg.click("#vTabs .item[data-vtab=recent]")
+        settle(pg, 800)
+        if pg.evaluate("document.getElementById('vrBody').innerText.trim().length") < 10:
+            fail("visitors", "recent visits tab shows neither rows nor the empty state")
+        pg.click("#vTabs .item[data-vtab=settings]")
+        settle(pg, 500)
+        pg.fill("#vsAge", "45")
+        pg.click("#vsSave")
+        pg.wait_for_timeout(700)
+        if "Saved" not in pg.inner_text("#vsMsg"):
+            fail("visitors", "saving the settings did not confirm")
+        pg.screenshot(path=os.path.join(args.out, "visitors-settings.png"), full_page=True)
+        pg.click("#vsPurge")
+        if not pg.is_visible("#vsPurgeYes"):
+            fail("visitors", "purge needs a second confirmation click")
+        pg.click("#vsPurgeNo")
+        pg.click("#vTabs .item[data-vtab=list]")
+
         # ---- narrow / mobile layout ----
         current["page"] = "mobile"
         pg.set_viewport_size({"width": 390, "height": 700})

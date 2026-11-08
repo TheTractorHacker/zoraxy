@@ -131,6 +131,12 @@ func (c *Collector) QueryMode() string {
 	return QueryModeStrip
 }
 
+// ExcludesBlocked reports whether requests rejected by Zoraxy itself are left out of the statistics
+func (c *Collector) ExcludesBlocked() bool {
+	cs := c.settings.v.Load()
+	return cs != nil && cs.ExcludeBlocked
+}
+
 // ExcludesIP reports whether ip (possibly a "a,b" forwarded list, an
 // IPv4-mapped IPv6 address or "[v6]") is inside the exclusion list
 func (c *Collector) ExcludesIP(ip string) bool {
