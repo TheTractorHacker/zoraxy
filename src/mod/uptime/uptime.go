@@ -402,9 +402,13 @@ func (m *Monitor) getWebsiteStatus(url string, skipTLSVerification bool, timeout
 		IdleConnTimeout:   15 * time.Second,
 	}
 	if skipTLSVerification {
-		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		transport.TLSClientConfig = utils.InsecureUpstreamTLSConfig("")
 		transport.DialTLS = func(network, addr string) (net.Conn, error) {
-			return tls.Dial(network, addr, &tls.Config{InsecureSkipVerify: true})
+			cfg := utils.InsecureUpstreamTLSConfig("")
+			if host, _, err := net.SplitHostPort(addr); err == nil && net.ParseIP(host) == nil {
+				cfg.ServerName = host //keep SNI: tls.Dial derives it from addr, a custom config must set it
+			}
+			return tls.Dial(network, addr, cfg)
 		}
 	}
 
