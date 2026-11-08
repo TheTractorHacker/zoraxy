@@ -378,7 +378,7 @@ func (router *Router) handleNonTLSRequest(w http.ResponseWriter, r *http.Request
 	armOps(r)
 	selectedUpstream, err := router.loadBalancer.SelectUpstream(w, r, sep.ActiveOrigins, router.newSelectOptions(r, sep))
 	if err != nil {
-		serveProxyRequestError(w, 404, router, ErrorTemplateHostError)
+		serveProxyRequestError(w, r, 404, router, ErrorTemplateHostError)
 		router.Option.Logger.PrintAndLog("dprouter", "failed to get upstream for hostname", err)
 		router.logRequest(r, false, 404, "vdir-http", r.Host, "", sep)
 		return

@@ -97,7 +97,7 @@ func (h *ProxyHandler) enforcePeerSet(w http.ResponseWriter, r *http.Request, se
 		}
 	}
 	h.Parent.logRequest(r, false, 403, "peer-not-allowed", r.Host, "", sep)
-	serveProxyRequestError(w, http.StatusForbidden, h.Parent, ErrorTemplateForbidden)
+	serveProxyRequestError(w, r, http.StatusForbidden, h.Parent, ErrorTemplateForbidden)
 	return true
 }
 

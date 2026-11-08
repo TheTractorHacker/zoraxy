@@ -455,6 +455,7 @@ func initAPIs(targetMux *http.ServeMux) {
 	RegisterWAFAPIs(authRouter)
 	RegisterBulkAPIs(authRouter)
 	authRouter.HandleFunc("/api/quickstart", HandleQuickStartState)
+	authRouter.HandleFunc("/api/i18n/language", HandleUILanguage)
 	authRouter.HandleFunc("/api/proxy/testupstream", HandleTestUpstream)
 	RegisterNetworkingAPIs(authRouter)
 	RegisterOpsAPIs(authRouter)

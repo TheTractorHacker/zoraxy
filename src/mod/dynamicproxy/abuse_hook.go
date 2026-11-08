@@ -106,7 +106,7 @@ func (router *Router) abuseBegin(w http.ResponseWriter, r *http.Request, sep *Pr
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusForbidden)
-		w.Write(page_forbidden)
+		w.Write(localizedPage(r, page_forbidden))
 		return w, r, noopDone, true
 	}
 

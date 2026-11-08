@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"imuslab.com/zoraxy/mod/i18n"
 )
 
 /*
@@ -59,6 +61,7 @@ type PageStrings struct {
 	Failed    string
 	Error     string
 	Retry     string
+	FooterBy  string // "Performance & security by" (footer, localised)
 }
 
 // ClientConfig is serialised as a JSON object into the page script. Custom
@@ -104,6 +107,7 @@ type TemplateData struct {
 	Provider string // turnstile, recaptcha_v2 or recaptcha_v3
 	Page     string // challenge, failed or blocked
 	Preview  bool
+	Lang     string // value for <html lang>, negotiated from Accept-Language ("en-US" by default)
 
 	Title      string
 	Heading    string
@@ -126,6 +130,7 @@ type RenderOptions struct {
 	WebDir   string // webroot that may hold legacy template overrides
 	Preview  bool   // admin preview: dummy site key, nothing is verified, HTTP 200
 	RetryURL string // failed page only, derived from the request when empty
+	Lang     string // i18n code of the page text; negotiated from Accept-Language when empty
 }
 
 func providerID(c *Config) string {
@@ -190,6 +195,7 @@ func buildData(cfg *Config, kind PageKind, domain, nonce string, opts RenderOpti
 		Provider:   prov,
 		Page:       string(kind),
 		Preview:    opts.Preview,
+		Lang:       i18n.HTMLLang(opts.Lang),
 		Accent:     DefaultAccentColor,
 		Theme:      ThemeAuto,
 		ShowFooter: !b.HideFooter,
@@ -216,19 +222,21 @@ func buildData(cfg *Config, kind PageKind, domain, nonce string, opts RenderOpti
 		d.Theme = b.Theme
 	}
 
-	text := func(v, def string) string { return expandDomain(pick(v, def), domain) }
+	// branding text always wins; only the built-in defaults are localised
+	text := func(v, def string) string { return expandDomain(pick(v, i18n.Tr(opts.Lang, def)), domain) }
 	d.Strings = PageStrings{
 		Verifying: text(b.VerifyingText, DefaultVerifyingText),
 		Success:   text(b.SuccessText, DefaultSuccessText),
 		Failed:    text(b.FailedText, DefaultFailedText),
 		Error:     text(b.ErrorText, DefaultErrorText),
 		Retry:     text(b.RetryText, DefaultRetryText),
+		FooterBy:  i18n.Tr(opts.Lang, "Performance & security by"),
 	}
 
 	switch kind {
 	case PageFailed:
 		d.Title = text(b.Title, DefaultFailedHeading)
-		d.Heading = DefaultFailedHeading
+		d.Heading = i18n.Tr(opts.Lang, DefaultFailedHeading)
 		d.Message = d.Strings.Failed
 	case PageBlocked:
 		d.Title = text(b.BlockedTitle, DefaultBlockedTitle)
@@ -511,6 +519,9 @@ func renderPage(w http.ResponseWriter, r *http.Request, cfg *Config, kind PageKi
 		cfg = ApplyDefaultBranding(cfg) // previews merge on their own, see HandleCaptchaPreview
 	}
 	nonce := newNonce()
+	if opts.Lang == "" && r != nil {
+		opts.Lang = i18n.Negotiate(r.Header.Get("Accept-Language"))
+	}
 	if kind == PageFailed && opts.RetryURL == "" {
 		opts.RetryURL = retryURLFor(r)
 	}
@@ -557,6 +568,7 @@ func renderPage(w http.ResponseWriter, r *http.Request, cfg *Config, kind PageKi
 
 	h := w.Header()
 	h.Set("Content-Type", "text/html; charset=utf-8")
+	h.Add("Vary", "Accept-Language")
 	h.Set("Content-Security-Policy", contentSecurityPolicy(data.Provider, kind, nonce, relaxed, opts.Preview))
 	h.Set("Cache-Control", "no-store")
 	h.Set("X-Content-Type-Options", "nosniff")

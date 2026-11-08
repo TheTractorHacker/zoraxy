@@ -1,4 +1,13 @@
 /*
+    i18n bootstrap: every document that loads utils.js (index, snippets, tools) also gets the
+    translation engine.  index.html includes script/i18n.js directly, in which case this is a no-op.
+*/
+(function () {
+    if (window.i18n || !document.currentScript) return;
+    document.write('<script src="' + document.currentScript.src.replace(/utils\.js(\?.*)?$/, "i18n.js") + '"><\/script>');
+})();
+
+/*
     Utils.js
 
     This script holds utilities function that is commonly use

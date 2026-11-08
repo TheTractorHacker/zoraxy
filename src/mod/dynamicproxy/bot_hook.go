@@ -66,6 +66,6 @@ func (h *ProxyHandler) handleBotRules(w http.ResponseWriter, r *http.Request, se
 	h.Parent.Option.Metrics.Event(metrics.EventAccessBlocked, endpointLabel(sep), "bot")
 	h.Parent.logRequest(r, false, 403, reason, r.Host, "", sep)
 	abuseNoteKind(r, abuse.KindBot)
-	serveProxyRequestError(w, http.StatusForbidden, h.Parent, ErrorTemplateForbidden)
+	serveProxyRequestError(w, r, http.StatusForbidden, h.Parent, ErrorTemplateForbidden)
 	return true
 }

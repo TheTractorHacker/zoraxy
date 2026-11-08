@@ -29,7 +29,7 @@ func (router *Router) captchaChallenge(w http.ResponseWriter, r *http.Request, s
 		//Fail closed: the country is meant to be restricted, so without a CAPTCHA it is blocked
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusForbidden)
-		w.Write(page_forbidden)
+		w.Write(localizedPage(r, page_forbidden))
 		router.Option.Metrics.Event(metrics.EventAccessBlocked, endpointLabel(sep), why+"-challenge-unavailable")
 		router.logRequest(r, false, 403, why+"-challenge-unavailable", r.Host, "", sep)
 		return true

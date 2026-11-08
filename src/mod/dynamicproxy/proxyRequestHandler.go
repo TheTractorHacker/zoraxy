@@ -16,6 +16,7 @@ import (
 	"imuslab.com/zoraxy/mod/dynamicproxy/dpcore"
 	"imuslab.com/zoraxy/mod/dynamicproxy/loadbalance"
 	"imuslab.com/zoraxy/mod/dynamicproxy/rewrite"
+	"imuslab.com/zoraxy/mod/i18n"
 	"imuslab.com/zoraxy/mod/netutils"
 	"imuslab.com/zoraxy/mod/statistic"
 	"imuslab.com/zoraxy/mod/utils"
@@ -153,7 +154,7 @@ func (h *ProxyHandler) upstreamHostSwap(w http.ResponseWriter, r *http.Request, 
 			h.hostRequest(w, r, loopbackProxyEndpoint)
 		} else {
 			//Endpoint disabled, return 521
-			serveProxyRequestError(w, 521, h.Parent, ErrorTemplateRPError)
+			serveProxyRequestError(w, r, 521, h.Parent, ErrorTemplateRPError)
 			h.Parent.logRequest(r, false, 521, "host-http", r.Host, upstreamHostname, currentTarget)
 		}
 		return true
@@ -179,7 +180,7 @@ func (h *ProxyHandler) hostRequest(w http.ResponseWriter, r *http.Request, targe
 			h.Parent.logRequest(r, false, http.StatusServiceUnavailable, "host-http", r.Host, "", target)
 			return
 		}
-		serveProxyRequestError(w, 521, h.Parent, ErrorTemplateRPError)
+		serveProxyRequestError(w, r, 521, h.Parent, ErrorTemplateRPError)
 		h.Parent.Option.Logger.PrintAndLog("proxy", "Failed to assign an upstream for this request", err)
 		h.Parent.logRequest(r, false, 521, "subdomain-http", r.URL.Hostname(), r.Host, target)
 		return
@@ -259,14 +260,14 @@ func (h *ProxyHandler) hostRequest(w http.ResponseWriter, r *http.Request, targe
 			h.Parent.logUpstreamFailure(reqHostname, upstreamHostname, err)
 		}
 		if errors.As(err, &dnsError) {
-			serveProxyRequestError(w, 404, h.Parent, ErrorTemplateHostError)
+			serveProxyRequestError(w, r, 404, h.Parent, ErrorTemplateHostError)
 			h.Parent.logRequest(r, false, 404, "host-http", reqHostname, upstreamHostname, target)
 		} else if errors.Is(err, context.Canceled) {
 			//Request canceled by client, usually due to manual refresh before page load
 			http.Error(w, "Request canceled", http.StatusRequestTimeout)
 			h.Parent.logRequest(r, false, http.StatusRequestTimeout, "host-http", reqHostname, upstreamHostname, target)
 		} else {
-			serveProxyRequestError(w, 521, h.Parent, ErrorTemplateRPError)
+			serveProxyRequestError(w, r, 521, h.Parent, ErrorTemplateRPError)
 			h.Parent.logRequest(r, false, 521, "host-http", reqHostname, upstreamHostname, target)
 		}
 	}
@@ -421,11 +422,11 @@ func (h *ProxyHandler) vdirRequest(w http.ResponseWriter, r *http.Request, targe
 			h.Parent.logUpstreamFailure(reqHostname, target.Domain, err)
 		}
 		if errors.As(err, &dnsError) {
-			serveProxyRequestError(w, 404, h.Parent, ErrorTemplateHostError)
+			serveProxyRequestError(w, r, 404, h.Parent, ErrorTemplateHostError)
 			//log.Println(err.Error())
 			h.Parent.logRequest(r, false, 404, "vdir-http", reqHostname, target.Domain, target.parent)
 		} else {
-			serveProxyRequestError(w, 521, h.Parent, ErrorTemplateRPError)
+			serveProxyRequestError(w, r, 521, h.Parent, ErrorTemplateRPError)
 			//log.Println(err.Error())
 			h.Parent.logRequest(r, false, 521, "vdir-http", reqHostname, target.Domain, target.parent)
 		}
@@ -527,8 +528,9 @@ func (router *Router) logRequest(r *http.Request, succ bool, statusCode int, for
 
 // Serve error page with status code
 // Checks for custom templates in web directory before falling back to embedded content
-func serveProxyRequestError(w http.ResponseWriter, statusCode int, router *Router, templateType ErrorTemplateType) {
+func serveProxyRequestError(w http.ResponseWriter, r *http.Request, statusCode int, router *Router, templateType ErrorTemplateType) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Add("Vary", "Accept-Language")
 	w.WriteHeader(statusCode)
 
 	// Get the embedded template and filename for this template type
@@ -544,6 +546,19 @@ func serveProxyRequestError(w http.ResponseWriter, statusCode int, router *Route
 		}
 	}
 
-	// Fall back to embedded template
-	w.Write(embeddedContent)
+	// Fall back to embedded template (translated from Accept-Language, English by default)
+	w.Write(localizedPage(r, embeddedContent))
+}
+
+// localizedPage translates a built-in visitor error page to the language negotiated from the request's
+// Accept-Language header. Operator supplied templates are never passed through here.
+func localizedPage(r *http.Request, page []byte) []byte {
+	if r == nil {
+		return page
+	}
+	lang := i18n.Negotiate(r.Header.Get("Accept-Language"))
+	if lang == "en" {
+		return page
+	}
+	return i18n.TranslatePage(page, lang)
 }
