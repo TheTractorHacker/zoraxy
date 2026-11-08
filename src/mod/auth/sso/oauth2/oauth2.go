@@ -68,6 +68,8 @@ type OAuth2Router struct {
 	meta    *providerMeta
 	metaKey string
 	metaErr time.Time
+	lastErr error
+	errKey  string
 
 	now func() time.Time
 }
@@ -136,6 +138,7 @@ func (ar *OAuth2Router) flushCaches() {
 	ar.metaMu.Lock()
 	ar.meta = nil
 	ar.metaKey = ""
+	ar.lastErr = nil
 	ar.metaMu.Unlock()
 	ar.store.sessions.DeleteAll()
 	ar.store.pending.DeleteAll()
@@ -446,13 +449,16 @@ func (ar *OAuth2Router) provider(ctx context.Context, o *OAuth2RouterOptions) (*
 	}
 	manualComplete := o.OAuth2ServerURL != "" && o.OAuth2TokenURL != ""
 	if wk != "" {
-		// Do not hammer an unreachable provider: back off 5s after a failure.
-		if ar.meta != nil && ar.metaKey == key && time.Since(ar.metaErr) < 5*time.Second {
-			return ar.meta, nil
+		// Do not hammer an unreachable provider: back off 5s after a failure (all callers share the result).
+		if ar.lastErr != nil && ar.errKey == key && time.Since(ar.metaErr) < 5*time.Second {
+			if ar.meta != nil && ar.metaKey == key {
+				return ar.meta, nil
+			}
+			return nil, ar.lastErr
 		}
 		doc, err := fetchDiscovery(ctx, ar.client, wk, o.OAuth2Issuer)
 		if err != nil {
-			ar.metaErr = time.Now()
+			ar.metaErr, ar.lastErr, ar.errKey = time.Now(), err, key
 			if ar.meta != nil && ar.metaKey == key && time.Since(ar.meta.fetched) < 24*time.Hour {
 				ar.log("Discovery refresh failed, using cached provider metadata", err)
 				return ar.meta, nil
@@ -463,6 +469,7 @@ func (ar *OAuth2Router) provider(ctx context.Context, o *OAuth2RouterOptions) (*
 			ar.log("Discovery failed, using manually configured endpoints", err)
 		} else {
 			meta = doc.toMeta()
+			ar.lastErr = nil
 		}
 	}
 	if o.OAuth2ServerURL != "" {
