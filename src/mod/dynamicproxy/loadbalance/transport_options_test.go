@@ -7,7 +7,7 @@ import (
 )
 
 func TestUpstreamTransportOptionValidation(t *testing.T) {
-	ok := []Upstream{
+	ok := []*Upstream{
 		{OriginIpOrDomain: "a:1"},
 		{OriginIpOrDomain: "a:1", ProxyProtocol: 1},
 		{OriginIpOrDomain: "a:1", ProxyProtocol: 2},
@@ -19,7 +19,7 @@ func TestUpstreamTransportOptionValidation(t *testing.T) {
 			t.Errorf("ok[%d]: %v", i, err)
 		}
 	}
-	bad := []Upstream{
+	bad := []*Upstream{
 		{ProxyProtocol: 3},
 		{ProxyProtocol: -1},
 		{RequireTLS: true, ClientCertName: "../etc/passwd"},
@@ -31,7 +31,7 @@ func TestUpstreamTransportOptionValidation(t *testing.T) {
 	}
 	for i, u := range bad {
 		if err := u.ValidateTransportOptions(); err == nil {
-			t.Errorf("bad[%d] %+v accepted", i, u)
+			t.Errorf("bad[%d] %+v accepted", i, u.ProxyProtocol)
 		}
 	}
 }
