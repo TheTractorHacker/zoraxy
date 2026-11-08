@@ -6,39 +6,31 @@ import (
 	"testing"
 )
 
-// Upstream #386 / #490 / #537: with a proxy rule for the host, "force HTTPS
-// redirect" off and no plain-HTTP bypass, the port 80 listener answered every
-// request (including the Let's Encrypt HTTP-01 challenge) with 400.
-func TestPort80ServesACMEChallengeForExistingProxyRule(t *testing.T) {
-	for _, forceRedirect := range []bool{false, true} {
+// Upstream #537: the CA's HTTP-01 request must reach the ACME handler on port 80 whatever the redirect
+// setting is and whether or not the host has a proxy rule; otherwise Let's Encrypt reports
+// "Error getting validation data".
+func TestPort80AnswersACMEChallengeBeforeRedirectOrRejection(t *testing.T) {
+	for _, force := range []bool{true, false} {
 		router, sep, _ := newNonTLSTestRouter(t)
-		router.Option.ForceHttpsRedirect = forceRedirect
-		router.ProxyEndpoints.Store("app.example.com", sep)
+		router.Option.ForceHttpsRedirect = force
+		router.Option.Port = 443
 		router.AddRoutingRules(&RoutingRule{
-			ID:      "acme-test",
-			Enabled: true,
+			ID: "acme-autorenew", Enabled: true,
 			MatchRule: func(r *http.Request) bool {
-				return r.URL.Path == "/.well-known/acme-challenge/tok"
+				return len(r.URL.Path) > 28 && r.URL.Path[:28] == "/.well-known/acme-challenge/"
 			},
 			RoutingHandler: func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(218) },
 		})
+		router.ProxyEndpoints.Store(sep.RootOrMatchingDomain, sep) // host with a rule that does not allow plain HTTP
 
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodGet, "http://app.example.com/.well-known/acme-challenge/tok", nil)
-		router.handlePort80Request(w, r)
-		if w.Code != 218 {
-			t.Fatalf("forceRedirect=%v: ACME challenge not served on port 80, got %d", forceRedirect, w.Code)
-		}
-
-		// Other paths keep the old behaviour
-		w = httptest.NewRecorder()
-		r = httptest.NewRequest(http.MethodGet, "http://app.example.com/other", nil)
-		router.handlePort80Request(w, r)
-		if forceRedirect && w.Code != http.StatusTemporaryRedirect {
-			t.Fatalf("expected redirect to https, got %d", w.Code)
-		}
-		if !forceRedirect && w.Code != http.StatusBadRequest {
-			t.Fatalf("expected 400 for non-TLS-enabled host, got %d", w.Code)
+		for _, host := range []string{sep.RootOrMatchingDomain, "unknown.example.org"} {
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest("GET", "http://"+host+"/.well-known/acme-challenge/tok123", nil)
+			r.RemoteAddr = "198.51.100.1:1000"
+			router.handlePort80Request(w, r)
+			if w.Code != 218 {
+				t.Errorf("forceRedirect=%v host=%s: challenge got %d (%s), want the ACME handler", force, host, w.Code, w.Header().Get("Location"))
+			}
 		}
 	}
 }

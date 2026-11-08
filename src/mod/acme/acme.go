@@ -511,6 +511,7 @@ func (a *ACMEHandler) obtainCertLocked(domains []string, certificateName string,
 
 	certificates, err := client.Certificate.Obtain(ctx, request)
 	if err != nil {
+		err = explainACMEError(err, useDNS)
 		a.Logf("Obtain certificate failed", err)
 		return false, err
 	}
