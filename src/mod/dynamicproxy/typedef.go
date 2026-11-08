@@ -39,6 +39,7 @@ import (
 	"imuslab.com/zoraxy/mod/info/logger"
 	"imuslab.com/zoraxy/mod/plugins"
 	"imuslab.com/zoraxy/mod/statistic"
+	"imuslab.com/zoraxy/mod/visitors"
 	"imuslab.com/zoraxy/mod/tlscert"
 )
 
@@ -99,6 +100,7 @@ type RouterOption struct {
 	GeodbStore           *geodb.Store               //GeoIP resolver
 	AccessController     *access.Controller         //Blacklist / whitelist controller
 	StatisticCollector   *statistic.Collector       //Statistic collector for storing stats on incoming visitors
+	VisitorTracker       *visitors.Tracker          //Optional: per client IP visitor list (who visited, when, via which CDN)
 	WebDirectory         string                     //The static web server directory containing the templates folder
 	LoadBalancer         *loadbalance.RouteManager  //Load balancer that handle load balancing of proxy target
 	PersistProxyEndpoint func(*ProxyEndpoint) error `json:"-"` //Optional, called to save an endpoint config after a basic auth hash upgrade

@@ -34,18 +34,20 @@ cluster.node_online   info      cluster  node name         node_id
 admin.login_failed    warning   auth     user name         ip
 admin.login_new_ip    warning   auth     user name         ip
 updater.available     info      updater  version tag       current, channel, url
+visitor.new_country   info      visitors country code      ip, host   (off by default: needs "notify on new country" in the Visitors settings)
 */
 const (
-	EventUptimeDown     = "uptime.down"
-	EventUptimeUp       = "uptime.up"
-	EventWAFSpike       = "waf.spike"
-	EventAutoBan        = "security.autoban"
-	EventNodeOffline    = "cluster.node_offline"
-	EventNodeOnline     = "cluster.node_online"
-	EventAdminLoginFail = "admin.login_failed"
-	EventAdminLoginNew  = "admin.login_new_ip"
-	EventUpdateAvail    = "updater.available"
-	EventDigest         = "notify.digest"
+	EventUptimeDown        = "uptime.down"
+	EventUptimeUp          = "uptime.up"
+	EventWAFSpike          = "waf.spike"
+	EventAutoBan           = "security.autoban"
+	EventNodeOffline       = "cluster.node_offline"
+	EventNodeOnline        = "cluster.node_online"
+	EventAdminLoginFail    = "admin.login_failed"
+	EventAdminLoginNew     = "admin.login_new_ip"
+	EventUpdateAvail       = "updater.available"
+	EventVisitorNewCountry = "visitor.new_country"
+	EventDigest            = "notify.digest"
 )
 
 // Severity levels, ordered
@@ -76,6 +78,7 @@ var Catalog = []EventInfo{
 	{EventAdminLoginFail, SevWarning, "Admin login failed"},
 	{EventAdminLoginNew, SevWarning, "Admin login from a new address"},
 	{EventUpdateAvail, SevInfo, "Update available"},
+	{EventVisitorNewCountry, SevInfo, "First visitor from a new country"},
 }
 
 // AllEvents are the event names that can be subscribed to
@@ -206,6 +209,12 @@ func Describe(ev Event) (title string, lines []string) {
 	case EventAdminLoginNew:
 		title = "Admin login from a new address: " + subj
 		lines = append(lines, "From address: "+x("ip"))
+	case EventVisitorNewCountry:
+		title = "First visitor from a new country: " + subj
+		lines = append(lines, "Address: "+cleanText(x("ip"), 64))
+		if x("host") != "" {
+			lines = append(lines, "Site: "+cleanText(x("host"), 120))
+		}
 	case EventUpdateAvail:
 		title = "Zoraxy update available: " + subj
 		if x("current") != "" {

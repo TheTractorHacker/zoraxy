@@ -40,6 +40,7 @@ import (
 	"imuslab.com/zoraxy/mod/tlscert"
 	"imuslab.com/zoraxy/mod/updater"
 	"imuslab.com/zoraxy/mod/uptime"
+	"imuslab.com/zoraxy/mod/visitors"
 	"imuslab.com/zoraxy/mod/webserv"
 )
 
@@ -178,6 +179,7 @@ var (
 	accessController   *access.Controller        //Access controller, handle black list and white list
 	netstatBuffers     *netstat.NetStatBuffers   //Realtime graph buffers
 	statisticCollector *statistic.Collector      //Collecting statistic from visitors
+	visitorTracker     *visitors.Tracker         //Per client IP visitor list (who visited, when, via which CDN)
 	uptimeMonitor      *uptime.Monitor           //Uptime monitor service worker
 	mdnsScanner        *mdns.MDNSHost            //mDNS discovery services
 	webSshManager      *sshprox.Manager          //Web SSH connection service

@@ -253,6 +253,8 @@ func RegisterStatisticalAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/analytic/sites", AnalyticLoader.HandleSiteList)
 	authRouter.HandleFunc("/api/stats/settings", HandleStatSettings)
 	authRouter.HandleFunc("/api/stats/excludeMyIP", HandleStatExcludeMyIP)
+	/* Visitors (who visited, when and where) */
+	RegisterVisitorAPIs(authRouter)
 	/* UpTime Monitor */
 	authRouter.HandleFunc("/api/utm/list", HandleUptimeMonitorListing)
 }
