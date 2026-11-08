@@ -490,7 +490,7 @@ class Syncer:
     # -- run --------------------------------------------------------------------
 
     def fetch_upstream(self, mode):
-        params = {"state": "all", "sort": "created", "direction": "asc"}
+        params = {"state": self.args.state, "sort": "created", "direction": "asc"}
         since = None
         if mode == "sync":
             if not self.index:
@@ -508,6 +508,8 @@ class Syncer:
         for i in items:
             if "pull_request" in i:
                 self.report["issues_skipped"].append({"upstream": i["number"], "reason": "pull request"})
+            elif self.args.state == "open" and i["state"] != "open" and i["number"] not in self.index:
+                self.report["issues_skipped"].append({"upstream": i["number"], "reason": "closed upstream (--state open)"})
             else:
                 issues.append(i)
         issues.sort(key=lambda i: i["number"])
@@ -588,6 +590,8 @@ def main():
                     help="fork to write to (default: $GITHUB_REPOSITORY)")
     ap.add_argument("--only", type=lambda s: [int(x) for x in s.split(",")],
                     help="comma-separated upstream issue numbers")
+    ap.add_argument("--state", choices=["all", "open"], default="all",
+                    help="'open' mirrors only issues that are open upstream (existing mirrors still sync)")
     ap.add_argument("--limit", type=int, help="create at most N new issues this run")
     ap.add_argument("--max-creates", type=int, default=50, help="sync mode safety cap")
     ap.add_argument("--write-interval", type=float, default=7.5,
