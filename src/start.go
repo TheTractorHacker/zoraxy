@@ -364,6 +364,7 @@ func startupSequence() {
 	//Create a table just to store acme related preferences
 	sysdb.NewTable("acmepref")
 	initCertHooks()
+	initCertMapDir()
 	acmeHandler = initACME()
 	acmeAutoRenewer, err = acme.NewAutoRenewer(
 		ACME_AUTORENEW_CONFIG_PATH,
