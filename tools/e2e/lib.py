@@ -122,13 +122,14 @@ class Proc:
 class Zoraxy:
     """A throw-away Zoraxy instance: own conf/db/tmp dir, admin port, proxy port."""
 
-    def __init__(self, tls=False, extra_args=None, noauth=True, name="z", certs=()):
+    def __init__(self, tls=False, extra_args=None, noauth=True, name="z", certs=(), env=None):
         self.dir = tempfile.mkdtemp(prefix="zx-e2e-" + name + "-")
         self.admin = free_port()
         self.proxy = free_port()
         self.tls = tls
         self.noauth = noauth
         self.extra = list(extra_args or [])
+        self.env = dict(env or {})
         self.proc = None
         self.csrf = ""
         self.opener = None
@@ -150,7 +151,7 @@ class Zoraxy:
         args += self.extra
         self.log = open(os.path.join(self.dir, "zoraxy.log"), "ab")
         self.proc = subprocess.Popen(args, cwd=self.dir, stdout=self.log, stderr=subprocess.STDOUT,
-                                     preexec_fn=os.setsid)
+                                     preexec_fn=os.setsid, env=dict(os.environ, **self.env))
         t0 = time.time()
         while time.time() - t0 < 40:
             if self.proc.poll() is not None:
@@ -275,8 +276,8 @@ class Zoraxy:
         return self.api("/api/proxy/detail", type="host", epname=host)
 
     # data-plane client
-    def req(self, host, path="/", method="GET", headers=None, body=None, timeout=15, chunked=False):
-        return http_req("127.0.0.1", self.proxy, host, path, method, headers, body, timeout, tls=self.tls, chunked=chunked)
+    def req(self, host, path="/", method="GET", headers=None, body=None, timeout=15, chunked=False, src=None):
+        return http_req("127.0.0.1", self.proxy, host, path, method, headers, body, timeout, tls=self.tls, chunked=chunked, src=src)
 
 
 # --------------------------------------------------------------------------- raw http client
@@ -302,7 +303,7 @@ class Resp:
 
 
 def http_req(addr, port, host, path="/", method="GET", headers=None, body=None, timeout=15, tls=False,
-             cert=None, chunked=False):
+             cert=None, chunked=False, src=None):
     if tls:
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
@@ -311,10 +312,10 @@ def http_req(addr, port, host, path="/", method="GET", headers=None, body=None, 
             ctx.load_cert_chain(*cert)
         conn = http.client.HTTPSConnection(addr, port, timeout=timeout, context=ctx)
         sni = (host or "").split(":")[0]
-        raw = socket.create_connection((addr, port), timeout)
+        raw = socket.create_connection((addr, port), timeout, source_address=(src, 0) if src else None)
         conn.sock = ctx.wrap_socket(raw, server_hostname=sni or None)  # SNI follows the Host header
     else:
-        conn = http.client.HTTPConnection(addr, port, timeout=timeout)
+        conn = http.client.HTTPConnection(addr, port, timeout=timeout, source_address=(src, 0) if src else None)
     h = {"Host": host} if host else {}
     h.update(headers or {})
     try:
@@ -497,3 +498,89 @@ def wait_for(fn, timeout=10, step=0.2, msg="condition"):
             last = e
         time.sleep(step)
     raise Fail("timed out waiting for " + msg + (" (%s)" % last if last else ""))
+
+
+# --------------------------------------------------------------------------- fake third-party HTTPS services
+
+class FakeHTTPS:
+    """Stands in for external HTTPS APIs (Turnstile, reCAPTCHA, Friendly Captcha siteverify ...).
+
+    Zoraxy is started with HTTPS_PROXY=<this CONNECT proxy> and SSL_CERT_FILE=<our CA>, so the real
+    binary talks to what it believes is e.g. challenges.cloudflare.com. handler(host, path, headers, body)
+    returns (status, dict). .calls records (host, path, body).
+    """
+
+    def __init__(self, hostnames, handler, workdir):
+        self.handler = handler
+        self.calls = []
+        ca = make_ca(workdir, "E2E Fake Provider CA")
+        san = ",".join("DNS:" + h for h in hostnames)
+        self.crt, self.key = make_leaf(workdir, hostnames[0], ca, san=san, name="fake")
+        self.ca_file = ca[0]
+        self.ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        self.ctx.load_cert_chain(self.crt, self.key)
+        self.port = free_port()
+        outer = self
+
+        class H(socketserver.BaseRequestHandler):
+            def handle(self):
+                outer._serve(self.request)
+
+        class S(socketserver.ThreadingMixIn, socketserver.TCPServer):
+            daemon_threads = True
+            allow_reuse_address = True
+        self.srv = S(("127.0.0.1", self.port), H)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+
+    @property
+    def env(self):
+        return {"HTTPS_PROXY": "http://127.0.0.1:%d" % self.port, "https_proxy": "http://127.0.0.1:%d" % self.port,
+                "SSL_CERT_FILE": self.ca_file, "NO_PROXY": "", "no_proxy": ""}
+
+    def _serve(self, c):
+        try:
+            c.settimeout(10)
+            buf = b""
+            while b"\r\n\r\n" not in buf:
+                d = c.recv(4096)
+                if not d:
+                    return
+                buf += d
+            first = buf.split(b"\r\n")[0].decode()
+            if not first.startswith("CONNECT"):
+                c.sendall(b"HTTP/1.1 400 no\r\nContent-Length: 0\r\n\r\n")
+                return
+            host = first.split()[1].split(":")[0]
+            c.sendall(b"HTTP/1.1 200 Connection established\r\n\r\n")
+            t = self.ctx.wrap_socket(c, server_side=True)
+            data = b""
+            while b"\r\n\r\n" not in data:
+                d = t.recv(65536)
+                if not d:
+                    return
+                data += d
+            head, _, body = data.partition(b"\r\n\r\n")
+            lines = head.decode("latin1").split("\r\n")
+            path = lines[0].split()[1]
+            hdrs = {k.strip().lower(): v.strip() for k, _, v in (l.partition(":") for l in lines[1:])}
+            n = int(hdrs.get("content-length", 0))
+            while len(body) < n:
+                body += t.recv(65536)
+            self.calls.append((host, path, body.decode("latin1"), hdrs))
+            status, obj = self.handler(host, path, hdrs, body)
+            out = json.dumps(obj).encode()
+            t.sendall(("HTTP/1.1 %d X\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n" % (status, len(out))).encode() + out)
+            t.close()
+        except Exception:
+            pass
+
+    def close(self):
+        with contextlib.suppress(Exception):
+            self.srv.shutdown()
+            self.srv.server_close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        self.close()

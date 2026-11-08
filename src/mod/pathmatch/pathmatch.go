@@ -106,3 +106,21 @@ func CanonicalPath(target string) (string, bool) {
 	}
 	return clean, true
 }
+
+// StripPathParams returns the request target with the ";param" part of every path segment removed
+// (and the path percent-decoded first, so "%3B" counts as well). Java servlet containers read paths
+// that way, so a restrictive match (protected prefix, deny list) must also try this reading.
+// The query string is dropped.
+func StripPathParams(requestURI string) string {
+	p := requestURI
+	if u, err := url.ParseRequestURI(requestURI); err == nil {
+		p = u.Path
+	}
+	segs := strings.Split(p, "/")
+	for i, s := range segs {
+		if j := strings.IndexByte(s, ';'); j >= 0 {
+			segs[i] = s[:j]
+		}
+	}
+	return strings.Join(segs, "/")
+}
