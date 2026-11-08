@@ -110,7 +110,7 @@ func (m *Manager) runApp(ctx context.Context, opts RunOptions, reserved bool) (e
 
 	// 2. Resolve release
 	m.stage(a, "Looking up the latest release")
-	r, cur, err := m.resolve(ctx)
+	r, cur, err := m.resolve(ctx, false)
 	if err != nil {
 		return fmt.Errorf("release lookup failed: %w", err)
 	}

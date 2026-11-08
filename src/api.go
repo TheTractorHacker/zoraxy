@@ -40,6 +40,7 @@ func RegisterUpdaterAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/updater/rollback", updateManager.HandleRollback)
 	authRouter.HandleFunc("/api/updater/setChannel", updateManager.HandleSetChannel)
 	authRouter.HandleFunc("/api/updater/setBackup", updateManager.HandleSetBackup)
+	authRouter.HandleFunc("/api/updater/setToken", updateManager.HandleSetToken)
 }
 
 // Register the APIs for HTTP proxy management functions

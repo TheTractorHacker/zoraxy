@@ -78,6 +78,12 @@ type Manager struct {
 	cacheRes  *CheckResult
 	cacheChan string
 
+	relMu      sync.Mutex
+	limitedErr *RateLimitError // last rate limit answer; requests are held back until it resets
+	tokenMu    sync.Mutex
+	token      string
+	tokenLoad  bool
+
 	shaOnce sync.Once
 	exeSHA  string
 }
@@ -121,7 +127,7 @@ func New(cfg Config) *Manager {
 		cfg.PubKey, _ = EmbeddedPublicKey()
 	}
 	m := &Manager{cfg: cfg, st: newStore(cfg.ConfDir)}
-	m.src = &source{repo: cfg.Repo, apiBase: cfg.APIBase, client: cfg.Client, allowHTTP: cfg.AllowHTTP}
+	m.src = &source{repo: cfg.Repo, apiBase: cfg.APIBase, client: cfg.Client, allowHTTP: cfg.AllowHTTP, token: m.githubToken}
 	h := &m.cfg.Hooks
 	if h.Now == nil {
 		h.Now = time.Now
@@ -174,7 +180,92 @@ func (m *Manager) defaultSpawnWatchdog(prevBin, markerPath string) error {
 }
 
 // Settings returns the persisted settings.
-func (m *Manager) Settings() Settings { return m.st.settings() }
+func (m *Manager) Settings() Settings {
+	s := m.st.settings()
+	s.HasToken = m.githubToken() != ""
+	return s
+}
+
+func (m *Manager) githubToken() string {
+	m.tokenMu.Lock()
+	defer m.tokenMu.Unlock()
+	if !m.tokenLoad {
+		m.token, m.tokenLoad = m.st.loadToken(), true
+	}
+	return m.token
+}
+
+// SetGitHubToken stores an optional GitHub token that raises the API rate limit.
+// It is written with mode 0600, only sent to the GitHub API host and never returned
+// by any API. An empty value removes it.
+func (m *Manager) SetGitHubToken(tok string) error {
+	tok = strings.TrimSpace(tok)
+	if len(tok) > 255 || strings.ContainsAny(tok, " \t\r\n\"") {
+		return errors.New("that does not look like a GitHub token")
+	}
+	if err := m.st.saveToken(tok); err != nil {
+		return err
+	}
+	m.tokenMu.Lock()
+	m.token, m.tokenLoad = tok, true
+	m.tokenMu.Unlock()
+	m.relMu.Lock()
+	m.limitedErr = nil
+	m.relMu.Unlock()
+	if tok == "" {
+		m.audit("", "GitHub token removed")
+	} else {
+		m.audit("", "GitHub token set")
+	}
+	return nil
+}
+
+// releases returns the release list. With useCache a copy younger than releaseCacheTTL is
+// used without any network request. Otherwise a conditional request is made, so an
+// unchanged list costs no rate limit quota (HTTP 304).
+func (m *Manager) releases(ctx context.Context, useCache bool) ([]Release, error) {
+	m.relMu.Lock()
+	defer m.relMu.Unlock()
+	now := m.cfg.Hooks.Now()
+	var c releaseCache
+	have := m.st.readJSON(releaseCacheFile, &c) == nil && c.Repo == m.cfg.Repo && len(c.Body) > 0
+	if have && useCache && !now.Before(c.FetchedAt) && now.Sub(c.FetchedAt) < releaseCacheTTL {
+		if rels, err := parseReleases(c.Body); err == nil {
+			return rels, nil
+		}
+	}
+	if l := m.limitedErr; l != nil && !l.ResetAt.IsZero() && now.Before(l.ResetAt) {
+		return nil, l
+	}
+	etag := ""
+	if have {
+		etag = c.ETag
+	}
+	body, newETag, notModified, err := m.src.fetchReleases(ctx, etag, now)
+	if err != nil {
+		var rl *RateLimitError
+		if errors.As(err, &rl) {
+			m.limitedErr = rl
+		}
+		return nil, err
+	}
+	m.limitedErr = nil
+	if notModified {
+		rels, err := parseReleases(c.Body)
+		if err != nil {
+			return nil, err
+		}
+		c.FetchedAt = now
+		_ = m.st.writeJSON(releaseCacheFile, c)
+		return rels, nil
+	}
+	rels, err := parseReleases(body)
+	if err != nil {
+		return nil, err
+	}
+	_ = m.st.writeJSON(releaseCacheFile, releaseCache{Repo: m.cfg.Repo, ETag: newETag, FetchedAt: now, Body: body})
+	return rels, nil
+}
 
 // SetChannel persists the update channel.
 func (m *Manager) SetChannel(ch string) error {
@@ -294,9 +385,9 @@ type resolved struct {
 
 // resolve looks up the latest release on the channel and decides if it is an
 // acceptable (newer, signed, platform-matching) update.
-func (m *Manager) resolve(ctx context.Context) (*resolved, Current, error) {
+func (m *Manager) resolve(ctx context.Context, useCache bool) (*resolved, Current, error) {
 	cur, curID := m.current()
-	rels, err := m.src.releases(ctx)
+	rels, err := m.releases(ctx, useCache)
 	if err != nil {
 		return nil, cur, err
 	}
@@ -347,7 +438,7 @@ func (m *Manager) Check(ctx context.Context, force bool) (*CheckResult, error) {
 		return &res, nil
 	}
 	m.cacheMu.Unlock()
-	r, cur, err := m.resolve(ctx)
+	r, cur, err := m.resolve(ctx, !force)
 	if err != nil {
 		return nil, err
 	}

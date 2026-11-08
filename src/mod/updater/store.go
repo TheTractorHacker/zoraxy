@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -52,6 +53,8 @@ func (s *store) readJSON(name string, v any) error {
 type Settings struct {
 	Channel     string `json:"channel"`
 	BackupFirst bool   `json:"backup_first"`
+	// HasToken is filled in by Manager.Settings for the UI; the token itself is never returned.
+	HasToken bool `json:"has_token,omitempty"`
 }
 
 func (s *store) settings() Settings {
@@ -208,4 +211,51 @@ func fileSHA256(path string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// ---- GitHub token and release cache ---------------------------------------
+
+const (
+	tokenFile        = "github_token"
+	releaseCacheFile = "releases-cache.json"
+	releaseCacheTTL  = 10 * time.Minute
+)
+
+// releaseCache is the last successful release list, kept so repeated checks do not
+// spend GitHub API quota. ETag allows a cheap conditional re-validation.
+type releaseCache struct {
+	Repo      string          `json:"repo"`
+	ETag      string          `json:"etag,omitempty"`
+	FetchedAt time.Time       `json:"fetched_at"`
+	Body      json.RawMessage `json:"body"`
+}
+
+func (s *store) loadToken() string {
+	b, err := os.ReadFile(s.path(tokenFile))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+// saveToken stores the token with mode 0600; an empty token removes it.
+func (s *store) saveToken(tok string) error {
+	if tok == "" {
+		err := os.Remove(s.path(tokenFile))
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if err := s.ensure(); err != nil {
+		return err
+	}
+	tmp := s.path(tokenFile + ".tmp")
+	if err := os.WriteFile(tmp, []byte(tok), 0o600); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, s.path(tokenFile))
 }

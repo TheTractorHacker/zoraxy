@@ -56,6 +56,18 @@
             <button class="ui basic red button" id="upRollbackBtn" onclick="window.upConfirm('rollback');"><i class="undo icon"></i> Roll back</button>
         </div>
         <div id="upBtnReasons" style="margin-top:0.75em; color:#a33; font-size:0.95em;"></div>
+        <div id="upRateLimit" class="ui warning message" style="display:none; margin-top:0.75em;"></div>
+        <details style="margin-top:1em;">
+            <summary>GitHub access token (optional)</summary>
+            <p style="margin:0.5em 0;">Release checks use the anonymous GitHub API (60 requests per hour per IP address). A token without any scopes raises that limit.
+                It is stored on this server with mode 0600, only sent to api.github.com and never shown again.</p>
+            <div class="ui action input">
+                <input type="password" id="upToken" autocomplete="off" placeholder="ghp_..." style="min-width:18em;">
+                <button class="ui basic button" onclick="window.upSetToken(false);">Save</button>
+                <button class="ui basic button" id="upTokenClear" onclick="window.upSetToken(true);">Remove</button>
+            </div>
+            <span id="upTokenState" style="margin-left:0.75em;"></span>
+        </details>
     </div>
 
     <!-- Preflight -->
@@ -113,6 +125,8 @@
         $("#upChannel").val(s.channel);
         $("#upChannelLabel").text(s.channel);
         $("#upBackup").prop("checked", s.backup_first);
+        $("#upTokenState").text(s.has_token ? "A token is configured." : "No token configured.");
+        $("#upTokenClear").toggle(!!s.has_token);
         $("#upCurrent").text(c.tag ? c.tag : "v" + c.version);
         $("#upCurrentDetail").text(c.known ? "Installed by the updater, published " + fmtTime(c.published) :
             "Base version " + c.version + " (build date unknown: not installed by the updater yet)");
@@ -215,9 +229,21 @@
         $.get("./api/updater/check" + (force ? "?force=true" : ""), function(data){
             renderCheck(data.result);
             if (state.info) { state.info.preflight = data.preflight; renderInfo(state.info); }
+            $("#upRateLimit").hide();
         }).fail(function(xhr){
+            if (xhr.status == 429) { $("#upRateLimit").text(errText(xhr)).show(); }
             msgbox(errText(xhr), false, 6000);
         }).always(function(){ $("#upCheckBtn").removeClass("loading"); });
+    };
+
+    window.upSetToken = function(clear){
+        let tok = clear ? "" : $("#upToken").val();
+        $.cjax({method: "POST", url: "./api/updater/setToken", data: {token: tok}, success: function(){
+            $("#upToken").val("");
+            $("#upRateLimit").hide();
+            msgbox(clear ? "GitHub token removed" : "GitHub token saved", true);
+            loadInfo();
+        }, error: function(xhr){ msgbox(errText(xhr), false); }});
     };
 
     window.upSetChannel = function(ch){

@@ -3,6 +3,7 @@ package updater
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"strconv"
@@ -78,6 +79,15 @@ func (m *Manager) HandleCheck(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	res, err := m.Check(ctx, r.URL.Query().Get("force") == "true")
 	if err != nil {
+		var rl *RateLimitError
+		if errors.As(err, &rl) {
+			body := map[string]string{"error": rl.Error(), "code": "rate_limited"}
+			if !rl.ResetAt.IsZero() {
+				body["retry_at"] = rl.ResetAt.UTC().Format(time.RFC3339)
+			}
+			writeJSON(w, http.StatusTooManyRequests, body)
+			return
+		}
 		writeErr(w, http.StatusBadGateway, "Update check failed: "+err.Error())
 		return
 	}
@@ -190,6 +200,19 @@ func (m *Manager) HandleSetBackup(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := m.SetBackupFirst(formBool(r, "enabled", true)); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, m.Settings())
+}
+
+// HandleSetToken stores or removes the optional GitHub token (param: token; empty removes it).
+// The token is never returned by any endpoint.
+func (m *Manager) HandleSetToken(w http.ResponseWriter, r *http.Request) {
+	if !requirePost(w, r) {
+		return
+	}
+	if err := m.SetGitHubToken(r.FormValue("token")); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, m.Settings())
