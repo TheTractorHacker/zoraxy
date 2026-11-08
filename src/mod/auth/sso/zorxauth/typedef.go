@@ -132,6 +132,13 @@ type AuthRouter struct {
 	pendingPasskeyAuth sync.Map // token (string) -> *PendingPasskeyAuth
 }
 
+// LegacyConfigFolder is the config folder older builds hard coded and saved into the options
+const LegacyConfigFolder = "./conf/sso/zorxauth"
+
+// DefaultConfigFolder is where group policies and branding are stored. The main program
+// sets it from the -conf flag; options that still carry LegacyConfigFolder follow it.
+var DefaultConfigFolder = LegacyConfigFolder
+
 func getDefaultOptions() *AuthRouterOptions {
 	return &AuthRouterOptions{
 		GatewayPort:              5489,
@@ -144,6 +151,6 @@ func getDefaultOptions() *AuthRouterOptions {
 		CookieName:               "zr_xauth_session",
 		CookieDuration:           3600,
 		CookieDurationRememberMe: 604800, // 7 days
-		ConfigFolderPath:         "./conf/sso/zorxauth",
+		ConfigFolderPath:         DefaultConfigFolder,
 	}
 }

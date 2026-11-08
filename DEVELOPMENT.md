@@ -665,3 +665,19 @@ Developer map and operator notes for the fixes in `fix/triage-bugs-2`.
   and CONNECT requests fall back to HTTP/1.1. The old `modh2c` round tripper is not used: it builds a transport per request and cancels the
   context when `RoundTrip` returns, which breaks streaming. The gRPC body-peek block in `dpcore.go` is unchanged. Limits: the upstream
   "response timeout" is not applied to h2c upstreams, and "Force HTTP/1.1" on the rule is ignored for them.
+
+## Bug sweep 1 (path handling, backups, stream proxy)
+
+Report: `docs/triage/sweep-1.md|json`. Developer notes for the fixes on `fix/bug-sweep-1`.
+
+- **`-conf` is honoured by ACME and ZorxAuth**: `acme.ACMEHandler.CertStorePath` (set from `CONF_CERT_STORE` in `src/acme.go`, default `./conf/certs`)
+  is the only place certificates, keys and `<name>.json` are read or written. `zorxauth.DefaultConfigFolder` (set in `start.go`) replaces the old
+  hard-coded `./conf/sso/zorxauth`; saved options that still carry the legacy value follow it. Still hard-coded: `mod/update` migrations (`./conf`)
+  and a few `./tmp` paths (tlscert localhost cert, cert download zip, gotty).
+- **Config backup** (`src/confbackup.go`): zip entries are always `conf/<relative path>` and `sys.db`, whatever `-conf` / `-dbpath` are. Restore validates
+  every entry first (`zipRestoreTarget`, rejects anything outside `conf/`, `..`, absolute names), only then renames the live folder to `<conf>.old_<ts>`
+  and extracts into `-conf` (`sys.db` into `-dbpath`). Archives made by older builds with the default `-conf` still restore.
+- **Edit handlers are partial updates**: stream proxy edit keeps TCP/UDP/logging/PROXY protocol when the parameter is absent; redirect add/edit
+  returns on a missing destination; vdir edit keeps `Disabled`.
+- **Stream proxy**: `connCopy` always releases its wait group and closes both sockets on error; PROXY headers pick TCPv4/TCPv6 (UDPv4/UDPv6) from the
+  addresses; rejected clients are closed after 300 ms in a goroutine so the accept loop never sleeps.

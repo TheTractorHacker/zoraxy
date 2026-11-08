@@ -32,6 +32,7 @@ func handleAddRedirectionRule(w http.ResponseWriter, r *http.Request) {
 	destUrl, err := utils.PostPara(r, "destUrl")
 	if err != nil {
 		utils.SendErrorResponse(w, "destination url cannot be empty")
+		return
 	}
 
 	forwardChildpath, err := utils.PostBool(r, "forwardChildpath")
@@ -104,6 +105,7 @@ func handleEditRedirectionRule(w http.ResponseWriter, r *http.Request) {
 	destUrl, err := utils.PostPara(r, "destUrl")
 	if err != nil {
 		utils.SendErrorResponse(w, "destination url cannot be empty")
+		return
 	}
 
 	forwardChildpath, err := utils.PostBool(r, "forwardChildpath")
