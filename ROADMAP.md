@@ -48,12 +48,12 @@ Status: ✅ done · 🔧 in progress · 📋 planned
 - 📋 Generic OIDC hardening: discovery, PKCE, token refresh, logout, group-based route policies.
 
 ## 5. Load balancing (beyond weighted random)
-- 📋 Algorithms: round robin, weighted round robin, least connections, least response time, IP hash /
-  consistent hash (header, cookie or path), random-two-choices.
-- 📋 **Active health checks** (fields `UseActiveHealthCheck` exist but are unimplemented): per-upstream path,
-  interval, timeout, expected status, rise/fall thresholds.
-- 📋 Passive health checks: eject an upstream after N consecutive errors, slow-start on recovery.
-- 📋 Retries on another upstream for idempotent requests, connection limits per upstream, draining.
+- ✅ Algorithms (#79): round robin, smooth weighted round robin, least connections, least response time, IP hash,
+  consistent hash on header or cookie (ring with virtual nodes), power of two choices. Hash on path: 📋.
+- ✅ **Active health checks** (#80): HTTP or TCP, path, method, interval, timeout, expected status range, body match,
+  rise/fall thresholds, per endpoint with optional per-upstream override (API only, no UI yet).
+- ✅ Passive health checks (#80): eject after N consecutive failures, cooldown, slow-start on recovery.
+- ✅ Retries on another upstream for idempotent requests, per-upstream max in-flight, draining (#80).
 - Inspiration: HAProxy, Envoy, Traefik, Caddy (Apache-2.0), nginx.
 
 ## 6. High availability

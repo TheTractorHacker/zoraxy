@@ -80,7 +80,7 @@ detection and plugins. Fixing that means pulling the pre-proxy chain into one sh
 | Area | Where | Notes |
 |---|---|---|
 | Proxy core | `mod/dynamicproxy`, `dpcore/` | Endpoint config type `ProxyEndpoint` in `typedef.go`; saved by `src/config.go` |
-| Load balancing | `mod/dynamicproxy/loadbalance` | Weighted random + optional sticky cookie; offline filtering from `mod/uptime` (5 min). No round robin / least-conn / active checks yet |
+| Load balancing | `mod/dynamicproxy/loadbalance` | Selection algorithms, active/passive health checks, retries, per-upstream limits and draining. See [Load balancing](#load-balancing-and-health-checks) |
 | TLS | `mod/tlscert` | SNI lookup over `conf/certs/*.pem/.key`; fallback cert; per-host behaviour. Loads key pairs from disk per handshake |
 | ACME | `mod/acme` | lego v5, HTTP-01 (special route) and DNS-01 providers, auto-renew (`conf/acme_conf.json`) |
 | Admin auth | `mod/auth` | Single admin, gorilla cookie sessions, CSRF, plugin API keys |
@@ -90,6 +90,34 @@ detection and plugins. Fixing that means pulling the pre-proxy chain into one sh
 | Streams | `mod/streamproxy` | TCP/UDP forwarding |
 | Storage | `mod/database` | BoltDB by default (`-db`), LevelDB optional, file DB on mipsle/riscv64 |
 | Plugins | `mod/plugins` | Separate processes launched with `-configure`; static path capture or dynamic "sniff" capture on tagged endpoints; UI proxied at `/plugin.ui/<id>/`; events via `mod/eventsystem` |
+
+### Load balancing and health checks
+
+All of it lives in `src/mod/dynamicproxy/loadbalance` and is driven by one optional per-endpoint object,
+`ProxyEndpoint.LoadBalanceConfig` (`nil` in every config written before this feature = weighted random, no
+checks, no retries, exactly the old behaviour).
+
+- **Selection** (`originPicker.go`, `algorithms.go`, `hashring.go`): `SelectUpstream` filters candidates
+  (uptime monitor, draining, `MaxInFlight`, active/passive health; if health would remove everything the
+  endpoint fails open) and then applies the algorithm. Sticky sessions are checked first. Weight 0 is fallback only
+  for every algorithm. Hash algorithms use a consistent ring with virtual nodes.
+- **Per upstream state** (`state.go`): in-flight counter, EWMA of time to first byte, passive ejection with
+  cooldown and slow start, active rise/fall state. Memory only, never serialized. All time dependent code takes a
+  `now` value so tests use a fake clock (`RouteManager.Now`).
+- **Active checks** (`healthcheck.go`): one goroutine per checked upstream, grouped per endpoint and owned by the
+  `RouteManager`. The router syncs them in `lbglue.go` (start with the router, stop on `StopProxyService`, follow
+  endpoint updates and removal). New code that stores or removes an endpoint must go through `UpdateToRuntime` /
+  `Remove` so the goroutines follow.
+- **Retries** (`retry.go`): `ServeWithRetry` wraps the client `ResponseWriter` in a gate so a failed attempt can be
+  discarded while nothing was sent. Request bodies are only replayed if empty or fully buffered up front (known
+  length, under `MaxBodyKB`); non-idempotent methods retry only when listed in `ExtraMethods`.
+- **Config fields** (all optional): `LoadBalanceConfig{Algorithm, HashKey, ActiveHealthCheck, PassiveHealthCheck,
+  Retry, SlowStartSeconds}` on the endpoint; `MaxInFlight`, `Draining`, `HealthCheck` on each `Upstream`.
+- **API**: `/api/proxy/upstream/lb/get|set`, `/setDraining`, `/setMaxInFlight`; `/list` also returns live `States`.
+- Algorithms and checks are clean-room implementations of publicly documented designs (nginx smooth WRR, HAProxy
+  leastconn, power of two choices, ketama ring); no third-party code was copied.
+- Tests: `go test -race ./mod/dynamicproxy/...` (distribution, ring stability, state machines with a fake clock,
+  goroutine leak check, retry rules, old-config compatibility).
 
 ### Plugins in one paragraph
 A plugin is a folder in `./plugins` containing an executable of the same name. Zoraxy runs it with
