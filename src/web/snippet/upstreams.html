@@ -235,6 +235,14 @@
                 </div>
 
                 <div class="ui divider"></div>
+                <div class="ui form">
+                    <div class="field">
+                        <label>Client rules (route clients to upstream groups)</label>
+                        <textarea id="lbClientRules" rows="4" style="font-family:monospace;" placeholder="office | 10.0.0.0/8, 192.168.0.0/16 | | 10.0.0.5:8080 | deny&#10;eu | | DE, FR, NL | eu1.internal:8080, eu2.internal:8080 | any"></textarea>
+                        <small>One rule per line, first match wins: <code>name | client CIDRs | countries (GeoIP) | upstream addresses | fallback</code>. The algorithm above then runs inside the group. Fallback <code>any</code> (default) uses all upstreams if the group is down, <code>deny</code> fails the request. Clients matching no rule use all upstreams.</small>
+                    </div>
+                </div>
+                <div class="ui divider"></div>
                 <div class="ui checkbox"><input type="checkbox" id="lbRetryEnabled" onchange="updateLbFieldVisibility();">
                     <label>Retry on another upstream<br><small>Only when nothing was sent to the client yet. GET, HEAD and OPTIONS only unless you add methods below.</small></label></div>
                 <div id="lbRetryFields" style="display:none; margin-top:0.8em;" class="ui form">
@@ -847,6 +855,9 @@
                         $("#lbPhcCooldown").val(p.CooldownSeconds);
                         $("#lbPhcStatuses").val(p.FailureStatuses.join(","));
                         $("#lbSlowStart").val(data.SlowStartSeconds);
+                        $("#lbClientRules").val((data.ClientRules || []).map(function(r){
+                            return [r.Name || "", (r.CIDRs || []).join(", "), (r.Countries || []).join(", "), (r.Upstreams || []).join(", "), r.Fallback || ""].join(" | ");
+                        }).join("\n"));
                         let r = data.Retry;
                         $("#lbRetryEnabled").prop("checked", r.Enabled);
                         $("#lbRetryMax").val(r.MaxRetries);
@@ -872,6 +883,11 @@
                     Algorithm: $("#lbAlgorithm").val(),
                     HashKey: $("#lbHashKey").val().trim(),
                     SlowStartSeconds: intOr("#lbSlowStart", 0),
+                    ClientRules: $("#lbClientRules").val().split("\n").map(function(l){ return l.trim(); }).filter(function(l){ return l; }).map(function(l){
+                        let p = l.split("|").map(function(x){ return x.trim(); });
+                        let list = function(x){ return (x || "").split(",").map(function(y){ return y.trim(); }).filter(function(y){ return y; }); };
+                        return { Name: p[0] || "", CIDRs: list(p[1]), Countries: list(p[2]).map(function(c){ return c.toUpperCase(); }), Upstreams: list(p[3]), Fallback: p[4] || "" };
+                    }),
                     ActiveHealthCheck: {
                         Enabled: $("#lbActiveEnabled")[0].checked,
                         Mode: $("#lbAhcMode").val(),

@@ -38,7 +38,7 @@
                     <div class="field" tourstep="targetdomain">
                         <label>Target IP Address or Domain Name with port</label>
                             <input type="text" id="proxyDomain" onchange="autoFillTargetTLS(this);">
-                        <small>e.g. 192.168.0.101:8000 or example.com</small>
+                        <small>e.g. 192.168.0.101:8000 or example.com. A local service can be reached over a Unix socket with <code>unix:/run/app/app.sock</code> (plain HTTP, no TLS options).</small>
                     </div>
                     <div class="field dockerOptimizations" style="display:none;">
                         <button style="margin-top: -2em;" class="ui basic small button" onclick="openDockerContainersList();"><i class="blue docker icon"></i> Pick from Docker Containers</button>
@@ -80,6 +80,11 @@
                                     <label>Tags</label>
                                     <input type="text" id="proxyTags" placeholder="e.g. mediaserver, management">
                                     <small>Comma-separated list of tags for this proxy host.</small>
+                                </div>
+                                <div class="field">
+                                    <label>Template</label>
+                                    <select id="newProxyTemplate" class="ui dropdown"><option value="">None</option></select>
+                                    <small>Optional named defaults (HSTS, security headers, WAF, rate limit, tags ...) applied when the rule is created. They override the matching options chosen above.</small>
                                 </div>
                                 <div class="ui horizontal divider">
                                     <i class="ui green lock icon"></i>
@@ -397,6 +402,7 @@
                 access: accessRuleToUse,
                 stickysess: useStickySessionLB,
                 tags: tags,
+                template: $("#newProxyTemplate").val() || "",
                 enableUtm: enableUtm,
                 utmURI: utmURI,
                 disableLog: disableLog,
@@ -712,4 +718,16 @@
    
  
    
+
+    //Rule templates for new hosts
+    function loadNewProxyTemplates(){
+        $.get("/api/proxy/templates/list", function(list){
+            let sel = $("#newProxyTemplate");
+            sel.find("option:not(:first)").remove();
+            (list || []).forEach(function(t){
+                sel.append($("<option></option>").attr("value", t.Name).text(t.Name + (t.Builtin ? " (built in)" : "")).attr("title", t.Description || ""));
+            });
+        });
+    }
+    loadNewProxyTemplates();
 </script>

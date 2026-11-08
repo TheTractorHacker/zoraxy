@@ -337,7 +337,8 @@ type LoadBalanceSettings struct {
 	PassiveHealthCheck loadbalance.PassiveHealthCheck
 	Retry              loadbalance.RetryConfig
 	SlowStartSeconds   int
-	Algorithms         []string //All valid algorithm names
+	ClientRules        []*loadbalance.ClientRule //Pin clients by CIDR / country to upstream groups
+	Algorithms         []string                  //All valid algorithm names
 }
 
 // Get the load balancing, health check and retry settings of an endpoint
@@ -363,6 +364,10 @@ func ReverseProxyLoadBalanceGet(w http.ResponseWriter, r *http.Request) {
 		HashKey:          cfg.HashKey,
 		SlowStartSeconds: cfg.SlowStartSeconds,
 		Algorithms:       loadbalance.AllAlgorithms,
+		ClientRules:      cfg.ClientRules,
+	}
+	if settings.ClientRules == nil {
+		settings.ClientRules = []*loadbalance.ClientRule{}
 	}
 	if cfg.ActiveHealthCheck != nil {
 		settings.ActiveHealthCheck = cfg.ActiveHealthCheck.Normalized()

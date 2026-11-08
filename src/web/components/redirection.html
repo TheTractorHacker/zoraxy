@@ -50,6 +50,12 @@
               </div>
               <br>
               <div class="ui toggle checkbox" style="margin-top: 0.4em;">
+                <input id="redirectRegexAdvanced" type="checkbox">
+                <label>Advanced regex engine (experimental)<br>
+                <small>Uses a backtracking engine that supports lookahead <code>(?=...)</code>, lookbehind <code>(?&lt;=...)</code> and backreferences, which Go's default engine does not. Only active together with the option above. Every match is cut off after 50 ms to stop catastrophic patterns (a timed out rule simply does not match). Patterns are limited to 500 characters, matched text to 4096.</small></label>
+              </div>
+              <br>
+              <div class="ui toggle checkbox" style="margin-top: 0.4em;">
                 <input id="redirectCaseSensitive" type="checkbox">
                 <label>Force Case Sensitive Check<br>
                 <small>If enabled, URL matching will be case sensitive</small></label>
@@ -358,6 +364,27 @@
     }
 
     initRegexpSupportToggle();
+
+    function initAdvancedRegexToggle(){
+      $.get("/api/redirect/advancedregex", function(data){
+        $("#redirectRegexAdvanced").parent().checkbox(data && data.enabled ? "set checked" : "set unchecked");
+        $("#redirectRegexAdvanced").on("change", function(){
+          $.cjax({
+            url: "/api/redirect/advancedregex",
+            method: "POST",
+            data: {"enable": $(this)[0].checked},
+            success: function(data){
+              if (data.error != undefined){
+                msgbox(data.error, false);
+              }else{
+                msgbox("Advanced regex setting updated", true);
+              }
+            }
+          });
+        });
+      });
+    }
+    initAdvancedRegexToggle();
 
     function initCaseSensitivityToggle(){
       $.get("/api/redirect/case_sensitive", function(data){
