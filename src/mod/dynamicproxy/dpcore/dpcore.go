@@ -409,7 +409,20 @@ func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request, rrr 
 	// they are always stripped from H3 requests even when hop-by-hop removal
 	// is disabled for this endpoint (the flag only applies to HTTP/1.1 upstreams).
 	if !rrr.NoRemoveHopByHop || req.ProtoMajor == 3 {
+		// gRPC clients announce "TE: trailers" and some gRPC servers refuse requests without it.
+		// Like net/http/httputil.ReverseProxy (Go issue 21096) keep exactly that token.
+		teTrailers := false
+		for _, v := range outreq.Header["Te"] {
+			for _, tok := range strings.Split(v, ",") {
+				if strings.EqualFold(strings.TrimSpace(tok), "trailers") {
+					teTrailers = true
+				}
+			}
+		}
 		removeHeaders(outreq.Header)
+		if teTrailers {
+			outreq.Header.Set("Te", "trailers")
+		}
 	}
 
 	if rrr.NoCache {

@@ -76,12 +76,53 @@ def build(force=False):
     return BIN
 
 
+HELPER_BIN = os.path.join(tempfile.gettempdir(), "zoraxy-e2e-helper")
+
+
+def helper():
+    """Builds tools/e2e/helpers (Go) once and returns the binary path."""
+    if not os.path.exists(HELPER_BIN) or os.path.getmtime(HELPER_BIN) < max(
+            os.path.getmtime(os.path.join(HERE, "helpers", f)) for f in os.listdir(os.path.join(HERE, "helpers"))
+            if f.endswith(".go")):
+        env = dict(os.environ, GOFLAGS="-mod=mod", GOTMPDIR=os.path.expanduser("~/.cache/go-tmp"))
+        os.makedirs(env["GOTMPDIR"], exist_ok=True)
+        subprocess.check_call(["go", "build", "-o", HELPER_BIN, "."], cwd=os.path.join(HERE, "helpers"), env=env)
+    return HELPER_BIN
+
+
+def helper_json(*args, timeout=30):
+    out = subprocess.run([helper()] + list(args), capture_output=True, timeout=timeout)
+    try:
+        return json.loads(out.stdout.decode().strip().splitlines()[-1])
+    except Exception:
+        raise Fail("helper %s failed: %s %s" % (args[0], out.stdout[-300:], out.stderr[-300:]))
+
+
+class Proc:
+    """A background process killed on exit."""
+
+    def __init__(self, argv, **kw):
+        self.p = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, preexec_fn=os.setsid, **kw)
+
+    def close(self):
+        with contextlib.suppress(Exception):
+            os.killpg(os.getpgid(self.p.pid), signal.SIGKILL)
+        with contextlib.suppress(Exception):
+            self.p.wait(5)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        self.close()
+
+
 # --------------------------------------------------------------------------- instance
 
 class Zoraxy:
     """A throw-away Zoraxy instance: own conf/db/tmp dir, admin port, proxy port."""
 
-    def __init__(self, tls=False, extra_args=None, noauth=True, name="z"):
+    def __init__(self, tls=False, extra_args=None, noauth=True, name="z", certs=()):
         self.dir = tempfile.mkdtemp(prefix="zx-e2e-" + name + "-")
         self.admin = free_port()
         self.proxy = free_port()
@@ -92,6 +133,12 @@ class Zoraxy:
         self.csrf = ""
         self.opener = None
         os.symlink(os.path.join(SRC, "web"), os.path.join(self.dir, "web"))
+        # certs: iterable of (name, crt_path, key_path) pre-seeded into conf/certs (name.pem / name.key)
+        for nm, crt, key in certs:
+            cd = os.path.join(self.dir, "conf", "certs")
+            os.makedirs(cd, exist_ok=True)
+            shutil.copy(crt, os.path.join(cd, nm + ".pem"))
+            shutil.copy(key, os.path.join(cd, nm + ".key"))
 
     # lifecycle
     def start(self, wait_proxy=True):
@@ -263,6 +310,9 @@ def http_req(addr, port, host, path="/", method="GET", headers=None, body=None, 
         if cert:
             ctx.load_cert_chain(*cert)
         conn = http.client.HTTPSConnection(addr, port, timeout=timeout, context=ctx)
+        sni = (host or "").split(":")[0]
+        raw = socket.create_connection((addr, port), timeout)
+        conn.sock = ctx.wrap_socket(raw, server_hostname=sni or None)  # SNI follows the Host header
     else:
         conn = http.client.HTTPConnection(addr, port, timeout=timeout)
     h = {"Host": host} if host else {}
