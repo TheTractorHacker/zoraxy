@@ -369,6 +369,20 @@
                 <p>Enable access from the following countries or IP. <br>
                     Whitelist has lower priority than blacklist if both whitelist and blacklist are enabled <br>
                     <small>Tips: You can use blacklist to fine tune whitelist coverage</small></p>
+                <div class="ui info message" id="whitelistReservedRangeHelp">
+                    <div class="header">Why does the whitelist deny me (403)?</div>
+                    <ul class="list">
+                        <li><b>Which address is checked:</b> by default the address of the TCP connection that reached Zoraxy.
+                            Behind Cloudflare, a Cloudflare Tunnel, WireGuard / Tailscale, a router that does NAT or another reverse proxy
+                            that is the address of that device, not of the visitor. To check the visitor instead, turn on
+                            <i>Enable Trusted Proxy Gating</i> in the Access Rule editor and list that device on the <i>Trusted Proxy</i> page.</li>
+                        <li><b>Country rules never match reserved addresses:</b> private (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16),
+                            <b>CarrierNAT / shared address space (100.64.0.0/10, used by Tailscale, mobile carriers and some tunnels)</b>,
+                            loopback, link-local and similar ranges have no country.</li>
+                        <li><i>Enable LAN and Loopback</i> (below) covers the private, loopback and link-local ranges
+                            but <b>not 100.64.0.0/10</b>. Add that range (or the exact address) to the IP whitelist if you need it.</li>
+                    </ul>
+                </div>
                 <div class="ui divider"></div>
                 <div class="ui toggle checkbox">
                     <input type="checkbox" id="enableWhitelist">
@@ -387,7 +401,7 @@
                             <div class="ui toggle checkbox">
                                 <input type="checkbox" id="enableWhitelistLoopback">
                                 <label>Enable LAN and Loopback<br>
-                                    <small>Allowing loopback request from your public IP address and local area network devices</small></label>
+                                    <small>Allow loopback and private network addresses (127.0.0.0/8, ::1, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, fc00::/7, fe80::/10). Does not include 100.64.0.0/10 (CarrierNAT / Tailscale), add it to the IP whitelist if needed.</small></label>
                             </div>
                         </div>
                     </div>  
