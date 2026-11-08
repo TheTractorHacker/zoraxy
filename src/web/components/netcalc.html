@@ -1,0 +1,67 @@
+<!-- IPv4 / IPv6 subnet calculators. Loaded into the Network Tools "Calculators" tab. API: GET /api/tools/netcalc?q= -->
+<div id="netcalcPanel">
+    <div class="ui basic message">
+        Calculate subnets locally on this node (no outbound traffic). Accepts <code>192.168.1.10/24</code>, <code>10.0.0.1 255.255.255.0</code>,
+        <code>2001:db8::/32</code>, a single address, or a range such as <code>10.0.0.5 - 10.0.3.200</code> (converted into the shortest list of CIDR blocks).
+    </div>
+    <div class="ui action fluid input">
+        <input type="text" id="netcalcInput" maxlength="200" placeholder="192.168.1.10/24 or 2001:db8::1/64 or 10.0.0.1 - 10.0.0.99">
+        <button class="ui basic button" id="netcalcBtn"><i class="calculator icon"></i> Calculate</button>
+    </div>
+    <div class="ui red message" id="netcalcError" style="display:none;"></div>
+    <div style="overflow-x:auto;">
+        <table class="ui definition compact unstackable table" id="netcalcResult" style="display:none;"><tbody></tbody></table>
+    </div>
+    <div id="netcalcList" style="display:none;">
+        <h4 class="ui header">CIDR blocks</h4>
+        <pre id="netcalcListPre" style="overflow-x:auto;"></pre>
+    </div>
+</div>
+<script>
+(function(){
+    var rows = [
+        ["Type", "kind"], ["Address", "address"], ["CIDR", "cidr"], ["Network", "network"],
+        ["Netmask", "netmask"], ["Wildcard mask", "wildcard"], ["Broadcast", "broadcast"],
+        ["First usable host", "firstHost"], ["Last usable host", "lastHost"],
+        ["Usable hosts", "hostCount"], ["Total addresses", "addressCount"],
+        ["Class", "class"], ["Address type", "scope"], ["Private", "private"],
+        ["Expanded", "expanded"], ["Compressed", "compressed"],
+        ["Embedded IPv4", "embeddedIpv4"], ["Embedded kind", "embeddedKind"],
+        ["Binary", "binary"], ["Reverse DNS", "reverseDns"],
+        ["Range start", "rangeStart"], ["Range end", "rangeEnd"]
+    ];
+    var kindNames = {ipv4: "IPv4", ipv6: "IPv6", range4: "IPv4 range", range6: "IPv6 range"};
+
+    function netcalcRun(){
+        var q = $("#netcalcInput").val().trim();
+        $("#netcalcError").hide();
+        if (q == ""){ return; }
+        $.get("/api/tools/netcalc", {q: q}, function(data){
+            var tb = $("#netcalcResult tbody").empty();
+            $("#netcalcList").hide();
+            if (data.error != undefined){
+                $("#netcalcResult").hide();
+                $("#netcalcError").text(data.error).show();
+                return;
+            }
+            rows.forEach(function(r){
+                var v = data[r[1]];
+                if (v === undefined || v === "") return;
+                if (r[1] == "kind") v = kindNames[v] || v;
+                if (r[1] == "private") v = v ? "yes" : "no";
+                var tr = $("<tr></tr>");
+                tr.append($("<td></td>").text(r[0]));
+                tr.append($("<td></td>").css("word-break", "break-all").text(String(v)));
+                tb.append(tr);
+            });
+            $("#netcalcResult").show();
+            if (data.cidrList && data.cidrList.length){
+                $("#netcalcListPre").text(data.cidrList.join("\n"));
+                $("#netcalcList").show();
+            }
+        });
+    }
+    $("#netcalcBtn").on("click", netcalcRun);
+    $("#netcalcInput").on("keydown", function(e){ if (e.key == "Enter"){ netcalcRun(); } });
+})();
+</script>

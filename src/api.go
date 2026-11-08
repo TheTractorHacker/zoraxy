@@ -14,6 +14,7 @@ import (
 	"imuslab.com/zoraxy/mod/info/hardwareinfo"
 	"imuslab.com/zoraxy/mod/ipscan"
 	"imuslab.com/zoraxy/mod/netstat"
+	"imuslab.com/zoraxy/mod/netcalc"
 	"imuslab.com/zoraxy/mod/netutils"
 	"imuslab.com/zoraxy/mod/utils"
 )
@@ -68,6 +69,7 @@ func RegisterHTTPProxyAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/proxy/setIncoming", HandleIncomingPortSet)
 	authRouter.HandleFunc("/api/proxy/useHttpsRedirect", HandleUpdateHttpsRedirect)
 	authRouter.HandleFunc("/api/proxy/listenPort80", HandleUpdatePort80Listener)
+	authRouter.HandleFunc("/api/proxy/httpListenAddr", HandleHttpListenAddr)
 	authRouter.HandleFunc("/api/proxy/requestIsProxied", HandleManagementProxyCheck)
 	authRouter.HandleFunc("/api/proxy/developmentMode", HandleDevelopmentModeChange)
 	authRouter.HandleFunc("/api/proxy/sanitiseClientIP", HandleSanitiseClientIPChange)
@@ -302,6 +304,8 @@ func RegisterStaticWebServerAPIs(authRouter *auth.RouterDef) {
 
 // Register the APIs for Network Utilities functions
 func RegisterNetworkUtilsAPIs(authRouter *auth.RouterDef) {
+	authRouter.HandleFunc("/api/tools/netcalc", netcalc.HandleNetCalc)
+	authRouter.HandleFunc("/api/tools/dnsresponder", HandleDNSResponder)
 	authRouter.HandleFunc("/api/tools/ipscan", ipscan.HandleIpScan)
 	authRouter.HandleFunc("/api/tools/portscan", ipscan.HandleScanPort)
 	authRouter.HandleFunc("/api/tools/traceroute", netutils.HandleTraceRoute)

@@ -290,7 +290,8 @@ func ReverseProxyInit() {
 	sysdb.Read("settings", "listenP80", &listenOnPort80)
 	sysdb.Read("settings", "redirect", &forceHttpsRedirect)
 
-	listenOnPort80 = listenOnPort80 && !netutils.CheckIfPortOccupied(80)
+	httpListenAddr := loadHttpListenAddr() //see httplistenaddr_api.go (default ":80")
+	listenOnPort80 = listenOnPort80 && !httpListenPortOccupied(httpListenAddr)
 
 	if listenOnPort80 {
 		SystemWideLogger.Println("Port 80 listener enabled")
@@ -320,6 +321,7 @@ func ReverseProxyInit() {
 		TlsCipherProfile:   tlsCipherProfile,
 		NoCache:            developmentMode,
 		ListenOnPort80:     listenOnPort80,
+		HttpListenAddr:     httpListenAddr,
 		ForceHttpsRedirect: forceHttpsRedirect,
 		UseProxyProtocol:   useProxyProtocol,
 
@@ -2055,7 +2057,7 @@ func HandleUpdatePort80Listener(w http.ResponseWriter, r *http.Request) {
 		}
 		if enabled {
 			//Check if port 80 is already used by other services
-			if netutils.CheckIfPortOccupied(80) && !dynamicProxyRouter.GetPort80ListenerState() {
+			if httpListenPortOccupied(loadHttpListenAddr()) && !dynamicProxyRouter.GetPort80ListenerState() {
 				utils.SendErrorResponse(w, "Port 80 is already used by other services")
 				return
 			}

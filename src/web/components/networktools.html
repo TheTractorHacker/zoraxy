@@ -9,6 +9,8 @@
         <a class="nettools item active bluefont" data-tab="tab1">Discovery</a>
         <a class="nettools item bluefont" data-tab="tab2">Connection</a>
         <a class="nettools item bluefont" data-tab="tab3">Diagnostics</a>
+        <a class="nettools item bluefont" data-tab="tab4">Calculators</a>
+        <a class="nettools item bluefont" data-tab="tab5">DNS Responder</a>
     </div>
 
     <div class="ui bottom attached tab segment nettoolstab active" data-tab="tab1">
@@ -163,6 +165,18 @@
             </tbody>
         </table>
         <button class="ui basic button" onclick="listWoL();"><i class="ui green refresh icon"></i> Refresh</button>
+    </div>
+
+    <!-- IPv4 / IPv6 calculators, see netcalc.html -->
+    <div class="ui bottom attached tab segment nettoolstab" data-tab="tab4">
+        <div id="netcalcHost"></div>
+        <script>$("#netcalcHost").load("./components/netcalc.html");</script>
+    </div>
+
+    <!-- Split-horizon DNS responder, see dnsresponder.html -->
+    <div class="ui bottom attached tab segment nettoolstab" data-tab="tab5">
+        <div id="dnsResponderHost"></div>
+        <script>$("#dnsResponderHost").load("./components/dnsresponder.html");</script>
     </div>
 
     <!-- Diagnostics: DNS lookup, TLS certificate inspector, HTTP request tester -->

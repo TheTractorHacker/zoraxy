@@ -138,6 +138,14 @@
         <i class="warning icon"></i>
         Port 80 is occupied by another service and might not be working properly
     </div>
+    <div id="httpListenAddrBox" class="notloopbackOnly tlsEnabledOnly" style="margin: 0.5em 0 0.8em 0;">
+        <div class="ui action fluid input" style="max-width: 360px;">
+            <input type="text" id="httpListenAddrInput" placeholder=":80" value=":80">
+            <button class="ui basic button" onclick="applyHttpListenAddr();"><i class="ui checkmark icon"></i> Apply</button>
+        </div>
+        <small>Address of the plain HTTP listener, as <code>:port</code> or <code>ip:port</code> (default <code>:80</code>). Useful when port 80 is taken or you sit behind a port forward (e.g. <code>:8080</code>). Cannot be the management interface port or the proxy (HTTPS) port. Applying restarts the proxy service. Let's Encrypt HTTP-01 validation still requires this to be reachable from the internet on public port 80.</small>
+        <div id="httpListenAddrRuntime" style="display:none;"><small></small></div>
+    </div>
     <br>
     <div tourstep="forceHttpsRedirect" style="display: inline-block;">
         <div id="redirect" class="ui toggle notloopbackOnly tlsEnabledOnly checkbox" style="margin-top: 0.4em;">
@@ -404,6 +412,36 @@
         });
     }
     initPort80ListenerSetting();
+
+    function initHttpListenAddrSetting(){
+        $.get("/api/proxy/httpListenAddr", function(data){
+            if (data.error != undefined){ return; }
+            $("#httpListenAddrInput").val(data.config || ":80");
+            if (data.runtime){
+                $("#httpListenAddrRuntime small").text("Currently listening on " + data.runtime);
+                $("#httpListenAddrRuntime").show();
+            }else{
+                $("#httpListenAddrRuntime").hide();
+            }
+        });
+    }
+    function applyHttpListenAddr(){
+        $.cjax({
+            url: "/api/proxy/httpListenAddr",
+            method: "POST",
+            data: {"addr": $("#httpListenAddrInput").val().trim()},
+            success: function(data){
+                if (data.error != undefined){
+                    msgbox(data.error, false, 5000);
+                }else{
+                    msgbox("HTTP listener address updated");
+                }
+                initHttpListenAddrSetting();
+                initPort80ListenerSetting();
+            }
+        });
+    }
+    initHttpListenAddrSetting();
 
     function initHTTPtoHTTPSRedirectSetting(){
         $.get("/api/proxy/useHttpsRedirect", function(data){
