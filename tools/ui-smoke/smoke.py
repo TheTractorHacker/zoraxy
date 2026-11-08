@@ -230,6 +230,13 @@ def proxy_ux(pg, ctx):
         if not pg.is_visible("#bulkBar"):
             fail("select", "bulk bar not visible with a selection")
         pg.screenshot(path=out("httprp-selected.png"))
+        pg.evaluate("window.scrollTo(0, 600)")
+        pg.wait_for_timeout(300)
+        top = pg.evaluate("document.getElementById('bulkBar').getBoundingClientRect().top")
+        if not (45 <= top <= 140):
+            fail("select", f"the bulk bar does not stay visible below the menu bar while scrolling (top {top:.0f}px)")
+        pg.evaluate("window.scrollTo(0, 0)")
+        pg.wait_for_timeout(200)
         pg.click("#bulkBar button[data-act=waf]")
         pg.wait_for_selector("#bulkModal", state="visible", timeout=5000)
         pg.select_option("#bulkWafSrc", "detection_only")

@@ -45,7 +45,6 @@ func quickStartDecide(dismissed bool, rules int, running bool) quickStartState {
 func currentQuickStartState() quickStartState {
 	dismissed := false
 	if sysdb != nil {
-		sysdb.NewTable("settings")
 		sysdb.Read("settings", quickStartDismissKey, &dismissed)
 	}
 	rules, running := 0, false
@@ -70,7 +69,6 @@ func HandleQuickStartState(w http.ResponseWriter, r *http.Request) {
 			utils.SendErrorResponse(w, "database not available")
 			return
 		}
-		sysdb.NewTable("settings")
 		if err := sysdb.Write("settings", quickStartDismissKey, d); err != nil {
 			utils.SendErrorResponse(w, "unable to save")
 			return

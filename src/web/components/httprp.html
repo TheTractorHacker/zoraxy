@@ -24,7 +24,7 @@
         #httprpPage .ptLink{ background:none; border:0; color:#4b75ff; cursor:pointer; font:inherit; padding:0 0.3em; }
 
         /* bulk action bar: only exists while something is selected, sticks to the top while scrolling */
-        #bulkBar{ position:sticky; top:0.5em; z-index:6; display:flex; flex-wrap:wrap; gap:0.4em; align-items:center; padding:0.55em 0.8em; margin:0 0 0.8em; border-radius:0.6em; background:var(--theme_bg_inverted); color:var(--text_color_inverted); box-shadow:0 4px 14px rgba(0,0,0,0.25); }
+        #bulkBar{ position:sticky; top:4em; /* below the fixed menu bar */ z-index:6; display:flex; flex-wrap:wrap; gap:0.4em; align-items:center; padding:0.55em 0.8em; margin:0 0 0.8em; border-radius:0.6em; background:var(--theme_bg_inverted); color:var(--text_color_inverted); box-shadow:0 4px 14px rgba(0,0,0,0.25); }
         #bulkBar[hidden]{ display:none !important; }
         #bulkBar .bulkCount{ font-weight:700; margin-right:0.4em; }
         #bulkBar .bulkAllSel{ opacity:0.75; font-size:0.9em; margin-right:0.4em; }
@@ -96,7 +96,11 @@
             #httprpPage .ptSearch{ max-width:none; flex-basis:100%; }
             #httprpPage .ptSeg{ overflow-x:auto; max-width:100%; }
             #httprpPage .ptHead .ui.primary.button{ width:100%; }
-            #bulkBar{ top:0.2em; }
+            #bulkBar{ top:3.9em; padding:0.4em 0.5em; }
+            #bulkBar .ui.button:not(.icon){ font-size:0; padding:1.05em 1.15em; }
+            #bulkBar .ui.button:not(.icon) > i.icon{ font-size:1rem; margin:0; }
+            #bulkBar .bulkHint, #bulkBar .bulkSpacer{ display:none; }
+            #bulkBar .bulkCount{ flex:1 0 100%; }
             /* rows become cards: no sideways scrolling on a phone */
             table.ptTable{ min-width:0; }
             table.ptTable, table.ptTable tbody{ display:block; }
@@ -283,14 +287,14 @@
     <!-- Bulk actions: shown only while rules are selected -->
     <div id="bulkBar" role="toolbar" aria-label="Actions for the selected rules" hidden>
         <b class="bulkCount">0 selected</b><span class="bulkAllSel" style="display:none;">(every matching rule)</span>
-        <button type="button" class="ui mini button" data-act="enable"><i class="toggle on icon"></i> Enable</button>
-        <button type="button" class="ui mini button" data-act="disable"><i class="toggle off icon"></i> Disable</button>
-        <button type="button" class="ui mini button" data-act="tags"><i class="tags icon"></i> Tags</button>
-        <button type="button" class="ui mini button" data-act="waf"><i class="shield alternate icon"></i> WAF</button>
-        <button type="button" class="ui mini button" data-act="rate"><i class="tachometer alternate icon"></i> Rate limit</button>
-        <button type="button" class="ui mini button" data-act="auth"><i class="key icon"></i> Authentication</button>
-        <button type="button" class="ui mini button" data-act="template"><i class="clone icon"></i> Template</button>
-        <button type="button" class="ui mini button danger" data-act="delete"><i class="trash icon"></i> Delete</button>
+        <button type="button" class="ui mini button" data-act="enable" title="Enable the selected rules" aria-label="Enable the selected rules"><i class="toggle on icon"></i> Enable</button>
+        <button type="button" class="ui mini button" data-act="disable" title="Disable the selected rules" aria-label="Disable the selected rules"><i class="toggle off icon"></i> Disable</button>
+        <button type="button" class="ui mini button" data-act="tags" title="Add or remove tags on the selected rules" aria-label="Tags of the selected rules"><i class="tags icon"></i> Tags</button>
+        <button type="button" class="ui mini button" data-act="waf" title="Set the WAF of the selected rules" aria-label="WAF of the selected rules"><i class="shield alternate icon"></i> WAF</button>
+        <button type="button" class="ui mini button" data-act="rate" title="Set the rate limit of the selected rules" aria-label="Rate limit of the selected rules"><i class="tachometer alternate icon"></i> Rate limit</button>
+        <button type="button" class="ui mini button" data-act="auth" title="Set the authentication of the selected rules" aria-label="Authentication of the selected rules"><i class="key icon"></i> Authentication</button>
+        <button type="button" class="ui mini button" data-act="template" title="Apply a template to the selected rules" aria-label="Apply a template to the selected rules"><i class="clone icon"></i> Template</button>
+        <button type="button" class="ui mini button danger" data-act="delete" title="Delete the selected rules" aria-label="Delete the selected rules"><i class="trash icon"></i> Delete</button>
         <span class="bulkSpacer"></span>
         <span class="bulkHint">Esc to clear</span>
         <button type="button" class="ui mini icon button" data-act="clear" title="Clear selection (Esc)" aria-label="Clear selection"><i class="times icon"></i></button>

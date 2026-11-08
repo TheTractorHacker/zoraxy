@@ -41,6 +41,7 @@ func TestQuickStartDismissPersists(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 	old := sysdb
 	sysdb = db
+	sysdb.NewTable("settings") // created at startup in the real program (start.go)
 	t.Cleanup(func() { sysdb = old })
 
 	get := func() quickStartState {
