@@ -33,11 +33,11 @@ type Manager struct {
 	CertStore    string         //Path where all the certs are stored
 	LoadedCerts  []*CertCache   //A list of loaded certs
 	Logger       *logger.Logger //System wide logger for debug mesage
-	FallbackCert string        //Name of the fallback/default certificate (no file renaming)
+	FallbackCert string         //Name of the fallback/default certificate (no file renaming)
 
 	//OnCertRemoved is called after a certificate has been deleted, so other modules
 	//(e.g. ACME) can drop the data they keep for it
-	OnCertRemoved func(domain string)
+	OnCertRemoved func(domain string) `json:"-"`
 
 	/* External handlers */
 	hostSpecificTlsBehavior func(serverName string) (*HostSpecificTlsBehavior, error) // Function to get host specific TLS behavior, if nil, use global TLS options

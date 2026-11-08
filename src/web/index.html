@@ -29,13 +29,13 @@
             </div>
 
             <div class="ui right floated buttons menutoggle" style="padding-top: 2px;">
-                <button id="sidemenuBtn" class="ui basic icon button" onclick="$('.toolbar').fadeToggle('fast');"><i class="content icon"></i></button>
+                <button id="sidemenuBtn" class="ui basic icon button" aria-label="Toggle navigation menu" onclick="$('.toolbar').fadeToggle('fast');"><i class="content icon"></i></button>
             </div>
             <div id="logoutButtonWrapper" class="ui right floated buttons" style="padding-top: 2px; padding-right: 0.4em;">
-                <button class="ui basic white icon button" onclick="logout();"><i class="sign-out icon"></i></button>
+                <button class="ui basic white icon button" onclick="logout();" title="Log out" aria-label="Log out"><i class="sign-out icon"></i></button>
             </div>
             <div class="ui right floated buttons" style="padding-top: 2px; margin-right: 0.4em;">
-                <button id="themeColorButton" class="ui icon button" onclick="toggleTheme();"><i class="sun icon"></i></button>
+                <button id="themeColorButton" class="ui icon button" onclick="toggleTheme();" title="Switch light / dark theme (follows your system until you choose)" aria-label="Switch light or dark theme"><i class="sun icon"></i></button>
             </div>
         </div>
         <div class="wrapper">
@@ -928,5 +928,6 @@
                 }});
             });
         </script>
+        <script src="script/uxkit.js"></script>
     </body>
 </html>

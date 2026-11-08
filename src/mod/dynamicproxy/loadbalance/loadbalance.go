@@ -31,7 +31,7 @@ type RouteManager struct {
 	Options      Options  //Options for the load balancer
 
 	//Now returns the current time. Defaults to time.Now, replaced in tests
-	Now func() time.Time
+	Now func() time.Time `json:"-"`
 
 	cacheTicker     *time.Ticker //Ticker for cache cleanup
 	cacheTickerStop chan bool    //Stop the cache cleanup

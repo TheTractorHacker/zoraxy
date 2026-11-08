@@ -942,3 +942,47 @@ makes the rule answer **503 to every request** (fail closed) instead of dropping
   accessible to the user (checked first; the error names the `chown -R` to run). Ignored with a log line on Windows. Unit tests simulate root with a seam; nothing here was run as real root.
 * **Network diagnostics** `mod/netutils/diagnostics.go`: `/api/tools/dns`, `/api/tools/tlsinspect`, `/api/tools/httptest` ("Diagnostics" tab of Network Tools). Admin only; connections to metadata /
   link-local addresses are refused by default at dial time (so rebinding and redirects are covered), `allowmetadata=true` overrides per call. HTTP tester follows redirects manually (max 10), GET/HEAD/OPTIONS only.
+## Admin UI: UX overhaul and smoke test
+
+### What changed (`feat/ui-ux-overhaul`)
+
+* **Nav scrolling fix.** `.toolbar` (left menu) is a sticky column limited to the viewport
+  (`100vh` / `100dvh`), with its own `overflow-y: auto` and `overscroll-behavior: contain`, so the mouse wheel over the
+  menu scrolls the menu, not the page (it used to be as tall as the whole page and therefore never scrolled itself).
+  The mobile drawer got the same treatment.
+* `src/web/script/uxkit.js` (new, loaded at the end of `index.html`, optional enhancements):
+  menu filter box (press `/` to focus, `Esc` clears, `Enter` opens the first match); `alert()` is replaced by the
+  non-blocking toast (`msgbox`) in the main window and in snippet iframes; aria-labels for icon-only buttons and
+  keyboard operation of the menu groups; rate limited toast when an API request fails; unsaved-changes confirmation when
+  closing the HTTP proxy rule editor after editing a field (cleared by any successful `/api/proxy/*` write; it is per
+  editor, not per section).
+* Theme: with no stored choice the UI follows the OS dark/light preference; the toggle still persists the choice.
+* Responsive: no horizontal page overflow on phones, tabular menus scroll sideways, wide tables scroll inside their box.
+* Fixed bugs found by the smoke test: `/api/proxy/status` failed to marshal (func fields in `tlscert.Manager`,
+  `access.Controller`, `loadbalance.RouteManager`, `dynamicproxy.RouterOption` now tagged `json:"-"`) which broke the
+  Status/Ingress pages; null `Tags`/`MatchingDomainAlias`/certificate lists crashing the HTTP proxy page; a 404 script in the
+  certificate page.
+* Collapsible nav groups with remembered state already existed (`zoraxy_menu_groups` in localStorage).
+
+### UI smoke test (`tools/ui-smoke/`)
+
+`smoke.py` drives headless Chromium (Playwright) against a running admin UI. It opens every menu page in light and dark
+theme and fails on JavaScript errors, `console.error`, failed or 4xx/5xx requests, empty/missing page containers and
+horizontal overflow; it takes a screenshot per page; it checks the nav wheel-scroll behaviour on a short desktop viewport
+and on a 390px phone viewport; it tests the menu filter, icon-button labels and the editor unsaved-changes guard (it creates
+and deletes a rule `smoke-test.invalid`, so run it only against a throw-away instance).
+
+```bash
+# one-time setup (any directory outside the repo)
+python3 -m venv venv && ./venv/bin/pip install playwright && ./venv/bin/playwright install chromium
+# (if chromium misses system libraries and you have no root: apt-get download the missing -dev-less
+#  libs, dpkg -x them into a scratch dir and export LD_LIBRARY_PATH; a fonts.conf via FONTCONFIG_FILE and one
+#  TTF font are needed too)
+
+# builds this checkout, starts a throw-away instance (-noauth, temp conf/db, port 18765) and runs the test
+PY=./venv/bin/python tools/ui-smoke/run.sh --out ~/ui-smoke-shots
+# or against an instance you started yourself (use -noauth -dev with scratch -conf/-dbpath):
+./venv/bin/python tools/ui-smoke/smoke.py --url http://127.0.0.1:8000 --out ~/ui-smoke-shots
+```
+
+Exit status is non-zero on any failure; `--allow REGEX` tolerates a known message (e.g. offline-only failures).

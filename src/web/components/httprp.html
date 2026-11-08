@@ -1080,7 +1080,7 @@
                     let aliasDomains = ``;
                     if (subd.MatchingDomainAlias != undefined && subd.MatchingDomainAlias.length > 0){
                         aliasDomains = `<small class="aliasDomains" eptuuid="${subd.RootOrMatchingDomain}" style="color: #636363;">Alias: `;
-                        subd.MatchingDomainAlias.forEach(alias => {
+                        (subd.MatchingDomainAlias || []).forEach(alias => {
                             aliasDomains += `<a href="${httpProto}${alias}${hostnameRedirectPort}" target="_blank">${alias}</a>, `;
                         });
                         aliasDomains = aliasDomains.substr(0, aliasDomains.length - 2); //Remove the last tailing seperator
@@ -1158,7 +1158,7 @@
                             ${authDisplay}
                         </td>
                         <td data-label="" editable="true" datatype="vdir" style="${vdIsEmpty?"text-align: center;":""}">${vdList}</td>
-                        <td data-label="tags" payload="${encodeURIComponent(JSON.stringify(subd.Tags))}" datatype="tags" style="${tagListEmpty?"text-align: center;":""}">
+                        <td data-label="tags" payload="${encodeURIComponent(JSON.stringify(subd.Tags || []))}" datatype="tags" style="${tagListEmpty?"text-align: center;":""}">
                             <div class="tags-list">
                             ${tagList}
                             </div>
@@ -1963,6 +1963,9 @@
             let host = $(this).find("td[data-label='']").text().toLowerCase();
             let tagElements = $(this).find("td[data-label='tags']");
             let tags = tagElements.attr("payload");
+            if (tags === undefined) {
+                return; //placeholder row (e.g. "no proxy rules"), not a host entry
+            }
             tags = JSON.parse(decodeURIComponent(tags));
             if ((host.includes(searchInput) || searchInput === "") && (tags.includes(selectedTag) || selectedTag === "")) {
                 $(this).show();
@@ -1998,7 +2001,7 @@
      function populateTagFilterDropdown(data) {
         let tags = new Set();
         data.forEach(subd => {
-            subd.Tags.forEach(tag => tags.add(tag));
+            (subd.Tags || []).forEach(tag => tags.add(tag));
         });
         tags = Array.from(tags).sort((a, b) => a.localeCompare(b));
         let dropdownMenu = $("#tagFilterDropdown .tagList");
@@ -2084,7 +2087,7 @@
             success: function(data) {
                 let dropdown = $('<div class="ui fluid selection dropdown"></div>');
                 let menu = $('<div class="menu"></div>');
-                data.forEach(cert => {
+                (data || []).forEach(cert => {
                     menu.append(`<div class="item" data-value="${cert}">${cert}</div>`);
                 });
                 // Add a hidden input to store the selected certificate
@@ -2238,7 +2241,7 @@
         
         //Build the alias hostname list
         let aliasHTML = "";
-        subd.MatchingDomainAlias.forEach(alias => {
+        (subd.MatchingDomainAlias || []).forEach(alias => {
             if (alias.indexOf("*") > -1){
                 //Wildcard alias
                 aliasHTML += `<span class="ui tiny label">${alias}</span> `;

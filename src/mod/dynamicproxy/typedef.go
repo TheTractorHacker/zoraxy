@@ -77,7 +77,7 @@ type RouterOption struct {
 	/* Basic Settings */
 	HostUUID           string                  //The UUID of Zoraxy, use for heading mod
 	HostVersion        string                  //The version of Zoraxy, use for heading mod
-	SessionSecret      string                  //Key input for the CAPTCHA session signing. Empty = HostUUID (cluster deployments pass a key derived from the cluster secret)
+	SessionSecret      string                  `json:"-"` //Key input for the CAPTCHA session signing (never serialised: /api/proxy/status marshals RouterOption). Empty = HostUUID (cluster deployments pass a key derived from the cluster secret)
 	Health             *cluster.HealthEndpoint //Optional /.zoraxy/health endpoint, served on the proxy listeners before host routing
 	Port               int                     //Incoming port
 	UseTls             bool                    //Use TLS to serve incoming requsts
@@ -98,7 +98,7 @@ type RouterOption struct {
 	StatisticCollector   *statistic.Collector       //Statistic collector for storing stats on incoming visitors
 	WebDirectory         string                     //The static web server directory containing the templates folder
 	LoadBalancer         *loadbalance.RouteManager  //Load balancer that handle load balancing of proxy target
-	PersistProxyEndpoint func(*ProxyEndpoint) error //Optional, called to save an endpoint config after a basic auth hash upgrade
+	PersistProxyEndpoint func(*ProxyEndpoint) error `json:"-"` //Optional, called to save an endpoint config after a basic auth hash upgrade
 	PluginManager        *plugins.Manager           //Plugin manager for handling plugin routing
 	Metrics              *metrics.Registry          //Optional Prometheus metrics registry (nil or disabled = no overhead)
 

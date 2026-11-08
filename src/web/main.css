@@ -67,12 +67,22 @@ body.darkTheme .menubar{
 
 .toolbar {
     display: inline-block;
-    height: calc(100% - 51px);
+    /* The nav is a sticky column limited to the visible viewport so it can
+       scroll on its own (its parent is as tall as the whole page, so a %
+       height never produced an overflow and the wheel scrolled the page). */
+    box-sizing: border-box;
+    align-self: flex-start;
+    flex-shrink: 0;
+    height: calc(100vh - 4.6em);
+    height: calc(100dvh - 4.6em);
     overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
     width: 240px;
     position: sticky;
-    top: 4em;
-    padding: 0 1em;
+    top: 4.6em;
+    padding: 0 1em 1em 1em;
 }
 
 .contentWindow{
@@ -244,9 +254,13 @@ body.darkTheme .menubar{
         background-color: white;
         top: 3.6em;
         right: 0;
-        height: calc(100% - 51px);
+        height: calc(100vh - 3.6em);
+        height: calc(100dvh - 3.6em);
+        box-sizing: border-box;
         overflow-y: auto;
-        margin-bottom: 1em;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+        margin-bottom: 0;
         z-index: 9;
         padding: 1em;
         display:none;
@@ -263,7 +277,8 @@ body.darkTheme .menubar{
 
     .contentWindow{
         display: inline-block;
-        width: 100%;
+        width: calc(100% - 0.8em);
+        min-width: 0;
         margin-right: 0.4em;
         margin-left: 0.4em;
     }
@@ -1040,4 +1055,100 @@ body.darkTheme .menudivider{
     z-index: 199;
     border-radius: 0.6em;
     box-shadow: 0 0 0 max(100vh, 100vw) rgba(0, 0, 0, .3);
+}
+/*
+    UX overhaul: responsive helpers (small screens)
+*/
+@media screen and (max-width: 748px) {
+    /* Tabular menus with many tabs scroll sideways instead of widening the page */
+    .ui.tabular.menu, .ui.top.attached.tabular.menu {
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        flex-wrap: nowrap !important;
+        max-width: 100%;
+        scrollbar-width: thin;
+    }
+    .ui.tabular.menu .item {
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+    /* Status page: certificate overview wraps */
+    #status .certOverviewBox {
+        flex-wrap: wrap;
+        row-gap: 0.8em;
+    }
+    #status .certOverviewItem {
+        flex: 1 1 40% !important;
+        min-width: 0 !important;
+    }
+    #status .certOverviewLabel {
+        white-space: normal;
+    }
+}
+
+/*
+    UX overhaul: menu filter, focus rings, toast
+*/
+.navFilter {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding: 0.6em 0 0.5em 0;
+    background: var(--theme_bg, #fafafa);
+}
+.navFilter .ui.input > input {
+    border-radius: 2em;
+}
+.navFilterEmpty {
+    font-size: 0.85em;
+    color: #9c9c9c;
+    padding: 0.6em 0.4em;
+}
+#mainmenu .navHidden {
+    display: none !important;
+}
+#mainmenu.navFiltering .menugroup-items {
+    display: block !important;
+}
+#mainmenu.navFiltering .recent-section-header,
+#mainmenu.navFiltering #group-recent,
+#mainmenu.navFiltering .recent-section-divider {
+    display: none !important;
+}
+
+/* Visible keyboard focus */
+#mainmenu a.item:focus-visible,
+.menugroup-header:focus-visible,
+.recent-section-header:focus-visible,
+.recent-item:focus-visible,
+.ui.button:focus-visible,
+button:focus-visible,
+a:focus-visible,
+.ui.checkbox input:focus-visible ~ label::before,
+.ui.dropdown:focus-visible {
+    outline: 2px solid #4b75ff !important;
+    outline-offset: 2px;
+}
+
+/* Toast: above the confirm box, readable, never wider than the screen */
+#messageBox {
+    max-width: min(300px, calc(100vw - 2em));
+    z-index: 1001;
+}
+@media (prefers-reduced-motion: reduce) {
+    * { scroll-behavior: auto !important; }
+}
+
+@media screen and (max-width: 748px) {
+    /* Wide tables scroll inside their own box instead of being cut off */
+    .functiontab table.ui.table {
+        display: block;
+        max-width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .functiontab table.ui.table td,
+    .functiontab table.ui.table th {
+        white-space: normal;
+    }
 }
