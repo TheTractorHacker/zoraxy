@@ -532,6 +532,54 @@ function loadPluginUIContextIfAvailable(){
   }
 }
 
+//Hook (filter) settings of a router plugin: attach to all endpoints / allow fail-closed
+function pluginHookControls(plugin){
+  if (plugin.Spec.type != 0) return "";
+  const admin = plugin.HookAdmin || {};
+  const hooks = plugin.Spec.hooks;
+  const hasHooks = hooks && hooks.stages && hooks.stages.length > 0;
+  const hasDynamic = plugin.Spec.dynamic_capture_sniff && plugin.Spec.dynamic_capture_ingress;
+  if (!hasHooks && !hasDynamic) return "";
+  const id = plugin.Spec.id;
+  let html = `<div class="ui divider"></div><div class="ui form">`;
+  if (hasHooks) {
+    html += `<small>Hook stages: ${hooks.stages.join(", ")}</small><br>`;
+  }
+  html += `<div class="ui checkbox" style="margin-top:0.4em;">
+      <input type="checkbox" ${admin.Global ? "checked" : ""} onchange="setPluginHookSetting('${id}', 'global', this.checked);">
+      <label>Apply to all HTTP proxy rules <small>(add the tag <code>no-plugin:${id}</code> to a rule to opt out)</small></label>
+    </div>`;
+  if (admin.FailClosedDeclared) {
+    html += `<br><div class="ui checkbox" style="margin-top:0.4em;">
+      <input type="checkbox" ${admin.FailClosedConsent ? "checked" : ""} onchange="setPluginHookSetting('${id}', 'fail_closed', this.checked);">
+      <label>Block requests if this plugin fails <small>(fail-closed; when off, requests continue if the plugin is down)</small></label>
+    </div>`;
+  }
+  if (admin.BreakerOpen) {
+    html += `<br><small style="color:#b03030;"><i class="exclamation triangle icon"></i> Plugin is failing and is temporarily skipped</small>`;
+  }
+  html += `</div>`;
+  return html;
+}
+
+function setPluginHookSetting(pluginId, key, value){
+  let data = {plugin_id: pluginId};
+  data[key] = value ? "true" : "false";
+  $.cjax({
+    url: '/api/plugins/hooks/set',
+    type: 'POST',
+    data: data,
+    success: function(resp){
+      if (resp.error != undefined){
+        msgbox(resp.error, false);
+      }else{
+        msgbox("Plugin setting updated", true);
+      }
+      initiatePluginList();
+    }
+  });
+}
+
 function initiatePluginList(){
   $.get(`/api/plugins/list`, function(data){
     $("#pluginTable").html("");
@@ -555,7 +603,8 @@ function initiatePluginList(){
             </h4>
             </td>
           <td data-label="Descriptions">${plugin.Spec.description}<br>
-          <a href="${plugin.Spec.url}" target="_blank">${plugin.Spec.url}</a></td>
+          <a href="${plugin.Spec.url}" target="_blank">${plugin.Spec.url}</a>
+          ${pluginHookControls(plugin)}</td>
           <td data-label="Category">${plugin.Spec.type==0?"Router":"Utilities"}</td>
           <td data-label="Action">
             <button onclick="uninstallPlugin('${plugin.Spec.id}', '${plugin.Spec.name}', this);" class="ui basic red icon button">

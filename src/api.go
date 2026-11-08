@@ -316,6 +316,7 @@ func RegisterPluginAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/plugins/icon", pluginManager.HandleLoadPluginIcon)
 	authRouter.HandleFunc("/api/plugins/info", pluginManager.HandlePluginInfo)
 
+	authRouter.HandleFunc("/api/plugins/hooks/set", pluginManager.HandleSetPluginHookSettings)
 	authRouter.HandleFunc("/api/plugins/groups/list", pluginManager.HandleListPluginGroups)
 	authRouter.HandleFunc("/api/plugins/groups/add", pluginManager.HandleAddPluginToGroup)
 	authRouter.HandleFunc("/api/plugins/groups/remove", pluginManager.HandleRemovePluginFromGroup)

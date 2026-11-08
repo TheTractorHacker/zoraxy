@@ -1,7 +1,6 @@
 package plugins
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/google/uuid"
 	"imuslab.com/zoraxy/mod/dynamicproxy/dpcore"
 	"imuslab.com/zoraxy/mod/plugins/zoraxy_plugin"
 )
@@ -40,73 +38,51 @@ func (p *Plugin) AcceptDynamicRoute() bool {
 	return p.Spec.DynamicCaptureSniff != "" && p.Spec.DynamicCaptureIngress != ""
 }
 
-func (p *Plugin) HandleDynamicRoute(w http.ResponseWriter, r *http.Request, clientIP string) bool {
-	//Make sure p.Spec.DynamicCaptureSniff and p.Spec.DynamicCaptureIngress are not empty and start with /
+// sniffPlugin asks the legacy dynamic capture sniff endpoint of the plugin whether it
+// wants this request. A non-200 answer is a regular "skip"; only transport problems
+// (connection refused, timeout) are failures and feed the circuit breaker.
+func (m *Manager) sniffPlugin(p *Plugin, r *http.Request, clientIP string, reqID string) (accepted bool, err error) {
 	if !p.AcceptDynamicRoute() {
-		return false
+		return false, nil
 	}
-
-	//Make sure the paths start with / and do not end with /
-	if !strings.HasPrefix(p.Spec.DynamicCaptureSniff, "/") {
-		p.Spec.DynamicCaptureSniff = "/" + p.Spec.DynamicCaptureSniff
+	if !m.breakerAdmit(p) {
+		return false, errBreakerOpen
 	}
-	p.Spec.DynamicCaptureSniff = strings.TrimSuffix(p.Spec.DynamicCaptureSniff, "/")
-	if !strings.HasPrefix(p.Spec.DynamicCaptureIngress, "/") {
-		p.Spec.DynamicCaptureIngress = "/" + p.Spec.DynamicCaptureIngress
-	}
-	p.Spec.DynamicCaptureIngress = strings.TrimSuffix(p.Spec.DynamicCaptureIngress, "/")
-
-	//Send the request to the sniff endpoint
-	sniffURL, err := url.Parse("http://127.0.0.1:" + strconv.Itoa(p.AssignedPort) + p.Spec.DynamicCaptureSniff + "/")
-	if err != nil {
-		//Error when parsing the sniff URL, let the next plugin handle the request
-		return false
-	}
-
-	// Create an instance of CustomRequest with the original request's data
 	forwardReq := zoraxy_plugin.EncodeForwardRequestPayload(r, clientIP)
-
-	// Encode the custom request object into JSON
 	jsonData, err := json.Marshal(forwardReq)
 	if err != nil {
-		// Error when encoding the request, let the next plugin handle the request
-		return false
+		m.breakerRecord(p, nil)
+		return false, nil
 	}
-
-	//Generate a unique request ID
-	uniqueRequestID := uuid.New().String()
-
-	req, err := http.NewRequest("POST", sniffURL.String(), bytes.NewBuffer(jsonData))
+	//The sniff endpoint has always been called with a trailing slash
+	status, _, err := m.callPlugin(p, normalizeEndpoint(p.Spec.DynamicCaptureSniff)+"/", jsonData, reqID, 4096)
+	m.breakerRecord(p, err)
 	if err != nil {
-		// Error when creating the request, let the next plugin handle the request
-		return false
+		return false, err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Zoraxy-RequestID", uniqueRequestID)
+	return status == http.StatusOK, nil
+}
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		// Error when sending the request, let the next plugin handle the request
-		return false
+func normalizeEndpoint(s string) string {
+	if !strings.HasPrefix(s, "/") {
+		s = "/" + s
 	}
-	defer resp.Body.Close()
+	return strings.TrimSuffix(s, "/")
+}
 
-	if resp.StatusCode != http.StatusOK {
-		// Sniff endpoint did not return OK, let the next plugin handle the request
-		return false
+// serveDynamicCapture proxies the whole request to the dynamic capture ingress of the plugin
+func (p *Plugin) serveDynamicCapture(w http.ResponseWriter, r *http.Request, reqID string) {
+	headers := [][]string{{"X-Zoraxy-RequestID", reqID}}
+	if tok := p.invokeToken(); tok != "" {
+		headers = append(headers, []string{zoraxy_plugin.InvokeTokenHeader, tok})
 	}
-
 	p.dynamicRouteProxy.ServeHTTP(w, r, &dpcore.ResponseRewriteRuleSet{
-		UseTLS:       false,
-		OriginalHost: r.Host,
-		ProxyDomain:  "127.0.0.1:" + strconv.Itoa(p.AssignedPort),
-		NoCache:      true,
-		PathPrefix:   p.Spec.DynamicCaptureIngress,
-		AllowUpgrade: true,
-		UpstreamHeaders: [][]string{
-			{"X-Zoraxy-RequestID", uniqueRequestID},
-		},
+		UseTLS:          false,
+		OriginalHost:    r.Host,
+		ProxyDomain:     "127.0.0.1:" + strconv.Itoa(p.AssignedPort),
+		NoCache:         true,
+		PathPrefix:      normalizeEndpoint(p.Spec.DynamicCaptureIngress),
+		AllowUpgrade:    true,
+		UpstreamHeaders: headers,
 	})
-	return true
 }

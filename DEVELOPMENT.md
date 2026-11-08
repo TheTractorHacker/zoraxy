@@ -537,3 +537,22 @@ accepts them, so no stickiness is required at this layer.
 8. Stop the proxy service from the UI on the VIP owner: health returns 503 and keepalived fails over.
 9. Edit a synced object on the follower: refused with 403 (primary wins).
 10. Wrong secret on a follower: sync error "primary rejected the request", no files changed.
+
+## Plugin request / response hooks (filter API)
+
+Plugins can act as middleware / WAF style filters. User-facing documentation is in
+`docs/plugins/docs/2. Architecture/7. Request and Response Hooks.md`; this section is the developer map.
+
+- **SDK / wire format**: `src/mod/plugins/zoraxy_plugin/hooks.go` (`HookSettings`, `FilterRequest`, `FilterVerdict`, helpers,
+  `HookAPIVersion`). The SDK is copied into every example by `example/plugins/build_all.sh`; run it and commit the copies.
+  A new example directory needs an empty `mod/` directory created first, otherwise `cp -r` creates `mod` as the SDK itself.
+- **Runtime**: `src/mod/plugins/hooks_pipeline.go` (stage execution, concurrency, merge, body preview, response writer wrapper),
+  `hooks_validate.go` (verdict sanitising, manifest sanitising), `hooks_runtime.go` (HTTP client, circuit breaker, admin settings,
+  invoke token), `traffic_router.go` (`HandleStage`, legacy capture).
+- **Integration**: `src/mod/dynamicproxy/plugin_hooks.go` is the only glue. `runEndpointChain` calls
+  `routePluginStage(pre_auth)` right after the access check, `routePlugin` (post_auth) is unchanged in position, and
+  `pluginWrapResponse` wraps the `ResponseWriter` before the chain in `ServeHTTP` and `handleNonTLSRequest`.
+- **Admin state** (global attach, fail-closed consent) lives in the `plugin_hooks` database table, API `POST /api/plugins/hooks/set`
+  on the admin router only (never register it on the plugin REST router). fail_closed needs manifest AND consent.
+- **Tests**: `go test -race ./mod/plugins/... ./mod/dynamicproxy/...`. `mod/plugins/hooks_test.go` uses `httptest` servers as fake
+  plugin processes; `mod/dynamicproxy/plugin_hooks_test.go` drives `ProxyHandler.ServeHTTP` end to end.
