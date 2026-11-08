@@ -476,6 +476,12 @@ func ReverseProxyHandleAddEndpoint(w http.ResponseWriter, r *http.Request) {
 	endpoint = strings.TrimSpace(endpoint)
 
 	useTLS, _ := utils.PostBool(r, "tls")
+	if probe := (loadbalance.Upstream{OriginIpOrDomain: endpoint, RequireTLS: useTLS}); probe.IsUnix() {
+		if err := probe.ValidateTransportOptions(); err != nil {
+			utils.SendErrorResponse(w, err.Error())
+			return
+		}
+	}
 
 	//Bypass global TLS value / allow direct access from port 80?
 	useBypassGlobalTLS, _ := utils.PostBool(r, "bypassGlobalTLS")

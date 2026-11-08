@@ -113,6 +113,7 @@ type DpcoreOptions struct {
 	H2C                     bool          //Speak HTTP/2 over cleartext (prior knowledge) to a plain http:// upstream, for gRPC backends (#1029)
 	DisableKeepAlive        bool          //Do not reuse upstream connections (one connection per request), for upstreams that close after every response (#1343)
 
+	UnixSocket           string //If not empty, dial this unix domain socket path instead of TCP (target host is then only a placeholder)
 	ProxyProtocolVersion int                                                         //0 = off, 1 or 2: send a PROXY protocol header on every upstream connection (disables connection reuse), see proxyproto.go
 	ClientCertificate    func(*tls.CertificateRequestInfo) (*tls.Certificate, error) //Client certificate presented to HTTPS upstreams (upstream mTLS), nil = none
 }
@@ -320,6 +321,15 @@ func newBaseTransport(opts *DpcoreOptions) *http.Transport {
 		ExpectContinueTimeout: 1 * time.Second,
 		DisableCompression:    true,
 		DisableKeepAlives:     opts.DisableKeepAlive,
+	}
+
+	if opts.UnixSocket != "" {
+		sock := opts.UnixSocket
+		tr.Proxy = nil
+		tr.ForceAttemptHTTP2 = false
+		tr.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{Timeout: 30 * time.Second}).DialContext(ctx, "unix", sock)
+		}
 	}
 
 	if opts.ProxyProtocolVersion == 1 || opts.ProxyProtocolVersion == 2 {

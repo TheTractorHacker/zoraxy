@@ -28,6 +28,15 @@ func (u *Upstream) StartProxy(tlsServerName string) error {
 		domain = domain[:len(domain)-1]
 	}
 
+	unixSock := ""
+	if sock, ok := UnixSocketPath(domain); ok {
+		if err := ValidateUnixSocketPath(sock); err != nil {
+			return err
+		}
+		unixSock = sock
+		domain = "unix.socket" //placeholder host, the dialer ignores it
+	}
+
 	if !strings.HasPrefix("http://", domain) && !strings.HasPrefix("https://", domain) {
 		//TLS is not hardcoded in proxy target domain
 		if u.RequireTLS {
@@ -55,7 +64,8 @@ func (u *Upstream) StartProxy(tlsServerName string) error {
 		MaxConcurrentConnection: u.MaxConn,
 		UpstreamTLSServerName:   tlsServerName,
 		DisableKeepAlive:        u.DisableKeepAlive,
-		H2C:                     u.H2C && !u.RequireTLS && proxyProto == 0,
+		H2C:                     u.H2C && !u.RequireTLS && proxyProto == 0 && unixSock == "",
+		UnixSocket:              unixSock,
 		ProxyProtocolVersion:    proxyProto,
 		ClientCertificate:       u.clientCertCallback(),
 	})
@@ -117,6 +127,9 @@ var upstreamCertNamePattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9._-]{0,
 
 // ValidateTransportOptions checks the optional PROXY protocol and client certificate settings of an upstream
 func (u *Upstream) ValidateTransportOptions() error {
+	if err := u.validateUnix(); err != nil {
+		return err
+	}
 	if u.ProxyProtocol < 0 || u.ProxyProtocol > 2 {
 		return errors.New("PROXY protocol version must be 0 (off), 1 or 2")
 	}
