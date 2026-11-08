@@ -62,6 +62,10 @@ func RegisterHTTPProxyAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/proxy/upstream/setPriority", ReverseProxyUpstreamSetPriority)
 	authRouter.HandleFunc("/api/proxy/upstream/update", ReverseProxyUpstreamUpdate)
 	authRouter.HandleFunc("/api/proxy/upstream/remove", ReverseProxyUpstreamDelete)
+	authRouter.HandleFunc("/api/proxy/upstream/lb/get", ReverseProxyLoadBalanceGet)
+	authRouter.HandleFunc("/api/proxy/upstream/lb/set", ReverseProxyLoadBalanceSet)
+	authRouter.HandleFunc("/api/proxy/upstream/setDraining", ReverseProxyUpstreamSetDraining)
+	authRouter.HandleFunc("/api/proxy/upstream/setMaxInFlight", ReverseProxyUpstreamSetMaxInFlight)
 	/* Reverse proxy virtual directory */
 	authRouter.HandleFunc("/api/proxy/vdir/list", ReverseProxyListVdir)
 	authRouter.HandleFunc("/api/proxy/vdir/add", ReverseProxyAddVdir)

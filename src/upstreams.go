@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"imuslab.com/zoraxy/mod/dynamicproxy/loadbalance"
 	"imuslab.com/zoraxy/mod/utils"
@@ -48,14 +49,23 @@ func ReverseProxyUpstreamList(w http.ResponseWriter, r *http.Request) {
 		return inactiveUpstreams[i].OriginIpOrDomain < inactiveUpstreams[j].OriginIpOrDomain
 	})
 
+	//Live state of every upstream (health, in-flight requests, response time)
+	now := time.Now()
+	states := map[string]loadbalance.UpstreamState{}
+	for _, u := range activeUpstreams {
+		states[u.OriginIpOrDomain] = u.GetState(now, targetEndpoint.LoadBalanceConfig)
+	}
+
 	type UpstreamCombinedList struct {
 		ActiveOrigins   []*loadbalance.Upstream
 		InactiveOrigins []*loadbalance.Upstream
+		States          map[string]loadbalance.UpstreamState //Keyed by OriginIpOrDomain, active upstreams only
 	}
 
 	js, _ := json.Marshal(UpstreamCombinedList{
 		ActiveOrigins:   activeUpstreams,
 		InactiveOrigins: inactiveUpstreams,
+		States:          states,
 	})
 	utils.SendJSONResponse(w, string(js))
 }
@@ -297,6 +307,209 @@ func ReverseProxyUpstreamDelete(w http.ResponseWriter, r *http.Request) {
 
 	//Update uptime monitor
 	UpdateUptimeMonitorTargets()
+
+	utils.SendOK(w)
+}
+
+// LoadBalanceSettings is the view of the load balance config sent to the UI.
+// Zero values are replaced with the defaults that are really applied
+type LoadBalanceSettings struct {
+	Algorithm          string
+	HashKey            string
+	ActiveHealthCheck  loadbalance.ActiveHealthCheck
+	PassiveHealthCheck loadbalance.PassiveHealthCheck
+	Retry              loadbalance.RetryConfig
+	SlowStartSeconds   int
+	Algorithms         []string //All valid algorithm names
+}
+
+// Get the load balancing, health check and retry settings of an endpoint
+func ReverseProxyLoadBalanceGet(w http.ResponseWriter, r *http.Request) {
+	endpoint, err := utils.GetPara(r, "ep")
+	if err != nil {
+		utils.SendErrorResponse(w, "endpoint not defined")
+		return
+	}
+
+	targetEndpoint, err := dynamicProxyRouter.LoadProxy(endpoint)
+	if err != nil {
+		utils.SendErrorResponse(w, "target endpoint not found")
+		return
+	}
+
+	cfg := targetEndpoint.LoadBalanceConfig
+	if cfg == nil {
+		cfg = &loadbalance.Config{}
+	}
+	settings := LoadBalanceSettings{
+		Algorithm:        cfg.GetAlgorithm(),
+		HashKey:          cfg.HashKey,
+		SlowStartSeconds: cfg.SlowStartSeconds,
+		Algorithms:       loadbalance.AllAlgorithms,
+	}
+	if cfg.ActiveHealthCheck != nil {
+		settings.ActiveHealthCheck = cfg.ActiveHealthCheck.Normalized()
+		settings.ActiveHealthCheck.Enabled = cfg.ActiveHealthCheck.Enabled
+	} else {
+		settings.ActiveHealthCheck = loadbalance.ActiveHealthCheck{}.Normalized()
+	}
+	if cfg.PassiveHealthCheck != nil {
+		settings.PassiveHealthCheck = cfg.PassiveHealthCheck.Normalized()
+		settings.PassiveHealthCheck.Enabled = cfg.PassiveHealthCheck.Enabled
+	} else {
+		settings.PassiveHealthCheck = loadbalance.PassiveHealthCheck{}.Normalized()
+	}
+	if cfg.Retry != nil {
+		settings.Retry = cfg.Retry.Normalized()
+		settings.Retry.Enabled = cfg.Retry.Enabled
+	} else {
+		settings.Retry = loadbalance.RetryConfig{}.Normalized()
+	}
+	if settings.Retry.ExtraMethods == nil {
+		settings.Retry.ExtraMethods = []string{}
+	}
+	if settings.Retry.RetryStatuses == nil {
+		settings.Retry.RetryStatuses = []int{}
+	}
+
+	js, _ := json.Marshal(settings)
+	utils.SendJSONResponse(w, string(js))
+}
+
+// Set the load balancing, health check and retry settings of an endpoint
+// The whole config is passed in as JSON via the "payload" POST variable
+func ReverseProxyLoadBalanceSet(w http.ResponseWriter, r *http.Request) {
+	endpoint, err := utils.PostPara(r, "ep")
+	if err != nil {
+		utils.SendErrorResponse(w, "endpoint not defined")
+		return
+	}
+
+	targetEndpoint, err := dynamicProxyRouter.LoadProxy(endpoint)
+	if err != nil {
+		utils.SendErrorResponse(w, "target endpoint not found")
+		return
+	}
+
+	payload, err := utils.PostPara(r, "payload")
+	if err != nil {
+		utils.SendErrorResponse(w, "payload not set")
+		return
+	}
+
+	newConfig := &loadbalance.Config{}
+	if err := json.Unmarshal([]byte(payload), newConfig); err != nil {
+		utils.SendErrorResponse(w, "invalid payload: "+err.Error())
+		return
+	}
+	if err := newConfig.Validate(); err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
+	}
+	if newConfig.Algorithm == loadbalance.AlgoRandom {
+		newConfig.Algorithm = "" //Store the default as empty so the config stays minimal
+	}
+
+	//Swap the pointer: requests being served keep using the previous config object
+	targetEndpoint.LoadBalanceConfig = newConfig
+	//Pushing to runtime also (re)starts or stops the active health checks
+	targetEndpoint.UpdateToRuntime()
+
+	err = SaveReverseProxyConfig(targetEndpoint)
+	if err != nil {
+		SystemWideLogger.PrintAndLog("INFO", "Unable to save load balance settings", err)
+		utils.SendErrorResponse(w, "Failed to save load balance settings")
+		return
+	}
+
+	utils.SendOK(w)
+}
+
+// Set the draining state of an upstream. A draining upstream receives no new requests
+// (and no new sticky sessions) while requests in flight finish normally
+func ReverseProxyUpstreamSetDraining(w http.ResponseWriter, r *http.Request) {
+	endpoint, err := utils.PostPara(r, "ep")
+	if err != nil {
+		utils.SendErrorResponse(w, "endpoint not defined")
+		return
+	}
+
+	targetEndpoint, err := dynamicProxyRouter.LoadProxy(endpoint)
+	if err != nil {
+		utils.SendErrorResponse(w, "target endpoint not found")
+		return
+	}
+
+	originIP, err := utils.PostPara(r, "origin")
+	if err != nil {
+		utils.SendErrorResponse(w, "origin ip or matching address not set")
+		return
+	}
+	originIP = strings.TrimSpace(originIP)
+
+	draining, err := utils.PostBool(r, "draining")
+	if err != nil {
+		utils.SendErrorResponse(w, "draining state not defined")
+		return
+	}
+
+	editingUpstream, err := targetEndpoint.GetUpstreamOriginByMatchingIP(originIP)
+	if err != nil {
+		utils.SendErrorResponse(w, "target upstream not found")
+		return
+	}
+	editingUpstream.Draining = draining
+
+	err = SaveReverseProxyConfig(targetEndpoint)
+	if err != nil {
+		SystemWideLogger.PrintAndLog("INFO", "Unable to update upstream draining state", err)
+		utils.SendErrorResponse(w, "Failed to update upstream draining state")
+		return
+	}
+
+	utils.SendOK(w)
+}
+
+// Set the maximum number of concurrent in-flight requests of an upstream, 0 for unlimited
+func ReverseProxyUpstreamSetMaxInFlight(w http.ResponseWriter, r *http.Request) {
+	endpoint, err := utils.PostPara(r, "ep")
+	if err != nil {
+		utils.SendErrorResponse(w, "endpoint not defined")
+		return
+	}
+
+	targetEndpoint, err := dynamicProxyRouter.LoadProxy(endpoint)
+	if err != nil {
+		utils.SendErrorResponse(w, "target endpoint not found")
+		return
+	}
+
+	originIP, err := utils.PostPara(r, "origin")
+	if err != nil {
+		utils.SendErrorResponse(w, "origin ip or matching address not set")
+		return
+	}
+	originIP = strings.TrimSpace(originIP)
+
+	limit, err := utils.PostInt(r, "limit")
+	if err != nil || limit < 0 {
+		utils.SendErrorResponse(w, "invalid limit given")
+		return
+	}
+
+	editingUpstream, err := targetEndpoint.GetUpstreamOriginByMatchingIP(originIP)
+	if err != nil {
+		utils.SendErrorResponse(w, "target upstream not found")
+		return
+	}
+	editingUpstream.MaxInFlight = limit
+
+	err = SaveReverseProxyConfig(targetEndpoint)
+	if err != nil {
+		SystemWideLogger.PrintAndLog("INFO", "Unable to update upstream max in-flight limit", err)
+		utils.SendErrorResponse(w, "Failed to update upstream limit")
+		return
+	}
 
 	utils.SendOK(w)
 }

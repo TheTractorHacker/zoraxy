@@ -30,6 +30,10 @@ func RegisterHTTPProxyRestAPI(authMiddleware *auth.PluginAuthMiddleware) {
 	authMiddleware.HandleFunc("/api/proxy/upstream/setPriority", ReverseProxyUpstreamSetPriority)
 	authMiddleware.HandleFunc("/api/proxy/upstream/update", ReverseProxyUpstreamUpdate)
 	authMiddleware.HandleFunc("/api/proxy/upstream/remove", ReverseProxyUpstreamDelete)
+	authMiddleware.HandleFunc("/api/proxy/upstream/lb/get", ReverseProxyLoadBalanceGet)
+	authMiddleware.HandleFunc("/api/proxy/upstream/lb/set", ReverseProxyLoadBalanceSet)
+	authMiddleware.HandleFunc("/api/proxy/upstream/setDraining", ReverseProxyUpstreamSetDraining)
+	authMiddleware.HandleFunc("/api/proxy/upstream/setMaxInFlight", ReverseProxyUpstreamSetMaxInFlight)
 	/* Reverse proxy virtual directory */
 	authMiddleware.HandleFunc("/api/proxy/vdir/list", ReverseProxyListVdir)
 	/* Reverse proxy user-defined header */
