@@ -285,10 +285,11 @@ class Zoraxy:
 # --------------------------------------------------------------------------- raw http client
 
 class Resp:
-    def __init__(self, status, headers, body):
+    def __init__(self, status, headers, body, set_cookies=None):
         self.status = status
         self.headers = headers
         self.body = body
+        self.set_cookies = set_cookies or []
 
     @property
     def text(self):
@@ -324,7 +325,7 @@ def http_req(addr, port, host, path="/", method="GET", headers=None, body=None, 
         conn.request(method, path, body=body, headers=h, encode_chunked=chunked)
         r = conn.getresponse()
         data = r.read()
-        return Resp(r.status, {k.lower(): v for k, v in r.getheaders()}, data)
+        return Resp(r.status, {k.lower(): v for k, v in r.getheaders()}, data, r.msg.get_all("Set-Cookie") or [])
     finally:
         conn.close()
 

@@ -34,7 +34,7 @@ def verify(z, host, field, token, headers=None):
 
 
 def cookie_of(r):
-    sc = r.h("set-cookie", "")
+    sc = " ".join(r.set_cookies)
     m = re.search(r"zoraxy_captcha_session=([^;]+)", sc)
     return ("zoraxy_captcha_session=" + m.group(1)) if m else None
 
@@ -64,7 +64,7 @@ def captcha_altcha_flow():
         check(ok.status == 200 and ok.json().get("success") is True, "good PoW refused: %d %r" % (ok.status, ok.body[:100]))
         ck = cookie_of(ok)
         check(ck, "no session cookie issued")
-        sc = ok.h("set-cookie", "")
+        sc = " ".join(ok.set_cookies)
         check("HttpOnly" in sc, "session cookie not HttpOnly: " + sc)
         # replay of the solved challenge
         rep = verify(z, "cap.test", "altcha", tok)
