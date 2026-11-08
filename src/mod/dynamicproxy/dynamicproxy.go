@@ -405,35 +405,17 @@ func (router *Router) StartProxyService() error {
 // handleNonTLSRequest handles HTTP requests for endpoints that allow plain HTTP access
 // This is the common handler logic used by both port 80 listener and secondary listeners
 func (router *Router) handleNonTLSRequest(w http.ResponseWriter, r *http.Request, sep *ProxyEndpoint) {
-	//Access Check (blacklist / whitelist)
-	ruleID := sep.AccessFilterUUID
-	if sep.AccessFilterUUID == "" {
-		//Use default rule
-		ruleID = "default"
-	}
-	accessRule, err := router.Option.AccessController.GetAccessRuleByID(ruleID)
-	if err == nil {
-		isBlocked, _ := accessRequestBlocked(accessRule, router.Option.WebDirectory, w, r)
-		if isBlocked {
-			return
-		}
-	}
+	proxyHandler := router.mux.(*ProxyHandler)
 
-	// Rate Limit
-	if sep.RequireRateLimit {
-		if err := router.handleRateLimit(w, r, sep); err != nil {
-			return
-		}
-	}
-
-	// CAPTCHA Gating
-	if handled, _ := router.handleCaptchaGating(w, r, sep); handled {
+	//Same special routing / redirect / protection chain as the TLS handler
+	if proxyHandler.handleSpecialAndRedirect(w, r) {
 		return
 	}
-
-	//Validate authentication using all configured auth methods (Basic, ForwardAuth, OAuth2, ZorxAuth)
-	proxyHandler := router.mux.(*ProxyHandler)
-	if handleAuthProviderRouting(sep, w, r, proxyHandler) {
+	domainOnly := r.Host
+	if strings.Contains(r.Host, ":") {
+		domainOnly = strings.Split(r.Host, ":")[0]
+	}
+	if proxyHandler.runEndpointChain(w, r, sep, domainOnly) {
 		return
 	}
 

@@ -32,24 +32,9 @@ import (
 
 func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	/*
-		Special Routing Rules, bypass most of the limitations
+		Special Routing Rules and Redirection Routing
 	*/
-	//Check if there are external routing rule (rr) matches.
-	//If yes, route them via external rr
-	matchedRoutingRule := h.Parent.GetMatchingRoutingRule(r)
-	if matchedRoutingRule != nil {
-		//Matching routing rule found. Let the sub-router handle it
-		matchedRoutingRule.Route(w, r)
-		return
-	}
-
-	/*
-		Redirection Routing
-	*/
-	//Check if this is a redirection url
-	if h.Parent.Option.RedirectRuleTable.IsRedirectable(r) {
-		statusCode := h.Parent.Option.RedirectRuleTable.HandleRedirect(w, r)
-		h.Parent.logRequest(r, statusCode != 500, statusCode, "redirect", r.Host, "", nil)
+	if h.handleSpecialAndRedirect(w, r) {
 		return
 	}
 
@@ -64,60 +49,8 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	sep := h.Parent.GetProxyEndpointFromHostname(domainOnly)
 	if sep != nil && !sep.Disabled {
-		//Matching proxy rule found
-		//Access Check (blacklist / whitelist)
-		ruleID := sep.AccessFilterUUID
-		if sep.AccessFilterUUID == "" {
-			//Use default rule
-			ruleID = "default"
-		}
-		if h.handleAccessRouting(ruleID, w, r, sep) {
-			//Request handled by subroute
-			return
-		}
-
-		/* Exploit Detection */
-		if sep.detector != nil {
-			if sep.detector.CheckIsAttack(w, r) {
-				statusCode := 403
-				if sep.detector != nil {
-					statusCode = sep.detector.GetResponseStatusCode()
-				}
-				h.Parent.logRequest(r, false, statusCode, "exploit-blocked", domainOnly, "blocked", sep)
-				return
-			}
-		}
-
-		// Rate Limit
-		if sep.RequireRateLimit {
-			err := h.handleRateLimitRouting(w, r, sep)
-			if err != nil {
-				if !sep.DisableLogging {
-					clientIP := h.Parent.GetClientIPForEndpoint(r, sep)
-					h.Parent.Option.Logger.LogHTTPRequest(r, "host", 307, r.Host, "", clientIP)
-				}
-				return
-			}
-		}
-
-		// CAPTCHA Gating
-		if handled, challenged := h.Parent.handleCaptchaGating(w, r, sep); handled {
-			if challenged {
-				h.Parent.logRequest(r, false, 403, "captcha-required", domainOnly, "captcha", sep)
-			}
-			return
-		}
-
-		//Validate auth (basic auth or SSO auth)
-		respWritten := handleAuthProviderRouting(sep, w, r, h)
-		if respWritten {
-			//Request handled by subroute
-			return
-		}
-
-		//Plugin routing
-		if h.Parent.Option.PluginManager != nil && h.Parent.Option.PluginManager.HandleRoute(w, r, sep.Tags, h.Parent.GetClientIPForEndpoint(r, sep)) {
-			//Request handled by subroute
+		//Matching proxy rule found. Run the shared pre-proxy chain
+		if h.runEndpointChain(w, r, sep, domainOnly) {
 			return
 		}
 
@@ -282,4 +215,105 @@ func (h *ProxyHandler) serve404PageWithTemplate(w http.ResponseWriter, r *http.R
 	} else {
 		w.Write(template)
 	}
+}
+
+/*
+handleSpecialAndRedirect applies the routing steps that sit above host routing:
+external special routing rules (e.g. ACME) and redirection rules.
+Shared by the TLS handler and the non-TLS listeners.
+Returns true if the request has been handled.
+*/
+func (h *ProxyHandler) handleSpecialAndRedirect(w http.ResponseWriter, r *http.Request) bool {
+	//Check if there are external routing rule (rr) matches.
+	//If yes, route them via external rr
+	matchedRoutingRule := h.Parent.GetMatchingRoutingRule(r)
+	if matchedRoutingRule != nil {
+		//Matching routing rule found. Let the sub-router handle it
+		matchedRoutingRule.Route(w, r)
+		return true
+	}
+
+	//Check if this is a redirection url
+	if h.Parent.Option.RedirectRuleTable != nil && h.Parent.Option.RedirectRuleTable.IsRedirectable(r) {
+		statusCode := h.Parent.Option.RedirectRuleTable.HandleRedirect(w, r)
+		h.Parent.logRequest(r, statusCode != 500, statusCode, "redirect", r.Host, "", nil)
+		return true
+	}
+	return false
+}
+
+/*
+runEndpointChain is the single pre-proxy protection chain for a matched proxy
+endpoint, shared by the TLS handler (ServeHTTP) and the non-TLS handlers
+(port 80 bypass and secondary listening ports) so the two can never drift apart.
+
+Order: access (blacklist / whitelist) -> exploit detection -> rate limit
+-> captcha -> auth (basic / SSO) -> plugin routing.
+
+Returns true if the request has been fully handled (blocked or answered).
+*/
+func (h *ProxyHandler) runEndpointChain(w http.ResponseWriter, r *http.Request, sep *ProxyEndpoint, domainOnly string) bool {
+	//Access Check (blacklist / whitelist)
+	ruleID := sep.AccessFilterUUID
+	if sep.AccessFilterUUID == "" {
+		//Use default rule
+		ruleID = "default"
+	}
+	if h.handleAccessRouting(ruleID, w, r, sep) {
+		//Request handled by subroute
+		return true
+	}
+
+	/* Exploit Detection */
+	if sep.detector != nil {
+		if sep.detector.CheckIsAttack(w, r) {
+			statusCode := sep.detector.GetResponseStatusCode()
+			h.Parent.logRequest(r, false, statusCode, "exploit-blocked", domainOnly, "blocked", sep)
+			return true
+		}
+	}
+
+	// Rate Limit
+	if sep.RequireRateLimit {
+		err := h.handleRateLimitRouting(w, r, sep)
+		if err != nil {
+			if !sep.DisableLogging {
+				clientIP := h.Parent.GetClientIPForEndpoint(r, sep)
+				h.Parent.Option.Logger.LogHTTPRequest(r, "host", 307, r.Host, "", clientIP)
+			}
+			return true
+		}
+	}
+
+	// CAPTCHA Gating
+	if handled, challenged := h.Parent.handleCaptchaGating(w, r, sep); handled {
+		if challenged {
+			h.Parent.logRequest(r, false, 403, "captcha-required", domainOnly, "captcha", sep)
+		}
+		return true
+	}
+
+	//Validate auth (basic auth or SSO auth)
+	if handleAuthProviderRouting(sep, w, r, h) {
+		//Request handled by subroute
+		return true
+	}
+
+	//Plugin routing
+	if h.Parent.routePlugin(w, r, sep) {
+		return true
+	}
+	return false
+}
+
+// routePlugin lets the plugin manager (if any) handle the request
+func (router *Router) routePlugin(w http.ResponseWriter, r *http.Request, sep *ProxyEndpoint) bool {
+	if router.pluginRouteHook != nil {
+		//Test seam, a real plugin.Manager needs running plugin processes
+		return router.pluginRouteHook(w, r, sep)
+	}
+	if router.Option.PluginManager != nil {
+		return router.Option.PluginManager.HandleRoute(w, r, sep.Tags, router.GetClientIPForEndpoint(r, sep))
+	}
+	return false
 }
