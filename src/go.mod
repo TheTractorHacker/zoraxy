@@ -18,6 +18,7 @@ require (
 	github.com/jellydator/ttlcache/v3 v3.4.0
 	github.com/likexian/whois v1.15.1
 	github.com/microcosm-cc/bluemonday v1.0.26
+	github.com/miekg/dns v1.1.73
 	github.com/moby/moby/client v0.3.0
 	github.com/pires/go-proxyproto v0.8.1
 	github.com/quic-go/quic-go v0.61.0
@@ -193,7 +194,6 @@ require (
 	github.com/liquidweb/liquidweb-cli v0.7.0 // indirect
 	github.com/liquidweb/liquidweb-go v1.6.4 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
-	github.com/miekg/dns v1.1.73 // indirect
 	github.com/mimuret/golang-iij-dpf v0.9.1 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect

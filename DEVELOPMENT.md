@@ -986,3 +986,11 @@ PY=./venv/bin/python tools/ui-smoke/run.sh --out ~/ui-smoke-shots
 ```
 
 Exit status is non-zero on any failure; `--allow REGEX` tolerates a known message (e.g. offline-only failures).
+
+## Proxy ops 2: plain HTTP listener address, network calculators, DNS responder
+
+**Plain HTTP listener address (upstream #909).** `RouterOption.HttpListenAddr` (default empty = `:80`, behaviour unchanged) sets where the optional plain-HTTP listener binds (`src/mod/dynamicproxy/httplistenaddr.go`). DB key `settings/httpListenAddr`. API `GET/POST /api/proxy/httpListenAddr` (`addr=host:port`, empty resets). Validation refuses a bad host/port, the management UI port (`-port`) and the HTTPS proxy port. A change restarts the proxy service. The existing "Enable HTTP server on port 80" toggle and the redirect toggle apply to whatever address is configured. UI: `components/globalsettings.html`.
+
+**Network calculators (upstream #504).** `src/mod/netcalc`: IPv4/CIDR and IPv6 calculators and range-to-CIDR, all constant-time big-integer arithmetic (a `::/0` query is free). `GET /api/tools/netcalc?q=...` (admin auth). UI: `components/netcalc.html` in the Network Tools "Calculators" tab.
+
+**DNS responder (upstream #769, opt-in).** `src/mod/dnsresponder`: UDP+TCP authoritative responder for proxy rule hostnames and aliases (wildcards by glob), built on `github.com/miekg/dns`. Off by default; must be bound to a specific IP (wildcard bind needs `allowAllInterfaces`); default port 5353; non-hosted names get REFUSED; optional forwarding only when `forwardEnabled` and the client is inside `allowedCidrs` (a `/0` is refused); ANY/AXFR refused; per-client token bucket (queries over the limit are dropped), UDP size cap, TCP timeouts and connection cap. Config in DB key `settings/dnsResponder`, API `GET/POST /api/tools/dnsresponder` (`config=<JSON>`), glue in `src/dnsresponder_glue.go`, UI `components/dnsresponder.html` ("DNS Responder" tab of Network Tools). It is a split-horizon helper, not a general DNS server; do not expose it to the internet.

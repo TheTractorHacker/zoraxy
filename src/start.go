@@ -469,11 +469,15 @@ func finalSequence() {
 
 	//Set the host specific TLS behavior resolver for resolving TLS behavior for each hostname
 	tlsCertManager.SetHostSpecificTlsBehavior(dynamicProxyRouter.ResolveHostSpecificTlsBehaviorForHostname)
+
+	//Opt-in split-horizon DNS responder (off unless enabled), see dnsresponder_glue.go
+	startDNSResponder()
 }
 
 /* Shutdown Sequence */
 func ShutdownSeq() {
 	SystemWideLogger.Println("Shutting down " + SYSTEM_NAME)
+	stopDNSResponder()
 	SystemWideLogger.Println("Closing Netstats Listener")
 	if netstatBuffers != nil {
 		netstatBuffers.Close()

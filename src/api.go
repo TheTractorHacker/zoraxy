@@ -305,6 +305,7 @@ func RegisterStaticWebServerAPIs(authRouter *auth.RouterDef) {
 // Register the APIs for Network Utilities functions
 func RegisterNetworkUtilsAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/tools/netcalc", netcalc.HandleNetCalc)
+	authRouter.HandleFunc("/api/tools/dnsresponder", HandleDNSResponder)
 	authRouter.HandleFunc("/api/tools/ipscan", ipscan.HandleIpScan)
 	authRouter.HandleFunc("/api/tools/portscan", ipscan.HandleScanPort)
 	authRouter.HandleFunc("/api/tools/traceroute", netutils.HandleTraceRoute)
