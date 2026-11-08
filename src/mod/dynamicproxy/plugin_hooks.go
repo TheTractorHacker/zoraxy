@@ -20,6 +20,8 @@ func (router *Router) routePluginStage(w http.ResponseWriter, r *http.Request, s
 	if router.Option.PluginManager == nil {
 		return false
 	}
+	//Attach the matched rule in place: the hook stages may swap r.Body (body preview) and the caller must see that
+	*r = *plugins.WithRuleInfo(r, sep.RootOrMatchingDomain, sep.Tags)
 	res := router.Option.PluginManager.HandleStage(w, r, sep.Tags, router.GetClientIPForEndpoint(r, sep), stage)
 	if res.Denied {
 		router.logRequest(r, false, res.Status, "plugin-blocked", r.Host, res.PluginID, sep)
