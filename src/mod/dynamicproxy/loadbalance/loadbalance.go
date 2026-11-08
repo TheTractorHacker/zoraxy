@@ -30,8 +30,14 @@ type RouteManager struct {
 	OnlineStatus sync.Map //Store the online status notify by uptime monitor
 	Options      Options  //Options for the load balancer
 
+	//Now returns the current time. Defaults to time.Now, replaced in tests
+	Now func() time.Time
+
 	cacheTicker     *time.Ticker //Ticker for cache cleanup
 	cacheTickerStop chan bool    //Stop the cache cleanup
+
+	hcMu     sync.Mutex
+	hcGroups map[string]*healthGroup //Running active health check groups, by endpoint key
 }
 
 /* Upstream or Origin Server */
@@ -49,8 +55,21 @@ type Upstream struct {
 	MaxConn     int   //Maxmium concurrent requests to this upstream dpcore instance
 	RespTimeout int64 //Response header timeout in milliseconds
 
-	//currentConnectionCounts atomic.Uint64 //Counter for number of client currently connected
-	proxy *dpcore.ReverseProxy
+	//Optional runtime controls, all zero values keep the historical behavior
+	MaxInFlight int                //Maximum concurrent in-flight requests to this upstream, 0 = unlimited
+	Draining    bool               //Receive no new requests (sticky sessions are re-assigned), in-flight requests finish normally
+	HealthCheck *ActiveHealthCheck //Overrides the endpoint level active health check for this upstream when set
+
+	proxy         *dpcore.ReverseProxy
+	tlsServerName string //TLS server name override given to StartProxy, reused by the health checker
+	rt            upstreamRuntime
+}
+
+func (m *RouteManager) now() time.Time {
+	if m.Now != nil {
+		return m.Now()
+	}
+	return time.Now()
 }
 
 // Create a new load balancer
@@ -82,6 +101,7 @@ func NewLoadBalancer(options *Options) *RouteManager {
 		SessionStore: store,
 		OnlineStatus: sync.Map{},
 		Options:      *options,
+		Now:          time.Now,
 
 		cacheTicker:     cacheTicker,
 		cacheTickerStop: cacheTickerStop,
@@ -118,6 +138,9 @@ func (m *RouteManager) ResetSessions() {
 }
 
 func (m *RouteManager) Close() {
+	//Stop all active health check goroutines
+	m.StopAllHealthChecks()
+
 	//Close the session store
 	m.SessionStore.MaxAge(0)
 
@@ -125,10 +148,15 @@ func (m *RouteManager) Close() {
 	if m.cacheTicker != nil {
 		m.cacheTicker.Stop()
 	}
-	close(m.cacheTickerStop)
+	if m.cacheTickerStop != nil {
+		close(m.cacheTickerStop)
+	}
 }
 
 // Log Println, replace all log.Println or fmt.Println with this
 func (m *RouteManager) println(message string, err error) {
+	if m.Options.Logger == nil {
+		return
+	}
 	m.Options.Logger.PrintAndLog("LoadBalancer", message, err)
 }
