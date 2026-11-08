@@ -387,7 +387,10 @@ func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request, rrr 
 	}
 
 	// Fix for #1204 HTTP/2 to HTTP/1.1 translation for bodyless POST requests.
-	if outreq.ContentLength == -1 && outreq.Body != nil && outreq.Body != http.NoBody {
+	// Skip for gRPC: streaming RPCs may send no body until the server responds,
+	// so a blocking peek here deadlocks bidirectional streams (e.g. NetBird Signal).
+	isGRPC := strings.HasPrefix(strings.ToLower(req.Header.Get("Content-Type")), "application/grpc")
+	if !isGRPC && outreq.ContentLength == -1 && outreq.Body != nil && outreq.Body != http.NoBody {
 		buf := make([]byte, 1)
 		n, err := outreq.Body.Read(buf)
 		switch {
