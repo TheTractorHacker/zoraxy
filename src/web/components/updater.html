@@ -157,7 +157,7 @@
         state.check = res;
         let l = res.latest;
         $("#upLatest").text(l ? l.tag : "none");
-        $("#upLatestDetail").text(l ? ("Published " + fmtTime(l.published) + (l.prerelease ? " (pre-release)" : "") +
+        $("#upLatestDetail").text(l ? ("Published " + fmtTime(l.published) + ((l.early_access || l.prerelease) ? " (early access / pre-release)" : "") +
             ", " + res.asset_name + " " + fmtSize(res.asset_size)) : "");
         let $r = $("#upReason");
         if (res.update_available){

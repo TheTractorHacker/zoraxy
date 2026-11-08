@@ -102,6 +102,7 @@ func (s *source) releases(ctx context.Context) ([]Release, error) {
 		for _, a := range r.Assets {
 			rel.Assets = append(rel.Assets, Asset{Name: a.Name, Size: a.Size, URL: a.URL})
 		}
+		rel.MarkEarlyAccess()
 		out = append(out, rel)
 	}
 	return out, nil

@@ -80,13 +80,17 @@ func CompareReleases(a, b BuildID) int {
 
 // Release is the subset of a GitHub release the updater needs.
 type Release struct {
-	Tag        string    `json:"tag"`
-	Name       string    `json:"name"`
-	Notes      string    `json:"notes"`
-	URL        string    `json:"url"`
-	Prerelease bool      `json:"prerelease"`
-	Published  time.Time `json:"published"`
-	Assets     []Asset   `json:"assets"`
+	Tag        string `json:"tag"`
+	Name       string `json:"name"`
+	Notes      string `json:"notes"`
+	URL        string `json:"url"`
+	Prerelease bool   `json:"prerelease"`
+	// EarlyAccess marks releases the UI must label as early access: GitHub pre-releases and every
+	// release candidate ("-rcN" tags), even when the GitHub pre-release flag was not ticked (upstream #969).
+	// It is informational only; channel selection still follows the Prerelease flag.
+	EarlyAccess bool      `json:"early_access"`
+	Published   time.Time `json:"published"`
+	Assets      []Asset   `json:"assets"`
 }
 
 // Asset is a release asset.
@@ -94,6 +98,14 @@ type Asset struct {
 	Name string `json:"name"`
 	Size int64  `json:"size"`
 	URL  string `json:"-"`
+}
+
+// MarkEarlyAccess sets EarlyAccess from the GitHub flag and the tag.
+func (r *Release) MarkEarlyAccess() {
+	r.EarlyAccess = r.Prerelease
+	if t, err := ParseTag(r.Tag); err == nil && t.RC > 0 {
+		r.EarlyAccess = true
+	}
 }
 
 // ID returns the ordering identity of the release.
