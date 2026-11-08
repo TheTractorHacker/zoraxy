@@ -34,6 +34,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -45,6 +46,7 @@ import (
 	"imuslab.com/zoraxy/mod/auth"
 	"imuslab.com/zoraxy/mod/geodb"
 	"imuslab.com/zoraxy/mod/update"
+	"imuslab.com/zoraxy/mod/updater"
 	"imuslab.com/zoraxy/mod/utils"
 )
 
@@ -78,6 +80,36 @@ func main() {
 	ACME_AUTORENEW_CONFIG_PATH = CONF_FOLDER + "/acme_conf.json"
 	CONF_TRUSTED_PROXIES = CONF_FOLDER + "/trusted_proxies.json"
 
+	/* Out-of-process rollback watchdog (spawned by the in-app updater) */
+	if *updaterWatchdog != "" {
+		os.Exit(updater.RunWatchdog(*updaterWatchdog, log.Printf))
+	}
+
+	/* In-app updater. Creating the manager performs no I/O and no network access. */
+	updateManager = updater.New(updater.Config{
+		Repo:           *updateRepo,
+		ConfDir:        CONF_FOLDER,
+		DBPath:         *path_database,
+		UUIDPath:       *path_uuid,
+		CurrentVersion: SYSTEM_VERSION,
+		InDocker:       *runningInDocker,
+		Migrate: func() error {
+			update.RunConfigUpdate(0, update.GetVersionIntFromVersionNumber(SYSTEM_VERSION))
+			return nil
+		},
+		Shutdown: func() {
+			if SystemWideLogger != nil && sysdb != nil { //nothing to flush before startup completed
+				ShutdownSeq()
+			}
+		},
+		Logf: func(format string, a ...any) {
+			if SystemWideLogger != nil {
+				SystemWideLogger.Println(fmt.Sprintf(format, a...))
+			} else {
+				log.Printf(format, a...)
+			}
+		},
+	})
 	/* Maintaince Function Modes */
 	if *showver {
 		fmt.Println(SYSTEM_NAME + " - Version " + SYSTEM_VERSION)
@@ -94,6 +126,9 @@ func main() {
 	}
 
 	/* Main Zoraxy Routines */
+	//If this start follows an in-app update, arm the automatic rollback timer.
+	//Only touches local files; MarkHealthy() below disarms it.
+	updateManager.StartGuard()
 	if !utils.ValidateListeningAddress(*webUIPort) {
 		fmt.Println("Malformed -port (listening address) paramter. Do you mean -port=:" + *webUIPort + "?")
 		os.Exit(0)
@@ -162,7 +197,15 @@ func main() {
 		SystemWideLogger.Println(SYSTEM_NAME + " started. Visit control panel at http://" + *webUIPort)
 	}
 
-	err = http.ListenAndServe(*webUIPort, entryMux)
+	listener, err := net.Listen("tcp", *webUIPort)
+	if err != nil {
+		log.Fatal(err)
+	}
+	//Admin HTTP listener is bound and the proxy router is initialised: this
+	//start is healthy, so confirm a pending in-app update.
+	updateManager.MarkHealthy()
+
+	err = http.Serve(listener, entryMux)
 
 	if err != nil {
 		log.Fatal(err)

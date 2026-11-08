@@ -37,6 +37,7 @@ import (
 	"imuslab.com/zoraxy/mod/statistic/analytic"
 	"imuslab.com/zoraxy/mod/streamproxy"
 	"imuslab.com/zoraxy/mod/tlscert"
+	"imuslab.com/zoraxy/mod/updater"
 	"imuslab.com/zoraxy/mod/uptime"
 	"imuslab.com/zoraxy/mod/webserv"
 )
@@ -117,6 +118,8 @@ var (
 	/* Maintaince & Development Function Flags */
 	geoDbUpdate       = flag.Bool("update_geoip", false, "Download the latest GeoIP data and exit")
 	development_build = flag.Bool("dev", false, "Use external web folder for UI development and enable verbose logging")
+	updateRepo        = flag.String("update_repo", updater.DefaultRepo, "GitHub repository (owner/name) the Update page fetches releases from")
+	updaterWatchdog   = flag.String("updater_watchdog", "", "Internal: run the post-update rollback watchdog for the given pending-update marker and exit")
 	reset_account     = flag.Bool("reset_ac", false, "Reset admin account username and password to default and exit")
 )
 
@@ -155,6 +158,7 @@ var (
 	/*
 		Handler Modules
 	*/
+	updateManager  *updater.Manager                //In-app updater (Update page)
 	sysdb          *database.Database              //System database
 	authAgent      *auth.AuthAgent                 //Authentication agent
 	tlsCertManager *tlscert.Manager                //TLS / SSL management

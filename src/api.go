@@ -27,6 +27,19 @@ import (
 	If you are adding new plugin api, add them in plugin_api.go instead of this file
 */
 
+// Register the APIs of the in-app updater (Update page). Mutations are POST
+// only; see mod/updater/api.go.
+func RegisterUpdaterAPIs(authRouter *auth.RouterDef) {
+	authRouter.HandleFunc("/api/updater/info", updateManager.HandleInfo)
+	authRouter.HandleFunc("/api/updater/check", updateManager.HandleCheck)
+	authRouter.HandleFunc("/api/updater/status", updateManager.HandleStatus)
+	authRouter.HandleFunc("/api/updater/history", updateManager.HandleHistory)
+	authRouter.HandleFunc("/api/updater/start", updateManager.HandleStart)
+	authRouter.HandleFunc("/api/updater/rollback", updateManager.HandleRollback)
+	authRouter.HandleFunc("/api/updater/setChannel", updateManager.HandleSetChannel)
+	authRouter.HandleFunc("/api/updater/setBackup", updateManager.HandleSetBackup)
+}
+
 // Register the APIs for HTTP proxy management functions
 func RegisterHTTPProxyAPIs(authRouter *auth.RouterDef) {
 	/* Reverse Proxy Settings & Status */
@@ -438,6 +451,7 @@ func initAPIs(targetMux *http.ServeMux) {
 	RegisterStreamProxyAPIs(authRouter)
 	RegisterMDNSAPIs(authRouter)
 	RegisterNetworkUtilsAPIs(authRouter)
+	RegisterUpdaterAPIs(authRouter)
 	RegisterACMEAndAutoRenewerAPIs(authRouter)
 	RegisterStaticWebServerAPIs(authRouter)
 	RegisterPluginAPIs(authRouter)
