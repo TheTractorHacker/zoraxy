@@ -260,12 +260,17 @@ runEndpointChain is the single pre-proxy protection chain for a matched proxy
 endpoint, shared by the TLS handler (ServeHTTP) and the non-TLS handlers
 (port 80 bypass and secondary listening ports) so the two can never drift apart.
 
-Order: access (blacklist / whitelist) -> plugin pre_auth -> WAF -> exploit detection -> rate limit
+Order: allowed peer set -> access (blacklist / whitelist) -> client cert -> path rules -> plugin pre_auth -> WAF -> exploit detection -> rate limit
 -> captcha -> auth (basic / SSO) -> plugin routing.
 
 Returns true if the request has been fully handled (blocked or answered).
 */
 func (h *ProxyHandler) runEndpointChain(w http.ResponseWriter, r *http.Request, sep *ProxyEndpoint, domainOnly string) bool {
+	//Direct peer must be in the allowed set (upstream #761), checked before anything else
+	if h.enforcePeerSet(w, r, sep) {
+		return true
+	}
+
 	//Access Check (blacklist / whitelist)
 	ruleID := sep.AccessFilterUUID
 	if sep.AccessFilterUUID == "" {
@@ -274,6 +279,11 @@ func (h *ProxyHandler) runEndpointChain(w http.ResponseWriter, r *http.Request, 
 	}
 	if h.handleAccessRouting(ruleID, w, r, sep) {
 		//Request handled by subroute
+		return true
+	}
+
+	//Networking: client certificate policy (mTLS) and path scoped rules, see clientcert.go / pathrules.go
+	if h.enforceClientCert(w, r, sep) || h.handlePathRules(w, r, sep) {
 		return true
 	}
 

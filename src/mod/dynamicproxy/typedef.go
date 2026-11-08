@@ -12,6 +12,7 @@ import (
 	"imuslab.com/zoraxy/mod/metrics"
 	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 	"sync"
 
@@ -156,6 +157,7 @@ type Router struct {
 	secondaryServers     map[string]*http.Server //Map of secondary listening servers, key is the listening address (ip:port or :port)
 	secondaryStopChans   map[string]chan bool    //Stop channels for secondary listening servers
 	secondaryServerMutex sync.RWMutex            //Mutex for accessing secondary server maps
+	secondaryTLS         map[string]bool         //Secondary listeners that speak TLS (guarded by secondaryServerMutex)
 
 }
 
@@ -357,6 +359,12 @@ type ProxyEndpoint struct {
 	//Access Control
 	AccessFilterUUID string //Access filter ID
 
+	//Networking options, all opt-in (zero value = off). Logic in clientcert.go, pathrules.go, peerset.go
+	ClientCert        *ClientCertConfig `json:",omitempty"` //Inbound client certificate (mTLS) policy
+	PathRules         []*PathRule       `json:",omitempty"` //Ordered path scoped access control / rate limit rules
+	AllowedPeerCIDRs  []string          `json:",omitempty"` //Only accept connections whose TCP peer is in this set (empty = any)
+	SecondaryPortsTLS bool              //Serve the secondary listening ports of this endpoint over TLS
+
 	//Fallback routing logic (Special Rule Sets Only)
 	DefaultSiteOption int    //Fallback routing logic options
 	DefaultSiteValue  string //Fallback routing target, optional
@@ -365,7 +373,14 @@ type ProxyEndpoint struct {
 	parent   *Router            `json:"-"` //Parent router, excluded from JSON
 	detector *exploits.Detector `json:"-"` //Exploit detector instance, excluded from JSON
 	wafInst  *waf.Instance      `json:"-"` //Compiled WAF instance (shared between identical configs), excluded from JSON
-	Tags     []string           // Tags for the proxy endpoint
+
+	clientCert    *clientCertRuntime  `json:"-"` //Compiled client certificate policy
+	clientCertErr error               `json:"-"` //Compile error, the endpoint then fails closed
+	pathRules     []*compiledPathRule `json:"-"` //Compiled path rules
+	pathRulesErr  error               `json:"-"`
+	peerSet       []netip.Prefix      `json:"-"` //Compiled allowed peer set
+	peerSetErr    error               `json:"-"`
+	Tags          []string            // Tags for the proxy endpoint
 }
 
 /*

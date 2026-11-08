@@ -227,6 +227,9 @@ func (router *Router) StartProxyService() error {
 	//Apply the TLS cipher profile (default = Go defaults, see tlscipherprofile.go)
 	ApplyTlsCipherProfile(config, router.Option.TlsCipherProfile)
 
+	//Endpoints with client certificates (mTLS) enabled ask for one, selected by SNI name
+	config.GetConfigForClient = router.clientCertGetConfig(config)
+
 	//Start rate limitor
 	err := router.startRateLimterCounterResetTicker()
 	if err != nil {
@@ -550,10 +553,23 @@ func (router *Router) startSecondaryListeners() {
 		// Create stop channel
 		stopChan := make(chan bool)
 
+		// TLS on this secondary port? (opt-in per endpoint, see secondarytls.go)
+		useTLS, mixed := router.addrWantsTLS(addr)
+		if useTLS {
+			secondaryServer.TLSConfig = router.secondaryTLSConfig()
+			if mixed {
+				router.Option.Logger.PrintAndLog("dprouter", "Secondary listener "+addr+" is shared by endpoints with and without TLS; it serves TLS only", nil)
+			}
+		}
+
 		// Store in maps
 		router.secondaryServerMutex.Lock()
 		router.secondaryServers[addr] = secondaryServer
 		router.secondaryStopChans[addr] = stopChan
+		if router.secondaryTLS == nil {
+			router.secondaryTLS = map[string]bool{}
+		}
+		router.secondaryTLS[addr] = useTLS
 		router.secondaryServerMutex.Unlock()
 
 		// Start shutdown handler
@@ -566,7 +582,13 @@ func (router *Router) startSecondaryListeners() {
 
 		// Start the server
 		go func(addr string) {
-			if err := secondaryServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			var err error
+			if useTLS {
+				err = secondaryServer.ListenAndServeTLS("", "")
+			} else {
+				err = secondaryServer.ListenAndServe()
+			}
+			if err != nil && err != http.ErrServerClosed {
 				router.Option.Logger.PrintAndLog("dprouter", "Secondary listener on "+addr+" failed", err)
 			}
 		}(addr)
@@ -601,13 +623,19 @@ func (router *Router) UpdateSecondaryListeners() {
 	// Stop listeners that are no longer needed
 	router.secondaryServerMutex.Lock()
 	for addr := range router.secondaryServers {
-		if _, exists := newCommonPorts[addr]; !exists {
-			// This port is no longer needed, stop it
+		wantTLS, _ := router.addrWantsTLS(addr)
+		if _, exists := newCommonPorts[addr]; !exists || router.secondaryTLS[addr] != wantTLS {
+			// This port is no longer needed (or switches between HTTP and TLS), stop it
+			if _, stillWanted := newCommonPorts[addr]; stillWanted {
+				//Free the port right away so the restarted listener can bind it
+				router.secondaryServers[addr].Close()
+			}
 			if stopChan, ok := router.secondaryStopChans[addr]; ok {
 				stopChan <- true
 			}
 			delete(router.secondaryServers, addr)
 			delete(router.secondaryStopChans, addr)
+			delete(router.secondaryTLS, addr)
 			router.Option.Logger.PrintAndLog("dprouter", "Stopped secondary listener on "+addr, nil)
 		}
 	}
