@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"imuslab.com/zoraxy/mod/auth"
 	"imuslab.com/zoraxy/mod/dynamicproxy"
@@ -46,6 +47,7 @@ func RegisterWAFAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/waf/events", HandleWAFEvents)
 	authRouter.HandleFunc("/api/waf/stats", HandleWAFStats)
 	authRouter.HandleFunc("/api/waf/exclude", HandleWAFExclude)
+	RegisterWAFCentralAPIs(authRouter)
 }
 
 func parseWAFConfig(r *http.Request) (*waf.Config, error) {
@@ -58,30 +60,6 @@ func parseWAFConfig(r *http.Request) (*waf.Config, error) {
 		return nil, err
 	}
 	return cfg, nil
-}
-
-// applyWAFConfig replaces the WAF config of an endpoint at runtime and persists it.
-// Compilation errors (including custom rule syntax errors) reject the change.
-func applyWAFConfig(rootNameOrMatchingDomain string, mutate func(old *waf.Config) (*waf.Config, error)) error {
-	target, err := dynamicProxyRouter.LoadProxy(rootNameOrMatchingDomain)
-	if err != nil {
-		return err
-	}
-	updated := dynamicproxy.CopyEndpoint(target)
-	newCfg, err := mutate(updated.WAF)
-	if err != nil {
-		return err
-	}
-	updated.WAF = newCfg
-	ready, err := dynamicProxyRouter.PrepareProxyRoute(updated)
-	if err != nil {
-		return err
-	}
-	target.Remove()
-	loadBalancer.ResetSessions()
-	dynamicProxyRouter.AddProxyRouteToRuntime(ready)
-	SaveReverseProxyConfig(updated)
-	return nil
 }
 
 // HandleWAFSet sets the WAF config of an endpoint. POST rootname, config (JSON)
@@ -100,7 +78,13 @@ func HandleWAFSet(w http.ResponseWriter, r *http.Request) {
 		utils.SendErrorResponse(w, "Invalid config: "+err.Error())
 		return
 	}
-	if err := applyWAFConfig(ep, func(*waf.Config) (*waf.Config, error) { return cfg, nil }); err != nil {
+	err = applyWAFEndpoint(ep, func(e *dynamicproxy.ProxyEndpoint, _ *waf.State) error {
+		e.WAF = cfg
+		e.WAFSource = waf.SourceCustom
+		e.WAFProfile = ""
+		return nil
+	})
+	if err != nil {
 		utils.SendErrorResponse(w, err.Error())
 		return
 	}
@@ -125,14 +109,40 @@ func HandleWAFValidate(w http.ResponseWriter, r *http.Request) {
 	utils.SendOK(w)
 }
 
-// HandleWAFEvents lists recent events, newest first. GET limit, endpoint
+// HandleWAFEvents lists recent events across all endpoints, newest first.
+// GET limit, endpoint, rule, action (blocked|detected), ip, since (unix seconds or RFC3339)
 func HandleWAFEvents(w http.ResponseWriter, r *http.Request) {
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
 	if limit <= 0 || limit > 1000 {
 		limit = 200
 	}
-	js, _ := json.Marshal(waf.Default.RecentEvents(limit, r.URL.Query().Get("endpoint")))
+	f := waf.EventFilter{Limit: limit, Endpoint: q.Get("endpoint"), Action: q.Get("action"), ClientIP: q.Get("ip")}
+	if rule := strings.TrimSpace(q.Get("rule")); rule != "" {
+		id, err := strconv.Atoi(rule)
+		if err != nil {
+			utils.SendErrorResponse(w, "invalid rule filter")
+			return
+		}
+		f.RuleID = id
+	}
+	f.Since = parseSince(q.Get("since"))
+	js, _ := json.Marshal(waf.Default.QueryEvents(f))
 	utils.SendJSONResponse(w, string(js))
+}
+
+func parseSince(v string) time.Time {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return time.Time{}
+	}
+	if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+		return time.Unix(n, 0)
+	}
+	if t, err := time.Parse(time.RFC3339, v); err == nil {
+		return t
+	}
+	return time.Time{}
 }
 
 // HandleWAFStats returns counters per rule and per endpoint
@@ -141,16 +151,12 @@ func HandleWAFStats(w http.ResponseWriter, r *http.Request) {
 	utils.SendJSONResponse(w, string(js))
 }
 
-// HandleWAFExclude adds an exclusion for a rule, either for one path or the
-// whole endpoint. POST rootname, ruleid, path (optional, empty = whole endpoint)
+// HandleWAFExclude adds an exclusion for a rule. POST ruleid, path (optional),
+// exact (optional), scope: "endpoint" (default, needs rootname; with a path it is
+// a path exclusion) or "global" (policy wide; with a path it is a path exclusion).
 func HandleWAFExclude(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		utils.SendErrorResponse(w, "Method not supported")
-		return
-	}
-	ep, err := utils.PostPara(r, "rootname")
-	if err != nil {
-		utils.SendErrorResponse(w, "Target proxy rule not defined")
 		return
 	}
 	ruleID, err := utils.PostPara(r, "ruleid")
@@ -158,23 +164,25 @@ func HandleWAFExclude(w http.ResponseWriter, r *http.Request) {
 		utils.SendErrorResponse(w, "Rule ID not defined")
 		return
 	}
+	scope, _ := utils.PostPara(r, "scope")
+	scope = strings.ToLower(strings.TrimSpace(scope))
+	if scope != "" && scope != "global" && scope != "endpoint" && scope != "path" {
+		utils.SendErrorResponse(w, "invalid scope")
+		return
+	}
+	ep, _ := utils.PostPara(r, "rootname")
+	if scope != "global" && ep == "" {
+		utils.SendErrorResponse(w, "Target proxy rule not defined")
+		return
+	}
 	path, _ := utils.PostPara(r, "path")
 	path = strings.TrimSpace(path)
+	if scope == "path" && path == "" {
+		utils.SendErrorResponse(w, "path not defined")
+		return
+	}
 	exact, _ := utils.PostBool(r, "exact")
-
-	err = applyWAFConfig(ep, func(old *waf.Config) (*waf.Config, error) {
-		var cfg waf.Config
-		if old != nil {
-			cfg = *old
-		}
-		if path == "" {
-			cfg.ExcludedRuleIDs = append(cfg.ExcludedRuleIDs, ruleID)
-		} else {
-			cfg.PathExclusions = append(cfg.PathExclusions, waf.PathExclusion{Path: path, Exact: exact, RuleIDs: []string{ruleID}})
-		}
-		return &cfg, nil
-	})
-	if err != nil {
+	if err := addWAFExclusion(scope, ep, ruleID, path, exact); err != nil {
 		utils.SendErrorResponse(w, err.Error())
 		return
 	}

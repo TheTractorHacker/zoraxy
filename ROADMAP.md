@@ -81,7 +81,11 @@ Status: ✅ done · 🔧 in progress · 📋 planned
   anomaly threshold, rule and path-scoped exclusions, validated custom SecLang rules, body limit with
   replay, gRPC and WebSocket passthrough, JSON audit log + in-memory events + counters, WAF tab with recent
   events and one-click exclusions (`feat/waf-coraza`).
-- 📋 Add the WAF call to the shared pre-proxy chain / non-TLS path once that refactor lands.
+- ✅ WAF runs in the shared pre-proxy chain, so the non-TLS path is covered.
+- ✅ **Central WAF** (`feat/central-waf`): global policy, inherit/off/detection/block/profile/custom per rule, built-in and custom profiles,
+  global exclusions and trusted path / IP bypass, Security > WAF page (policy, profiles, exclusions, events across all rules, rules reference,
+  coverage), cluster replication, metrics. See DEVELOPMENT.md.
+- 📋 Central WAF follow-ups: per-profile CRS application exclusion packs (the embedded CRS has no REQUEST-903 files), time-boxed exclusions, event export.
 - 📋 Response inspection (CRS RESPONSE-* rules), per-path paranoia level, CRS version update flow, WAF metrics.
 - 📋 Replace the regex exploit detector with WAF rules, or keep it as a lightweight mode.
 

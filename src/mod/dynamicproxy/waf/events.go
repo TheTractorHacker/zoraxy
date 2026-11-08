@@ -16,7 +16,10 @@ import (
 	per endpoint counters.
 */
 
-const ringSize = 1000
+const (
+	ringSize       = 1000
+	maxHourBuckets = 24 * 7
+)
 
 // RuleHit is one rule that matched during a transaction
 type RuleHit struct {
@@ -40,6 +43,7 @@ type Event struct {
 	Action        string    `json:"action"` // "blocked" or "detected"
 	WouldBlock    bool      `json:"would_block"`
 	Mode          string    `json:"mode"`
+	Source        string    `json:"source,omitempty"` // global, profile:X, custom, endpoint
 	Rules         []RuleHit `json:"rules"`
 }
 
@@ -54,6 +58,14 @@ type Stats struct {
 	Blocked     uint64            `json:"blocked"`
 	PerRule     map[string]uint64 `json:"per_rule"`
 	PerEndpoint map[string]uint64 `json:"per_endpoint"`
+	PerHour     []HourStat        `json:"per_hour,omitempty"` // last 24 * 7 hours with events, oldest first
+}
+
+// HourStat is the event count of one hour
+type HourStat struct {
+	Hour    int64  `json:"hour"` // unix seconds at the start of the hour
+	Total   uint64 `json:"total"`
+	Blocked uint64 `json:"blocked"`
 }
 
 type eventStore struct {
@@ -65,6 +77,7 @@ type eventStore struct {
 	blocked  uint64
 	perRule  map[int]uint64
 	perEndpt map[string]uint64
+	perHour  map[int64]*HourStat
 	sink     AuditSink
 }
 
@@ -73,6 +86,7 @@ func newEventStore() *eventStore {
 		ring:     make([]Event, ringSize),
 		perRule:  map[int]uint64{},
 		perEndpt: map[string]uint64{},
+		perHour:  map[int64]*HourStat{},
 	}
 }
 
@@ -94,6 +108,25 @@ func (s *eventStore) add(ev Event) {
 		s.blocked++
 	}
 	s.perEndpt[ev.Endpoint]++
+	hr := ev.Time.Truncate(time.Hour).Unix()
+	hs := s.perHour[hr]
+	if hs == nil {
+		hs = &HourStat{Hour: hr}
+		s.perHour[hr] = hs
+		if len(s.perHour) > maxHourBuckets {
+			oldest := hr
+			for k := range s.perHour {
+				if k < oldest {
+					oldest = k
+				}
+			}
+			delete(s.perHour, oldest)
+		}
+	}
+	hs.Total++
+	if ev.Action == "blocked" {
+		hs.Blocked++
+	}
 	for _, r := range ev.Rules {
 		s.perRule[r.ID]++
 	}
@@ -145,5 +178,9 @@ func (s *eventStore) stats() Stats {
 	for k, v := range s.perEndpt {
 		st.PerEndpoint[k] = v
 	}
+	for _, h := range s.perHour {
+		st.PerHour = append(st.PerHour, *h)
+	}
+	sort.Slice(st.PerHour, func(i, j int) bool { return st.PerHour[i].Hour < st.PerHour[j].Hour })
 	return st
 }

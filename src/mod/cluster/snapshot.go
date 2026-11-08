@@ -57,6 +57,7 @@ var baseRoots = []string{
 	"rules",
 	"trusted_proxies.json",
 	"acme_conf.json",
+	"waf_central.json",
 }
 
 const certRoot = "certs"
@@ -211,7 +212,7 @@ func validEntryPath(p string, roots []string) bool {
 	switch parts[0] {
 	case "proxy":
 		return len(parts) == 2 && strings.HasSuffix(parts[1], ".config")
-	case "trusted_proxies.json", "acme_conf.json":
+	case "trusted_proxies.json", "acme_conf.json", "waf_central.json":
 		return len(parts) == 1
 	default:
 		return len(parts) >= 2

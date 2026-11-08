@@ -72,7 +72,7 @@ func (router *Router) PrepareProxyRoute(endpoint *ProxyEndpoint) (*ProxyEndpoint
 	endpoint.InitializeExploitDetector()
 
 	// Compile the WAF. Invalid custom rules reject the save here.
-	if err := endpoint.InitializeWAF(); err != nil {
+	if err := endpoint.initializeWAF(router.WAFState()); err != nil {
 		return nil, errors.New("WAF configuration error: " + err.Error())
 	}
 
@@ -85,6 +85,7 @@ func (router *Router) AddProxyRouteToRuntime(endpoint *ProxyEndpoint) error {
 	if len(endpoint.ActiveOrigins) == 0 {
 		//There are no active origins. No need to check for ready
 		router.ProxyEndpoints.Store(lookupHostname, endpoint)
+		router.syncEndpointWAF(endpoint)
 		router.syncHealthChecks(endpoint)
 		return nil
 	}
@@ -94,6 +95,7 @@ func (router *Router) AddProxyRouteToRuntime(endpoint *ProxyEndpoint) error {
 	}
 	// Push record into running subdomain endpoints
 	router.ProxyEndpoints.Store(lookupHostname, endpoint)
+	router.syncEndpointWAF(endpoint)
 	router.syncHealthChecks(endpoint)
 	return nil
 }
@@ -106,6 +108,7 @@ func (router *Router) SetProxyRouteAsRoot(endpoint *ProxyEndpoint) error {
 	}
 	// Push record into running root endpoints
 	router.Root = endpoint
+	router.syncEndpointWAF(endpoint)
 	router.syncHealthChecks(endpoint)
 	return nil
 }

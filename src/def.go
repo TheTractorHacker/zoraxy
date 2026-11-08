@@ -147,6 +147,7 @@ var (
 	CONF_GEODB_PATH            string //GeoIP database path
 	CONF_LOG_CONFIG            string //Log configuration path
 	CONF_TRUSTED_PROXIES       string //Trusted proxy IPs configuration path
+	CONF_WAF_CENTRAL           string //Central WAF policy and profiles (replicated by cluster snapshots)
 
 	/* mDNS */
 	previousmdnsScanResults = []*mdns.NetworkHost{}

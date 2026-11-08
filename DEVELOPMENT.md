@@ -200,8 +200,8 @@ binary, about +5 MB). Licences: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 
 **Request path.** `ProxyHandler.ServeHTTP` calls `Router.wafInspect(w, r, sep)` (`waf_inspect.go`) right after
 `handleAccessRouting`; it is a single nil check when the endpoint has no WAF. The call sites are marked
-`WAF-HOOK` in `Server.go` (one for host endpoints, one for the default-site root endpoint). The non-TLS path
-(`handleNonTLSRequest`) does not have the call yet: add it to the shared pre-proxy chain when that lands.
+`WAF-HOOK` in `Server.go` (one for host endpoints, one for the default-site root endpoint). The call lives in
+the shared pre-proxy chain (`runEndpointChain`), so the TLS and non-TLS (`handleNonTLSRequest`) paths both run it.
 
 **Behaviour.**
 - Compiled instances are cached by the hash of the normalised config, so endpoints with identical settings share
@@ -237,6 +237,61 @@ SQLi on free text fields), JSON APIs with odd content types (920420) and WebDAV-
 
 **Benchmarks** (`go test ./mod/dynamicproxy -run xxx -bench 'Proxy(GET|POSTJSON|Attack)_WAF' -benchmem`) drive a request
 through `ProxyHandler.ServeHTTP` to a local upstream. See the PR description for numbers.
+
+### Central WAF (policy, profiles, inheritance)
+
+The WAF is managed centrally from **Security > WAF** (`src/web/components/waf.html`); per proxy rule settings
+still exist but are now one of several *sources*. Code: `waf/central.go` (State, Resolve, bypass), `waf/profiles.go`
+(built-ins), `waf/rulesref.go` (CRS rule reference), `dynamicproxy/waf_inspect.go` (apply / coverage / hook),
+`src/wafcentral.go` (persistence + mutations), `src/wafcentralapi.go` + `src/wafapi.go` (HTTP APIs).
+
+**Storage.** `<conf>/waf_central.json` = `{Policy, Profiles}` (user profiles only). It is a file, not a sysdb table,
+so it is part of the conf backup zip and, because `waf_central.json` is in the cluster snapshot allow-list
+(`mod/cluster/snapshot.go`, validated in `validateClusterPayload`), it replicates to followers. A missing file means
+policy off, no custom profiles (the pre-upgrade behaviour). Endpoint fields (`ProxyEndpoint`, all `omitempty`):
+`WAFSource`, `WAFProfile`, `WAFExtra`; the existing `WAF` field is the *custom* config.
+
+**Policy** (`waf.Policy`): `Enabled` (master switch for inheriting rules, default off), `DefaultMode`
+(`off|detection_only|block`), `ParanoiaLevel`, `InboundThreshold`, `MaxBodyBytes`, `AllowEndpointOverride`,
+`ExcludedRuleIDs`, `PathExclusions`, `CustomRules` (global SecLang), `TrustedPaths` (`{Host, Path, Exact}`) and
+`AllowedIPs` (IP/CIDR) which skip the WAF.
+
+**Sources** (`ProxyEndpoint.WAFSource`): empty means `custom` if `WAF` is set (every pre-existing config, behaves
+exactly as before) else `inherit`; `inherit` (policy `DefaultMode` if `Enabled`, else off), `off`, `detection_only`,
+`block` (fixed mode, policy tuning), `profile` (`WAFProfile`), `custom` (own full config, standalone).
+
+**Merge** (`State.Resolve`): global values, then profile (mode, non-zero paranoia / threshold), then `WAFExtra`
+(paranoia / threshold only if `AllowEndpointOverride`, otherwise ignored with a warning and rejected on save).
+Exclusions are additive and de-duplicated; custom rules are concatenated global, profile, endpoint, so later ones run
+after earlier ones. A profile that disappeared (e.g. synced config) degrades to the global default with a warning in
+the coverage table instead of failing to load. `custom` endpoints do not use global exclusions or rules.
+
+**Bypass** (`State.BypassReason`): allowed IP, `/.well-known/acme-challenge/<token>` (GET/HEAD, built in), trusted
+paths. Applies to every non-custom effective WAF, and to `custom` endpoints only while the policy is enabled (so an
+upgrade changes nothing). Path matching fails closed: only paths that are already canonical qualify (no `//`, `/./`,
+`..`, `%`, backslash, control characters, encoded `/` or `.` in the raw path); case sensitive. Anything ambiguous is
+simply inspected.
+
+**Applying changes.** `Router.ApplyWAFState(state)` compiles the policy, every user profile and every endpoint's
+resolved config first (bad SecLang rejects the whole change and nothing moves), then swaps the state and the per
+endpoint `wafRuntime` atomically (`atomic.Pointer`), so there is no restart and no half applied request. Compiled
+instances are shared through the config-hash cache (now 48 entries), so unchanged effective configs reuse their
+instance. Endpoints prepared concurrently are re-synced after the swap. `wafCentralMu` serialises every read-modify-write
+of policy, profiles and endpoint WAF settings.
+
+**APIs** (admin auth + CSRF): `GET/POST /api/waf/policy`, `GET /api/waf/profiles`, `POST /api/waf/profile/{save,clone,delete}`
+(built-ins are read-only, deleting a profile in use is refused), `GET /api/waf/coverage`, `POST /api/waf/endpoint/set`
+(`rootname` or `/` for the default site, `source`, `profile`, `extra`), `GET /api/waf/events?limit&endpoint&rule&action&ip&since`,
+`GET /api/waf/summary?hours` (top rules / IPs / endpoints), `GET /api/waf/stats` (now with `per_hour`, 7 days max),
+`GET /api/waf/rules`, `POST /api/waf/exclude` (`ruleid`, `scope=global|endpoint|path`, `rootname`, `path`, `exact`; without
+`scope` the old rootname/path semantics apply; the exclusion lands in `WAFExtra` or, for custom rules, in `WAF`).
+`POST /api/waf/set` still exists and means *custom*. Metrics: `zoraxy_waf_policy_enabled`, `zoraxy_waf_endpoints{mode}`
+(three label values) next to the existing event counters.
+
+**Built-in profiles:** `WordPress`, `API-only`, `Strict`, `Learning` (detection only, PL2). Clone them to edit.
+
+**Tests:** `waf/central_test.go`, `dynamicproxy/waf_central_test.go` (inheritance matrix through `ProxyHandler.ServeHTTP`
+and the non-TLS path, bypass tricks, profile propagation, concurrency), `src/wafcentral_test.go` (APIs, persistence, cluster).
 
 ## Customising CAPTCHA pages
 

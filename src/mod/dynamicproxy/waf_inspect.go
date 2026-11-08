@@ -1,10 +1,12 @@
 package dynamicproxy
 
 import (
+	"fmt"
 	"html"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"imuslab.com/zoraxy/mod/dynamicproxy/waf"
@@ -18,29 +20,163 @@ import (
 	check when the WAF is disabled for the endpoint.
 */
 
-// InitializeWAF compiles (or fetches from the shared cache) the WAF for this
-// endpoint. A nil or "off" config results in no WAF at all. An error is returned
-// if the configuration or custom rules are invalid.
-func (pe *ProxyEndpoint) InitializeWAF() error {
-	inst, err := waf.Default.Get(pe.WAF)
+// wafRuntime is the resolved WAF of one endpoint: the compiled instance (nil
+// when the WAF is off) plus the central state it was resolved against.
+type wafRuntime struct {
+	inst  *waf.Instance
+	state *waf.State
+	res   waf.Resolved
+}
+
+var emptyWAFState = waf.EmptyState()
+
+// WAFSetting returns the endpoint's central WAF choice
+func (pe *ProxyEndpoint) WAFSetting() waf.Setting {
+	return waf.Setting{Source: pe.WAFSource, Profile: pe.WAFProfile, Extra: pe.WAFExtra, Custom: pe.WAF}
+}
+
+func buildWAFRuntime(set waf.Setting, st *waf.State) (*wafRuntime, error) {
+	if st == nil {
+		st = emptyWAFState
+	}
+	res := st.Resolve(set)
+	inst, err := waf.Default.Get(res.Config)
 	if err != nil {
-		pe.wafInst = nil
+		return nil, err
+	}
+	return &wafRuntime{inst: inst, state: st, res: res}, nil
+}
+
+// InitializeWAF resolves the endpoint's WAF against the default (empty, disabled)
+// central policy. Kept for callers outside a router; PrepareProxyRoute uses the
+// router's central state.
+func (pe *ProxyEndpoint) InitializeWAF() error { return pe.initializeWAF(nil) }
+
+// initializeWAF compiles (or fetches from the shared cache) the WAF for this
+// endpoint. An error is returned if the configuration or custom rules are
+// invalid; the previous runtime is then left untouched.
+func (pe *ProxyEndpoint) initializeWAF(st *waf.State) error {
+	rt, err := buildWAFRuntime(pe.WAFSetting(), st)
+	if err != nil {
 		return err
 	}
-	pe.wafInst = inst
+	pe.wafRT.Store(rt)
 	return nil
+}
+
+// WAFState returns the central WAF policy and profiles in effect
+func (router *Router) WAFState() *waf.State {
+	if st := router.wafState.Load(); st != nil {
+		return st
+	}
+	return emptyWAFState
+}
+
+// SetWAFState installs the state without touching endpoints (startup, before
+// any endpoint is loaded).
+func (router *Router) SetWAFState(st *waf.State) { router.wafState.Store(st) }
+
+func (router *Router) allWAFEndpoints() []*ProxyEndpoint {
+	var eps []*ProxyEndpoint
+	if router.Root != nil {
+		eps = append(eps, router.Root)
+	}
+	router.ProxyEndpoints.Range(func(_, v interface{}) bool {
+		if ep, ok := v.(*ProxyEndpoint); ok && ep != router.Root {
+			eps = append(eps, ep)
+		}
+		return true
+	})
+	return eps
+}
+
+// syncEndpointWAF re-resolves an endpoint that was prepared against an older state
+func (router *Router) syncEndpointWAF(ep *ProxyEndpoint) {
+	st := router.WAFState()
+	if rt := ep.wafRT.Load(); rt != nil && rt.state == st {
+		return
+	}
+	ep.initializeWAF(st)
+}
+
+// ApplyWAFState validates a new central state and, only if everything compiles,
+// swaps it in for every endpoint. Nothing changes on error. Compiled instances
+// are shared through the hash cache, so endpoints whose effective config did
+// not change keep their instance; no proxy restart is needed.
+func (router *Router) ApplyWAFState(st *waf.State) error {
+	router.wafMu.Lock()
+	defer router.wafMu.Unlock()
+
+	for _, cfg := range st.ValidationConfigs() {
+		if _, err := waf.Default.Get(cfg); err != nil {
+			return err
+		}
+	}
+	eps := router.allWAFEndpoints()
+	built := make(map[*ProxyEndpoint]*wafRuntime, len(eps))
+	for _, ep := range eps {
+		rt, err := buildWAFRuntime(ep.WAFSetting(), st)
+		if err != nil {
+			return fmt.Errorf("endpoint %s: %w", ep.RootOrMatchingDomain, err)
+		}
+		built[ep] = rt
+	}
+	router.wafState.Store(st)
+	for ep, rt := range built {
+		ep.wafRT.Store(rt)
+	}
+	// Endpoints added while compiling were prepared against the old state
+	for _, ep := range router.allWAFEndpoints() {
+		router.syncEndpointWAF(ep)
+	}
+	return nil
+}
+
+// WAFCoverageEntry describes the effective WAF of one endpoint
+type WAFCoverageEntry struct {
+	Endpoint string
+	IsRoot   bool
+	Source   string // inherit, off, detection_only, block, profile, custom
+	Origin   string // global, endpoint, profile:X, custom
+	Profile  string
+	Mode     string // effective mode
+	Warning  string `json:",omitempty"`
+}
+
+// WAFCoverage lists every endpoint with its effective WAF mode and origin
+func (router *Router) WAFCoverage() []WAFCoverageEntry {
+	var out []WAFCoverageEntry
+	st := router.WAFState()
+	for _, ep := range router.allWAFEndpoints() {
+		res := st.Resolve(ep.WAFSetting())
+		e := WAFCoverageEntry{Endpoint: ep.RootOrMatchingDomain, IsRoot: ep == router.Root, Source: res.Source, Origin: res.Label, Mode: res.Mode, Warning: res.Warning}
+		if res.Source == waf.SourceProfile {
+			e.Profile = ep.WAFProfile
+		}
+		out = append(out, e)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Endpoint < out[j].Endpoint })
+	return out
 }
 
 // wafInspect runs the request through the WAF of the endpoint.
 // Returns true if the request was blocked and a response has been written.
 func (router *Router) wafInspect(w http.ResponseWriter, r *http.Request, sep *ProxyEndpoint) bool {
-	if sep == nil || sep.wafInst == nil {
+	if sep == nil {
+		return false
+	}
+	rt := sep.wafRT.Load()
+	if rt == nil || rt.inst == nil {
 		return false
 	}
 	clientIP := router.GetClientIPForEndpoint(r, sep)
-	blocked := sep.wafInst.Inspect(w, r, waf.RequestInfo{
+	if rt.res.Bypass && rt.state.BypassReason(r, clientIP) != "" {
+		return false
+	}
+	blocked := rt.inst.Inspect(w, r, waf.RequestInfo{
 		Endpoint: sep.RootOrMatchingDomain,
 		ClientIP: clientIP,
+		Source:   rt.res.Label,
 		OnBlock: func(w http.ResponseWriter, r *http.Request, txID string) {
 			// Same 403 page (and template override) as the other access blocks.
 			// Rule details are logged server side only, never sent to the client.

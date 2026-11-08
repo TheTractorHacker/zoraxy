@@ -24,6 +24,7 @@ func writeTree(t *testing.T, dir string) {
 		"rules/pathrules/p1.json":  `{"path":"/"}`,
 		"trusted_proxies.json":     `["10.0.0.0/8"]`,
 		"acme_conf.json":           `{"Enabled":true,"Email":"ops@example.com"}`,
+		"waf_central.json":         `{"Policy":{"Enabled":true,"DefaultMode":"block"},"Profiles":[]}`,
 		"certs/a.pem":              "CERT-A",
 		"certs/a.key":              "KEY-A",
 		"webui/webui.key":          "WEBUI-TLS-PRIVATE-KEY",
@@ -68,7 +69,7 @@ func TestSnapshotContentsAndExclusions(t *testing.T) {
 	got := pathsOf(p)
 	for _, want := range []string{
 		"proxy/a.config", "proxy/b.config", "redirect/r1.json", "access/default.json",
-		"streamproxy/s1.config", "rules/pathrules/p1.json", "trusted_proxies.json", "acme_conf.json",
+		"streamproxy/s1.config", "rules/pathrules/p1.json", "trusted_proxies.json", "acme_conf.json", "waf_central.json",
 	} {
 		if _, ok := got[want]; !ok {
 			t.Errorf("expected %s in snapshot", want)
