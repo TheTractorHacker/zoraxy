@@ -527,6 +527,7 @@ func (router *Router) startSecondaryListeners() {
 				// No matching proxy rule for this domain+port combination
 				// Use default site behavior
 				// TODO: Make this behave like the primary listening port
+				router.logDefaultSiteRequest(r, http.StatusNotFound, "secondary-nomatch") //opt-in, rate limited
 				if router.Root.DefaultSiteOption == DefaultSite_NoResponse {
 					// No response. Just close the connection
 					hijacker, ok := w.(http.Hijacker)

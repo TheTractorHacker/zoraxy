@@ -40,6 +40,7 @@ func RegisterNetworkingAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/proxy/networking/pathrules", HandleNetworkingPathRules)
 	authRouter.HandleFunc("/api/proxy/networking/peers", HandleNetworkingPeers)
 	authRouter.HandleFunc("/api/proxy/networking/secondarytls", HandleNetworkingSecondaryTLS)
+	authRouter.HandleFunc("/api/proxy/defaultsite/logging", HandleDefaultSiteLogging)
 }
 
 // applyNetworkingChange applies mutate to a copy of the endpoint, prepares it, swaps it into the runtime and saves it
@@ -260,4 +261,25 @@ func HandleNetworkingSecondaryTLS(w http.ResponseWriter, r *http.Request) {
 	//Restart the listeners of this rule that switch between HTTP and TLS
 	dynamicProxyRouter.UpdateSecondaryListeners()
 	utils.SendOK(w)
+}
+
+// HandleDefaultSiteLogging reads (GET) or sets (POST enable) the logging of default site requests (upstream #578).
+// The lines are rate limited, see mod/dynamicproxy/defaultsitelog.go.
+func HandleDefaultSiteLogging(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		enable, err := utils.PostBool(r, "enable")
+		if err != nil {
+			utils.SendErrorResponse(w, "enable not given")
+			return
+		}
+		dynamicProxyRouter.SetDefaultSiteLogging(enable)
+		sysdb.Write("settings", "logDefaultSite", enable)
+		utils.SendOK(w)
+		return
+	}
+	js, _ := json.Marshal(map[string]interface{}{
+		"enabled": dynamicProxyRouter.DefaultSiteLoggingEnabled(),
+		"logged":  dynamicProxyRouter.DefaultSiteLogStats(),
+	})
+	utils.SendJSONResponse(w, string(js))
 }

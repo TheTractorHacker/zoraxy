@@ -192,6 +192,7 @@ func (h *ProxyHandler) handleRootRouting(w http.ResponseWriter, r *http.Request)
 		http.Redirect(w, r, redirectTarget, http.StatusTemporaryRedirect)
 	case DefaultSite_NotFoundPage:
 		//Serve the not found page, use template if exists
+		h.Parent.logDefaultSiteRequest(r, http.StatusNotFound, "root-404") //opt-in, rate limited
 		h.serve404PageWithTemplate(w, r)
 	case DefaultSite_NoResponse:
 		//No response. Just close the connection

@@ -362,6 +362,11 @@ func ReverseProxyInit() {
 	//Persist basic auth credential hashes upgraded from legacy SHA-512
 	dprouter.Option.PersistProxyEndpoint = SaveReverseProxyConfig
 	dynamicProxyRouter = dprouter
+
+	//Optional logging of default site requests (off unless enabled)
+	logDefaultSite := false
+	sysdb.Read("settings", "logDefaultSite", &logDefaultSite)
+	dprouter.SetDefaultSiteLogging(logDefaultSite)
 	// Signal that the router is ready
 	select {
 	case dynamicProxyRouterReady <- true:

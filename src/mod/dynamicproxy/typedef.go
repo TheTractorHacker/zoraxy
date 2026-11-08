@@ -159,6 +159,8 @@ type Router struct {
 	secondaryServerMutex sync.RWMutex            //Mutex for accessing secondary server maps
 	secondaryTLS         map[string]bool         //Secondary listeners that speak TLS (guarded by secondaryServerMutex)
 
+	defaultSiteLog defaultSiteLogger //Optional, rate limited logging of default site requests
+
 }
 
 /* Basic Auth Related Data structure*/
