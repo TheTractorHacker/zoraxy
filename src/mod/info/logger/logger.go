@@ -22,7 +22,7 @@ type Logger struct {
 	LogFolder      string        //Folder to store the log  file
 	CurrentLogFile string        //Current writing filename
 	RotateOption   *RotateOption //Options for log rotation, see rotate.go
-	Sites          *SiteLogs     //Optional per-site request logs, see sitelog.go (nil = global log only)
+	Sites          *SiteLogs     `json:"-"` //Optional per-site request logs, see sitelog.go (nil = global log only)
 
 	//Internal
 	logRotateTicker *time.Ticker

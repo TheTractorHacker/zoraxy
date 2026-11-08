@@ -1058,3 +1058,58 @@ certificate store names to the proxy rule hostnames that resolve to them. The li
 ### Manual verification needing real accounts
 Staging issuance (`Let's Encrypt (Staging)`), EAB with ZeroSSL, a real DNS provider profile, ACME `profile` support, and webhook delivery to a
 real HTTPS receiver cannot be covered by unit tests (no CA is contacted in tests).
+
+## Statistics, logs and notifications (feat/stats-logs-notify)
+
+### Per-site statistics (`mod/statistic/site.go`)
+Every proxy rule gets a compact `SiteSummary` next to the global daily summary, **keyed by the configured rule
+(`RootOrMatchingDomain`), never by the raw Host header**. Bounds: at most 128 sites per day (further ones fold into `_other`), every
+per-site map is soft-capped at `-stats_max_entries / 8` (min 100; 1000 when the flag is 0). Per site: totals, errors, blocked, 24 hourly counters
+(sparkline), status codes, countries, client IPs, referers, user agents, top URLs, methods. Persisted inside the existing daily record
+(`Sites`, additive JSON; old records load unchanged). API: `/api/analytic/load`, `/api/analytic/loadRange` accept `&site=<rule>` and answer in
+the usual shape; `/api/analytic/sites?start=&end=` returns the comparison table. Global `StatusCodes` and `BlockedRequest` were added the same way.
+
+### Statistics filters
+`/api/stats/settings` (GET/POST JSON `{ExcludeNetworks, ExcludeBlocked, QueryMode}`) and `/api/stats/excludeMyIP`. Persisted in the `statsettings`
+table. Defaults record everything and strip the query string (the old behaviour). `QueryMode` `mask` keeps parameter names and replaces values with `*`;
+`full` records the whole query (can contain secrets, off by default). Blocked = access list, rate limit, WAF, CAPTCHA, exploit detection, path rules,
+plugin, peer and client-certificate denials (`statistic.IsBlockedForwardType`).
+
+### Per-site log files (`mod/info/logger/sitelog.go`)
+Off by default. `conf/sitelog.json` (`/api/log/sites/config`): default mode `off|also|only`, per-rule override, `text|json` lines, rotate at size,
+keep N rotated files, delete older than N days, gzip. Files: `<log>/sites/<safe name>/<safe name>.log`; `SafeSiteName` maps any rule key to one safe path
+component (lower case `[a-z0-9._-]`, hash suffix when anything changed, so no traversal or collisions). Rules with "disable logging" never write.
+
+### Access log search (`mod/info/logviewer/search.go`, page `snippet/logsearch.html`)
+`/api/log/search`, `/api/log/searchExport?format=csv|json`, `/api/log/sources`. Files are discovered by walking the log folder only (no user supplied paths).
+Plain files are read backwards in 64 KB chunks (newest first, stops early), gzip files are streamed. Bounds: 256 MB / 10 s per search by default (caps 2 GB / 60 s),
+64 KB per line, RE2 regex of at most 200 characters, 1000 rows per page, 100000 rows per export. A search that hits a bound reports `truncated` with the reason.
+CSV cells that start with `= + - @` are prefixed with `'`.
+
+### Notification centre (`mod/notify`, page `snippet/notifications.html`)
+Extends the certificate hooks (`notify.json`, mode 0600). Channels are `Sink`s of the same dispatcher and reuse the webhook SSRF guard (connect-time address
+check, no redirects, no environment proxy). A channel reaches private/loopback/link-local targets or plain http **only** with its own "allow private" toggle; SMTP
+hosts are resolved and checked before connecting (a rebinding race remains possible, hence use the toggle only for trusted LAN hosts). Secrets are masked in
+every response, a posted mask keeps the stored value, and secrets are scrubbed from error text, the delivery log and the system log.
+Rules (channels only; webhooks/command hook are unchanged): quiet hours (critical can bypass), digest, dedupe window, per-channel hourly rate limit, retry with
+backoff (1s, 4s, 16s), in-memory delivery log (`/api/notify/deliveries`). Webhooks gained an optional JSON `template` (Go text/template with a `json` helper,
+validated on save).
+
+Event schema (see `mod/notify/events_ext.go`); other modules only call `notify.Emit(notify.Event{...})`, which is a no-op until the centre is started:
+
+| event | severity | Subject | Extra |
+|---|---|---|---|
+| `uptime.down` / `uptime.up` | critical / info | target name | url, status_code, failures, downtime |
+| `certificate.issued` / `renewal_failed` / `expiring` | info / critical / warning | store name | (Event fields) |
+| `waf.spike` | warning | rule | blocks, window_seconds |
+| `security.autoban` | warning | banned address | reason, duration, rule |
+| `cluster.node_offline` / `node_online` | critical / info | node name | node_id, last_seen |
+| `admin.login_failed` / `login_new_ip` | warning | user name | ip |
+| `updater.available` | info | release tag | current, channel, url |
+
+Flap suppression: `uptime.down` after N consecutive failed checks (default 3), `uptime.up` after M good ones (default 2). WAF spike: default 100 blocks in 60 s
+per rule, cooldown 15 min. `updater.available` is only emitted when an administrator runs a check (the updater never polls by itself). Auto-ban and
+renewal sources live on other branches and call `notify.Emit` (types `notify.EventAutoBan`, `notify.EventCertRenewFailed`).
+
+### Plugin sniff payload
+`DynamicSniffForwardRequest.rule = {name, uuid, tags}` (additive, omitted by older Zoraxy). Rules have no stored UUID, so `uuid` is a stable 16 hex digit hash of the rule key.

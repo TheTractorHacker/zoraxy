@@ -97,6 +97,22 @@ def main():
                 check_horizontal(pg, "desktop")
                 pg.screenshot(path=os.path.join(args.out, f"{t}-{theme}.png"))
 
+        # ---- standalone pages: access log search, notifications, statistics filters ----
+        for name in ("logsearch", "notifications", "statsFilters"):
+            current["page"] = "snippet/" + name
+            print("page", current["page"])
+            sp = ctx.new_page()
+            sp.on("pageerror", lambda e: fail("pageerror", str(e)))
+            sp.on("console", lambda m: m.type == "error" and fail("console.error", m.text + " " + m.location.get("url", "")))
+            sp.on("response", lambda r: r.status >= 400 and fail("http", f"{r.status} {r.url}"))
+            sp.goto(args.url + "/snippet/" + name + ".html", wait_until="networkidle")
+            sp.wait_for_timeout(700)
+            if sp.evaluate("document.body.innerText.trim().length") < 50:
+                fail("page", f"{name} rendered (almost) nothing")
+            check_horizontal(sp, name)
+            sp.screenshot(path=os.path.join(args.out, f"snippet-{name}.png"))
+            sp.close()
+
         # ---- nav scroll behaviour at a short viewport ----
         current["page"] = "nav-scroll"
         if pg.evaluate("document.body.classList.contains('darkTheme')"):

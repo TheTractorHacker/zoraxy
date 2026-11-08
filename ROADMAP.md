@@ -133,3 +133,14 @@ Status: ✅ done · 🔧 in progress · 📋 planned
 - 📋 Notification sources beyond certificates (uptime, WAF) can reuse `mod/notify`; per-event retry persistence (undelivered webhooks are
   dropped after the retry window); webhook delivery log in the UI; DNS profile selection inside the proxy rule dialog itself
   (`httprp.html` is owned by the networking work); ARI (renewal information) support when lego exposes it; Encrypted Client Hello (#1319) is out of scope.
+
+## 12. Statistics, logs and notifications (`feat/stats-logs-notify`)
+- ✅ Per-site statistics with a site filter, comparison table and sparklines (#349, #764); status code and top path tables.
+- ✅ Statistics filters: exclude own IP/CIDR (one-click "add my IP"), exclude blocked requests, URL query strip/mask/full for "top requested paths" (#352, #1344, #1354).
+- ✅ Stream proxies in the Status network diagram (#1186); at-a-glance overview (requests/min, error rate, blocked, upstream health, certificate expiry, alerts).
+- ✅ Per-site log files with size/age/count retention, gzip, text or JSON lines (#596); access log search with filters, live tail, CSV/JSON export (#1243).
+- ✅ Notification centre: Discord, Slack, Telegram, ntfy, Gotify, Pushover, SMTP channels, subscriptions, quiet hours, dedupe, rate limit, digest, retry/backoff,
+  delivery log, webhook JSON templates; events for uptime (flap suppressed), WAF spikes, fleet nodes, admin logins, updates (#1046, #899).
+- ✅ Dynamic capture sniff payload carries the matched rule (#1351).
+- 📋 Persist the delivery log and undelivered messages across restarts; per-site statistics for the status-code/country dimension of the global map; notification
+  events for auto-ban and certificate renewal are emitted by their own modules through `notify.Emit` (see DEVELOPMENT.md).

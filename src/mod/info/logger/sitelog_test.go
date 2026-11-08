@@ -128,7 +128,7 @@ func TestSiteLogRotationGzipRetention(t *testing.T) {
 	cfg.Compress = true
 	s, dir := newSite(t, cfg)
 	var clock int64
-	s.Now = func() time.Time {
+	s.now = func() time.Time {
 		clock++
 		return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).Add(time.Duration(clock) * time.Second)
 	}
@@ -243,5 +243,16 @@ func TestSiteLogConcurrent(t *testing.T) {
 	es, _ := os.ReadDir(filepath.Join(dir, "sites"))
 	if len(es) == 0 {
 		t.Fatal("no site dirs")
+	}
+}
+
+// /api/proxy/status marshals the router including its Logger: the site logs must not break that
+func TestLoggerWithSiteLogsStaysJSONSerialisable(t *testing.T) {
+	l, _ := NewFmtLogger()
+	s, _ := NewSiteLogs(t.TempDir(), DefaultSiteLogConfig())
+	defer s.Close()
+	l.Sites = s
+	if _, err := json.Marshal(l); err != nil {
+		t.Fatal(err)
 	}
 }

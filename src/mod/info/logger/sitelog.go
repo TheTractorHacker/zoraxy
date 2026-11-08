@@ -166,7 +166,7 @@ type SiteLogs struct {
 	cfg     SiteLogConfig
 	root    string // <log folder>/sites
 	writers map[string]*siteWriter
-	Now     func() time.Time
+	now     func() time.Time
 
 	stop chan struct{}
 }
@@ -177,7 +177,7 @@ func NewSiteLogs(logFolder string, cfg SiteLogConfig) (*SiteLogs, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
-	s := &SiteLogs{cfg: cfg, writers: map[string]*siteWriter{}, Now: time.Now, stop: make(chan struct{})}
+	s := &SiteLogs{cfg: cfg, writers: map[string]*siteWriter{}, now: time.Now, stop: make(chan struct{})}
 	if logFolder != "" {
 		s.root = filepath.Join(logFolder, siteLogDirName)
 	}
@@ -333,7 +333,7 @@ func (s *SiteLogs) appendLine(key, text string) error {
 		}
 		n, err := io.WriteString(w.f, text)
 		w.size += int64(n)
-		w.lastUse.Store(s.Now().UnixNano())
+		w.lastUse.Store(s.now().UnixNano())
 		w.mu.Unlock()
 		return err
 	}
@@ -366,7 +366,7 @@ func (s *SiteLogs) writerFor(name string) (*siteWriter, error) {
 	}
 	st, _ := f.Stat()
 	w = &siteWriter{f: f, path: path}
-	w.lastUse.Store(s.Now().UnixNano())
+	w.lastUse.Store(s.now().UnixNano())
 	if st != nil {
 		w.size = st.Size()
 	}
@@ -398,7 +398,7 @@ func (s *SiteLogs) evictOldestLocked() {
 func (s *SiteLogs) rotateLocked(name string, w *siteWriter, compress bool) error {
 	w.f.Close()
 	w.f = nil
-	stamp := s.Now().Format("20060102-150405.000")
+	stamp := s.now().Format("20060102-150405.000")
 	rotated := filepath.Join(filepath.Dir(w.path), name+"."+stamp+".log")
 	if err := os.Rename(w.path, rotated); err != nil {
 		return err
@@ -481,7 +481,7 @@ func (s *SiteLogs) retainDir(dir, name string) {
 	}
 	cutoff := time.Time{}
 	if cfg.MaxAgeDays > 0 {
-		cutoff = s.Now().AddDate(0, 0, -cfg.MaxAgeDays)
+		cutoff = s.now().AddDate(0, 0, -cfg.MaxAgeDays)
 	}
 	for i, f := range rotated {
 		if i >= keep || (!cutoff.IsZero() && f.mod.Before(cutoff)) {
