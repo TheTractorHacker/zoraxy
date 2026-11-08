@@ -148,6 +148,10 @@ func (s *Store) loadDataSet() (*geoDataSet, error) {
 		return nil, err
 	}
 
+	//Pin the ranges known to be wrong in the source data, see overrides.go
+	parsedGeoData = applyGeoOverrides(parsedGeoData, ipv4Overrides)
+	parsedGeoDataIpv6 = applyGeoOverrides(parsedGeoDataIpv6, ipv6Overrides)
+
 	var ipv4Trie *trie
 	if !s.option.AllowSlowIpv4LookUp {
 		ipv4Trie = constrctTrieTree(parsedGeoData)

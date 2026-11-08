@@ -86,6 +86,8 @@ type RouterOption struct {
 	ForceHttpsRedirect bool                    //Force redirection of http to https endpoint
 	UseProxyProtocol   bool                    //Enable PROXY protocol v1/v2 support for TLS listener
 
+	SanitiseClientIPHeaders bool //Global default (off): drop client supplied X-Forwarded-For / X-Real-IP / ... from peers that are not trusted proxies
+
 	/* Routing Service Managers */
 	TlsManager           *tlscert.Manager           //TLS manager for serving SAN certificates
 	RedirectRuleTable    *redirection.RuleTable     //Redirection rules handler and table
@@ -348,6 +350,9 @@ type ProxyEndpoint struct {
 	// Chunked Transfer Encoding
 	DisableChunkedTransferEncoding bool //Disable chunked transfer encoding for this endpoint
 	ForceHTTP11                    bool //Force use HTTP/1.1 for upstream connection
+
+	//Client IP header handling
+	SanitiseClientIPHeaders bool //Drop client supplied X-Forwarded-For / X-Real-IP / CF-Connecting-IP... from peers that are not trusted proxies (default off)
 
 	//Access Control
 	AccessFilterUUID string //Access filter ID

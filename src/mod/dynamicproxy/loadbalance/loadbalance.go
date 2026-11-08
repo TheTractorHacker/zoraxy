@@ -55,6 +55,14 @@ type Upstream struct {
 	MaxConn     int   //Maxmium concurrent requests to this upstream dpcore instance
 	RespTimeout int64 //Response header timeout in milliseconds
 
+	//Do not reuse connections to this upstream (sends Connection: close, one TCP connection per request).
+	//For upstreams that close the connection after every response; default off keeps pooling
+	DisableKeepAlive bool
+
+	//Speak HTTP/2 over cleartext (h2c, prior knowledge) to this plain http:// upstream, for gRPC backends
+	//such as NetBird. Ignored when RequireTLS is set. Default off
+	H2C bool
+
 	//Optional runtime controls, all zero values keep the historical behavior
 	MaxInFlight int                //Maximum concurrent in-flight requests to this upstream, 0 = unlimited
 	Draining    bool               //Receive no new requests (sticky sessions are re-assigned), in-flight requests finish normally

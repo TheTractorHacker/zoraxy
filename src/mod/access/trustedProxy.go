@@ -205,6 +205,22 @@ func (s *AccessRule) StripUntrustedClientIPHeaders(r *http.Request) bool {
 	if s.parent.IsTrustedProxy(netutils.GetRequesterIPUntrusted(r)) {
 		return false
 	}
+	return deleteClientIPHeaders(r)
+}
+
+// SanitiseClientIPHeaders removes client supplied client-IP headers from every request whose
+// TCP peer is not in the trusted proxy list, whether or not the rule enabled TrustProxyHeadersOnly.
+// It is the opt-in "Sanitise client IP headers" switch (per endpoint or global, default off) for
+// setups that are not behind a CDN: the upstream then only sees X-Forwarded-For / X-Real-IP
+// built from the real peer (upstream #1359). Returns true if headers were removed.
+func (s *AccessRule) SanitiseClientIPHeaders(r *http.Request) bool {
+	if s.parent != nil && s.parent.IsTrustedProxy(netutils.GetRequesterIPUntrusted(r)) {
+		return false
+	}
+	return deleteClientIPHeaders(r)
+}
+
+func deleteClientIPHeaders(r *http.Request) bool {
 	stripped := false
 	for _, h := range clientIPHeaders {
 		if len(r.Header.Values(h)) > 0 {

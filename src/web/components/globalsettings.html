@@ -242,6 +242,16 @@
                     <button class="ui basic green button" style="margin-top: 0.6em;" onclick="saveProxyTimeoutSettings();"><i class="ui checkmark icon"></i> Apply Timeouts</button>
                 </div>
 
+                <!-- Client IP headers -->
+                <div class="ingressSettingGroup">
+                    <div class="ingressGroupTitle">Client IP headers</div>
+                    <div id="sanitiseClientIP" class="ui toggle checkbox">
+                        <input type="checkbox">
+                        <label>Sanitise client IP headers on all hosts<br>
+                        <small>Drop X-Forwarded-For, X-Real-IP, Forwarded, CF-Connecting-IP... from clients that are not trusted proxies, so upstreams cannot be fooled by spoofed addresses. Off by default; leave off behind a CDN that is not in the Trusted Proxy list. Can also be set per host.</small></label>
+                    </div>
+                </div>
+
                 <!-- Development -->
                 <div class="ingressSettingGroup">
                     <div class="ingressGroupTitle">Development</div>
@@ -577,6 +587,19 @@
         });
     }
     initDevelopmentMode();
+
+    function initSanitiseClientIP(){
+        $.get("/api/proxy/sanitiseClientIP", function(data){
+            setToggleStateSilently("#sanitiseClientIP", data === true);
+            $("#sanitiseClientIP").off("change").on("change", function(){
+                let enable = ($(this).find("input[type='checkbox']")[0].checked);
+                $.get("/api/proxy/sanitiseClientIP?enable=" + enable, function(){
+                    msgbox("Client IP header sanitising " + (enable ? "enabled" : "disabled"));
+                });
+            });
+        });
+    }
+    initSanitiseClientIP();
 
     //Set a toggle's state without firing change (checkbox("set checked") would re-trigger handlers)
     function setToggleStateSilently(selector, checked){

@@ -631,3 +631,37 @@ rule lists and matchers (unchanged). `handleAuthProviderRouting` consults the li
 * Requests that skip SSO get the provider's identity headers scrubbed (`ScrubIdentityHeaders` on the forward auth and OAuth2 routers:
   configured response headers, `X-authentik-*` in Authentik mode, mapped OAuth2 claim headers).
 * Tests: `go test -race ./mod/dynamicproxy -run 'AuthException|CanonicalException|ForwardAuthException|OAuth2Exceptions'`.
+## Triage fixes, batch 2 (upstream #1343 #1117 #1109 #986 #1359 #1067 #410 #1334 #1029)
+
+Developer map and operator notes for the fixes in `fix/triage-bugs-2`.
+
+- **Proxy rule edit is a partial update (#1109)**: `ReverseProxyHandleEditEndpoint` (`src/reverseproxy.go`) loads the current rule first and
+  every field uses `postBoolOr(r, key, current)` / `formHas(r, key)`: absent parameter = keep the current value, present = change it
+  (an empty `utmURI` / `tags` clears the field). WAF and load-balance config are not part of this form and are never touched. When you add
+  a form field, add a row to `editCases` in `src/reverseproxy_edit_test.go`.
+- **Disable connection reuse per upstream (#1343)**: `Upstream.DisableKeepAlive` sets `DisableKeepAlives` on that upstream's transport
+  (`dpcore.DpcoreOptions.DisableKeepAlive`), so there is no per-request transport clone. API: `nokeepalive=true` on `/api/proxy/upstream/add`,
+  or the field in the `payload` of `/api/proxy/upstream/update`. "Force HTTP/1.1" only disables HTTP/2 and does not stop connection reuse.
+- **ACME issuance is serialised (#1117)**: `ACMEHandler.ObtainCert` holds a mutex for the whole issuance (manual request, auto renew and
+  SAN names queue up) and re-checks the HTTP-01 port right before use, picking a new free one if it was taken since start-up.
+- **IP blacklist index (#986)**: `src/mod/access/blacklist_index.go` compiles `BlackListIP` once (exact map, IPv4 wildcard trie, CIDR prefix
+  maps per prefix length) and is rebuilt when the map pointer or its size changes (Add/Remove swap the map). 100k entries: about 53 ms
+  per lookup before, 2.3 us after (`go test ./mod/access -bench Blacklist`). `blacklist_index_test.go` keeps the old linear scan as a
+  reference and compares both on random data. The whitelist still scans linearly.
+- **Sanitise client IP headers (#1359)**: opt-in, default off, per proxy rule (`sanitiseClientIP` on `/api/proxy/edit`) and global
+  (`/api/proxy/sanitiseClientIP`, stored in `settings/sanitiseClientIP`). Peers that are not in the Trusted Proxy list lose
+  `X-Forwarded-For`, `X-Real-IP`, `Forwarded`, `CF-Connecting-IP`, `True-Client-IP`, `Fastly-Client-IP`, `X-Client-IP`; the proxy then
+  builds `X-Forwarded-For` / `X-Real-IP` from the real peer. Behind a CDN, list the CDN ranges as trusted proxies first or leave the switch off.
+- **Map typed DNS credentials (#1067, #410)**: provider fields of type `map[string]string` / `map[string]*Seq` are shown as text areas in the
+  ACME form. `src/mod/acme/acme_dns_maps.go` decodes `name:value` lists (comma or new line separated) or a JSON object. `selfhostde`
+  (`RecordsMapping`, `domain:id[:id]`) has its own constructor because lego's `Seq` has no exported fields. `hurricane`, `dnshomede` and
+  `myaddr` (all `Credentials`) are enabled. `providers.json` / `acmedns.go` were edited by hand to match what `tools/update_acmedns.sh`
+  produces after the `extract.go` change; regenerate when lego is bumped.
+- **GeoIP overrides (#1334)**: `src/mod/geodb/overrides.go` pins verified ranges on top of the CSV (embedded or downloaded). The proper fix
+  (switch to a maintained dataset with an acceptable licence and regenerate the CSVs) needs network access and a licence decision and is
+  still open. Refresh procedure: replace the CSVs (see `mod/geodb/README.txt`), then drop overrides the new data already gets right.
+- **h2c upstreams (#1029)**: `Upstream.H2C` (API `h2c=true` on upstream add / `H2C` in the update payload, ignored when "Require TLS" is
+  set) makes dpcore use an `http2.Transport` with plain TCP dials (`dpcore/h2c.go`). Streaming bodies and trailers work (gRPC); `Upgrade`
+  and CONNECT requests fall back to HTTP/1.1. The old `modh2c` round tripper is not used: it builds a transport per request and cancels the
+  context when `RoundTrip` returns, which breaks streaming. The gRPC body-peek block in `dpcore.go` is unchanged. Limits: the upstream
+  "response timeout" is not applied to h2c upstreams, and "Force HTTP/1.1" on the rule is ignored for them.

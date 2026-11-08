@@ -78,9 +78,6 @@ func getExcludedDNSProviders() []string {
 		"exec",         // Not a DNS provider
 		"httpreq",      // Not a DNS provider
 		"manual",       // Not a DNS provider
-		"hurricane",    // Multi-credentials arch
-		"dnshomede",    // Multi-credentials arch
-		"myaddr",       // Multi-credentials arch
 		"oraclecloud",  // Evil company
 		"selectelv2",   // Not sure why not working with our code generator
 		"designate",    // OpenStack, if you are using this you shd not be using zoraxy
@@ -249,6 +246,13 @@ func main() {
 			switch fields[1] {
 			case "*url.URL":
 				hostKey = fields[0]
+				configKeys = append(configKeys, &Field{
+					Title:    fields[0],
+					Datatype: fields[1],
+				})
+			case "map[string]string", "map[string]*Seq":
+				// Map typed credentials (hurricane, dnshomede, myaddr: Credentials; selfhostde: RecordsMapping).
+				// The UI renders a text area; src/mod/acme/acme_dns_maps.go decodes it.
 				configKeys = append(configKeys, &Field{
 					Title:    fields[0],
 					Datatype: fields[1],

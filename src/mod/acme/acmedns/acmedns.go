@@ -58,6 +58,7 @@ import (
 	"github.com/go-acme/lego/v5/providers/dns/dns51"
 	"github.com/go-acme/lego/v5/providers/dns/dnscale"
 	"github.com/go-acme/lego/v5/providers/dns/dnsexit"
+	"github.com/go-acme/lego/v5/providers/dns/dnshomede"
 	"github.com/go-acme/lego/v5/providers/dns/dnsimple"
 	"github.com/go-acme/lego/v5/providers/dns/dnsla"
 	"github.com/go-acme/lego/v5/providers/dns/dnsmadeeasy"
@@ -102,6 +103,7 @@ import (
 	"github.com/go-acme/lego/v5/providers/dns/hostup"
 	"github.com/go-acme/lego/v5/providers/dns/httpnet"
 	"github.com/go-acme/lego/v5/providers/dns/huaweicloud"
+	"github.com/go-acme/lego/v5/providers/dns/hurricane"
 	"github.com/go-acme/lego/v5/providers/dns/hyperone"
 	"github.com/go-acme/lego/v5/providers/dns/ibmcloud"
 	"github.com/go-acme/lego/v5/providers/dns/iijdpf"
@@ -132,6 +134,7 @@ import (
 	"github.com/go-acme/lego/v5/providers/dns/metaregistrar"
 	"github.com/go-acme/lego/v5/providers/dns/mijnhost"
 	"github.com/go-acme/lego/v5/providers/dns/mittwald"
+	"github.com/go-acme/lego/v5/providers/dns/myaddr"
 	"github.com/go-acme/lego/v5/providers/dns/mydnsjp"
 	"github.com/go-acme/lego/v5/providers/dns/myra"
 	"github.com/go-acme/lego/v5/providers/dns/namecheap"
@@ -663,6 +666,15 @@ func GetDNSProviderByJsonConfig(name string, js string, propagationTimeout int64
 		cfg.PropagationTimeout = pgDuration
 		cfg.PollingInterval = plInterval
 		return dnsexit.NewDNSProviderConfig(cfg)
+	case "dnshomede":
+		cfg := dnshomede.NewDefaultConfig()
+		err := json.Unmarshal([]byte(js), &cfg)
+		if err != nil {
+			return nil, err
+		}
+		cfg.PropagationTimeout = pgDuration
+		cfg.PollingInterval = plInterval
+		return dnshomede.NewDNSProviderConfig(cfg)
 	case "dnsimple":
 		cfg := dnsimple.NewDefaultConfig()
 		err := json.Unmarshal([]byte(js), &cfg)
@@ -1060,6 +1072,15 @@ func GetDNSProviderByJsonConfig(name string, js string, propagationTimeout int64
 		cfg.PropagationTimeout = pgDuration
 		cfg.PollingInterval = plInterval
 		return huaweicloud.NewDNSProviderConfig(cfg)
+	case "hurricane":
+		cfg := hurricane.NewDefaultConfig()
+		err := json.Unmarshal([]byte(js), &cfg)
+		if err != nil {
+			return nil, err
+		}
+		cfg.PropagationTimeout = pgDuration
+		cfg.PollingInterval = plInterval
+		return hurricane.NewDNSProviderConfig(cfg)
 	case "hyperone":
 		cfg := hyperone.NewDefaultConfig()
 		err := json.Unmarshal([]byte(js), &cfg)
@@ -1330,6 +1351,15 @@ func GetDNSProviderByJsonConfig(name string, js string, propagationTimeout int64
 		cfg.PropagationTimeout = pgDuration
 		cfg.PollingInterval = plInterval
 		return mittwald.NewDNSProviderConfig(cfg)
+	case "myaddr":
+		cfg := myaddr.NewDefaultConfig()
+		err := json.Unmarshal([]byte(js), &cfg)
+		if err != nil {
+			return nil, err
+		}
+		cfg.PropagationTimeout = pgDuration
+		cfg.PollingInterval = plInterval
+		return myaddr.NewDNSProviderConfig(cfg)
 	case "mydnsjp":
 		cfg := mydnsjp.NewDefaultConfig()
 		err := json.Unmarshal([]byte(js), &cfg)

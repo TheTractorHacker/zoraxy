@@ -531,6 +531,20 @@
               </div>
             </div>`);
           
+          }else if (datatype.startsWith("map[")){
+            //Map typed credentials (Hurricane Electric tokens, selfhost.de record IDs): one entry per line
+            let mapHint = "name:value, one entry per line (or a JSON object)";
+            if (key == "Credentials"){
+              mapHint = "my.example.org:token1\ndemo.example.org:token2";
+            }else if (key == "RecordsMapping"){
+              mapHint = "example.org:recordID\nother.org:recordID1:recordID2";
+            }
+            $("#dnsProviderAPIFields").append(`<div class="ui fluid dnsConfigField typemap" key="${key}" style="margin-top: 0.4em;">
+              <div class="ui basic label" style="font-weight: 300; margin-bottom: 0.2em;">
+                ${key}
+              </div>
+              <div class="ui form"><textarea rows="3" placeholder="${mapHint}" style="font-family: monospace;"></textarea></div>
+            </div>`);
           }else{
             //Default to string
             $("#dnsProviderAPIFields").append(`<div class="ui fluid labeled input dnsConfigField" key="${key}" style="margin-top: 0.2em;">
@@ -667,6 +681,9 @@
           //Int options
           let value = $(this).find("input").val();
           dnsCredentials[thisKey] = parseInt(value);
+        }else if ($(this).hasClass("typemap")){
+          //Map options are sent as text and decoded by the server
+          dnsCredentials[thisKey] = $(this).find("textarea").val().trim();
         }else{
           //String options
           let value = $(this).find("input").val().trim();
@@ -693,7 +710,8 @@
       //Check if all fields is empty. If yes, do not update the config
       let allFieldsEmpty = true;
       $(".dnsConfigField").each(function(){
-        if ($(this).find("input").val().trim() != ""){
+        let fieldValue = $(this).hasClass("typemap") ? $(this).find("textarea").val() : $(this).find("input").val();
+        if (fieldValue.trim() != ""){
           allFieldsEmpty = false;
         }
       });

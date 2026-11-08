@@ -253,6 +253,9 @@ func ReverseProxyInit() {
 		SystemWideLogger.Println("Development mode disabled. Proxying with default Cache Control policy")
 	}
 
+	sanitiseClientIP := false
+	sysdb.Read("settings", "sanitiseClientIP", &sanitiseClientIP)
+
 	useProxyProtocol := false
 	sysdb.Read("settings", "useProxyProtocol", &useProxyProtocol)
 	if useProxyProtocol {
@@ -319,6 +322,8 @@ func ReverseProxyInit() {
 		ListenOnPort80:     listenOnPort80,
 		ForceHttpsRedirect: forceHttpsRedirect,
 		UseProxyProtocol:   useProxyProtocol,
+
+		SanitiseClientIPHeaders: sanitiseClientIP,
 		/* Routing Service Managers */
 		TlsManager:          tlsCertManager,
 		RedirectRuleTable:   redirectTable,
@@ -821,6 +826,24 @@ func authMethodFromRequest(r *http.Request) (method dynamicproxy.AuthMethod, giv
 	}
 }
 
+// formHas reports whether a form parameter was sent at all (an empty value counts as sent).
+// The proxy rule edit handler uses it to tell "clear this field" from "field not part of this request".
+func formHas(r *http.Request, key string) bool {
+	if err := r.ParseForm(); err != nil {
+		return false
+	}
+	_, ok := r.Form[key]
+	return ok
+}
+
+// postBoolOr reads a boolean form parameter and returns current when it is absent or not a valid boolean.
+func postBoolOr(r *http.Request, key string, current bool) bool {
+	if v, err := utils.PostBool(r, key); err == nil {
+		return v
+	}
+	return current
+}
+
 /*
 ReverseProxyHandleEditEndpoint handles proxy endpoint edit
 (host only, for root use Default Site page to edit)
@@ -834,25 +857,34 @@ func ReverseProxyHandleEditEndpoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	useStickySession, _ := utils.PostBool(r, "ss")
+	//Load the current rule. This handler is a partial update: only the parameters present in
+	//the request are changed, every other field keeps its current value (upstream #1109)
+	targetProxyEntry, err := dynamicProxyRouter.LoadProxy(rootNameOrMatchingDomain)
+	if err != nil {
+		utils.SendErrorResponse(w, "Target proxy config not found or could not be loaded")
+		return
+	}
+	cur := targetProxyEntry
+
+	useStickySession := postBoolOr(r, "ss", cur.UseStickySession)
 
 	//Load bypass TLS option
-	bypassGlobalTLS, _ := utils.PostBool(r, "bpgtls")
+	bypassGlobalTLS := postBoolOr(r, "bpgtls", cur.BypassGlobalTLS)
 
 	// Allow HTTP CONNECT tunneling to the configured upstream (disabled by default)
-	enableConnectSupport, _ := utils.PostBool(r, "enableConnectSupport")
+	enableConnectSupport := postBoolOr(r, "enableConnectSupport", cur.EnableConnectSupport)
 
-	enableUpgradeForwarding, _ := utils.PostBool(r, "enableUpgradeForwarding")
+	enableUpgradeForwarding := postBoolOr(r, "enableUpgradeForwarding", cur.EnableUpgradeForwarding)
 
 	//Disable uptime monitor
-	disbleUtm, err := utils.PostBool(r, "dutm")
-	if err != nil {
-		disbleUtm = false
-	}
+	disbleUtm := postBoolOr(r, "dutm", cur.DisableUptimeMonitor)
 
-	// Custom URI used by the uptime monitor health check (optional)
-	utmURI, _ := utils.PostPara(r, "utmURI")
-	utmURI = strings.TrimSpace(utmURI)
+	// Custom URI used by the uptime monitor health check (optional, an empty value clears it)
+	utmURI := cur.UptimeMonitorURI
+	if formHas(r, "utmURI") {
+		utmURI, _ = utils.PostPara(r, "utmURI")
+		utmURI = strings.TrimSpace(utmURI)
+	}
 
 	// Auth Provider. When the parameter is absent (stale cached UI, API client, plugin) the
 	// current authentication method is kept instead of silently switching it to "None"
@@ -863,15 +895,18 @@ func ReverseProxyHandleEditEndpoint(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Rate Limiting?
-	requireRateLimit, _ := utils.PostBool(r, "rate")
-	rlnum, _ := utils.PostPara(r, "ratenum")
-	if rlnum == "" {
-		rlnum = "0"
-	}
-	proxyRateLimit, err := strconv.ParseInt(rlnum, 10, 64)
-	if err != nil {
-		utils.SendErrorResponse(w, "invalid rate limit number")
-		return
+	requireRateLimit := postBoolOr(r, "rate", cur.RequireRateLimit)
+	proxyRateLimit := cur.RateLimit
+	if rlnum, _ := utils.PostPara(r, "ratenum"); formHas(r, "ratenum") {
+		if rlnum == "" {
+			rlnum = "0"
+		}
+		var perr error
+		proxyRateLimit, perr = strconv.ParseInt(rlnum, 10, 64)
+		if perr != nil {
+			utils.SendErrorResponse(w, "invalid rate limit number")
+			return
+		}
 	}
 
 	if requireRateLimit && proxyRateLimit <= 0 {
@@ -888,56 +923,64 @@ func ReverseProxyHandleEditEndpoint(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// CAPTCHA Gating
-	captchaConfig, err := parseCaptchaConfigFromRequest(r)
-	if err != nil {
-		utils.SendErrorResponse(w, "failed to parse CAPTCHA config: "+err.Error())
-		return
+	captchaConfig, requireCaptcha := cur.CaptchaConfig, cur.RequireCaptcha
+	if formHas(r, "captcha") {
+		captchaConfig, err = parseCaptchaConfigFromRequest(r)
+		if err != nil {
+			utils.SendErrorResponse(w, "failed to parse CAPTCHA config: "+err.Error())
+			return
+		}
+		requireCaptcha = captchaConfig != nil
 	}
-	requireCaptcha := captchaConfig != nil
 
 	// Disable chunked Encoding
-	disableChunkedEncoding, _ := utils.PostBool(r, "dChunkedEnc")
+	disableChunkedEncoding := postBoolOr(r, "dChunkedEnc", cur.DisableChunkedTransferEncoding)
 
 	// Force HTTP/1.1
-	forceHTTP11, _ := utils.PostBool(r, "forceHTTP11")
+	forceHTTP11 := postBoolOr(r, "forceHTTP11", cur.ForceHTTP11)
+
+	// Drop spoofable client IP headers sent by untrusted peers
+	sanitiseClientIP := postBoolOr(r, "sanitiseClientIP", cur.SanitiseClientIPHeaders)
 
 	// WebSocket options
-	disableWebSocket, _ := utils.PostBool(r, "disableWebSocket")
-	websocketTimeoutStr, _ := utils.PostPara(r, "websocketTimeout")
-	websocketTimeout, _ := strconv.ParseInt(websocketTimeoutStr, 10, 64)
+	disableWebSocket := postBoolOr(r, "disableWebSocket", cur.DisableWebSocket)
+	websocketTimeout := cur.WebsocketTimeout
+	if formHas(r, "websocketTimeout") {
+		websocketTimeoutStr, _ := utils.PostPara(r, "websocketTimeout")
+		websocketTimeout, _ = strconv.ParseInt(websocketTimeoutStr, 10, 64)
+	}
 	if websocketTimeout < 0 {
 		websocketTimeout = 0
 	}
-	enableTimeoutRefreshOnActivity, _ := utils.PostBool(r, "enableTimeoutRefreshOnActivity")
+	enableTimeoutRefreshOnActivity := postBoolOr(r, "enableTimeoutRefreshOnActivity", cur.EnableTimeoutRefreshOnActivity)
 
 	// Disable logging
-	disableLogging, _ := utils.PostBool(r, "dLogging")
+	disableLogging := postBoolOr(r, "dLogging", cur.DisableLogging)
 
 	// Disable statistic collection
-	disableStatisticCollection, _ := utils.PostBool(r, "dStatisticCollection")
+	disableStatisticCollection := postBoolOr(r, "dStatisticCollection", cur.DisableStatisticCollection)
 
 	// Exploit Detection
-	blockCommonExploits, _ := utils.PostBool(r, "blockCommonExploits")
-	blockAICrawlers, _ := utils.PostBool(r, "blockAICrawlers")
-	mitigationActionStr, _ := utils.PostPara(r, "mitigationAction")
-	mitigationAction := 0
-	if mitigationActionStr != "" {
-		mitigationAction, _ = strconv.Atoi(mitigationActionStr)
+	blockCommonExploits := postBoolOr(r, "blockCommonExploits", cur.BlockCommonExploits)
+	blockAICrawlers := postBoolOr(r, "blockAICrawlers", cur.BlockAICrawlers)
+	mitigationAction := cur.MitigationAction
+	if formHas(r, "mitigationAction") {
+		mitigationActionStr, _ := utils.PostPara(r, "mitigationAction")
+		mitigationAction = 0
+		if mitigationActionStr != "" {
+			mitigationAction, _ = strconv.Atoi(mitigationActionStr)
+		}
 	}
 
-	//Load the previous basic auth credentials from current proxy rules
-	targetProxyEntry, err := dynamicProxyRouter.LoadProxy(rootNameOrMatchingDomain)
-	if err != nil {
-		utils.SendErrorResponse(w, "Target proxy config not found or could not be loaded")
-		return
-	}
-
-	tagStr, _ := utils.PostPara(r, "tags")
-	tags := []string{}
-	if tagStr != "" {
-		tags = strings.Split(tagStr, ",")
-		for i := range tags {
-			tags[i] = strings.TrimSpace(tags[i])
+	tags := cur.Tags
+	if formHas(r, "tags") {
+		tagStr, _ := utils.PostPara(r, "tags")
+		tags = []string{}
+		if tagStr != "" {
+			tags = strings.Split(tagStr, ",")
+			for i := range tags {
+				tags[i] = strings.TrimSpace(tags[i])
+			}
 		}
 	}
 
@@ -957,7 +1000,7 @@ func ReverseProxyHandleEditEndpoint(w http.ResponseWriter, r *http.Request) {
 		newProxyEndpoint.AuthenticationProvider.AuthMethod = requestedAuthMethod
 	}
 
-	disableAutoFallback, _ := utils.PostBool(r, "dAutoFallback")
+	disableAutoFallback := postBoolOr(r, "dAutoFallback", cur.DisableAutoFallback)
 
 	newProxyEndpoint.RequireRateLimit = requireRateLimit
 	newProxyEndpoint.RateLimit = proxyRateLimit
@@ -976,6 +1019,7 @@ func ReverseProxyHandleEditEndpoint(w http.ResponseWriter, r *http.Request) {
 	newProxyEndpoint.DisableAutoFallback = disableAutoFallback
 	newProxyEndpoint.DisableChunkedTransferEncoding = disableChunkedEncoding
 	newProxyEndpoint.ForceHTTP11 = forceHTTP11
+	newProxyEndpoint.SanitiseClientIPHeaders = sanitiseClientIP
 	newProxyEndpoint.DisableWebSocket = disableWebSocket
 	newProxyEndpoint.WebsocketTimeout = websocketTimeout
 	newProxyEndpoint.EnableTimeoutRefreshOnActivity = enableTimeoutRefreshOnActivity
@@ -2082,6 +2126,19 @@ func HandleDevelopmentModeChange(w http.ResponseWriter, r *http.Request) {
 		utils.SendOK(w)
 	}
 
+}
+
+// HandleSanitiseClientIPChange reads or sets the global default of "Sanitise client IP headers"
+func HandleSanitiseClientIPChange(w http.ResponseWriter, r *http.Request) {
+	enable, err := utils.GetBool(r, "enable")
+	if err != nil {
+		js, _ := json.Marshal(dynamicProxyRouter.Option.SanitiseClientIPHeaders)
+		utils.SendJSONResponse(w, string(js))
+		return
+	}
+	dynamicProxyRouter.Option.SanitiseClientIPHeaders = enable
+	sysdb.Write("settings", "sanitiseClientIP", enable)
+	utils.SendOK(w)
 }
 
 // HandleProxyProtocolChange handles the PROXY protocol v1/v2 toggle
