@@ -3,15 +3,17 @@ package statistic
 import (
 	"fmt"
 	"net"
+	"path/filepath"
+	"strings"
 	"time"
 	"unicode/utf8"
 )
 
 /*
-	MaxStatKeyLength is the maximum length of a request supplied string (URL,
-	Referer or User-Agent) used as a key in the daily summary maps. Anything
-	longer is truncated so that a single client cannot inflate the size of the
-	summary, and so the serialized summary stays a predictable size on disk.
+MaxStatKeyLength is the maximum length of a request supplied string (URL,
+Referer or User-Agent) used as a key in the daily summary maps. Anything
+longer is truncated so that a single client cannot inflate the size of the
+summary, and so the serialized summary stays a predictable size on disk.
 */
 const MaxStatKeyLength = 256
 
@@ -65,4 +67,19 @@ func IsValidIPAddress(ip string) bool {
 
 	// If the string is neither a valid IPv4 nor IPv6 address, return false
 	return false
+}
+
+// skipURLStat reports whether a request URL (host + path [+ ?query]) points to
+// a non page resource (image, css, ...) that is not counted as a requested page
+func skipURLStat(u string) bool {
+	if i := strings.IndexAny(u, "?#"); i >= 0 {
+		u = u[:i]
+	}
+	if i := strings.Index(u, "/"); i >= 0 {
+		u = u[i:]
+	} else {
+		return false
+	}
+	ext := filepath.Ext(u)
+	return ext != "" && !isWebPageExtension(ext)
 }

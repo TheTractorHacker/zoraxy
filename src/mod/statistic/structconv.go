@@ -6,9 +6,10 @@ import (
 )
 
 type DailySummaryExport struct {
-	TotalRequest int64 //Total request of the day
-	ErrorRequest int64 //Invalid request of the day, including error or not found
-	ValidRequest int64 //Valid request of the day
+	TotalRequest   int64 //Total request of the day
+	ErrorRequest   int64 //Invalid request of the day, including error or not found
+	ValidRequest   int64 //Valid request of the day
+	BlockedRequest int64 `json:",omitempty"` //Requests rejected by Zoraxy itself
 
 	ForwardTypes    map[string]int
 	RequestOrigin   map[string]int
@@ -19,6 +20,10 @@ type DailySummaryExport struct {
 	RequestMethods  map[string]int
 	Downstreams     map[string]int
 	Upstreams       map[string]int
+	StatusCodes     map[string]int `json:",omitempty"` //HTTP status code of the responses
+
+	// Sites holds the per-site (per proxy rule) summaries, see site.go
+	Sites map[string]*SiteSummaryExport `json:",omitempty"`
 }
 
 func SyncMapToMapStringInt(syncMap *sync.Map) map[string]int {
@@ -44,6 +49,7 @@ func dailySummaryToExport(summary *DailySummary) DailySummaryExport {
 		TotalRequest:    atomic.LoadInt64(&summary.TotalRequest),
 		ErrorRequest:    atomic.LoadInt64(&summary.ErrorRequest),
 		ValidRequest:    atomic.LoadInt64(&summary.ValidRequest),
+		BlockedRequest:  atomic.LoadInt64(&summary.BlockedRequest),
 		ForwardTypes:    make(map[string]int),
 		RequestOrigin:   make(map[string]int),
 		RequestClientIp: make(map[string]int),
@@ -64,6 +70,13 @@ func dailySummaryToExport(summary *DailySummary) DailySummaryExport {
 	export.RequestMethods = SyncMapToMapStringInt(summary.RequestMethods)
 	export.Downstreams = SyncMapToMapStringInt(summary.DownstreamHostnames)
 	export.Upstreams = SyncMapToMapStringInt(summary.UpstreamHostnames)
+	if summary.StatusCodes != nil {
+		export.StatusCodes = SyncMapToMapStringInt(summary.StatusCodes)
+	}
+	export.Sites = summary.sites.export()
+	if len(export.Sites) == 0 {
+		export.Sites = nil
+	}
 
 	return export
 }
@@ -81,6 +94,7 @@ func DailySummaryExportToSummary(export DailySummaryExport) DailySummary {
 		TotalRequest:        export.TotalRequest,
 		ErrorRequest:        export.ErrorRequest,
 		ValidRequest:        export.ValidRequest,
+		BlockedRequest:      export.BlockedRequest,
 		ForwardTypes:        MapStringIntToSyncMap(export.ForwardTypes),
 		RequestOrigin:       MapStringIntToSyncMap(export.RequestOrigin),
 		RequestClientIp:     MapStringIntToSyncMap(export.RequestClientIp),
@@ -90,6 +104,8 @@ func DailySummaryExportToSummary(export DailySummaryExport) DailySummary {
 		RequestMethods:      MapStringIntToSyncMap(export.RequestMethods),
 		DownstreamHostnames: MapStringIntToSyncMap(export.Downstreams),
 		UpstreamHostnames:   MapStringIntToSyncMap(export.Upstreams),
+		StatusCodes:         MapStringIntToSyncMap(export.StatusCodes),
+		sites:               siteTableFromExport(export.Sites),
 		bounded: boundedCounters{
 			ForwardTypes:        newBoundedCounter(len(export.ForwardTypes)),
 			RequestOrigin:       newBoundedCounter(len(export.RequestOrigin)),
@@ -100,6 +116,7 @@ func DailySummaryExportToSummary(export DailySummaryExport) DailySummary {
 			RequestMethods:      newBoundedCounter(len(export.RequestMethods)),
 			DownstreamHostnames: newBoundedCounter(len(export.Downstreams)),
 			UpstreamHostnames:   newBoundedCounter(len(export.Upstreams)),
+			StatusCodes:         newBoundedCounter(len(export.StatusCodes)),
 		},
 	}
 
@@ -110,4 +127,9 @@ func DailySummaryExportToSummary(export DailySummaryExport) DailySummary {
 func (c *Collector) GetExportSummary() *DailySummaryExport {
 	exportFormatDailySummary := dailySummaryToExport(c.GetCurrentDailySummary())
 	return &exportFormatDailySummary
+}
+
+// GetExportSummaryBlocked returns today's number of blocked requests without building the full export
+func (c *Collector) GetExportSummaryBlocked() int64 {
+	return atomic.LoadInt64(&c.GetCurrentDailySummary().BlockedRequest)
 }

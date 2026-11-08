@@ -102,6 +102,7 @@ func startupSequence() {
 	}
 
 	initWAFAuditLog() //WAF JSON audit log, see wafapi.go
+	initSiteLogs()    //Optional per-site request logs, see sitelogapi.go
 
 	LogViewer = logviewer.NewLogViewer(&logviewer.ViewerOption{
 		RootFolder: *path_logFile,
@@ -223,6 +224,7 @@ func startupSequence() {
 		panic(err)
 	}
 	statisticCollector.SetAutoSave(STATISTIC_AUTO_SAVE_INTERVAL)
+	loadStatSettings()
 
 	//Start the static web server
 	staticWebServer = webserv.NewWebServer(&webserv.WebServerOptions{
@@ -365,6 +367,7 @@ func startupSequence() {
 	//Create a table just to store acme related preferences
 	sysdb.NewTable("acmepref")
 	initCertHooks()
+	initNotifyCenter() //channels, rules and event sources, see notifyevents.go
 	initCertMapDir()
 	acmeHandler = initACME()
 	acmeAutoRenewer, err = acme.NewAutoRenewer(

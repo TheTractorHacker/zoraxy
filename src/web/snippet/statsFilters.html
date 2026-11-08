@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="zoraxy.csrf.Token" content="{{.csrfToken}}">
+        <link rel="stylesheet" href="../script/semantic/semantic.min.css">
+        <script src="../script/jquery-3.6.0.min.js"></script>
+        <script src="../script/semantic/semantic.min.js"></script>
+        <script src="../script/utils.js"></script>
+    </head>
+    <body>
+        <link rel="stylesheet" href="../darktheme.css">
+        <script src="../script/darktheme.js"></script>
+        <br>
+        <div class="ui container">
+            <div class="ui header">
+                <div class="content">
+                    Statistics Filters
+                    <div class="sub header">Choose what is recorded in the statistics. Changes apply to new requests only.</div>
+                </div>
+            </div>
+            <div class="ui divider"></div>
+            <h4>Exclude IP addresses</h4>
+            <p>Requests from these addresses or CIDR ranges are not counted (one per line), e.g. your own IP.</p>
+            <div class="ui form">
+                <div class="field">
+                    <textarea id="excludeNetworks" rows="5" placeholder="203.0.113.7&#10;192.168.0.0/16"></textarea>
+                </div>
+            </div>
+            <button class="ui basic small button" onclick="addMyIP();"><i class="user icon"></i> Add my current IP (<span id="myip">?</span>)</button>
+            <div class="ui divider"></div>
+            <div class="ui toggle checkbox">
+                <input type="checkbox" id="excludeBlocked">
+                <label>Do not count blocked requests (access list, WAF, rate limit, CAPTCHA, ...)</label>
+            </div>
+            <div class="ui divider"></div>
+            <h4>Query string in requested paths</h4>
+            <p>Controls how "Top requested paths" records the query string. Query strings can contain secrets such as tokens.</p>
+            <div class="ui form">
+                <div class="field">
+                    <select id="queryMode" class="ui dropdown">
+                        <option value="strip">Strip (host and path only)</option>
+                        <option value="mask">Mask (keep parameter names, hide values)</option>
+                        <option value="full">Full (record complete query string)</option>
+                    </select>
+                </div>
+            </div>
+            <br>
+            <button class="ui basic green button" onclick="saveSettings();"><i class="save icon"></i> Save</button>
+            <button class="ui basic button iframeOnly" style="float: right;" onclick="parent.hideSideWrapper();"><i class="remove icon"></i> Close</button>
+            <br><br>
+        </div>
+        <script>
+            function render(data){
+                $("#excludeNetworks").val((data.Settings.ExcludeNetworks || []).join("\n"));
+                $("#excludeBlocked").prop("checked", !!data.Settings.ExcludeBlocked);
+                $("#queryMode").val(data.Settings.QueryMode || "strip");
+                $("#myip").text(data.YourIP);
+            }
+            function load(){
+                $.getJSON("/api/stats/settings", function(data){
+                    if (data.error){ parent.msgbox(data.error, false, 5000); return; }
+                    render(data);
+                });
+            }
+            function addMyIP(){
+                $.cjax({
+                    url: "/api/stats/excludeMyIP", method: "POST",
+                    success: function(data){
+                        if (data && data.error){ parent.msgbox(data.error, false, 5000); return; }
+                        parent.msgbox("Your IP is now excluded from statistics");
+                        load();
+                    }
+                });
+            }
+            function saveSettings(){
+                let list = $("#excludeNetworks").val().split(/[\n,]+/).map(s => s.trim()).filter(s => s != "");
+                $.cjax({
+                    url: "/api/stats/settings", method: "POST", contentType: "application/json",
+                    data: JSON.stringify({
+                        ExcludeNetworks: list,
+                        ExcludeBlocked: $("#excludeBlocked").is(":checked"),
+                        QueryMode: $("#queryMode").val()
+                    }),
+                    success: function(data){
+                        if (data.error){ parent.msgbox(data.error, false, 6000); return; }
+                        parent.msgbox("Statistic filters saved");
+                        render(data);
+                    }
+                });
+            }
+            load();
+        </script>
+    </body>
+</html>

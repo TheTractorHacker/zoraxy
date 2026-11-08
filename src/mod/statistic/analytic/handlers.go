@@ -59,6 +59,10 @@ func (d *DataLoader) HandleLoadTargetDaySummary(w http.ResponseWriter, r *http.R
 		}
 	}
 
+	if site, _ := utils.GetPara(r, "site"); site != "" {
+		targetDailySummary = *siteView(&targetDailySummary, site)
+	}
+
 	js, _ := json.Marshal(targetDailySummary)
 	utils.SendJSONResponse(w, string(js))
 }
@@ -74,6 +78,13 @@ func (d *DataLoader) HandleLoadTargetRangeSummary(w http.ResponseWriter, r *http
 	if err != nil {
 		utils.SendErrorResponse(w, err.Error())
 		return
+	}
+
+	//Optionally reduce every day to one site (proxy rule)
+	if site, _ := utils.GetPara(r, "site"); site != "" {
+		for i := range dailySummaries {
+			dailySummaries[i] = siteView(dailySummaries[i], site)
+		}
 	}
 
 	//Merge the summaries into one

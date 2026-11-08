@@ -32,7 +32,7 @@ import (
 // only; see mod/updater/api.go.
 func RegisterUpdaterAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/updater/info", updateManager.HandleInfo)
-	authRouter.HandleFunc("/api/updater/check", updateManager.HandleCheck)
+	authRouter.HandleFunc("/api/updater/check", notifyUpdaterCheckWrap(updateManager.HandleCheck))
 	authRouter.HandleFunc("/api/updater/status", updateManager.HandleStatus)
 	authRouter.HandleFunc("/api/updater/history", updateManager.HandleHistory)
 	authRouter.HandleFunc("/api/updater/start", updateManager.HandleStart)
@@ -226,6 +226,7 @@ func RegisterStatisticalAPIs(authRouter *auth.RouterDef) {
 	/* Traffic Summary */
 	authRouter.HandleFunc("/api/stats/summary", statisticCollector.HandleTodayStatLoad)
 	authRouter.HandleFunc("/api/stats/overview", HandleDashboardOverview)
+	authRouter.HandleFunc("/api/stats/glance", HandleDashboardGlance)
 	authRouter.HandleFunc("/api/stats/trafficmap", HandleTrafficMapData)
 	authRouter.HandleFunc("/api/stats/countries", HandleCountryDistrSummary)
 	authRouter.HandleFunc("/api/stats/netstat", netstatBuffers.HandleGetNetworkInterfaceStats)
@@ -245,6 +246,9 @@ func RegisterStatisticalAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/analytic/exportRange", AnalyticLoader.HandleRangeExport)
 	authRouter.HandleFunc("/api/analytic/resetRange", AnalyticLoader.HandleRangeReset)
 	authRouter.HandleFunc("/api/analytic/resetAll", AnalyticLoader.HandleResetAllStats)
+	authRouter.HandleFunc("/api/analytic/sites", AnalyticLoader.HandleSiteList)
+	authRouter.HandleFunc("/api/stats/settings", HandleStatSettings)
+	authRouter.HandleFunc("/api/stats/excludeMyIP", HandleStatExcludeMyIP)
 	/* UpTime Monitor */
 	authRouter.HandleFunc("/api/utm/list", HandleUptimeMonitorListing)
 }
@@ -287,6 +291,8 @@ func RegisterACMEAndAutoRenewerAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/acme/profiles/dns", acmeHandler.HandleDNSProfiles)
 	authRouter.HandleFunc("/api/acme/renewCert", acmeAutoRenewer.HandleRenewCertNow)
 	authRouter.HandleFunc("/api/notify/hooks", notifyManager.HandleHooks)
+	authRouter.HandleFunc("/api/notify/center", notifyManager.HandleCenter)
+	authRouter.HandleFunc("/api/notify/deliveries", notifyManager.HandleDeliveries)
 	/* ACME Wizard */
 	authRouter.HandleFunc("/api/acme/wizard", acmewizard.HandleGuidedStepCheck)
 }
@@ -357,7 +363,7 @@ func RegisterPluginAPIs(authRouter *auth.RouterDef) {
 
 // Register the APIs for Auth functions, due to scoping issue some functions are defined here
 func RegisterAuthAPIs(requireAuth bool, targetMux *http.ServeMux) {
-	targetMux.HandleFunc("/api/auth/login", authAgent.HandleLogin)
+	targetMux.HandleFunc("/api/auth/login", notifyLoginWrap(authAgent.HandleLogin))
 	targetMux.HandleFunc("/api/auth/logout", authAgent.HandleLogout)
 	targetMux.HandleFunc("/api/auth/checkLogin", func(w http.ResponseWriter, r *http.Request) {
 		if requireAuth {
@@ -502,6 +508,10 @@ func initAPIs(targetMux *http.ServeMux) {
 	authRouter.HandleFunc("/api/log/read", LogViewer.HandleReadLog)
 	authRouter.HandleFunc("/api/log/summary", LogViewer.HandleReadLogSummary)
 	authRouter.HandleFunc("/api/log/errors", LogViewer.HandleLogErrorSummary)
+	authRouter.HandleFunc("/api/log/sites/config", HandleSiteLogConfig)
+	authRouter.HandleFunc("/api/log/search", LogViewer.HandleSearch(logSearchGeo))
+	authRouter.HandleFunc("/api/log/searchExport", LogViewer.HandleSearchDownload(logSearchGeo))
+	authRouter.HandleFunc("/api/log/sources", LogViewer.HandleSources)
 	authRouter.HandleFunc("/api/log/rotate/trigger", SystemWideLogger.HandleDebugTriggerLogRotation)
 	authRouter.HandleFunc("/api/logger/config", handleLoggerConfig)
 

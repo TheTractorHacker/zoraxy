@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Notifications | Zoraxy</title>
+    <meta charset="UTF-8">
+    <meta name="theme-color" content="#4b75ff">
+    <meta name="zoraxy.csrf.Token" content="{{.csrfToken}}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="../favicon.png" />
+    <link rel="stylesheet" href="../script/semantic/semantic.min.css">
+    <script type="text/javascript" src="../script/jquery-3.6.0.min.js"></script>
+    <script type="text/javascript" src="../script/semantic/semantic.min.js"></script>
+    <script type="text/javascript" src="../script/utils.js"></script>
+    <link rel="stylesheet" href="../main.css">
+    <link rel="stylesheet" href="../darktheme.css">
+    <script src="../script/darktheme.js"></script>
+    <style>
+        body { padding: 1em; }
+        .evgrid label { display: block; margin-bottom: 0.3em; }
+        .st-failed { color: #db2828; } .st-sent { color: #21ba45; } .st-held, .st-suppressed { color: #767676; }
+    </style>
+</head>
+<body>
+<div class="ui container" style="max-width: 1200px !important;">
+    <h2 class="ui header"><i class="bell icon"></i><div class="content">Notifications
+        <div class="sub header">Send alerts to Discord, Slack, Telegram, ntfy, Gotify, Pushover or email. Webhooks and certificate hooks are configured under Certificates.</div></div></h2>
+    <div class="ui top attached tabular menu">
+        <a class="active item" data-tab="n-channels">Channels</a>
+        <a class="item" data-tab="n-rules">Rules</a>
+        <a class="item" data-tab="n-log">Delivery log</a>
+    </div>
+
+    <div class="ui bottom attached active tab segment" data-tab="n-channels">
+        <div class="ui warning message" id="offlineMsg" style="display:none;">Offline mode is on: no notification leaves this server.</div>
+        <table class="ui very compact celled table">
+            <thead><tr><th>Name</th><th>Type</th><th>Subscribed events</th><th>Status</th><th></th></tr></thead>
+            <tbody id="chanList"><tr><td colspan="5">Loading...</td></tr></tbody>
+        </table>
+        <button class="ui green button" onclick="editChannel(null);"><i class="plus icon"></i> Add channel</button>
+
+        <div class="ui segment" id="chanEditor" style="display:none;">
+            <h4 id="chanEditorTitle">Channel</h4>
+            <form class="ui form" onsubmit="event.preventDefault(); saveChannel(); return false;">
+                <div class="three fields">
+                    <div class="field"><label for="c_name">Name</label><input id="c_name" type="text" maxlength="64"></div>
+                    <div class="field"><label for="c_type">Type</label><select id="c_type" onchange="renderSettings();"></select></div>
+                    <div class="field"><label for="c_sev">Minimum severity</label>
+                        <select id="c_sev"><option value="">Any</option><option value="warning">Warning and above</option><option value="critical">Critical only</option></select></div>
+                </div>
+                <div id="c_settings"></div>
+                <div class="field"><label>Events (none selected = all events)</label><div class="evgrid" id="c_events"></div></div>
+                <div class="inline fields">
+                    <div class="field"><div class="ui checkbox"><input type="checkbox" id="c_enabled" checked><label for="c_enabled">Enabled</label></div></div>
+                    <div class="field"><div class="ui checkbox"><input type="checkbox" id="c_private"><label for="c_private">Allow private / loopback targets and plain http (self-hosted services on your LAN)</label></div></div>
+                </div>
+                <div class="ui negative message" id="c_err" style="display:none;"></div>
+                <button class="ui green button" type="submit"><i class="save icon"></i> Save</button>
+                <button class="ui button" type="button" onclick="$('#chanEditor').hide();">Cancel</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="ui bottom attached tab segment" data-tab="n-rules">
+        <p>These rules apply to channels (not to webhooks). Critical events are never held by the digest and can bypass quiet hours.</p>
+        <form class="ui form" onsubmit="event.preventDefault(); saveRules(); return false;">
+            <h4>Flap suppression (uptime monitor)</h4>
+            <div class="two fields">
+                <div class="field"><label for="r_fail">Failed checks in a row before an upstream is reported down</label><input id="r_fail" type="number" min="1" max="100"></div>
+                <div class="field"><label for="r_rec">Successful checks in a row before it is reported recovered</label><input id="r_rec" type="number" min="1" max="100"></div>
+            </div>
+            <h4>WAF block spikes</h4>
+            <div class="three fields">
+                <div class="field"><label for="r_waf">Blocks that raise an alert (0 = off)</label><input id="r_waf" type="number" min="0"></div>
+                <div class="field"><label for="r_wafw">within (seconds)</label><input id="r_wafw" type="number" min="1" max="86400"></div>
+                <div class="field"><label for="r_wafc">Cooldown per site (seconds)</label><input id="r_wafc" type="number" min="0"></div>
+            </div>
+            <h4>Dedupe and rate limit</h4>
+            <div class="two fields">
+                <div class="field"><label for="r_dedupe">Suppress identical events for (seconds, 0 = off)</label><input id="r_dedupe" type="number" min="0"></div>
+                <div class="field"><label for="r_rate">Max notifications per channel per hour (0 = unlimited)</label><input id="r_rate" type="number" min="0"></div>
+            </div>
+            <h4>Quiet hours</h4>
+            <div class="inline fields">
+                <div class="field"><div class="ui checkbox"><input type="checkbox" id="r_q"><label for="r_q">Enable</label></div></div>
+                <div class="field"><label for="r_qs">from</label><input id="r_qs" type="time"></div>
+                <div class="field"><label for="r_qe">to</label><input id="r_qe" type="time"></div>
+                <div class="field"><div class="ui checkbox"><input type="checkbox" id="r_qc"><label for="r_qc">Critical events still notify</label></div></div>
+            </div>
+            <p>Events during quiet hours are held and sent as one digest when they end (server local time).</p>
+            <h4>Digest</h4>
+            <div class="inline fields">
+                <div class="field"><div class="ui checkbox"><input type="checkbox" id="r_d"><label for="r_d">Batch non-critical events into one message every</label></div></div>
+                <div class="field"><input id="r_di" type="number" min="1" max="1440" style="width:6em;"> <label>minutes</label></div>
+            </div>
+            <div class="ui negative message" id="r_err" style="display:none;"></div>
+            <button class="ui green button" type="submit"><i class="save icon"></i> Save rules</button>
+            <span id="r_ok"></span>
+        </form>
+    </div>
+
+    <div class="ui bottom attached tab segment" data-tab="n-log">
+        <button class="ui basic button" onclick="loadLog();"><i class="refresh icon"></i> Refresh</button>
+        <p>The most recent deliveries since Zoraxy started (kept in memory, secrets are never recorded).</p>
+        <div style="overflow-x:auto;">
+        <table class="ui very compact small table">
+            <thead><tr><th>Time</th><th>Channel</th><th>Event</th><th>Subject</th><th>Result</th></tr></thead>
+            <tbody id="logList"></tbody>
+        </table></div>
+    </div>
+</div>
+<script>
+    $(".tabular.menu .item").tab();
+    var center = null, editingId = "";
+
+    function esc(t){ return $("<div>").text(t == null ? "" : String(t)).html(); }
+
+    function load(){
+        $.getJSON("/api/notify/center", function(d){
+            if (d.error){ $("#chanList").html("<tr><td colspan='5'>" + esc(d.error) + "</td></tr>"); return; }
+            center = d;
+            $("#offlineMsg").toggle(!!d.offline);
+            let body = $("#chanList").empty();
+            if (!d.channels || d.channels.length == 0){ body.html("<tr><td colspan='5'>No channels yet</td></tr>"); }
+            (d.channels || []).forEach(function(c){
+                let evs = (c.events && c.events.length) ? c.events.join(", ") : "all events";
+                let row = $("<tr>").append($("<td>").text(c.name), $("<td>").text(c.type), $("<td>").text(evs + (c.minSeverity ? " (>= " + c.minSeverity + ")" : "")),
+                    $("<td>").text(c.enabled ? "enabled" : "disabled"));
+                let act = $("<td>");
+                act.append($("<button class='ui mini basic button'>Edit</button>").on("click", () => editChannel(c)));
+                act.append($("<button class='ui mini basic blue button'>Test</button>").on("click", () => testChannel(c.id)));
+                act.append($("<button class='ui mini basic red button'>Delete</button>").on("click", () => deleteChannel(c.id, c.name)));
+                row.append(act);
+                body.append(row);
+            });
+            let rules = d.rules;
+            $("#r_fail").val(rules.failThreshold); $("#r_rec").val(rules.recoverThreshold);
+            $("#r_waf").val(rules.wafSpikeBlocks); $("#r_wafw").val(rules.wafSpikeWindow); $("#r_wafc").val(rules.wafSpikeCooldown);
+            $("#r_dedupe").val(rules.dedupeSeconds); $("#r_rate").val(rules.ratePerHour);
+            $("#r_q").prop("checked", rules.quiet.enabled); $("#r_qs").val(rules.quiet.start); $("#r_qe").val(rules.quiet.end); $("#r_qc").prop("checked", rules.quiet.criticalPass);
+            $("#r_d").prop("checked", rules.digest.enabled); $("#r_di").val(rules.digest.intervalMinutes);
+            if ($("#c_type option").length == 0){
+                Object.keys(d.channelTypes).forEach(t => $("#c_type").append($("<option>").val(t).text(t)));
+            }
+        });
+    }
+
+    function renderSettings(values){
+        let type = $("#c_type").val();
+        let box = $("#c_settings").empty();
+        (center.channelTypes[type] || []).forEach(function(f){
+            let input = $("<input>").attr({type: f.secret ? "password" : "text", id: "set_" + f.key, autocomplete: "off", placeholder: f.hint || ""}).val((values || {})[f.key] || "");
+            box.append($("<div class='field'>").append($("<label>").attr("for", "set_" + f.key).text(f.label + (f.required ? " *" : "")), input));
+        });
+    }
+
+    function editChannel(c){
+        editingId = c ? c.id : "";
+        $("#chanEditorTitle").text(c ? "Edit channel" : "New channel");
+        $("#c_name").val(c ? c.name : "");
+        $("#c_type").val(c ? c.type : "discord").prop("disabled", !!c);
+        $("#c_sev").val(c ? c.minSeverity : "");
+        $("#c_enabled").prop("checked", c ? c.enabled : true);
+        $("#c_private").prop("checked", c ? c.allowPrivate : false);
+        renderSettings(c ? c.settings : {});
+        let grid = $("#c_events").empty();
+        center.events.forEach(function(e){
+            let checked = c && (c.events || []).indexOf(e.name) >= 0;
+            grid.append($("<label>").append($("<input type='checkbox' class='evbox'>").val(e.name).prop("checked", checked), " " + e.title + " ", $("<small>").text("(" + e.name + ", " + e.severity + ")")));
+        });
+        $("#c_err").hide();
+        $("#chanEditor").show()[0].scrollIntoView();
+    }
+
+    function saveChannel(){
+        let settings = {};
+        (center.channelTypes[$("#c_type").val()] || []).forEach(f => settings[f.key] = $("#set_" + f.key).val());
+        let ch = {id: editingId, name: $("#c_name").val(), type: $("#c_type").val(), enabled: $("#c_enabled").is(":checked"),
+            allowPrivate: $("#c_private").is(":checked"), minSeverity: $("#c_sev").val(), settings: settings,
+            events: $(".evbox:checked").map(function(){ return this.value; }).get()};
+        $.cjax({url: "/api/notify/center", method: "POST", contentType: "application/json", data: JSON.stringify({op: "saveChannel", channel: ch}), success: function(d){
+            if (d.error){ $("#c_err").text(d.error).show(); return; }
+            $("#chanEditor").hide(); load();
+        }});
+    }
+
+    function post(op, extra, done){
+        $.cjax({url: "/api/notify/center", method: "POST", contentType: "application/json", data: JSON.stringify($.extend({op: op}, extra)), success: done});
+    }
+    function testChannel(id){
+        post("testChannel", {id: id}, function(d){ alert(d.error ? "Test failed: " + d.error : "Test notification delivered"); loadLog(); });
+    }
+    function deleteChannel(id, name){
+        if (!confirm("Delete channel " + name + "?")) return;
+        post("deleteChannel", {id: id}, function(d){ if (d.error) alert(d.error); load(); });
+    }
+    function saveRules(){
+        let n = id => parseInt($(id).val() || 0);
+        let rules = {failThreshold: n("#r_fail"), recoverThreshold: n("#r_rec"), wafSpikeBlocks: n("#r_waf"), wafSpikeWindow: n("#r_wafw"), wafSpikeCooldown: n("#r_wafc"),
+            dedupeSeconds: n("#r_dedupe"), ratePerHour: n("#r_rate"),
+            quiet: {enabled: $("#r_q").is(":checked"), start: $("#r_qs").val(), end: $("#r_qe").val(), criticalPass: $("#r_qc").is(":checked")},
+            digest: {enabled: $("#r_d").is(":checked"), intervalMinutes: n("#r_di")}};
+        post("saveRules", {rules: rules}, function(d){
+            if (d.error){ $("#r_err").text(d.error).show(); $("#r_ok").text(""); return; }
+            $("#r_err").hide(); $("#r_ok").text("Saved");
+        });
+    }
+    function loadLog(){
+        $.getJSON("/api/notify/deliveries", function(list){
+            let body = $("#logList").empty();
+            if (!list || !list.length){ body.html("<tr><td colspan='5'>No deliveries yet</td></tr>"); return; }
+            list.forEach(function(r){
+                let cls = "st-" + r.status.split(":")[0];
+                body.append($("<tr>").append($("<td>").text(new Date(r.time).toLocaleString()), $("<td>").text(r.channel + " (" + r.kind + ")"), $("<td>").text(r.event),
+                    $("<td>").text(r.subject || ""), $("<td>").addClass(cls).text(r.status + (r.error ? ": " + r.error : ""))));
+            });
+        });
+    }
+    load(); loadLog();
+</script>
+</body>
+</html>

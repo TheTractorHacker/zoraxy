@@ -104,6 +104,13 @@ func (p *PathRouter) RegisterDynamicCaptureHandle(capture_ingress string, mux *h
 	sniffing and forwarding requests to the dynamic
 	router.
 */
+// SniffRuleInfo tells a dynamic capture plugin which proxy rule matched the request
+type SniffRuleInfo struct {
+	Name string   `json:"name"` //The matching domain (or root) of the rule, as shown in the Zoraxy UI
+	UUID string   `json:"uuid"` //Stable identifier derived from the rule key (rules have no stored UUID); changes only if the rule is renamed
+	Tags []string `json:"tags"` //Tags of the rule (the plugin was selected by these)
+}
+
 // A custom request object to be used in the dynamic sniffing
 type DynamicSniffForwardRequest struct {
 	Method     string              `json:"method"`
@@ -117,6 +124,7 @@ type DynamicSniffForwardRequest struct {
 	Proto      string              `json:"proto"`
 	ProtoMajor int                 `json:"proto_major"`
 	ProtoMinor int                 `json:"proto_minor"`
+	Rule       *SniffRuleInfo      `json:"rule,omitempty"` //The proxy rule that matched the request (additive field, absent from older Zoraxy versions)
 
 	/* Internal use */
 	rawRequest  *http.Request `json:"-"`

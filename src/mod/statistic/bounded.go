@@ -44,6 +44,7 @@ type boundedCounters struct {
 	RequestMethods      *boundedCounter
 	DownstreamHostnames *boundedCounter
 	UpstreamHostnames   *boundedCounter
+	StatusCodes         *boundedCounter
 }
 
 func newBoundedCounters() boundedCounters {
@@ -57,6 +58,7 @@ func newBoundedCounters() boundedCounters {
 		RequestMethods:      newBoundedCounter(0),
 		DownstreamHostnames: newBoundedCounter(0),
 		UpstreamHostnames:   newBoundedCounter(0),
+		StatusCodes:         newBoundedCounter(0),
 	}
 }
 

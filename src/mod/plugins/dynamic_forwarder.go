@@ -49,6 +49,7 @@ func (m *Manager) sniffPlugin(p *Plugin, r *http.Request, clientIP string, reqID
 		return false, errBreakerOpen
 	}
 	forwardReq := zoraxy_plugin.EncodeForwardRequestPayload(r, clientIP)
+	forwardReq.Rule = RuleInfoFromRequest(r)
 	jsonData, err := json.Marshal(forwardReq)
 	if err != nil {
 		m.breakerRecord(p, nil)

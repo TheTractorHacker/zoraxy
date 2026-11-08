@@ -406,11 +406,19 @@ func (router *Router) logRequest(r *http.Request, succ bool, statusCode int, for
 	// to spoof the IP recorded in the log file or the statistics collector.
 	clientIP := router.GetClientIPForEndpoint(r, endpoint)
 
+	if BlockObserver != nil && endpoint != nil && forwardType == "waf-blocked" {
+		BlockObserver(endpoint.RootOrMatchingDomain, forwardType)
+	}
+
 	// Notes: endpoint can be nil if the request has been handled before a host name can be resolved
 	// e.g. Redirection matching rule
 	if endpoint == nil || !endpoint.DisableLogging {
 		// log the http request to file
-		router.Option.Logger.LogHTTPRequest(r, forwardType, statusCode, originalHostname, upstreamHostname, clientIP)
+		siteKey := ""
+		if endpoint != nil {
+			siteKey = endpoint.RootOrMatchingDomain
+		}
+		router.Option.Logger.LogHTTPRequestSite(siteKey, r, forwardType, statusCode, originalHostname, upstreamHostname, clientIP)
 	}
 
 	if endpoint == nil || router.Option.StatisticCollector == nil {
@@ -437,9 +445,11 @@ func (router *Router) logRequest(r *http.Request, succ bool, statusCode int, for
 				RequestMethod:                 r.Method,
 				Referer:                       r.Referer(),
 				UserAgent:                     r.UserAgent(),
-				RequestURL:                    r.Host + r.URL.EscapedPath(),
+				RequestURL:                    statistic.BuildStatURL(r.Host, r.URL.EscapedPath(), r.URL.RawQuery, router.Option.StatisticCollector.QueryMode()),
 				Target:                        originalHostname,
 				Upstream:                      upstreamHostname,
+				Site:                          endpoint.RootOrMatchingDomain,
+				Blocked:                       statistic.IsBlockedForwardType(forwardType),
 			}
 			router.Option.StatisticCollector.RecordRequest(requestInfo)
 		}()

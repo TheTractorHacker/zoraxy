@@ -15,12 +15,31 @@
                 <input type="text" id="statsRangeEnd" placeholder="End date">
             </div>
         </div>
+        <div style="margin-bottom: 0.6em;">
+            <label for="statsSiteSelect"><i class="globe icon"></i> Site</label>
+            <select id="statsSiteSelect" class="ui compact dropdown" style="min-width: 14em;" onchange="handleLoadStatisticButtonPress();">
+                <option value="">All sites</option>
+            </select>
+            <button class="ui basic small button" onclick="showSideWrapper('snippet/statsFilters.html?t=' + Date.now());"><i class="filter icon"></i> Filters</button>
+        </div>
         <button onclick="handleLoadStatisticButtonPress();" class="ui basic button"><i class="blue search icon"></i> Load</button>
         <button onclick="clearStatisticDateRange();" class="ui basic button"><i class="eraser icon"></i> Clear Search</button>
         <br>
         <small>Leave end range as empty for showing starting day only statistic</small>
     </div>
     <div class="ui divider"></div>
+    <div class="ui basic segment" id="statsSitesSegment">
+        <h3>Sites</h3>
+        <p>Per proxy rule traffic of the selected period. Select a row to filter all statistics below by that site.</p>
+        <div style="overflow-x: auto;">
+            <table class="ui unstackable selectable compact celled table" id="statsSitesTable">
+                <thead><tr>
+                    <th>Site</th><th>Requests</th><th>Errors</th><th>Blocked</th><th>Visitors</th><th>Trend</th>
+                </tr></thead>
+                <tbody id="statsSitesBody"><tr><td colspan="6">Loading...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
     <div id="statisticRenderNotEnoughData" class="ui segment" style="padding: 2em;" align="center">
         <h4 class="ui icon header">
             <i class="medium icons" style="color: #dbdbdb !important;">
@@ -188,6 +207,29 @@
         <div class="ui divider"></div>
         <div class="ui stackable grid">
             <div class="eight wide column">
+                <h3>Top Requested Paths</h3>
+                <p>Most requested pages (host and path, query string depends on the Filters setting)</p>
+                <div style="height: 400px; overflow-y: auto;">
+                    <table class="ui unstackable striped celled table">
+                        <thead><tr><th class="no-sort">URL</th><th class="no-sort">Requests</th></tr></thead>
+                        <tbody id="stats_PathTable"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="eight wide column">
+                <h3>Response Status Codes</h3>
+                <p>HTTP status codes returned to clients</p>
+                <div style="height: 400px; overflow-y: auto;">
+                    <table class="ui unstackable striped celled table">
+                        <thead><tr><th class="no-sort">Status</th><th class="no-sort">Requests</th></tr></thead>
+                        <tbody id="stats_StatusTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="ui divider"></div>
+        <div class="ui stackable grid">
+            <div class="eight wide column">
                 <h3>Requested Hostnames</h3>
                 <p>Most requested hostnames from downstream</p>
                 <div>
@@ -241,6 +283,81 @@
 <script>
     var statisticCharts = [];
 
+    function statsSitePara(){
+        let v = $("#statsSiteSelect").val();
+        return v ? "&site=" + encodeURIComponent(v) : "";
+    }
+
+    function escStat(t){
+        return String(t).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    }
+
+    function renderPathTable(urls){
+        let body = $("#stats_PathTable").empty();
+        let entries = Object.entries(urls || {}).sort((a, b) => b[1] - a[1]).slice(0, 100);
+        if (entries.length == 0){
+            body.html("<tr><td colspan='2'>No data</td></tr>");
+            return;
+        }
+        entries.forEach(function(e){
+            let u = e[0];
+            try { u = decodeURIComponent(u); } catch(ex) {}
+            body.append(`<tr><td style="word-break: break-all;">${escStat(u)}</td><td>${e[1]}</td></tr>`);
+        });
+    }
+
+    function renderStatusTable(codes){
+        let body = $("#stats_StatusTable").empty();
+        let entries = Object.entries(codes || {}).sort((a, b) => b[1] - a[1]);
+        if (entries.length == 0){
+            body.html("<tr><td colspan='2'>No data (status codes are recorded since this version)</td></tr>");
+            return;
+        }
+        entries.forEach(function(e){
+            body.append(`<tr><td>${escStat(e[0])}</td><td>${e[1]}</td></tr>`);
+        });
+    }
+
+    function statsSparkline(values){
+        if (!values || values.length < 2){ return ""; }
+        let max = Math.max.apply(null, values);
+        if (max <= 0){ max = 1; }
+        let w = 100, h = 22;
+        let pts = values.map((v, i) => (i * w / (values.length - 1)).toFixed(1) + "," + (h - 2 - (v / max) * (h - 4)).toFixed(1)).join(" ");
+        return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="traffic trend"><polyline fill="none" stroke="#2185d0" stroke-width="1.5" points="${pts}"/></svg>`;
+    }
+
+    function loadStatsSites(){
+        let r = getStatisticDateRange();
+        let url = "/api/analytic/sites";
+        if ($("#statsRangeStart").val() != ""){
+            url += "?start=" + r[0] + "&end=" + r[1];
+        }
+        $.getJSON(url, function(data){
+            if (data.error){ $("#statsSitesBody").html("<tr><td colspan='6'>" + escStat(data.error) + "</td></tr>"); return; }
+            let sel = $("#statsSiteSelect");
+            let current = sel.val();
+            sel.find("option:not(:first)").remove();
+            let body = $("#statsSitesBody").empty();
+            let sites = data.Sites || [];
+            if (sites.length == 0){
+                body.html("<tr><td colspan='6'>No per-site data in this period</td></tr>");
+            }
+            sites.forEach(function(s){
+                sel.append($("<option>").val(s.Site).text(s.Site));
+                let trend = (data.Dates.length > 1) ? s.PerDay : s.Hourly;
+                let errRate = s.Total > 0 ? " (" + (s.Errors * 100 / s.Total).toFixed(1) + "%)" : "";
+                let row = $("<tr style='cursor:pointer;'>").append(
+                    $("<td>").text(s.Site), $("<td>").text(s.Total), $("<td>").text(s.Errors + errRate),
+                    $("<td>").text(s.Blocked), $("<td>").text(s.Visitors), $("<td>").html(statsSparkline(trend)));
+                row.on("click", function(){ $("#statsSiteSelect").val(s.Site); handleLoadStatisticButtonPress(); });
+                body.append(row);
+            });
+            sel.val(current);
+        });
+    }
+    loadStatsSites();
+
     //Start day must be earlier than end date
     function initStatisticSummery(startdate="", enddate=""){
             if (startdate == "" && enddate == "" ){
@@ -258,7 +375,7 @@
     }
 
    function loadStatisticByDate(dateid){
-        $.getJSON("/api/analytic/load?id=" + dateid, function(data){
+        $.getJSON("/api/analytic/load?id=" + dateid + statsSitePara(), function(data){
             if (data.error != undefined){
                 msgbox(data.error, false, 6000);
                 return;
@@ -301,6 +418,8 @@
 
             //Render Referer header
             renderRefererTable(data.Referer);
+            renderPathTable(data.RequestURL);
+            renderStatusTable(data.StatusCodes);
 
             if (data.Downstreams == null){
                 //No downstream data to show
@@ -326,7 +445,7 @@
    $("#statsRangeStart").val(getTodayStatisticKey().split("_").join("-"));
 
    function loadStatisticByRange(startdate, endDate){
-        $.getJSON("/api/analytic/loadRange?start=" + startdate + "&end=" + endDate, function(data){
+        $.getJSON("/api/analytic/loadRange?start=" + startdate + "&end=" + endDate + statsSitePara(), function(data){
             //console.log(data);
             //Destroy all the previous charts
            
@@ -366,6 +485,8 @@
             
             //Render Referer header
             renderRefererTable(data.Summary.Referer);
+            renderPathTable(data.Summary.RequestURL);
+            renderStatusTable(data.Summary.StatusCodes);
 
             //Render the trend graph
             $("#trendGraphs").show();
@@ -416,6 +537,7 @@
         }
        
         initStatisticSummery(sd, ed);
+        loadStatsSites();
    }
    
    function getStatisticDateRange(){

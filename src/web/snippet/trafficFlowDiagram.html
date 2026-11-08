@@ -168,6 +168,10 @@
             stroke-width: 1.5;
         }
 
+        .proxy-node.stream rect {
+            stroke-dasharray: 6 3;
+        }
+
         .proxy-node.disabled rect {
             fill: var(--node-disabled-bg);
             stroke: var(--node-disabled-border);
@@ -398,7 +402,7 @@
 
     /* Build a rounded-rect node group */
     function buildProxyNode(proxy, x, y) {
-        const g = svgEl("g", { class: "proxy-node" + (proxy.disabled ? " disabled" : "") });
+        const g = svgEl("g", { class: "proxy-node" + (proxy.disabled ? " disabled" : "") + (proxy.kind === "stream" ? " stream" : "") });
 
         const rx = 8;
         g.appendChild(svgEl("rect", {
@@ -418,18 +422,18 @@
         // Status / disabled badge
         if (proxy.disabled) {
             const badge = svgEl("text", { x: x + PROXY_W - 10, y: y + 19, class: "node-subtitle", "text-anchor": "end" });
-            badge.textContent = "disabled";
+            badge.textContent = proxy.kind === "stream" ? "stopped" : "disabled";
             g.appendChild(badge);
         }
 
         // Request count
         const countEl = svgEl("text", { x: x + 10, y: y + 36, class: "node-count" });
-        countEl.textContent = fmtCount(proxy.requestCount) + " req";
+        countEl.textContent = proxy.kind === "stream" ? (proxy.detail || "stream") : fmtCount(proxy.requestCount) + " req";
         g.appendChild(countEl);
 
         // Upstream count hint
         const uHint = svgEl("text", { x: x + PROXY_W - 10, y: y + 36, class: "node-subtitle", "text-anchor": "end" });
-        uHint.textContent = proxy.upstreams.length + " upstream" + (proxy.upstreams.length !== 1 ? "s" : "");
+        uHint.textContent = proxy.kind === "stream" ? "" : proxy.upstreams.length + " upstream" + (proxy.upstreams.length !== 1 ? "s" : "");
         g.appendChild(uHint);
 
         return g;

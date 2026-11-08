@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Access Log Search | Zoraxy</title>
+    <meta charset="UTF-8">
+    <meta name="theme-color" content="#4b75ff">
+    <meta name="zoraxy.csrf.Token" content="{{.csrfToken}}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="../favicon.png" />
+    <link rel="stylesheet" href="../script/semantic/semantic.min.css">
+    <script type="text/javascript" src="../script/jquery-3.6.0.min.js"></script>
+    <script type="text/javascript" src="../script/semantic/semantic.min.js"></script>
+    <script type="text/javascript" src="../script/utils.js"></script>
+    <link rel="stylesheet" href="../main.css">
+    <link rel="stylesheet" href="../darktheme.css">
+    <script src="../script/darktheme.js"></script>
+    <style>
+        body { padding: 1em; }
+        .logres { font-family: monospace; font-size: 0.85em; }
+        .logres td { word-break: break-all; }
+        .st2 { color: #21ba45; } .st3 { color: #2185d0; } .st4 { color: #f2711c; } .st5 { color: #db2828; }
+        #tailBadge { display: none; }
+    </style>
+</head>
+<body>
+<div class="ui container" style="max-width: 1400px !important;">
+    <h2 class="ui header"><i class="search icon"></i><div class="content">Access Log Search
+        <div class="sub header">Search the request logs (global and per-site) with filters, live tail and export</div></div></h2>
+    <div class="ui top attached tabular menu">
+        <a class="active item" data-tab="logtab-search">Search</a>
+        <a class="item" data-tab="logtab-sites">Per-site log files</a>
+    </div>
+
+    <div class="ui bottom attached active tab segment" data-tab="logtab-search">
+        <form class="ui small form" onsubmit="event.preventDefault(); newSearch(); return false;">
+            <div class="four fields">
+                <div class="field"><label for="f_range">Time range</label>
+                    <select id="f_range">
+                        <option value="900">Last 15 minutes</option>
+                        <option value="3600" selected>Last hour</option>
+                        <option value="86400">Last 24 hours</option>
+                        <option value="604800">Last 7 days</option>
+                        <option value="0">Any time</option>
+                        <option value="custom">Custom...</option>
+                    </select></div>
+                <div class="field"><label for="f_source">Log source</label>
+                    <select id="f_source"><option value="">All logs</option></select></div>
+                <div class="field"><label for="f_host">Host / rule contains</label><input id="f_host" type="text" placeholder="example.com"></div>
+                <div class="field"><label for="f_status">Status (e.g. 4xx, 502)</label><input id="f_status" type="text" placeholder="4xx, 502"></div>
+            </div>
+            <div class="two fields" id="customRange" style="display:none;">
+                <div class="field"><label for="f_from">From</label><input id="f_from" type="datetime-local"></div>
+                <div class="field"><label for="f_to">To</label><input id="f_to" type="datetime-local"></div>
+            </div>
+            <div class="four fields">
+                <div class="field"><label for="f_method">Method</label><input id="f_method" type="text" placeholder="GET, POST"></div>
+                <div class="field"><label for="f_ip">Client IP / CIDR</label><input id="f_ip" type="text" placeholder="203.0.113.0/24"></div>
+                <div class="field"><label for="f_country">Country (ISO code)</label><input id="f_country" type="text" maxlength="2" placeholder="us"></div>
+                <div class="field"><label for="f_useragent">User agent contains</label><input id="f_useragent" type="text"></div>
+            </div>
+            <div class="four fields">
+                <div class="field"><label for="f_path">Path contains</label><input id="f_path" type="text" placeholder="/admin"></div>
+                <div class="field"><label for="f_pathregex">Path regex (RE2, max 200 chars)</label><input id="f_pathregex" type="text" placeholder="^/api/v[0-9]+/"></div>
+                <div class="field"><label for="f_limit">Rows per page</label>
+                    <select id="f_limit"><option>100</option><option selected>200</option><option>500</option><option>1000</option></select></div>
+                <div class="field"><label for="f_maxscan">Max scan size (MB)</label>
+                    <select id="f_maxscan"><option>64</option><option selected>256</option><option>1024</option><option>2048</option></select></div>
+            </div>
+            <button class="ui primary button" type="submit"><i class="search icon"></i> Search</button>
+            <button class="ui button" type="button" id="tailBtn" onclick="toggleTail();"><i class="play icon"></i> Live tail</button>
+            <button class="ui basic button" type="button" onclick="downloadResults('csv');"><i class="download icon"></i> CSV</button>
+            <button class="ui basic button" type="button" onclick="downloadResults('json');"><i class="download icon"></i> JSON</button>
+            <span id="tailBadge" class="ui green label"><i class="circle icon"></i> live</span>
+        </form>
+        <div class="ui warning message" id="truncMsg" style="display:none;"></div>
+        <div class="ui negative message" id="errMsg" style="display:none;"></div>
+        <p id="summary" style="margin-top:1em;"></p>
+        <div style="overflow-x:auto;">
+            <table class="ui very compact small striped table logres">
+                <thead><tr><th>Time</th><th>Source</th><th>Host</th><th>Client</th><th>Method</th><th>URI</th><th>Status</th><th>Class</th><th>User agent</th></tr></thead>
+                <tbody id="results"></tbody>
+            </table>
+        </div>
+        <button class="ui basic button" id="moreBtn" style="display:none;" onclick="nextPage();">Next page</button>
+    </div>
+
+    <div class="ui bottom attached tab segment" data-tab="logtab-sites">
+        <p>Write a separate request log per proxy rule, in <code>&lt;log folder&gt;/sites/&lt;rule&gt;/</code>. Disabled by default. Rules whose
+            <i>disable logging</i> option is on never write to any log. Changes apply to new requests immediately.</p>
+        <form class="ui form" onsubmit="event.preventDefault(); saveSiteLogs(); return false;">
+            <div class="three fields">
+                <div class="field"><label for="s_mode">Default for all rules</label>
+                    <select id="s_mode">
+                        <option value="off">Off (global log only)</option>
+                        <option value="also">Also write a per-site log</option>
+                        <option value="only">Per-site log instead of the global log</option>
+                    </select></div>
+                <div class="field"><label for="s_format">Line format</label>
+                    <select id="s_format"><option value="text">Text (same as global log)</option><option value="json">JSON lines</option></select></div>
+                <div class="field"><label>Compress rotated files</label>
+                    <div class="ui toggle checkbox"><input type="checkbox" id="s_compress"><label>gzip</label></div></div>
+            </div>
+            <div class="three fields">
+                <div class="field"><label for="s_size">Rotate at size (MB, 0 = 50)</label><input type="number" min="0" id="s_size"></div>
+                <div class="field"><label for="s_backups">Keep rotated files per site (0 = 10)</label><input type="number" min="0" id="s_backups"></div>
+                <div class="field"><label for="s_age">Delete rotated files older than (days, 0 = never)</label><input type="number" min="0" id="s_age"></div>
+            </div>
+            <h4>Per-rule override</h4>
+            <table class="ui very compact table"><thead><tr><th>Rule</th><th>Mode</th></tr></thead><tbody id="s_rules"></tbody></table>
+            <button class="ui green button" type="submit"><i class="save icon"></i> Save</button>
+            <span id="s_msg"></span>
+        </form>
+    </div>
+</div>
+<script>
+    $(".tabular.menu .item").tab();
+    var lastQuery = "", nextOffset = 0, tailTimer = null, newestSeen = 0, newestKeys = {};
+
+    function esc(t){ return $("<div>").text(t == null ? "" : String(t)).html(); }
+
+    function buildParams(includePaging){
+        let p = {};
+        let range = $("#f_range").val();
+        if (range == "custom"){
+            if ($("#f_from").val()) p.from = $("#f_from").val();
+            if ($("#f_to").val()) p.to = $("#f_to").val();
+        } else if (range != "0"){
+            p.from = Math.floor(Date.now() / 1000) - parseInt(range);
+        }
+        ["source", "host", "status", "method", "ip", "country", "useragent", "path", "pathregex"].forEach(function(k){
+            let v = $("#f_" + k).val();
+            if (v) p[k] = v.trim();
+        });
+        p.limit = $("#f_limit").val();
+        p.maxscanmb = $("#f_maxscan").val();
+        return p;
+    }
+
+    function showErr(msg){ $("#errMsg").text(msg).show(); }
+
+    function rowHtml(e){
+        let t = new Date(e.time);
+        let cls = "st" + String(e.status).charAt(0);
+        return `<tr><td>${esc(t.toLocaleString())}</td><td>${esc(e.source)}</td><td>${esc(e.origin)}</td><td>${esc(e.client)}${e.country ? " (" + esc(e.country) + ")" : ""}</td>` +
+               `<td>${esc(e.method)}</td><td>${esc(e.uri)}</td><td class="${cls}"><b>${esc(e.status)}</b></td><td>${esc(e.class)}</td><td>${esc((e.useragent || "").substring(0, 80))}</td></tr>`;
+    }
+
+    function renderResult(res, append){
+        if (!append) $("#results").empty();
+        (res.entries || []).forEach(function(e){ $("#results").append(rowHtml(e)); });
+        $("#summary").text(`${(res.entries || []).length} entries shown, scanned ${(res.scannedBytes / 1048576).toFixed(1)} MB in ${res.scannedFiles} file(s)`);
+        if (res.truncated){
+            $("#truncMsg").text("Truncated: " + res.truncatedReason + " (limit " + Math.round(res.maxScanBytes / 1048576) + " MB). Older matching entries may exist; narrow the time range or raise the scan limit.").show();
+        } else { $("#truncMsg").hide(); }
+        nextOffset = res.nextOffset || 0;
+        $("#moreBtn").toggle(nextOffset > 0 && (res.entries || []).length > 0);
+    }
+
+    function runSearch(offset, append){
+        let p = buildParams();
+        p.offset = offset;
+        $("#errMsg").hide();
+        $.getJSON("/api/log/search", p, function(res){
+            if (res.error){ showErr(res.error); return; }
+            renderResult(res, append);
+            if (res.entries && res.entries.length && !append){
+                newestSeen = new Date(res.entries[0].time).getTime();
+            }
+        }).fail(function(){ showErr("Search request failed"); });
+    }
+    function newSearch(){ runSearch(0, false); }
+    function nextPage(){ runSearch(nextOffset, true); }
+
+    function downloadResults(fmt){
+        let p = buildParams(); p.format = fmt; delete p.limit;
+        window.open("/api/log/searchExport?" + $.param(p), "_blank");
+    }
+
+    function toggleTail(){
+        if (tailTimer){
+            clearInterval(tailTimer); tailTimer = null;
+            $("#tailBadge").hide(); $("#tailBtn").html('<i class="play icon"></i> Live tail');
+            return;
+        }
+        newSearch();
+        $("#tailBadge").show(); $("#tailBtn").html('<i class="pause icon"></i> Stop');
+        tailTimer = setInterval(tailPoll, 2000);
+    }
+
+    function tailPoll(){
+        if (document.hidden) return;
+        let p = buildParams();
+        p.from = Math.floor(newestSeen / 1000);
+        p.limit = 200; p.offset = 0;
+        $.getJSON("/api/log/search", p, function(res){
+            if (res.error){ showErr(res.error); return; }
+            let fresh = (res.entries || []).filter(function(e){
+                let ms = new Date(e.time).getTime();
+                let key = ms + "|" + e.client + "|" + e.uri + "|" + e.status;
+                if (ms < newestSeen || (ms == newestSeen && newestKeys[key])) return false;
+                return true;
+            });
+            if (!fresh.length) return;
+            fresh.slice().reverse().forEach(function(e){ $("#results").prepend(rowHtml(e)); });
+            let top = new Date(fresh[0].time).getTime();
+            if (top > newestSeen){ newestSeen = top; newestKeys = {}; }
+            fresh.forEach(function(e){
+                if (new Date(e.time).getTime() == newestSeen) newestKeys[newestSeen + "|" + e.client + "|" + e.uri + "|" + e.status] = true;
+            });
+            while ($("#results tr").length > 1000) $("#results tr:last").remove();
+        });
+    }
+
+    $("#f_range").on("change", function(){ $("#customRange").toggle($(this).val() == "custom"); });
+
+    // sources
+    $.getJSON("/api/log/sources", function(list){
+        (list || []).forEach(function(s){ $("#f_source").append($("<option>").val(s).text(s == "global" ? "global" : "site: " + s)); });
+    });
+
+    // ---- per-site log settings ----
+    var siteCfg = null;
+    function loadSiteCfg(){
+        $.getJSON("/api/log/sites/config", function(cfg){
+            if (cfg.error){ $("#s_msg").text(cfg.error); return; }
+            siteCfg = cfg;
+            $("#s_mode").val(cfg.mode); $("#s_format").val(cfg.format);
+            $("#s_compress").prop("checked", cfg.compress);
+            $("#s_size").val(cfg.maxSizeMB); $("#s_backups").val(cfg.maxBackups); $("#s_age").val(cfg.maxAgeDays);
+            $.getJSON("/api/proxy/list?type=host", function(rules){
+                let body = $("#s_rules").empty();
+                (rules || []).forEach(function(r){
+                    let key = r.RootOrMatchingDomain;
+                    let sel = $("<select class='ruleMode'>").data("key", key);
+                    [["", "Use default"], ["off", "Off"], ["also", "Also"], ["only", "Only"]].forEach(function(o){ sel.append($("<option>").val(o[0]).text(o[1])); });
+                    sel.val((cfg.rules || {})[key] || "");
+                    let note = r.DisableLogging ? " (logging disabled for this rule)" : "";
+                    body.append($("<tr>").append($("<td>").text(key + note), $("<td>").append(sel)));
+                });
+            });
+        });
+    }
+    function saveSiteLogs(){
+        let rules = {};
+        $(".ruleMode").each(function(){ let v = $(this).val(); if (v) rules[$(this).data("key")] = v; });
+        let cfg = {
+            mode: $("#s_mode").val(), format: $("#s_format").val(), compress: $("#s_compress").is(":checked"),
+            maxSizeMB: parseInt($("#s_size").val() || 0), maxBackups: parseInt($("#s_backups").val() || 0), maxAgeDays: parseInt($("#s_age").val() || 0),
+            rules: rules
+        };
+        $.cjax({url: "/api/log/sites/config", method: "POST", contentType: "application/json", data: JSON.stringify(cfg), success: function(d){
+            $("#s_msg").text(d.error ? d.error : "Saved");
+        }});
+    }
+    loadSiteCfg();
+    newSearch();
+</script>
+</body>
+</html>

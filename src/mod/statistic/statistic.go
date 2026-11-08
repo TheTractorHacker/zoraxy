@@ -2,7 +2,7 @@ package statistic
 
 import (
 	"log"
-	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,9 +22,10 @@ import (
 // Faststat, a interval summary for all collected data and avoid
 // looping through every data everytime a overview is needed
 type DailySummary struct {
-	TotalRequest int64 //Total request of the day
-	ErrorRequest int64 //Invalid request of the day, including error or not found
-	ValidRequest int64 //Valid request of the day
+	TotalRequest   int64 //Total request of the day
+	ErrorRequest   int64 //Invalid request of the day, including error or not found
+	ValidRequest   int64 //Valid request of the day
+	BlockedRequest int64 //Requests rejected by Zoraxy itself (access list, WAF, rate limit, CAPTCHA, ...)
 	//Type counters
 	ForwardTypes        *sync.Map //Map that hold the forward types
 	RequestOrigin       *sync.Map //Map that hold [country ISO code]: visitor counter
@@ -35,6 +36,9 @@ type DailySummary struct {
 	RequestMethods      *sync.Map //Map that hold the HTTP methods (GET / POST / ...) of the requests
 	DownstreamHostnames *sync.Map //Request count of downstream hostname
 	UpstreamHostnames   *sync.Map //Forwarded request count of upstream hostname
+	StatusCodes         *sync.Map //Map that hold the HTTP status codes of the responses
+
+	sites *siteTable //Per-site (per proxy rule) summaries, see site.go
 
 	// bounded tracks the logical size of each map above and serializes
 	// the trim path so that high-cardinality request inputs (many unique
@@ -55,6 +59,8 @@ type RequestInfo struct {
 	RequestURL                    string //Request URL
 	Target                        string //Target domain or hostname
 	Upstream                      string ////Upstream domain or hostname, if the request is forwarded to upstream
+	Site                          string //Optional: key of the proxy rule that handled the request (RootOrMatchingDomain). Empty = no per-site statistic
+	Blocked                       bool   //Optional: the request was rejected by Zoraxy itself (see IsBlockedForwardType)
 }
 
 type CollectorOption struct {
@@ -80,6 +86,9 @@ type Collector struct {
 	// incr is the per-request map-increment strategy, chosen once at startup
 	// based on Option.MaxEntriesPerStatMap. See newIncrFn.
 	incr incrFn
+
+	settings settingsHolder //Exclusion filters and URL query handling, see settings.go
+	rates    rateRing       //Per-minute counters for the status page, see rate.go
 }
 
 // incrFn is the dispatch shape for "increment one entry in one of the eight
@@ -262,6 +271,11 @@ func (c *Collector) Close() {
 // Note that this function run in go routine and might have concurrent R/W issue
 // Please make sure there is no racing paramters in this function
 func (c *Collector) RecordRequest(ri RequestInfo) {
+	//Opt-in exclusion filters (own IP, blocked requests)
+	if !c.shouldRecord(&ri) {
+		return
+	}
+	c.rates.add(time.Now(), !ri.Succ, ri.Blocked)
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -306,6 +320,13 @@ func (c *Collector) RecordRequest(ri RequestInfo) {
 
 		c.incr(ds.RequestClientIp, ds.bounded.RequestClientIp, ri.IpAddr)
 
+		if ri.Blocked {
+			atomic.AddInt64(&ds.BlockedRequest, 1)
+		}
+		if ri.StatusCode > 0 {
+			c.incr(ds.StatusCodes, ds.bounded.StatusCodes, strconv.Itoa(ri.StatusCode))
+		}
+
 		//Record the referer
 		p := bluemonday.StripTagsPolicy()
 		filteredReferer := p.Sanitize(
@@ -316,10 +337,11 @@ func (c *Collector) RecordRequest(ri RequestInfo) {
 		//Record the UserAgent
 		c.incr(ds.UserAgent, ds.bounded.UserAgent, truncateStatKey(ri.UserAgent))
 
-		//Record request URL, if it is a page
-		ext := filepath.Ext(ri.RequestURL)
+		//Per-site statistic (keyed by proxy rule, bounded)
+		c.recordSite(ds, &ri, ri.IpAddr, originISO, filteredReferer, time.Now())
 
-		if ext != "" && !isWebPageExtension(ext) {
+		//Record request URL, if it is a page
+		if skipURLStat(ri.RequestURL) {
 			return
 		}
 
@@ -381,6 +403,8 @@ func NewDailySummary() *DailySummary {
 		RequestMethods:      &sync.Map{},
 		DownstreamHostnames: &sync.Map{},
 		UpstreamHostnames:   &sync.Map{},
+		StatusCodes:         &sync.Map{},
+		sites:               &siteTable{},
 		bounded:             newBoundedCounters(),
 	}
 }
