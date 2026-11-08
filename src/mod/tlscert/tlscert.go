@@ -34,6 +34,7 @@ type Manager struct {
 	LoadedCerts  []*CertCache   //A list of loaded certs
 	Logger       *logger.Logger //System wide logger for debug mesage
 	FallbackCert string         //Name of the fallback/default certificate (no file renaming)
+	TmpFolder    string         //Temporary folder holding the built-in localhost certificate and zip exports (-tmp)
 
 	//OnCertRemoved is called after a certificate has been deleted, so other modules
 	//(e.g. ACME) can drop the data they keep for it
@@ -86,13 +87,26 @@ func safeJoin(baseDir, name string) (string, error) {
 	return joined, nil
 }
 
+// DefaultTmpFolder is the temporary folder used when none is configured (the -tmp default)
+const DefaultTmpFolder = "./tmp"
+
+// NewManager creates a manager that keeps its localhost fallback certificate in DefaultTmpFolder
 func NewManager(certStore string, logger *logger.Logger) (*Manager, error) {
+	return NewManagerWithTmp(certStore, DefaultTmpFolder, logger)
+}
+
+// NewManagerWithTmp is NewManager with an explicit temporary folder (the -tmp flag)
+func NewManagerWithTmp(certStore string, tmpFolder string, logger *logger.Logger) (*Manager, error) {
+	if tmpFolder == "" {
+		tmpFolder = DefaultTmpFolder
+	}
 	if !utils.FileExists(certStore) {
 		os.MkdirAll(certStore, 0775)
 	}
 
-	pubKey := "./tmp/localhost.pem"
-	priKey := "./tmp/localhost.key"
+	os.MkdirAll(tmpFolder, 0775)
+	pubKey := filepath.Join(tmpFolder, "localhost.pem")
+	priKey := filepath.Join(tmpFolder, "localhost.key")
 
 	//Check if this is initial setup
 	if !utils.FileExists(pubKey) {
@@ -110,6 +124,7 @@ func NewManager(certStore string, logger *logger.Logger) (*Manager, error) {
 		LoadedCerts:             []*CertCache{},
 		hostSpecificTlsBehavior: defaultHostSpecificTlsBehavior, //Default to no SNI and no auto HTTPS
 		Logger:                  logger,
+		TmpFolder:               tmpFolder,
 	}
 
 	// Restore fallback cert name from metadata file
@@ -274,8 +289,8 @@ func (m *Manager) GetCertificateByHostname(hostname string) (string, string, err
 		hostname = uni
 	}
 	//Check if the domain corrisponding cert exists
-	pubKey := "./tmp/localhost.pem"
-	priKey := "./tmp/localhost.key"
+	pubKey := filepath.Join(m.tmpFolder(), "localhost.pem")
+	priKey := filepath.Join(m.tmpFolder(), "localhost.key")
 
 	tlsBehavior, err := m.hostSpecificTlsBehavior(hostname)
 	if err != nil {
@@ -424,4 +439,12 @@ func IsValidTLSFile(file io.Reader) bool {
 		return false
 	}
 
+}
+
+// tmpFolder returns the configured temporary folder, or the default one
+func (m *Manager) tmpFolder() string {
+	if m.TmpFolder == "" {
+		return DefaultTmpFolder
+	}
+	return m.TmpFolder
 }

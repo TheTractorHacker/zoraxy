@@ -59,7 +59,7 @@ func (m *Manager) HandleCertDownload(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Serve both file in zip
-		zipTmpFolder := "./tmp/download"
+		zipTmpFolder := filepath.Join(m.tmpFolder(), "download")
 		os.MkdirAll(zipTmpFolder, 0o775)
 		zipFileName := filepath.Join(zipTmpFolder, certname+".zip")
 		err := utils.ZipFiles(zipFileName, pubKey, priKey)

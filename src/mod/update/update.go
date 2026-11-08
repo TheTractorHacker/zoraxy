@@ -10,6 +10,7 @@ package update
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -19,12 +20,26 @@ import (
 // Run config update. Version numbers are int. For example
 // to update 3.0.7 to 3.0.8, use RunConfigUpdate(307, 308)
 // This function support cross versions updates (e.g. 307 -> 310)
+// It operates on the default "./conf" folder; use RunConfigUpdateInDir when the
+// configuration folder was changed with the -conf flag.
 func RunConfigUpdate(fromVersion int, toVersion int) {
-	versionFile := "./conf/version"
-	isFirstTimeInit, _ := isFirstTimeInitialize("./conf/proxy/")
+	RunConfigUpdateInDir(DefaultConfDir, fromVersion, toVersion)
+}
+
+// DefaultConfDir is the configuration folder used when -conf is not given
+const DefaultConfDir = "./conf"
+
+// RunConfigUpdateInDir is RunConfigUpdate for an explicit configuration folder.
+// The version file and every migration read and write inside confDir only.
+func RunConfigUpdateInDir(confDir string, fromVersion int, toVersion int) {
+	if confDir == "" {
+		confDir = DefaultConfDir
+	}
+	versionFile := filepath.Join(confDir, "version")
+	isFirstTimeInit, _ := isFirstTimeInitialize(filepath.Join(confDir, "proxy"))
 	if isFirstTimeInit {
 		// Create version file and exit
-		os.MkdirAll("./conf/", 0o775)
+		os.MkdirAll(confDir, 0o775)
 		os.WriteFile(versionFile, []byte(strconv.Itoa(toVersion)), 0o775)
 		return
 	}
@@ -50,7 +65,7 @@ func RunConfigUpdate(fromVersion int, toVersion int) {
 		if fromVersion == toVersion {
 			// No need to update, but check if v3.3.5 rc1→rc2 migration is needed
 			if toVersion == 335 {
-				runUpdateRoutineWithVersion(335, 335)
+				runUpdateRoutineWithVersion(confDir, 335, 335)
 			}
 			return
 		}
@@ -61,7 +76,7 @@ func RunConfigUpdate(fromVersion int, toVersion int) {
 		oldVersion := i
 		newVersion := i + 1
 		fmt.Println("Updating from v", oldVersion, " to v", newVersion)
-		runUpdateRoutineWithVersion(oldVersion, newVersion)
+		runUpdateRoutineWithVersion(confDir, oldVersion, newVersion)
 		// Write the updated version to file
 		os.WriteFile(versionFile, []byte(strconv.Itoa(newVersion)), 0o775)
 	}

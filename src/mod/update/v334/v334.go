@@ -21,8 +21,8 @@ import (
 // In older versions, setting a cert as default renamed it to default.pem/key/json.
 // This migration renames them back to their original name (based on CN in the cert)
 // and writes a fallback.json metadata file for the new name-based approach.
-func UpdateFrom333To334() error {
-	certStore := "./conf/certs"
+func UpdateFrom333To334(confDir string) error {
+	certStore := filepath.Join(confDir, "certs")
 
 	// Check if the previous default cert exists. If yes, get its hostname from cert contents
 	defaultPubKey := filepath.Join(certStore, "default.pem")

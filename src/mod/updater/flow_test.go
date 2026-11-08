@@ -544,13 +544,13 @@ func TestDatabaseUpdate(t *testing.T) {
 	}
 }
 
-func TestDatabaseBlockedWhenConfDiffers(t *testing.T) {
+func TestDatabaseMigrationAllowedWithCustomConf(t *testing.T) {
 	f := newFixture(t)
 	t.Chdir(f.root)
-	f.build(func(c *Config) { c.Migrate = func() error { return nil } }) // ConfDir is the absolute temp path != ./conf? same dir!
+	// Migrations follow -conf now, so a custom conf folder must not block them.
 	f.build(func(c *Config) { c.ConfDir = f.conf + "/proxy"; c.Migrate = func() error { return nil } })
-	if pf := f.m.RunPreflight(0); pf.DBBlocked == "" {
-		t.Error("custom -conf must disable DB migration")
+	if pf := f.m.RunPreflight(0); pf.DBBlocked != "" {
+		t.Errorf("custom -conf must not disable DB migration: %q", pf.DBBlocked)
 	}
 	f.build(func(c *Config) { c.Migrate = nil })
 	if pf := f.m.RunPreflight(0); pf.DBBlocked == "" {

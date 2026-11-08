@@ -16,16 +16,16 @@ import (
 */
 
 // Update proxy config files from v3.0.7 to v3.0.8
-func UpdateFrom307To308() error {
+func UpdateFrom307To308(confDir string) error {
 
 	//Load the configs
-	oldConfigFiles, err := filepath.Glob("./conf/proxy/*.config")
+	oldConfigFiles, err := filepath.Glob(filepath.Join(confDir, "proxy", "*.config"))
 	if err != nil {
 		return err
 	}
 
 	//Backup all the files
-	err = os.MkdirAll("./conf/proxy.old/", 0775)
+	err = os.MkdirAll(filepath.Join(confDir, "proxy.old"), 0775)
 	if err != nil {
 		return err
 	}
@@ -34,7 +34,7 @@ func UpdateFrom307To308() error {
 		// Extract the file name from the path
 		fileName := filepath.Base(oldConfigFile)
 		// Construct the backup file path
-		backupFile := filepath.Join("./conf/proxy.old/", fileName)
+		backupFile := filepath.Join(confDir, "proxy.old", fileName)
 
 		// Copy the file to the backup directory
 		err := copyFile(oldConfigFile, backupFile)

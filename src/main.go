@@ -89,6 +89,18 @@ func main() {
 	CONF_TRUSTED_PROXIES = CONF_FOLDER + "/trusted_proxies.json"
 	CONF_WAF_CENTRAL = CONF_FOLDER + "/waf_central.json"
 
+	//Warn about a leftover ./conf (etc.) when a custom folder is used: older builds ran
+	//the config migrations against ./conf regardless of -conf
+	for _, sp := range update.FindStrayDefaultPaths(map[string][2]string{
+		"conf":    {"./conf", *path_conf},
+		"tmp":     {"./tmp", *path_tmp},
+		"log":     {"./log", *path_logFile},
+		"plugin":  {"./plugins", *path_plugin},
+		"webroot": {"./www", *path_webserver},
+	}) {
+		log.Printf("WARNING: %s exists but -%s=%s is in use, so %s is ignored. If an older build created it, check it for data you still need and remove it.", sp.Default, sp.Flag, sp.Used, sp.Default)
+	}
+
 	/* Out-of-process rollback watchdog (spawned by the in-app updater) */
 	if *updaterWatchdog != "" {
 		os.Exit(updater.RunWatchdog(*updaterWatchdog, log.Printf))
@@ -103,7 +115,7 @@ func main() {
 		CurrentVersion: SYSTEM_VERSION,
 		InDocker:       *runningInDocker,
 		Migrate: func() error {
-			update.RunConfigUpdate(0, update.GetVersionIntFromVersionNumber(SYSTEM_VERSION))
+			update.RunConfigUpdateInDir(CONF_FOLDER, 0, update.GetVersionIntFromVersionNumber(SYSTEM_VERSION))
 			return nil
 		},
 		Shutdown: func() {
@@ -161,7 +173,7 @@ func main() {
 
 	if *enableAutoUpdate {
 		fmt.Println("Checking required config update")
-		update.RunConfigUpdate(0, update.GetVersionIntFromVersionNumber(SYSTEM_VERSION))
+		update.RunConfigUpdateInDir(CONF_FOLDER, 0, update.GetVersionIntFromVersionNumber(SYSTEM_VERSION))
 	}
 
 	SetupCloseHandler()

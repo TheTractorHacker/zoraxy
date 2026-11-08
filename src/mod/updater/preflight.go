@@ -158,14 +158,6 @@ func (m *Manager) RunPreflight(assetSize int64) Preflight {
 		pf.DBBlocked = "Database migration is not available in this build."
 	case !confOK:
 		pf.DBBlocked = "The config directory is not writable."
-	case !sameDir(m.cfg.ConfDir, "./conf"):
-		pf.DBBlocked = "Migrations operate on ./conf, but this instance uses -conf=" + m.cfg.ConfDir + "."
 	}
 	return pf
-}
-
-func sameDir(a, b string) bool {
-	aa, err1 := filepath.Abs(a)
-	bb, err2 := filepath.Abs(b)
-	return err1 == nil && err2 == nil && aa == bb
 }
