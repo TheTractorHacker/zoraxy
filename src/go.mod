@@ -25,6 +25,7 @@ require (
 	github.com/shirou/gopsutil/v4 v4.25.1
 	github.com/stretchr/testify v1.12.1
 	github.com/syndtr/goleveldb v1.0.0
+	github.com/yuin/gopher-lua v1.1.2
 	go.etcd.io/bbolt v1.4.1
 	golang.org/x/net v0.59.0
 	golang.org/x/oauth2 v0.37.0
@@ -123,7 +124,6 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/yandex-cloud/go-sdk/services/dns v0.0.96 // indirect
 	github.com/yandex-cloud/go-sdk/v2 v2.175.0 // indirect
-	github.com/yuin/gopher-lua v1.1.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect
