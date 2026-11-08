@@ -42,6 +42,7 @@ type SelectOptions struct {
 	UseStickySession    bool          //Sticky sessions take precedence over the algorithm
 	DisableAutoFallback bool          //Do not filter out upstreams reported offline by the uptime monitor
 	ClientIP            func() string //Resolves the real client IP, used by ip_hash only
+	ClientCountry       func() string //Resolves the client's ISO country code (GeoIP), used by client rules only
 	Exclude             []*Upstream   //Upstreams that must not be selected (already tried by this request)
 }
 
@@ -122,10 +123,13 @@ func (m *RouteManager) SelectUpstream(w http.ResponseWriter, r *http.Request, or
 		return nil, errors.New("no upstream is defined for this host")
 	}
 
+	rule := opt.Config.matchClientRule(opt)
+
 	if opt.UseStickySession {
 		//Use stick session, check which origins this request previously used
 		targetOriginId, err := m.getSessionHandler(r, origins)
 		if err == nil && m.usable(origins[targetOriginId], opt) &&
+			(rule == nil || rule.group[origins[targetOriginId].OriginIpOrDomain]) &&
 			(len(origins) == 1 || origins[targetOriginId].isHealthy(m.now())) {
 			//Valid session found and origin is usable
 			return origins[targetOriginId], nil
@@ -135,6 +139,11 @@ func (m *RouteManager) SelectUpstream(w http.ResponseWriter, r *http.Request, or
 		cands, err := m.candidates(r, origins, opt)
 		if err != nil {
 			return nil, err
+		}
+		if rule != nil {
+			if cands, err = opt.Config.restrictToClientGroup(cands, rule); err != nil {
+				return nil, err
+			}
 		}
 		targetOrigin := m.pickByAlgorithm(r, origins, cands, opt)
 		index := 0
@@ -151,6 +160,11 @@ func (m *RouteManager) SelectUpstream(w http.ResponseWriter, r *http.Request, or
 	cands, err := m.candidates(r, origins, opt)
 	if err != nil {
 		return nil, err
+	}
+	if rule != nil {
+		if cands, err = opt.Config.restrictToClientGroup(cands, rule); err != nil {
+			return nil, err
+		}
 	}
 	return m.pickByAlgorithm(r, origins, cands, opt), nil
 }

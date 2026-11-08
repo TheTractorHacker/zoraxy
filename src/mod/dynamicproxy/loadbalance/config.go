@@ -45,10 +45,13 @@ type Config struct {
 	PassiveHealthCheck *PassiveHealthCheck //Passive health check (outlier ejection)
 	Retry              *RetryConfig        //Retry on another upstream
 
+	ClientRules []*ClientRule //Optional: pin clients (by CIDR / country) to upstream groups, see clientrules.go
+
 	SlowStartSeconds int //Seconds to ramp the weight of a recovered upstream back to 100%, 0 = no slow start
 
-	rtOnce sync.Once
-	rt     *algoState
+	crState clientRuleState
+	rtOnce  sync.Once
+	rt      *algoState
 }
 
 // ActiveHealthCheck probes an upstream periodically on its own
@@ -121,6 +124,9 @@ func (c *Config) Validate() error {
 	}
 	if (c.Algorithm == AlgoHeaderHash || c.Algorithm == AlgoCookieHash) && strings.TrimSpace(c.HashKey) == "" {
 		return errors.New("a header or cookie name is required for " + c.Algorithm)
+	}
+	if err := c.validateClientRules(); err != nil {
+		return err
 	}
 	if c.SlowStartSeconds < 0 || c.SlowStartSeconds > 3600 {
 		return errors.New("slow start must be between 0 and 3600 seconds")

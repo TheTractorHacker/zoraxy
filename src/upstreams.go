@@ -423,6 +423,14 @@ func ReverseProxyLoadBalanceSet(w http.ResponseWriter, r *http.Request) {
 		utils.SendErrorResponse(w, err.Error())
 		return
 	}
+	groupNames := []string{}
+	for _, u := range append(append([]*loadbalance.Upstream{}, targetEndpoint.ActiveOrigins...), targetEndpoint.InactiveOrigins...) {
+		groupNames = append(groupNames, u.OriginIpOrDomain)
+	}
+	if err := newConfig.ValidateClientRuleGroups(groupNames); err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
+	}
 	if newConfig.Algorithm == loadbalance.AlgoRandom {
 		newConfig.Algorithm = "" //Store the default as empty so the config stays minimal
 	}
