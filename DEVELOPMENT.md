@@ -665,3 +665,47 @@ Developer map and operator notes for the fixes in `fix/triage-bugs-2`.
   and CONNECT requests fall back to HTTP/1.1. The old `modh2c` round tripper is not used: it builds a transport per request and cancels the
   context when `RoundTrip` returns, which breaks streaming. The gRPC body-peek block in `dpcore.go` is unchanged. Limits: the upstream
   "response timeout" is not applied to h2c upstreams, and "Force HTTP/1.1" on the rule is ignored for them.
+
+## Networking features (feat/networking-1)
+
+All of these are opt-in; a rule without the new fields behaves exactly as before. Logic lives in new files of `src/mod/dynamicproxy`, the shared
+`runEndpointChain` (Server.go) only gained two hook lines. Order in the chain: **allowed peer set -> access rule -> client certificate -> path rules ->
+plugin pre_auth -> WAF -> exploit detection -> rate limit -> CAPTCHA -> auth -> plugin routing**. Config for all per-rule features is stored in the
+rule's `.config` file (`ClientCert`, `PathRules`, `AllowedPeerCIDRs`, `SecondaryPortsTLS`, omitted when empty) and edited through
+`src/networkingapi.go` (`/api/proxy/networking/*`) with the side panels `web/snippet/networkingEditor.html` and `pathRulesEditor.html`
+(buttons in the rule editor, `httprp.html`, "Networking"). `PrepareProxyRoute` compiles the options; a config that does not compile (hand edited file)
+makes the rule answer **503 to every request** (fail closed) instead of dropping the protection.
+
+* **Client certificates / mTLS (upstream #442)** `clientcert.go`. Modes: `request` (optional; if a CA bundle is set a presented certificate must verify),
+  `require` (certificate required, chain NOT verified; refused unless an allow list pins it), `require_and_verify` (CA bundle, `ExtKeyUsageClientAuth`).
+  The listener config has `GetConfigForClient` that picks the policy by SNI, so only the hosts that need a certificate prompt for one. The handshake is not the
+  security boundary: SNI and `Host` are independent, so the chain re-verifies against the CA pool of the rule selected by `Host` (a client that completed TLS for an
+  open host cannot reach an mTLS host; plain HTTP requests to a required rule get 403). Allow/block list entries: `cn:`, `san:`, `serial:<hex>`, SHA-256 fingerprint
+  or a bare CN/SAN; block list = manual revocation. **Revocation (CRL/OCSP) is not supported.** Upstream sees `X-Client-Cert-Subject/-Fingerprint/-Serial/-Verified`
+  (the four names are always deleted from the incoming request first; `DisableIdentityHeaders` turns the headers off). Per-handshake config clones do not share
+  session ticket keys, so TLS session resumption never carries a client certificate decision to another handshake. Tests: `clientcert_test.go` (real in-process TLS
+  handshakes: valid, expired, wrong CA, intermediate chain, blocked serial, SNI/Host mismatch, allow list, header spoofing).
+* **Upstream mTLS + PROXY protocol (per upstream)** `Upstream.ClientCertName` = a pair `name.pem`/`name.key` in the certificate store, loaded on every handshake
+  (`loadbalance.UpstreamClientCertLoader`, set by `initUpstreamClientCertLoader`); only for `RequireTLS` upstreams; also used by the active health probe.
+  `Upstream.ProxyProtocol` 1/2 (`dpcore/proxyproto.go`): header on every upstream connection announcing `r.RemoteAddr` (the TCP peer as Zoraxy sees it; behind a CDN
+  that is the CDN). Because the header belongs to a connection, those upstreams get **no connection reuse, no h2/h2c, no environment proxy**; health probes send a LOCAL/UNKNOWN
+  header. Not applied to WebSocket upgrades and CONNECT (they use their own dialers), nor to the TCP/UDP stream proxy. Edit in the upstream panel
+  (`/api/proxy/upstream/update` payload fields, `proxyproto` / `clientcert` on `/add`).
+* **TLS on secondary ports (upstream #1042)** `secondarytls.go`, `SecondaryPortsTLS` on the rule. A listener address is shared; it is TLS if any rule listing it asks for TLS
+  (warning logged for mixed use). `UpdateSecondaryListeners` restarts a listener whose mode changed. Same certificate store/SNI, min TLS version and cipher profile as the main
+  listener, plus the mTLS policy. Test: `secondarytls_test.go` (real handshake, switch off/on).
+* **Path rules (upstream #238, #726)** `pathrules.go`. Ordered, first match decides: `allow` (only stops path-rule evaluation), `deny` 403, `rate_limit` (token bucket per rule+client, 429),
+  `require_auth` (forces the rule's auth provider even if a Basic/ZorxAuth/Forward/OAuth2 exception would skip it via the `pathForcesAuth` request context flag; 403 if the rule has no
+  provider). Restrictive actions match if **any** reading of the path matches (single/multiple decoding up to 4 rounds, `//`, dot segments, `;params`, `\`, NUL); `allow` only matches a target
+  that is already canonical. Scope: CIDRs/countries, optionally inverted. Methods are the real HTTP method (override headers are ignored). Case sensitive unless the rule says otherwise
+  (tick it for case-insensitive upstreams). Tests: `pathrules_test.go` (bypass table).
+* **Allowed direct peers (upstream #761)** `peerset.go`, `AllowedPeerCIDRs`: only `r.RemoteAddr` is looked at, never forwarded headers; first check of the chain; works on TLS, port 80 and
+  secondary ports. With the PROXY-protocol listener option the peer is the announced address. Tests: `peerset_test.go`.
+* **Default site logging (upstream #578)** `defaultsitelog.go`: switch `settings/logDefaultSite` (`/api/proxy/defaultsite/logging`, checkbox on the Default Site page), default off. Logs the 404 page
+  and unknown host on secondary ports; global token bucket (20 burst, 5/s) plus a "N request(s) not logged" summary line. Proxied/static default site requests keep following the default
+  site rule's own logging setting.
+* **Plugins as unprivileged user (upstream #760)** flags `-plugin_user`, `-plugin_group` (`mod/plugins/runas_unix.go`): setuid/setgid via `SysProcAttr.Credential`, supplementary groups dropped,
+  `HOME/USER/LOGNAME` set. Requires root, otherwise `StartPlugin` returns a clear error (no silent fallback). Refuses uid/gid 0. Files are NOT chowned: the binary and the plugin folder must be
+  accessible to the user (checked first; the error names the `chown -R` to run). Ignored with a log line on Windows. Unit tests simulate root with a seam; nothing here was run as real root.
+* **Network diagnostics** `mod/netutils/diagnostics.go`: `/api/tools/dns`, `/api/tools/tlsinspect`, `/api/tools/httptest` ("Diagnostics" tab of Network Tools). Admin only; connections to metadata /
+  link-local addresses are refused by default at dial time (so rebinding and redirects are covered), `allowmetadata=true` overrides per call. HTTP tester follows redirects manually (max 10), GET/HEAD/OPTIONS only.
