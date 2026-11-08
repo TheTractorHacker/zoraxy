@@ -6,6 +6,7 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/shirou/gopsutil/v4/disk"
@@ -334,13 +335,13 @@ func HandleDashboardOverview(w http.ResponseWriter, r *http.Request) {
 
 	rxToday, txToday := getBandwidthToday()
 
-	d := statisticCollector.DailySummary
+	d := statisticCollector.GetCurrentDailySummary()
 	result := Overview{
 		SystemUptime:        time.Now().Unix() - bootTime,
 		ProxyRunning:        dynamicProxyRouter != nil && dynamicProxyRouter.Running,
-		TotalRequestToday:   d.TotalRequest,
-		ErrorRequestToday:   d.ErrorRequest,
-		ValidRequestToday:   d.ValidRequest,
+		TotalRequestToday:   atomic.LoadInt64(&d.TotalRequest),
+		ErrorRequestToday:   atomic.LoadInt64(&d.ErrorRequest),
+		ValidRequestToday:   atomic.LoadInt64(&d.ValidRequest),
 		UniqueVisitorsToday: countSyncMapEntries(d.RequestClientIp),
 		BandwidthRxToday:    rxToday,
 		BandwidthTxToday:    txToday,

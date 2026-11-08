@@ -3,6 +3,7 @@ package statistic_test
 import (
 	"net"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -104,9 +105,52 @@ func TestRecordRequest(t *testing.T) {
 		Target:                        "target1",
 	}
 	collector.RecordRequest(requestInfo)
-	time.Sleep(1 * time.Second) // Wait for the goroutine to finish
-	if collector.DailySummary.TotalRequest != 1 {
-		t.Fatalf("Expected TotalRequest to be 1, got %v", collector.DailySummary.TotalRequest)
+	waitForTotal(t, collector, 1)
+}
+
+// waitForTotal polls the (atomically updated) request counter until it reaches want.
+func waitForTotal(t *testing.T, c *statistic.Collector, want int64) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for atomic.LoadInt64(&c.GetCurrentDailySummary().TotalRequest) != want {
+		if time.Now().After(deadline) {
+			t.Fatalf("Expected TotalRequest to reach %d, got %d", want, atomic.LoadInt64(&c.GetCurrentDailySummary().TotalRequest))
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// Concurrent RecordRequest calls, concurrent readers and a day rollover must
+// not race (fork #247) and no request may be lost. Run with -race.
+func TestRecordRequestConcurrent(t *testing.T) {
+	db := getNewDatabase()
+	defer clearDatabase(db)
+	collector, _ := statistic.NewStatisticCollector(statistic.CollectorOption{Database: db})
+	const n = 200
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() { //concurrent reader like the dashboard
+		defer close(done)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				_ = collector.GetExportSummary()
+				d := collector.GetCurrentDailySummary()
+				_ = atomic.LoadInt64(&d.ErrorRequest)
+			}
+		}
+	}()
+	for i := 0; i < n; i++ {
+		collector.RecordRequest(statistic.RequestInfo{IpAddr: "127.0.0.1", Succ: i%2 == 0, StatusCode: 200, ForwardType: "t", RequestURL: "/x", Target: "a"})
+	}
+	waitForTotal(t, collector, n)
+	close(stop)
+	<-done
+	d := collector.GetCurrentDailySummary()
+	if atomic.LoadInt64(&d.ValidRequest)+atomic.LoadInt64(&d.ErrorRequest) != n {
+		t.Fatalf("valid+error != total: %d + %d", d.ValidRequest, d.ErrorRequest)
 	}
 }
 

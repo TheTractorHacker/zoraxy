@@ -15,7 +15,7 @@ import (
 // http.Transport every time and never closed/reused it. It verifies that
 // every connection opened by a check is closed again shortly after.
 func TestGetWebsiteStatusClosesConnections(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
 	}))
@@ -38,6 +38,7 @@ func TestGetWebsiteStatusClosesConnections(t *testing.T) {
 			atomic.AddInt64(&closed, 1)
 		}
 	}
+	server.Start() //start only after ConnState is set (setting it on a running server races)
 
 	m := &Monitor{Config: &Config{}}
 
@@ -52,8 +53,12 @@ func TestGetWebsiteStatusClosesConnections(t *testing.T) {
 		}
 	}
 
-	// Give the transport a moment to finish tearing down the connection.
-	time.Sleep(300 * time.Millisecond)
+	// The transport closes connections asynchronously: poll with a generous
+	// deadline instead of sleeping a fixed time (flaky under load).
+	deadline := time.Now().Add(10 * time.Second)
+	for atomic.LoadInt64(&closed) < n && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	closedNow := atomic.LoadInt64(&closed)
 	if closedNow < n {
