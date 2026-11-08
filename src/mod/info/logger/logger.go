@@ -127,6 +127,15 @@ func (l *Logger) Log(title string, errorMessage string, originalError error, cop
 
 }
 
+// LogRaw writes one pre-formatted line (e.g. a JSON audit record) to the log
+// file without adding any prefix, timestamp or STDOUT copy.
+func (l *Logger) LogRaw(line string) {
+	l.ValidateAndUpdateLogFilepath()
+	if l.logger != nil {
+		l.logger.Println(line)
+	}
+}
+
 // Validate if the logging target is still valid (detect any months change)
 func (l *Logger) ValidateAndUpdateLogFilepath() {
 	if l.file == nil {

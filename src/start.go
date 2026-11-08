@@ -98,6 +98,8 @@ func startupSequence() {
 		SystemWideLogger.Println("System wide logging is enabled")
 	}
 
+	initWAFAuditLog() //WAF JSON audit log, see wafapi.go
+
 	LogViewer = logviewer.NewLogViewer(&logviewer.ViewerOption{
 		RootFolder: *path_logFile,
 	})

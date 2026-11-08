@@ -76,6 +76,11 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		/* WAF (Coraza + OWASP CRS) -- WAF-HOOK: keep in the shared pre-proxy chain */
+		if h.Parent.wafInspect(w, r, sep) {
+			return
+		}
+
 		/* Exploit Detection */
 		if sep.detector != nil {
 			if sep.detector.CheckIsAttack(w, r) {
@@ -153,6 +158,11 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//Root access control based on default rule
 	blocked := h.handleAccessRouting("default", w, r, h.Parent.Root)
 	if blocked {
+		return
+	}
+
+	/* WAF for the default site (root endpoint) -- WAF-HOOK: keep in the shared pre-proxy chain */
+	if h.Parent.wafInspect(w, r, h.Parent.Root) {
 		return
 	}
 
