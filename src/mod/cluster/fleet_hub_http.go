@@ -255,6 +255,9 @@ type NodeView struct {
 	KeyRotating    bool              `json:"keyRotating"`
 	Vars           map[string]string `json:"vars"`
 	Override       *ScopeSel         `json:"override"`
+	Paused         bool              `json:"paused"`
+	AdminURL       string            `json:"adminUrl"`
+	Notes          string            `json:"notes"`
 	History        []HistoryEntry    `json:"history"`
 	Errors         []HistoryEntry    `json:"errors"`
 }
@@ -320,7 +323,7 @@ func (h *Hub) Overview() map[string]any {
 			continue
 		}
 		rt := h.rt[id]
-		v := NodeView{ID: id, Name: n.Name, Group: n.Group, Vars: n.Vars, Override: n.Override, KeyRotating: n.NextKey != "",
+		v := NodeView{ID: id, Name: n.Name, Group: n.Group, Vars: n.Vars, Override: n.Override, Paused: n.Paused, AdminURL: n.AdminURL, Notes: n.Notes, KeyRotating: n.NextKey != "",
 			Status: h.statusLocked(n, rt, now), DesiredVersion: desired[id].ver, History: []HistoryEntry{}, Errors: []HistoryEntry{}}
 		if rt != nil {
 			hb := rt.HB
@@ -509,6 +512,10 @@ func (m *Manager) HandleFleetHub(w http.ResponseWriter, r *http.Request) {
 		fail(h.SyncNow(by, id))
 	case "nodeGroup":
 		fail(h.SetNodeGroup(by, id, strings.TrimSpace(r.PostFormValue("group"))))
+	case "nodePaused":
+		fail(h.SetNodePaused(by, id, r.PostFormValue("paused") == "true"))
+	case "nodeInfo":
+		fail(h.SetNodeInfo(by, id, r.PostFormValue("name"), r.PostFormValue("adminUrl"), r.PostFormValue("notes")))
 	case "nodeVars":
 		v, err := formVars(r, "vars")
 		if err != nil {

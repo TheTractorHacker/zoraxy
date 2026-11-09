@@ -1237,3 +1237,44 @@ func TestWAFScopeSyncsCentralPolicy(t *testing.T) {
 		t.Fatal("node in another group received the WAF policy")
 	}
 }
+
+func TestPausedNodeGetsNothingAndKeepsDetails(t *testing.T) {
+	s := newSim(t, "a", "b")
+	if _, err := s.h.Publish("t", PublishRequest{Group: "g"}); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := s.h.DesiredHash("a"); v == 0 {
+		t.Fatal("a synced node should have a desired version")
+	}
+	if err := s.h.SetNodePaused("t", "a", true); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := s.h.DesiredHash("a"); v != 0 {
+		t.Fatalf("paused node desired version = %d, want 0", v)
+	}
+	if v, _ := s.h.DesiredHash("b"); v == 0 {
+		t.Fatal("pausing a must not affect b")
+	}
+	if _, err := s.h.pickCanaryLocked("g", "a"); err == nil {
+		t.Fatal("a paused node must not be a canary")
+	}
+	if err := s.h.SetNodePaused("t", "a", false); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := s.h.DesiredHash("a"); v == 0 {
+		t.Fatal("resuming sync should restore the desired version")
+	}
+
+	for _, bad := range []string{"javascript:alert(1)", "ftp://x", "http://"} {
+		if err := s.h.SetNodeInfo("t", "a", "", bad, ""); err == nil {
+			t.Fatalf("admin address %q must be rejected", bad)
+		}
+	}
+	if err := s.h.SetNodeInfo("t", "a", "edge-1", "https://10.1.0.25:3000", "rack 2"); err != nil {
+		t.Fatal(err)
+	}
+	n := s.h.st.Nodes["a"]
+	if n.Name != "edge-1" || n.AdminURL != "https://10.1.0.25:3000" || n.Notes != "rack 2" {
+		t.Fatalf("node = %+v", n)
+	}
+}

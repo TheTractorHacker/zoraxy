@@ -199,15 +199,15 @@ func (h *Hub) Publish(by string, req PublishRequest) (*Rollout, error) {
 func (h *Hub) pickCanaryLocked(group, want string) (string, error) {
 	if want != "" {
 		n := h.st.Nodes[want]
-		if n == nil || n.Group != group || n.Revoked {
-			return "", errors.New("canary node is not an active member of the group")
+		if n == nil || n.Group != group || n.Revoked || n.Paused {
+			return "", errors.New("canary node is not an active, synced member of the group")
 		}
 		return want, nil
 	}
 	now := h.now().Unix()
 	var ids []string
 	for id, n := range h.st.Nodes {
-		if n.Group == group && !n.Revoked {
+		if n.Group == group && !n.Revoked && !n.Paused {
 			ids = append(ids, id)
 		}
 	}

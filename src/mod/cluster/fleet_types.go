@@ -113,6 +113,9 @@ type FleetNode struct {
 	RevokedAt int64             `json:"revokedAt,omitempty"`
 	Vars      map[string]string `json:"vars,omitempty"`
 	Override  *ScopeSel         `json:"override,omitempty"` //nil = inherit the group
+	Paused    bool              `json:"paused,omitempty"`   //"don't sync": the hub hands this node no configuration (it is still monitored)
+	AdminURL  string            `json:"adminUrl,omitempty"` //where this node's own admin UI is, for the Open button
+	Notes     string            `json:"notes,omitempty"`
 	Pinned    string            `json:"-"`
 }
 

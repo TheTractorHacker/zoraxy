@@ -66,6 +66,17 @@
                 <h3 id="flDrawerTitle"></h3>
                 <div class="ui two column stackable grid">
                     <div class="column">
+                        <h4>Sync</h4>
+                        <div class="ui toggle checkbox"><input type="checkbox" id="flNodeSync"><label>Sync configuration from the hub to this node</label></div>
+                        <p style="color:grey;margin-top:0.4em;">Off: the hub sends this node nothing and never changes it. The node is still monitored, and you manage its rules and settings on the node itself (use <b>Open</b> below).</p>
+                        <h4>Node details</h4>
+                        <div class="ui form">
+                            <div class="field"><label>Name</label><input type="text" id="flNodeName" maxlength="64"></div>
+                            <div class="field"><label>Admin address of this node</label><input type="text" id="flNodeUrl" placeholder="https://10.1.0.25:3000" maxlength="200"></div>
+                            <div class="field"><label>Notes</label><textarea id="flNodeNotes" rows="2" maxlength="500"></textarea></div>
+                        </div>
+                        <button class="ui tiny basic button" id="flSaveInfo">Save details</button>
+                        <button class="ui tiny basic button" id="flOpenNode"><i class="external alternate icon"></i> Open</button>
                         <h4>Variables</h4>
                         <p style="color:grey;">JSON object, for example <code>{"upstream_ip":"10.0.0.5"}</code>. Used as <code>{{node.upstream_ip}}</code> in managed config. Allowed characters: letters, digits and . _ : / @ + - [ ]</p>
                         <textarea id="flNodeVars" rows="4" style="width:100%;font-family:monospace;"></textarea>
@@ -290,9 +301,9 @@
                 "<td>" + (x.health == "ok" ? "<i class='green check icon'></i>" : x.health ? "<i class='red times icon'></i>" + esc(x.health) : "-") + "</td>" +
                 "<td>" + esc(x.endpoints) + "</td><td style='color:" + (days != null && days < 14 ? "#c00" : "inherit") + "'>" + (days == null ? "-" : days + " d") + "</td>" +
                 "<td>" + esc(x.wafMode || "-") + "</td><td>" + Math.round(x.reqPerMin) + "</td><td>" + Math.round(x.errPerMin) + "</td>" +
-                "<td>v" + esc(x.appliedVersion || 0) + (x.desiredVersion ? " / v" + x.desiredVersion : "") +
-                (x.drift ? " <i class='orange exclamation triangle icon' title='" + esc(x.driftReason) + "'></i>" : x.desiredVersion ? " <i class='green check icon'></i>" : "") + "</td>" +
-                "<td class='flActs'>" + (x.status == "revoked" ? "" :
+                "<td>" + (x.paused ? "<span class='ui grey mini label' title='Sync is off for this node: the hub sends it nothing'>Not synced</span>" : "v" + esc(x.appliedVersion || 0) + (x.desiredVersion ? " / v" + x.desiredVersion : "")) +
+                (x.paused ? "" : x.drift ? " <i class='orange exclamation triangle icon' title='" + esc(x.driftReason) + "'></i>" : x.desiredVersion ? " <i class='green check icon'></i>" : "") + "</td>" +
+                "<td class='flActs'>" + (x.adminUrl ? "<a class='ui mini basic icon button' href='" + esc(x.adminUrl) + "' target='_blank' rel='noopener' title='Open the admin UI of this node'><i class='external alternate icon'></i></a>" : "") + (x.status == "revoked" ? "" :
                     "<button class='ui mini basic icon button' data-act='nodeSync' title='Sync now'><i class='sync icon'></i></button>" +
                     "<button class='ui mini basic icon button' data-act='nodeRotate' title='Rotate node key'><i class='key icon'></i></button>" +
                     "<button class='ui mini basic icon button' data-act='nodeGroup' title='Change group'><i class='exchange icon'></i></button>" +
@@ -365,11 +376,15 @@
         openNode = id;
         $("#flDrawerTitle").text(x.name + " (" + x.id + ") - " + x.status);
         if (!keep) {
+            $("#flNodeName").val(x.name);
+            $("#flNodeUrl").val(x.adminUrl || "").attr("placeholder", x.addr ? "https://" + x.addr + ":3000" : "https://node:3000");
+            $("#flNodeNotes").val(x.notes || "");
             $("#flNodeVars").val(JSON.stringify(x.vars || {}, null, 1));
             $("#flNodeInherit").prop("checked", !x.override);
             checks(ov.scopes, "#flNodeScopes", (x.override && x.override.scopes) || []);
             $("#flNodeTags").val(((x.override && x.override.proxyTags) || []).join(", "));
         }
+        $("#flNodeSync").prop("checked", !x.paused);
         $("#flHist").html((x.history || []).slice().reverse().map(function(h){ return "<tr><td>" + ts(h.at) + "</td><td>v" + h.version + "</td><td>" + esc(h.result) + "</td><td>" + esc(h.error) + "</td></tr>"; }).join("") || "<tr><td>none</td></tr>");
         $("#flErrs").html((x.errors || []).slice().reverse().map(function(h){ return esc(ts(h.at) + "  " + h.error); }).join("<br>") || "none");
         $("#flConf").text((x.conflicts || []).map(function(c){ return c.scope + ": " + c.key; }).join(", ") || "none");
@@ -389,6 +404,12 @@
         hub(act, data);
     });
     $("#flDrawerClose").on("click", function(){ $("#flDrawer").hide(); openNode = null; });
+    $("#flNodeSync").on("change", function(){ hub("nodePaused", {id: openNode, paused: $(this).is(":checked") ? "false" : "true"}); });
+    $("#flSaveInfo").on("click", function(){ hub("nodeInfo", {id: openNode, name: $("#flNodeName").val(), adminUrl: $("#flNodeUrl").val(), notes: $("#flNodeNotes").val()}); });
+    $("#flOpenNode").on("click", function(){
+        let u = $.trim($("#flNodeUrl").val()) || $("#flNodeUrl").attr("placeholder");
+        if (/^https?:\/\//i.test(u)) { window.open(u, "_blank", "noopener"); }
+    });
     $("#flSaveVars").on("click", function(){ hub("nodeVars", {id: openNode, vars: $("#flNodeVars").val()}); });
     $("#flSaveNodeScopes").on("click", function(){
         hub("nodeScopes", {id: openNode, inherit: $("#flNodeInherit").is(":checked") ? "true" : "false", scopes: picked("#flNodeScopes"), tags: $("#flNodeTags").val()});

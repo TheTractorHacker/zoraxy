@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -573,6 +574,60 @@ func (h *Hub) SetNodeScopes(by, id string, sel *ScopeSel) error {
 	return h.saveLocked()
 }
 
+// SetNodePaused switches configuration sync for one node off or on. A paused node is still monitored
+// (heartbeat) but receives no bundle, and keeps whatever it has now.
+func (h *Hub) SetNodePaused(by, id string, paused bool) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	n, err := h.node(id)
+	if err != nil {
+		return err
+	}
+	if n.Paused == paused {
+		return nil
+	}
+	n.Paused = paused
+	h.rtFor(id).SyncRequest = true
+	state := "sync resumed"
+	if paused {
+		state = "sync paused"
+	}
+	h.auditLocked(AuditEntry{At: h.now().Unix(), Actor: by, Action: "node.set-paused", Target: id, Detail: state})
+	return h.saveLocked()
+}
+
+// SetNodeInfo edits the display name, the address of the node's own admin UI and free notes.
+func (h *Hub) SetNodeInfo(by, id, name, adminURL, notes string) error {
+	name = strings.TrimSpace(name)
+	adminURL = strings.TrimSpace(adminURL)
+	notes = strings.TrimSpace(notes)
+	if name != "" && !nodeNamePattern.MatchString(name) {
+		return errors.New("invalid node name")
+	}
+	if adminURL != "" {
+		u, err := url.Parse(adminURL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || len(adminURL) > 200 {
+			return errors.New("the admin address must be a http:// or https:// URL")
+		}
+	}
+	if len(notes) > 500 {
+		return errors.New("notes are limited to 500 characters")
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	n, err := h.node(id)
+	if err != nil {
+		return err
+	}
+	if name != "" && name != n.Name {
+		n.Name = name
+		h.rtFor(id).SyncRequest = true
+	}
+	n.AdminURL, n.Notes = adminURL, notes
+	h.auditLocked(AuditEntry{At: h.now().Unix(), Actor: by, Action: "node.set-info", Target: id})
+	return h.saveLocked()
+}
+
 // SetGroup creates or updates a group's scopes and variables.
 func (h *Hub) SetGroup(by, name string, sel ScopeSel, vars map[string]string) error {
 	if !groupNamePattern.MatchString(name) {
@@ -699,6 +754,9 @@ func (h *Hub) effectiveLocked(n *FleetNode) (ScopeSel, map[string]string) {
 
 // desiredVersionLocked is the version the node should run now.
 func (h *Hub) desiredVersionLocked(n *FleetNode) int64 {
+	if n.Paused {
+		return 0 //not synced: nothing is published to this node, it keeps its local configuration
+	}
 	g := h.st.Groups[n.Group]
 	if g == nil {
 		return 0
