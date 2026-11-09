@@ -50,30 +50,32 @@ type TrustedPath struct {
 
 // Policy is the global WAF policy
 type Policy struct {
-	Enabled               bool   // Master switch for endpoints that inherit
-	DefaultMode           string // off, detection_only, block: mode of inheriting endpoints
-	ParanoiaLevel         int
-	InboundThreshold      int
-	MaxBodyBytes          int64
-	AllowEndpointOverride bool            // Endpoints may change paranoia level / threshold
-	ExcludedRuleIDs       []string        // Rules disabled everywhere
-	PathExclusions        []PathExclusion // Rules disabled for matching paths, everywhere
-	CustomRules           string          // Global SecLang, runs before profile / endpoint rules
-	TrustedPaths          []TrustedPath   // Requests that skip the WAF
-	AllowedIPs            []string        // IPs / CIDRs that skip the WAF
+	Enabled                bool   // Master switch for endpoints that inherit
+	DefaultMode            string // off, detection_only, block: mode of inheriting endpoints
+	ParanoiaLevel          int
+	InboundThreshold       int
+	MaxBodyBytes           int64
+	AllowEndpointOverride  bool            // Endpoints may change paranoia level / threshold
+	ExcludedRuleIDs        []string        // Rules disabled everywhere
+	PathExclusions         []PathExclusion // Rules disabled for matching paths, everywhere
+	CustomRules            string          // Global SecLang, runs before profile / endpoint rules
+	TrustedPaths           []TrustedPath   // Requests that skip the WAF
+	AllowedIPs             []string        // IPs / CIDRs that skip the WAF
+	IgnoreAnalyticsCookies bool            `json:",omitempty"` // Do not inspect the values of analytics cookies (PostHog, Google Analytics, ...), see Config
 }
 
 // Profile is a reusable named bundle of WAF settings
 type Profile struct {
-	Name             string
-	Description      string
-	BuiltIn          bool `json:",omitempty"` // Read-only, shipped with Zoraxy
-	Mode             string
-	ParanoiaLevel    int // 0 = use the global policy value
-	InboundThreshold int // 0 = use the global policy value
-	ExcludedRuleIDs  []string
-	PathExclusions   []PathExclusion
-	CustomRules      string
+	Name                   string
+	Description            string
+	BuiltIn                bool `json:",omitempty"` // Read-only, shipped with Zoraxy
+	Mode                   string
+	ParanoiaLevel          int // 0 = use the global policy value
+	InboundThreshold       int // 0 = use the global policy value
+	ExcludedRuleIDs        []string
+	PathExclusions         []PathExclusion
+	CustomRules            string
+	IgnoreAnalyticsCookies bool `json:",omitempty"` // Additive: on if the policy or the profile turns it on
 }
 
 // Overrides are the per endpoint additions applied on top of the global
@@ -338,6 +340,7 @@ func (s *State) Resolve(set Setting) Resolved {
 	cfg := Config{Mode: mode, ParanoiaLevel: p.ParanoiaLevel, InboundThreshold: p.InboundThreshold, MaxBodyBytes: p.MaxBodyBytes}
 	cfg.ExcludedRuleIDs = append(cfg.ExcludedRuleIDs, p.ExcludedRuleIDs...)
 	cfg.PathExclusions = append(cfg.PathExclusions, p.PathExclusions...)
+	cfg.IgnoreAnalyticsCookies = p.IgnoreAnalyticsCookies
 	rules := []string{p.CustomRules}
 	if prof != nil {
 		if prof.ParanoiaLevel > 0 {
@@ -348,6 +351,7 @@ func (s *State) Resolve(set Setting) Resolved {
 		}
 		cfg.ExcludedRuleIDs = append(cfg.ExcludedRuleIDs, prof.ExcludedRuleIDs...)
 		cfg.PathExclusions = append(cfg.PathExclusions, prof.PathExclusions...)
+		cfg.IgnoreAnalyticsCookies = cfg.IgnoreAnalyticsCookies || prof.IgnoreAnalyticsCookies
 		rules = append(rules, prof.CustomRules)
 	}
 	if x := set.Extra; x != nil {

@@ -1038,6 +1038,9 @@
                                     <small>One per line: <code>PATH RULEID,RULEID</code>. The path is a prefix; start it with <code>=</code> to match exactly.</small>
                                 </div>
                                 <div class="field">
+                                    <div class="ui checkbox"><input type="checkbox" class="wafIgnoreCookies"><label>Do not inspect analytics cookies (PostHog, Google Analytics, Facebook pixel, ...)</label></div>
+                                </div>
+                                <div class="field">
                                     <label>Custom rules (SecLang)</label>
                                     <textarea class="wafCustomRules" rows="5" style="font-family:monospace;" placeholder='SecRule REQUEST_HEADERS:X-Evil "@streq yes" "id:1000001,phase:1,deny,status:403,msg:custom"'></textarea>
                                     <small>Validated when saved; a syntax error rejects the save. Use rule IDs above 1000000. Include, file operators and engine/audit directives are not allowed.</small>
@@ -2513,6 +2516,7 @@
             return (p.Exact ? "=" : "") + p.Path + " " + p.RuleIDs.join(",");
         }).join("\n"));
         box.find(".wafCustomRules").val(cfg.CustomRules || "");
+        box.find(".wafIgnoreCookies").prop("checked", !!cfg.IgnoreAnalyticsCookies);
 
         box.find(".wafSaveBtn").off("click").on("click", function(){
             let pathEx = [];
@@ -2534,7 +2538,8 @@
                 MaxBodyBytes: (parseInt(box.find(".wafBodyLimit").val()) || 128) * 1024,
                 ExcludedRuleIDs: box.find(".wafExcludedIds").val().split(/[\s,]+/).filter(x => x != ""),
                 PathExclusions: pathEx,
-                CustomRules: box.find(".wafCustomRules").val()
+                CustomRules: box.find(".wafCustomRules").val(),
+                IgnoreAnalyticsCookies: box.find(".wafIgnoreCookies").prop("checked")
             };
             let btn = $(this).addClass("loading");
             $.cjax({

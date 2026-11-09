@@ -44,6 +44,12 @@ type Config struct {
 	ExcludedRuleIDs  []string        // Rules disabled for the whole endpoint
 	PathExclusions   []PathExclusion // Rules disabled for specific paths
 	CustomRules      string          // Extra SecLang directives, validated on save
+
+	// IgnoreAnalyticsCookies stops the injection rules (SQLi, XSS, generic, RCE) from inspecting the values of
+	// well known analytics and tracking cookies (PostHog, Google Analytics, Facebook pixel, Hotjar, Mixpanel,
+	// Segment, Amplitude, Matomo, Clarity). Their JSON or encoded values look like attacks to the CRS and get
+	// ordinary visitors blocked. Every other cookie, argument and header is inspected as before.
+	IgnoreAnalyticsCookies bool
 }
 
 var (

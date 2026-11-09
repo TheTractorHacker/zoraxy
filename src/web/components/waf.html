@@ -266,6 +266,8 @@
             </div>
             <div class="field">
                 <div class="ui checkbox" id="wafpOverrideBox"><input type="checkbox" id="wafpOverride"><label>Allow proxy rules to override paranoia level and threshold</label></div>
+                <div class="ui checkbox" id="wafpCookiesBox" style="display:block;margin-top:0.6em;"><input type="checkbox" id="wafpCookies"><label>Do not inspect analytics cookies (PostHog, Google Analytics, Facebook pixel, Hotjar, Mixpanel, Segment, Amplitude, Matomo, Clarity)</label></div>
+                <small style="opacity:0.7;">Their JSON or encoded values often look like injection attacks to the Core Rule Set and get normal visitors blocked (for example rule 942290 on PostHog's cookie). Every other cookie, argument and header is still inspected.</small>
             </div>
             <div class="field">
                 <label for="wafpCustomRules">Global custom rules (SecLang)</label>
@@ -325,6 +327,7 @@
                 </div>
                 <div class="field"><label for="wafprExcluded">Excluded rule IDs</label><input type="text" id="wafprExcluded" placeholder="942100, 949000-949999"></div>
                 <div class="field"><label for="wafprPathEx">Path scoped exclusions</label><textarea id="wafprPathEx" rows="3" placeholder="/api/search 942100,942200&#10;=/login 920420"></textarea></div>
+                <div class="field"><div class="ui checkbox"><input type="checkbox" id="wafprCookies"><label>Do not inspect analytics cookies</label></div></div>
                 <div class="field"><label for="wafprRules">Custom rules (SecLang)</label><textarea id="wafprRules" rows="4" style="font-family:monospace;"></textarea></div>
                 <button class="ui green button" id="wafprSave"><i class="save icon"></i> Save profile</button>
                 <button class="ui basic button" id="wafprClose">Close</button>
@@ -474,6 +477,7 @@
         $("#wafpThreshold").val(p.InboundThreshold || 5);
         $("#wafpBodyLimit").val(Math.round((p.MaxBodyBytes || 131072) / 1024));
         $("#wafpOverride").prop("checked", !!p.AllowEndpointOverride);
+        $("#wafpCookies").prop("checked", !!p.IgnoreAnalyticsCookies);
         $("#wafpCustomRules").val(p.CustomRules || "");
         $("#wafpTrustedPaths").val(trustedToText(p.TrustedPaths));
         $("#wafpAllowedIPs").val((p.AllowedIPs || []).join("\n"));
@@ -496,6 +500,7 @@
             p.InboundThreshold = parseInt($("#wafpThreshold").val()) || 5;
             p.MaxBodyBytes = (parseInt($("#wafpBodyLimit").val()) || 128) * 1024;
             p.AllowEndpointOverride = $("#wafpOverride").prop("checked");
+            p.IgnoreAnalyticsCookies = $("#wafpCookies").prop("checked");
             p.CustomRules = $("#wafpCustomRules").val();
             p.TrustedPaths = textToTrusted($("#wafpTrustedPaths").val());
             p.AllowedIPs = lines($("#wafpAllowedIPs").val());
@@ -885,7 +890,7 @@
         $("#wafProfileEditorTitle").text(editingNew ? "New profile" : (ro ? "Built-in profile (read-only)" : "Edit profile"));
         $("#wafprName").val(p.Name); $("#wafprDesc").val(p.Description || ""); $("#wafprMode").val(p.Mode || "detection_only");
         $("#wafprParanoia").val(p.ParanoiaLevel || 0); $("#wafprThreshold").val(p.InboundThreshold || 0);
-        $("#wafprExcluded").val((p.ExcludedRuleIDs || []).join(", ")); $("#wafprPathEx").val(pathExToText(p.PathExclusions)); $("#wafprRules").val(p.CustomRules || "");
+        $("#wafprExcluded").val((p.ExcludedRuleIDs || []).join(", ")); $("#wafprPathEx").val(pathExToText(p.PathExclusions)); $("#wafprRules").val(p.CustomRules || ""); $("#wafprCookies").prop("checked", !!p.IgnoreAnalyticsCookies);
         $("#wafProfileEditor").find("input,select,textarea,#wafPresets button").prop("disabled", !!ro);
         $("#wafprName").prop("disabled", !editingNew || !!ro);
         $("#wafprSave").toggle(!ro);
@@ -898,7 +903,7 @@
         try {
             prof = {Name: $("#wafprName").val().trim(), Description: $("#wafprDesc").val(), Mode: $("#wafprMode").val(),
                 ParanoiaLevel: parseInt($("#wafprParanoia").val()) || 0, InboundThreshold: parseInt($("#wafprThreshold").val()) || 0,
-                ExcludedRuleIDs: ids($("#wafprExcluded").val()), PathExclusions: textToPathEx($("#wafprPathEx").val()), CustomRules: $("#wafprRules").val()};
+                ExcludedRuleIDs: ids($("#wafprExcluded").val()), PathExclusions: textToPathEx($("#wafprPathEx").val()), CustomRules: $("#wafprRules").val(), IgnoreAnalyticsCookies: $("#wafprCookies").prop("checked")};
         } catch (e){ msgbox(e.message, false, 5000); return; }
         var btn = $(this).addClass("loading");
         $.cjax({url: "/api/waf/profile/save", method: "POST", data: {profile: JSON.stringify(prof), create: editingNew},

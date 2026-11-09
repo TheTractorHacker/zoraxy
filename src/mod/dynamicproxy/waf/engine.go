@@ -44,6 +44,12 @@ SecAction "id:900990,phase:1,pass,t:none,nolog,tag:'OWASP_CRS',setvar:tx.crs_set
 // because a reverse proxy fronts arbitrary applications (APIs, uploads).
 const allowedContentTypes = "|application/x-www-form-urlencoded| |multipart/form-data| |multipart/related| |text/xml| |application/xml| |application/soap+xml| |application/json| |application/merge-patch+json| |application/json-patch+json| |application/problem+json| |application/ld+json| |application/vnd.api+json| |application/x-ndjson| |application/csp-report| |application/octet-stream| |text/plain| |application/pdf| |application/zip| |application/gzip| |image/png| |image/jpeg| |image/gif| |image/webp|"
 
+// Cookie names (regular expression, no commas or semicolons) and the CRS rule families that must not
+// inspect their values when Config.IgnoreAnalyticsCookies is set.
+const analyticsCookieNames = "^(ph_.+_posthog|ph_.+_window_id|_ga(_.+)?|_gid|_gat.*|__utm[a-z]+|_fbp|_fbc|_gcl_.+|_hj.+|mp_.+_mixpanel|ajs_.+|amplitude_.+|_clck|_clsk|_pk_.+|_uet.+|_rdt_uuid|_tt_.+|_ttp)$"
+
+var analyticsCookieTags = []string{"attack-sqli", "attack-xss", "attack-generic", "attack-rce", "attack-injection-php", "attack-lfi"}
+
 func crsRuleFiles() ([]string, error) {
 	files, err := fs.Glob(coreruleset.FS, "@owasp_crs/REQUEST-*.conf")
 	if err != nil {
@@ -77,6 +83,14 @@ func buildDirectives(n Config) (string, error) {
 		var ctls []string
 		for _, rid := range n.ExcludedRuleIDs {
 			ctls = append(ctls, "ctl:ruleRemoveById="+strings.TrimSpace(rid))
+		}
+		fmt.Fprintf(&b, "SecAction \"id:%d,phase:1,pass,nolog,%s\"\n", id, strings.Join(ctls, ","))
+		id++
+	}
+	if n.IgnoreAnalyticsCookies {
+		var ctls []string
+		for _, tag := range analyticsCookieTags {
+			ctls = append(ctls, "ctl:ruleRemoveTargetByTag="+tag+";REQUEST_COOKIES:/"+analyticsCookieNames+"/")
 		}
 		fmt.Fprintf(&b, "SecAction \"id:%d,phase:1,pass,nolog,%s\"\n", id, strings.Join(ctls, ","))
 		id++

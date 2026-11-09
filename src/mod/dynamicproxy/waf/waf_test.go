@@ -435,3 +435,58 @@ func TestAuditSinkJSONLines(t *testing.T) {
 		t.Errorf("bad audit lines: %v", sink.lines)
 	}
 }
+
+// PostHog stores its state as a JSON cookie full of "$" keys, which CRS rule 942290 (MongoDB operators)
+// reads as an injection attempt, so every request of such a visitor was blocked.
+const postHogCookie = `ph_phc_abc123_posthog={"distinct_id":"anonymous_x.example.com","$sesid":[null,null,null],"$epp":true,"$initial_person_info":{"r":"$direct","u":"https://example.com/"}}`
+
+func TestAnalyticsCookiesIgnoredOnRequest(t *testing.T) {
+	plain, _ := newTestHandler(t, &Config{Mode: ModeBlock})
+	if rec := do(plain, "GET", "/", nil, map[string]string{"Cookie": postHogCookie}); rec.Code != 403 {
+		t.Fatalf("expected the PostHog cookie to trip the CRS (got %d); the test no longer reproduces the false positive", rec.Code)
+	}
+	h, _ := newTestHandler(t, &Config{Mode: ModeBlock, IgnoreAnalyticsCookies: true})
+	if rec := do(h, "GET", "/", nil, map[string]string{"Cookie": postHogCookie}); rec.Code != 200 {
+		t.Fatalf("analytics cookie still blocked with IgnoreAnalyticsCookies: %d", rec.Code)
+	}
+	// only those cookies are exempt: the same payload in another cookie, a query argument or a header is still caught
+	for name, req := range map[string]func() *httptest.ResponseRecorder{
+		"other cookie": func() *httptest.ResponseRecorder {
+			return do(h, "GET", "/", nil, map[string]string{"Cookie": "session={\"$where\":\"1\",\"$ne\":1};x=' OR 1=1--"})
+		},
+		"query": func() *httptest.ResponseRecorder { return do(h, "GET", "/?id=1%27%20OR%201%3D1--", nil, nil) },
+		"analytics cookie name with SQLi in another cookie": func() *httptest.ResponseRecorder {
+			return do(h, "GET", "/", nil, map[string]string{"Cookie": "_ga=GA1.2.3; sid=' UNION SELECT password FROM users--"})
+		},
+	} {
+		if rec := req(); rec.Code != 403 {
+			t.Errorf("%s: expected 403, got %d", name, rec.Code)
+		}
+	}
+}
+
+func TestCentralPolicyAnalyticsCookies(t *testing.T) {
+	st, err := NewState(Policy{Enabled: true, DefaultMode: ModeBlock, ParanoiaLevel: 1, InboundThreshold: 5, IgnoreAnalyticsCookies: true},
+		[]Profile{{Name: "plain", Mode: ModeBlock}, {Name: "cookies", Mode: ModeBlock, IgnoreAnalyticsCookies: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := st.Resolve(Setting{Source: SourceInherit}); r.Config == nil || !r.Config.IgnoreAnalyticsCookies {
+		t.Fatalf("global policy setting not carried into the resolved config: %+v", r.Config)
+	}
+	off, err := NewState(Policy{Enabled: true, DefaultMode: ModeBlock, ParanoiaLevel: 1, InboundThreshold: 5},
+		[]Profile{{Name: "plain", Mode: ModeBlock}, {Name: "cookies", Mode: ModeBlock, IgnoreAnalyticsCookies: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := off.Resolve(Setting{Source: SourceInherit}); r.Config == nil || r.Config.IgnoreAnalyticsCookies {
+		t.Fatal("must stay off unless the policy or profile asks for it")
+	}
+	if r := off.Resolve(Setting{Source: SourceProfile, Profile: "cookies"}); r.Config == nil || !r.Config.IgnoreAnalyticsCookies {
+		t.Fatal("profile setting not carried into the resolved config")
+	}
+	h, _ := newTestHandler(t, st.Resolve(Setting{Source: SourceInherit}).Config)
+	if rec := do(h, "GET", "/", nil, map[string]string{"Cookie": postHogCookie}); rec.Code != 200 {
+		t.Fatalf("got %d", rec.Code)
+	}
+}
