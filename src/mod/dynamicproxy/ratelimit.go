@@ -2,6 +2,7 @@ package dynamicproxy
 
 import (
 	"errors"
+	"fmt"
 	"imuslab.com/zoraxy/mod/metrics"
 	"net/http"
 	"sync"
@@ -148,7 +149,7 @@ func (t *RequestCountPerIpTable) Clear() {
 func (h *ProxyHandler) handleRateLimitRouting(w http.ResponseWriter, r *http.Request, pe *ProxyEndpoint) error {
 	err := h.Parent.handleRateLimit(w, r, pe)
 	if err != nil {
-		h.Parent.logRequest(r, false, 429, "ratelimit", r.URL.Hostname(), "", pe)
+		h.Parent.logRequestDetail(r, false, 429, "ratelimit", r.URL.Hostname(), "", pe, fmt.Sprintf("limit %d req/s, burst %d", pe.RateLimit, pe.RateLimitBurst))
 	}
 	return err
 }

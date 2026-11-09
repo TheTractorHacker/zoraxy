@@ -44,6 +44,9 @@ type RequestInfo struct {
 	// OnBlock writes the response for a blocked request. txID is the
 	// transaction ID to show to the user. If nil a plain 403 is written.
 	OnBlock func(w http.ResponseWriter, r *http.Request, txID string)
+	// OnEvent (optional) receives the audit event of a transaction that matched at least one rule,
+	// before OnBlock runs. Used to tell the blocked-request log which rule blocked the request.
+	OnEvent func(ev Event)
 }
 
 // Mode returns the effective mode
@@ -119,6 +122,9 @@ func (in *Instance) Inspect(w http.ResponseWriter, r *http.Request, info Request
 			Rules:         hits,
 		}
 		in.events.add(ev)
+		if info.OnEvent != nil {
+			info.OnEvent(ev)
+		}
 	}
 
 	if doBlock {
@@ -335,3 +341,30 @@ func (m *Manager) CacheSize() int {
 
 // Stats returns a snapshot of the counters
 func (m *Manager) Stats() Stats { return m.events.stats() }
+
+// BlockSummary returns a short human readable description of the rules that decided the event: the
+// matched rules other than the generic anomaly score evaluation first, e.g.
+// "942100 SQL Injection Attack Detected via libinjection (+2 more) [tx abc]".
+func (ev Event) BlockSummary() string {
+	var main *RuleHit
+	for i := range ev.Rules {
+		if ev.Rules[i].ID != anomalyEvaluationRuleID {
+			main = &ev.Rules[i]
+			break
+		}
+	}
+	if main == nil && len(ev.Rules) > 0 {
+		main = &ev.Rules[0]
+	}
+	if main == nil {
+		return "tx " + ev.TransactionID
+	}
+	out := itoa(main.ID)
+	if main.Message != "" {
+		out += " " + main.Message
+	}
+	if n := len(ev.Rules) - 1; n > 0 {
+		out += " (+" + itoa(n) + " more)"
+	}
+	return out + " [tx " + ev.TransactionID + "]"
+}

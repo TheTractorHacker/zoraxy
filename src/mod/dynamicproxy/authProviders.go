@@ -39,12 +39,26 @@ func handleAuthProviderRouting(sep *ProxyEndpoint, w http.ResponseWriter, r *htt
 	}
 	requestHostname := r.Host
 
+	// rejected records a failed authentication in the blocked-request log (access log lines are written here)
+	rejected := func(kind string, status int, detail string) {
+		clientIP := h.Parent.GetClientIPForEndpoint(r, sep)
+		h.Parent.Option.Logger.LogHTTPRequest(r, "host-http", 401, requestHostname, "", clientIP)
+		if status == http.StatusUnauthorized || status == http.StatusForbidden {
+			h.Parent.logRequestDetail(r, false, status, "auth-"+kind, requestHostname, "", sep, detail)
+		}
+	}
+
 	switch sep.AuthenticationProvider.AuthMethod {
 	case AuthMethodBasic:
+		_, _, hadCreds := r.BasicAuth()
 		err := h.handleBasicAuthRouting(w, r, sep)
 		if err != nil {
-			clientIP := h.Parent.GetClientIPForEndpoint(r, sep)
-			h.Parent.Option.Logger.LogHTTPRequest(r, "host-http", 401, requestHostname, "", clientIP)
+			// a request without credentials is just the browser asking for the login prompt, not a failure
+			status := 0
+			if hadCreds {
+				status = http.StatusUnauthorized
+			}
+			rejected("basic", status, "basic auth: wrong username or password")
 			return true
 		}
 	case AuthMethodForward:
@@ -55,10 +69,10 @@ func handleAuthProviderRouting(sep *ProxyEndpoint, w http.ResponseWriter, r *htt
 			}
 			break
 		}
-		err := h.handleForwardAuth(w, r)
+		sw := &statusSniffer{ResponseWriter: w}
+		err := h.handleForwardAuth(sw, r)
 		if err != nil {
-			clientIP := h.Parent.GetClientIPForEndpoint(r, sep)
-			h.Parent.Option.Logger.LogHTTPRequest(r, "host-http", 401, requestHostname, "", clientIP)
+			rejected("forward", sw.status, "forward auth refused the request")
 			return true
 		}
 	case AuthMethodOauth2:
@@ -68,17 +82,17 @@ func handleAuthProviderRouting(sep *ProxyEndpoint, w http.ResponseWriter, r *htt
 			}
 			break
 		}
-		err := h.handleOAuth2Auth(w, r, sep)
+		sw := &statusSniffer{ResponseWriter: w}
+		err := h.handleOAuth2Auth(sw, r, sep)
 		if err != nil {
-			clientIP := h.Parent.GetClientIPForEndpoint(r, sep)
-			h.Parent.Option.Logger.LogHTTPRequest(r, "host-http", 401, requestHostname, "", clientIP)
+			rejected("oauth2", sw.status, "OAuth2 / OIDC refused the request")
 			return true
 		}
 	case AuthMethodZorxAuth:
-		err := h.handleZorxAuth(w, r, sep)
+		sw := &statusSniffer{ResponseWriter: w}
+		err := h.handleZorxAuth(sw, r, sep)
 		if err != nil {
-			clientIP := h.Parent.GetClientIPForEndpoint(r, sep)
-			h.Parent.Option.Logger.LogHTTPRequest(r, "host-http", 401, requestHostname, "", clientIP)
+			rejected("zorxauth", sw.status, "Zorxauth refused the request")
 			return true
 		}
 	}
@@ -273,3 +287,31 @@ func zorxAuthExceptionMatched(rules []*ZorxAuthExceptionRule, r *http.Request) b
 	}
 	return false
 }
+
+// statusSniffer remembers the status code an auth handler wrote (the handler does the writing; this only observes)
+type statusSniffer struct {
+	http.ResponseWriter
+	status int
+}
+
+func (s *statusSniffer) WriteHeader(code int) {
+	if s.status == 0 {
+		s.status = code
+	}
+	s.ResponseWriter.WriteHeader(code)
+}
+
+func (s *statusSniffer) Write(b []byte) (int, error) {
+	if s.status == 0 {
+		s.status = http.StatusOK
+	}
+	return s.ResponseWriter.Write(b)
+}
+
+func (s *statusSniffer) Flush() {
+	if f, ok := s.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (s *statusSniffer) Unwrap() http.ResponseWriter { return s.ResponseWriter }

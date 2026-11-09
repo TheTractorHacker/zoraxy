@@ -237,6 +237,7 @@ func startupSequence() {
 	statisticCollector.SetAutoSave(STATISTIC_AUTO_SAVE_INTERVAL)
 	loadStatSettings()
 	initVisitors()
+	initBlockLog()
 
 	//Start the static web server
 	staticWebServer = webserv.NewWebServer(&webserv.WebServerOptions{
@@ -511,6 +512,10 @@ func ShutdownSeq() {
 	stopEch()
 	stopZrok()
 
+	if blockLog != nil {
+		SystemWideLogger.Println("Saving the blocked request log")
+		blockLog.Close()
+	}
 	if visitorTracker != nil {
 		SystemWideLogger.Println("Saving the visitor list")
 		visitorTracker.Close()

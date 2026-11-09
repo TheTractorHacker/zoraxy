@@ -345,6 +345,7 @@ func ReverseProxyInit() {
 		GeodbStore:          geodbStore,
 		StatisticCollector:  statisticCollector,
 		VisitorTracker:      visitorTracker,
+		BlockLog:            blockLog,
 		WebDirectory:        *path_webserver,
 		AccessController:    accessController,
 		ForwardAuthRouter:   forwardAuthRouter,

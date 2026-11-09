@@ -1693,3 +1693,27 @@ Notable design points:
 * Ports 28830-28849 are used; the last one (28849) is baked into the updater test binary.
 
 Bugs found by the suite are fixed with a Go regression test where the code is Go (see the commit list in the PR).
+
+## Blocked requests log and Statistics page (`feat/stats-blocked`)
+
+The Status page's "Blocked today" was only a counter. `src/mod/blocklog` now keeps a bounded log of what Zoraxy rejected and why.
+
+* **Classification** `blocklog.Classify(forwardType)` maps the router's `forwardType` string to a stable reason key
+  (`blacklist whitelist auto-ban ratelimit waf exploit bot header-rule captcha country-challenge path-rule client-cert peer auth plugin`)
+  plus a detail. `statistic.IsBlockedForwardType` delegates to it, so the counters and the log cannot disagree. Newly counted as blocked
+  (they were missed before): `*-dropped` variants (444), header rules, bot rules, country / bot challenges, auto-ban, failed auth.
+* **Recording** `Router.logRequestDetail` (`logRequest` + detail) calls `recordBlocked`. Details: WAF rule id + message + tx id (`waf.RequestInfo.OnEvent`),
+  rate limit values, exploit kind, ban reason/source, bot rule name, header rule. Auto-ban rejections and failed auth (`auth-basic|forward|oauth2|zorxauth`,
+  basic auth only when credentials were sent) are counted and listed but not written to the access log (`loggedElsewhere`).
+  No blocking behaviour changed.
+* **Privacy** same as Visitors: rules with "disable statistics" are skipped, the statistics exclusion list and "exclude blocked requests" apply,
+  query strings only when the Visitors setting `KeepQuery` is on. Ring of 2000 entries, persisted to `conf/blocked.json.gz` every 5 min and on shutdown;
+  settings (`Enabled`) in sysdb table `blocklog`.
+* **API** `GET /api/blocked/{overview,summary,list,settings}`, `POST /api/blocked/{settings,clear}`; token route `GET /api/v1/stats/blocked` (documented in `openapi.yaml`).
+  Filters: `reason host ip q since limit before`.
+* **UI** Statistics page rewritten (`components/stats.html`): Overview (range presets, site filter, KPI cards, ranked lists, doughnuts) and Blocked tab
+  (reason breakdown with links to the rule pages, hourly chart, top IPs / hosts / paths, table, filters, IP click -> filter or Visitors).
+  `window.statsOpenBlocked({reason, ip, host, hours})` opens it; the Status KPI card and the Blocked legend call it. Nothing polls while hidden;
+  the Blocked tab refreshes every 10 s only while visible. Note: multi-day ranges read the saved daily records, so today's numbers appear in "7 days" only after the next autosave; "Today" is live.
+* **Tests** `mod/blocklog`, `mod/dynamicproxy/blocklog_hook_test.go` (real blacklist / rate limit / bot / exploit / header rule / auto-ban / basic auth / WAF traffic),
+  `blocklogapi_test.go`, e2e scenario `tools/e2e` `blocked_request_log` (real binary, restart persistence), `tools/ui-smoke/smoke.py` `blocked_view`.

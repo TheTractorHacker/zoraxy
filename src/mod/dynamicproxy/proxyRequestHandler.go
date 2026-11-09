@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"imuslab.com/zoraxy/mod/abuse"
+	"imuslab.com/zoraxy/mod/blocklog"
 	"imuslab.com/zoraxy/mod/dynamicproxy/dpcore"
 	"imuslab.com/zoraxy/mod/dynamicproxy/loadbalance"
 	"imuslab.com/zoraxy/mod/dynamicproxy/rewrite"
@@ -437,6 +438,11 @@ func (h *ProxyHandler) vdirRequest(w http.ResponseWriter, r *http.Request, targe
 
 // This logger collect data for the statistical analysis. For log to file logger, check the Logger and LogHTTPRequest handler
 func (router *Router) logRequest(r *http.Request, succ bool, statusCode int, forwardType string, originalHostname string, upstreamHostname string, endpoint *ProxyEndpoint) {
+	router.logRequestDetail(r, succ, statusCode, forwardType, originalHostname, upstreamHostname, endpoint, "")
+}
+
+// logRequestDetail is logRequest plus a free text detail for the blocked-request log (e.g. the WAF rule that matched)
+func (router *Router) logRequestDetail(r *http.Request, succ bool, statusCode int, forwardType string, originalHostname string, upstreamHostname string, endpoint *ProxyEndpoint, detail string) {
 	// Resolve the client IP once via the trusted-proxy aware resolver so that
 	// untrusted proxy headers (X-Forwarded-For, X-Real-IP, etc.) cannot be used
 	// to spoof the IP recorded in the log file or the statistics collector.
@@ -456,7 +462,9 @@ func (router *Router) logRequest(r *http.Request, succ bool, statusCode int, for
 
 	// Notes: endpoint can be nil if the request has been handled before a host name can be resolved
 	// e.g. Redirection matching rule
-	if endpoint == nil || !endpoint.DisableLogging {
+	// Banned clients and failed authentications are counted but not written to the access log here
+	// (a banned scanner would otherwise fill it; the auth handlers write their own line)
+	if (endpoint == nil || !endpoint.DisableLogging) && !loggedElsewhere(forwardType) {
 		// log the http request to file
 		siteKey := ""
 		if endpoint != nil {
@@ -471,6 +479,7 @@ func (router *Router) logRequest(r *http.Request, succ bool, statusCode int, for
 	}
 	collector := router.Option.StatisticCollector
 	tracker := router.Option.VisitorTracker
+	router.recordBlocked(r, statusCode, forwardType, upstreamHostname, endpoint, clientIP, detail)
 	if collector == nil && tracker == nil {
 		return
 	}
@@ -561,4 +570,49 @@ func localizedPage(r *http.Request, page []byte) []byte {
 		return page
 	}
 	return i18n.TranslatePage(page, lang)
+}
+
+// recordBlocked adds a request that Zoraxy rejected to the blocked-request log (with the reason).
+// Same privacy rules as the visitor list: nothing is kept for rules that opted out of statistics,
+// the statistics exclusion list applies, and the query string only when the visitor list keeps it.
+func (router *Router) recordBlocked(r *http.Request, statusCode int, forwardType, upstreamHostname string, endpoint *ProxyEndpoint, clientIP, detail string) {
+	bl := router.Option.BlockLog
+	if bl == nil || endpoint == nil || endpoint.DisableStatisticCollection || !bl.Enabled() {
+		return
+	}
+	reason, d, ok := blocklog.Classify(forwardType)
+	if !ok {
+		return
+	}
+	if detail == "" {
+		detail = d
+		if reason == blocklog.ReasonPlugin && upstreamHostname != "" {
+			detail = "plugin " + upstreamHostname
+		}
+	}
+	path := r.URL.EscapedPath()
+	if t := router.Option.VisitorTracker; t != nil && t.Settings().KeepQuery && r.URL.RawQuery != "" {
+		path += "?" + r.URL.RawQuery
+	}
+	e := blocklog.Entry{
+		Time: time.Now().Unix(), IP: clientIP, Host: r.Host, Rule: endpoint.RootOrMatchingDomain,
+		Method: r.Method, Path: path, Status: statusCode, Reason: reason, Detail: detail, UA: r.UserAgent(),
+	}
+	if e.Host == "" {
+		e.Host = endpoint.RootOrMatchingDomain
+	}
+	geo := router.Option.GeodbStore
+	go func() {
+		if geo != nil {
+			if ci, err := geo.ResolveCountryCodeFromIP(clientIP); err == nil {
+				e.Country = ci.CountryIsoCode
+			}
+		}
+		bl.Record(e)
+	}()
+}
+
+// loggedElsewhere reports request classes whose access-log line is written by the caller (or deliberately not at all)
+func loggedElsewhere(forwardType string) bool {
+	return strings.HasPrefix(forwardType, "auto-ban") || strings.HasPrefix(forwardType, "auth-")
 }

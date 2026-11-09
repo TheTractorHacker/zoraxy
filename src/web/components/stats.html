@@ -1,1024 +1,959 @@
 <script src="./script/useragent.js"></script>
 <link href="./script/datepicker/dp-light.css" rel="stylesheet">
 <script defer src="./script/datepicker/datepicker.js"></script>
+<!--
+    Statistics: traffic summaries of a day or a date range (Overview) and what Zoraxy blocked and why (Blocked).
+    Data: /api/analytic/* (mod/statistic), /api/blocked/* (mod/blocklog).
+    Nothing here polls while the page is hidden; the Blocked tab refreshes every 10 s only while it is on screen.
+-->
+<style>
+    #statsPage{ --s-blue:#3b82f6; --s-green:#22a06b; --s-red:#e5484d; --s-amber:#f59e0b; --s-muted:var(--text_color_secondary); }
+    #statsPage .sHead{ display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:.6em 1em; margin-bottom:.4em; }
+    #statsPage .sHead h2{ margin:0; }
+    #statsPage .sHead p{ margin:.2em 0 0; color:var(--s-muted); }
+    #statsPage .sTabs{ display:flex; gap:.3em; border-bottom:1px solid var(--divider_color); margin:.8em 0 1em; overflow-x:auto; }
+    #statsPage .sTabs button{ background:none; border:0; border-bottom:3px solid transparent; padding:.55em .9em; cursor:pointer; color:var(--s-muted); font:inherit; font-weight:600; white-space:nowrap; }
+    #statsPage .sTabs button:hover{ color:var(--text_color); }
+    #statsPage .sTabs button.active{ color:var(--text_color); border-bottom-color:var(--s-blue); }
+    #statsPage .sTabs .sBadge{ display:inline-block; min-width:1.5em; padding:0 .45em; margin-left:.4em; border-radius:1em; font-size:.8em; background:rgba(245,158,11,.18); color:#b45309; text-align:center; }
+    body.darkTheme #statsPage .sTabs .sBadge{ color:#fbbf24; }
+    #statsPage .sBar{ display:flex; flex-wrap:wrap; align-items:center; gap:.6em .8em; margin-bottom:1em; }
+    #statsPage .sSeg{ display:inline-flex; border:1px solid var(--divider_color); border-radius:.5em; overflow:hidden; background:var(--theme_bg_primary); }
+    #statsPage .sSeg button{ border:0; background:none; padding:.5em .85em; font:inherit; cursor:pointer; color:var(--text_color); border-right:1px solid var(--divider_color); }
+    #statsPage .sSeg button:last-child{ border-right:0; }
+    #statsPage .sSeg button:hover{ background:rgba(128,128,128,.12); }
+    #statsPage .sSeg button.active{ background:var(--s-blue); color:#fff; }
+    #statsPage .sBar select, #statsPage .sBar input[type=text], #statsPage .sBar input[type=search]{
+        padding:.5em .65em; border-radius:.4em; border:1px solid var(--divider_color); background:var(--theme_bg_primary); color:var(--text_color); font:inherit; max-width:100%; }
+    #statsPage .sBar input.sDate{ width:9.5em; }
+    #statsPage .sBar .sGrow{ flex:1 1 12em; min-width:9em; }
+    #statsPage .sCustom{ display:none; align-items:center; gap:.4em; }
+    #statsPage .sCustom.show{ display:inline-flex; flex-wrap:wrap; }
+    #statsPage .sKpis{ display:grid; grid-template-columns:repeat(auto-fit,minmax(9.5em,1fr)); gap:.8em; margin-bottom:1em; }
+    #statsPage .sKpi, #statsPage .sCard{ background:var(--theme_bg_primary); border:1px solid var(--divider_color); border-radius:.8em; }
+    #statsPage .sKpi{ padding:.8em 1em; position:relative; overflow:hidden; text-align:left; font:inherit; color:inherit; }
+    #statsPage .sKpi::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--k,#94a3b8); }
+    #statsPage button.sKpi{ cursor:pointer; }
+    #statsPage button.sKpi:hover{ border-color:var(--k,#94a3b8); }
+    #statsPage .sKpi .l{ display:block; font-size:.82em; color:var(--s-muted); }
+    #statsPage .sKpi .v{ display:block; font-size:1.7em; font-weight:650; line-height:1.25; }
+    #statsPage .sKpi .u{ display:block; font-size:.78em; color:var(--s-muted); min-height:1.2em; }
+    #statsPage .sGrid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,21em),1fr)); gap:1em; margin-bottom:1em; }
+    #statsPage .sCard{ padding:1em 1.1em; min-width:0; }
+    #statsPage .sCard h4{ margin:0 0 .15em; font-size:1.02em; }
+    #statsPage .sCard .sub{ margin:0 0 .7em; font-size:.85em; color:var(--s-muted); }
+    #statsPage .sCard.wide{ grid-column:1 / -1; }
+    #statsPage .sChart{ position:relative; height:15em; }
+    #statsPage .sChart.tall{ height:18em; }
+    #statsPage .sRank{ list-style:none; margin:0; padding:0; }
+    #statsPage .sRank li{ position:relative; display:flex; gap:.6em; align-items:baseline; padding:.28em .5em; border-radius:.35em; overflow:hidden; font-size:.92em; }
+    #statsPage .sRank li .bar{ position:absolute; left:0; top:0; bottom:0; background:rgba(59,130,246,.13); z-index:0; }
+    #statsPage .sRank li > span{ position:relative; z-index:1; }
+    #statsPage .sRank li .k{ flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #statsPage .sRank li .n{ flex:none; font-variant-numeric:tabular-nums; }
+    #statsPage .sRank li.click{ cursor:pointer; }
+    #statsPage .sRank li.click:hover{ background:rgba(128,128,128,.12); }
+    #statsPage .sMore{ background:none; border:0; color:var(--s-blue); cursor:pointer; padding:.4em .5em 0; font:inherit; }
+    #statsPage .sEmpty{ text-align:center; padding:2.6em 1em; color:var(--s-muted); background:var(--theme_bg_primary); border:1px dashed var(--divider_color); border-radius:.8em; }
+    #statsPage .sEmpty i.icon{ font-size:2.6em; opacity:.45; display:block; margin:0 auto .3em; }
+    #statsPage .sEmpty b{ display:block; color:var(--text_color); font-size:1.1em; margin-bottom:.3em; }
+    #statsPage .sTableWrap{ overflow-x:auto; }
+    #statsPage table.sTable{ width:100%; border-collapse:collapse; font-size:.9em; }
+    #statsPage table.sTable th{ text-align:left; padding:.5em .6em; border-bottom:2px solid var(--divider_color); white-space:nowrap; color:var(--text_color); }
+    #statsPage table.sTable td{ padding:.45em .6em; border-bottom:1px solid var(--divider_color); vertical-align:top; }
+    #statsPage table.sTable tbody tr.click{ cursor:pointer; }
+    #statsPage table.sTable tbody tr:hover{ background:rgba(128,128,128,.09); }
+    #statsPage .mono{ font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.95em; }
+    #statsPage .nowrap{ white-space:nowrap; }
+    #statsPage .sInfo{ background:var(--theme_bg_primary); border:1px solid var(--divider_color); border-left:4px solid var(--s-blue); border-radius:.5em; padding:.7em 1em; margin-bottom:1em; font-size:.92em; }
+    #statsPage .sInfo summary{ cursor:pointer; font-weight:600; }
+    #statsPage .sInfo ul{ margin:.5em 0 0 1.1em; padding:0; }
+    #statsPage .chip{ display:inline-block; padding:.05em .6em; border-radius:1em; font-size:.8em; font-weight:650; white-space:nowrap; border:1px solid transparent; color:#fff; background:var(--c,#64748b); }
+    #statsPage .chip.btn{ cursor:pointer; }
+    #statsPage .st2{ color:#1a9a3a; } #statsPage .st3{ color:#1f78c1; } #statsPage .st4{ color:#d9660a; } #statsPage .st5{ color:#c62828; }
+    body.darkTheme #statsPage .st2{ color:#4ade80; } body.darkTheme #statsPage .st3{ color:#60a5fa; }
+    body.darkTheme #statsPage .st4{ color:#fb923c; } body.darkTheme #statsPage .st5{ color:#f87171; }
+    #statsPage .sDetail{ display:block; font-size:.85em; color:var(--s-muted); word-break:break-word; }
+    #statsPage .sIpTag{ display:inline-flex; align-items:center; gap:.4em; padding:.25em .3em .25em .7em; border-radius:1em; border:1px solid var(--s-blue); color:var(--s-blue); font-size:.9em; }
+    #statsPage .sIpTag button{ border:0; background:none; cursor:pointer; color:inherit; font:inherit; padding:0 .3em; }
+    #statsPage .sLink{ color:var(--s-blue); cursor:pointer; background:none; border:0; padding:0; font:inherit; }
+    #statsPage .sLink:hover{ text-decoration:underline; }
+    #statsPage .sReasonRow{ display:grid; grid-template-columns:auto 1fr auto; gap:.2em .8em; align-items:center; padding:.45em .3em; border-bottom:1px solid var(--divider_color); }
+    #statsPage .sReasonRow:last-child{ border-bottom:0; }
+    #statsPage .sReasonRow .meter{ grid-column:2; height:.5em; border-radius:.3em; background:rgba(128,128,128,.18); overflow:hidden; }
+    #statsPage .sReasonRow .meter i{ display:block; height:100%; background:var(--c,#64748b); }
+    #statsPage .sReasonRow .why{ grid-column:1 / -1; font-size:.82em; color:var(--s-muted); }
+    #statsPage .sReasonRow.on{ background:rgba(59,130,246,.10); border-radius:.4em; }
+    #statsPage .sPager{ display:flex; gap:.6em; align-items:center; margin-top:.8em; flex-wrap:wrap; color:var(--s-muted); font-size:.9em; }
+    #statsPage .sBtn{ padding:.45em .9em; border-radius:.4em; border:1px solid var(--divider_color); background:var(--theme_bg_primary); color:var(--text_color); cursor:pointer; font:inherit; }
+    #statsPage .sBtn:hover{ border-color:var(--s-blue); }
+    #statsPage .sBtn.danger{ color:var(--s-red); }
+    #statsPage .sBtn[disabled]{ opacity:.5; cursor:default; }
+    #statsPage .sSkel{ height:1em; border-radius:.3em; background:rgba(128,128,128,.18); animation:sPulse 1.4s ease-in-out infinite; }
+    @keyframes sPulse{ 50%{ opacity:.45; } }
+    @media (prefers-reduced-motion: reduce){ #statsPage .sSkel{ animation:none; } }
+    @media (max-width: 600px){
+        #statsPage .sBar .sSeg{ width:100%; }
+        #statsPage .sBar .sSeg button{ flex:1 1 auto; padding:.5em .3em; }
+        #statsPage .sKpis{ grid-template-columns:repeat(2,1fr); }
+        #statsPage .sChart{ height:13em; }
+        #statsPage #sbTable thead{ display:none; }
+        #statsPage #sbTable, #statsPage #sbTable tbody{ display:block; }
+        #statsPage #sbTable tr{ display:block; padding:.55em 0; border-bottom:1px solid var(--divider_color); }
+        #statsPage #sbTable td{ display:inline-block; border:0; padding:.1em .6em .1em 0; vertical-align:middle; }
+        #statsPage #sbTable td:nth-child(3){ color:var(--s-muted); }
+        #statsPage #sbTable td:nth-child(4), #statsPage #sbTable td:nth-child(6){ display:block; }
+    }
+</style>
 
-<div class="standardContainer">
-    <div class="ui basic segment">
-        <h2>Statistical Analysis</h2>
-        <p>Statistic of your server in every aspects</p>
-        <div style="margin-bottom: 0.4em;">
-            <div class="ui small input">
-                <input type="text" id="statsRangeStart" placeholder="From date">
-            </div>
-            <span style="padding-left: 0.6em; padding-right: 0.6em;"> <i class="ui right arrow icon"></i> </span>
-            <div class="ui small input">
-                <input type="text" id="statsRangeEnd" placeholder="End date">
-            </div>
+<div class="standardContainer" id="statsPage">
+    <div class="sHead">
+        <div>
+            <h2>Statistics</h2>
+            <p>Traffic of your proxy rules, and what was blocked and why.</p>
         </div>
-        <div style="margin-bottom: 0.6em;">
-            <label for="statsSiteSelect"><i class="globe icon"></i> Site</label>
-            <select id="statsSiteSelect" class="ui compact dropdown" style="min-width: 14em;" onchange="handleLoadStatisticButtonPress();">
+    </div>
+    <div class="sTabs" role="tablist" aria-label="Statistics views">
+        <button type="button" role="tab" class="active" data-stab="overview" aria-selected="true">Overview</button>
+        <button type="button" role="tab" data-stab="blocked" aria-selected="false">Blocked <span class="sBadge" id="sBlockedBadge" style="display:none;"></span></button>
+    </div>
+
+    <!-- ===================== Overview ===================== -->
+    <div id="sOverview">
+        <div class="sBar">
+            <div class="sSeg" id="sRange" role="group" aria-label="Time range">
+                <button type="button" data-range="today" class="active">Today</button>
+                <button type="button" data-range="yesterday">Yesterday</button>
+                <button type="button" data-range="7">7 days</button>
+                <button type="button" data-range="30">30 days</button>
+                <button type="button" data-range="custom">Custom</button>
+            </div>
+            <span class="sCustom" id="sCustom">
+                <input type="text" class="sDate" id="statsRangeStart" placeholder="From date" aria-label="From date" autocomplete="off">
+                <i class="right arrow icon"></i>
+                <input type="text" class="sDate" id="statsRangeEnd" placeholder="End date (optional)" aria-label="End date" autocomplete="off">
+                <button type="button" class="sBtn" id="sApply">Apply</button>
+            </span>
+            <select id="statsSiteSelect" aria-label="Site">
                 <option value="">All sites</option>
             </select>
-            <button class="ui basic small button" onclick="showSideWrapper('snippet/statsFilters.html?t=' + Date.now());"><i class="filter icon"></i> Filters</button>
+            <button type="button" class="sBtn" id="sFilters"><i class="filter icon"></i> Filters</button>
+            <button type="button" class="sBtn" id="sReload" title="Reload"><i class="sync alternate icon"></i></button>
         </div>
-        <button onclick="handleLoadStatisticButtonPress();" class="ui basic button"><i class="blue search icon"></i> Load</button>
-        <button onclick="clearStatisticDateRange();" class="ui basic button"><i class="eraser icon"></i> Clear Search</button>
-        <br>
-        <small>Leave end range as empty for showing starting day only statistic</small>
-    </div>
-    <div class="ui divider"></div>
-    <div class="ui basic segment" id="statsSitesSegment">
-        <h3>Sites</h3>
-        <p>Per proxy rule traffic of the selected period. Select a row to filter all statistics below by that site.</p>
-        <div style="overflow-x: auto;">
-            <table class="ui unstackable selectable compact celled table" id="statsSitesTable">
-                <thead><tr>
-                    <th>Site</th><th>Requests</th><th>Errors</th><th>Blocked</th><th>Visitors</th><th>Trend</th>
-                </tr></thead>
-                <tbody id="statsSitesBody"><tr><td colspan="6">Loading...</td></tr></tbody>
-            </table>
+
+        <div id="statisticRenderNotEnoughData" class="sEmpty" style="display:none;">
+            <i class="chart pie icon"></i>
+            <b>No data for this period</b>
+            No requests were recorded in the selected period<span id="sEmptyScope"></span>. Pick a longer range, or send some traffic through one of your proxy rules.
         </div>
-    </div>
-    <div id="statisticRenderNotEnoughData" class="ui segment" style="padding: 2em;" align="center">
-        <h4 class="ui icon header">
-            <i class="medium icons" style="color: #dbdbdb !important;">
-                <i class="chart pie icon"></i>
-                <i class="small corner remove icon" style="
-                    font-size: 1.4em;
-                    margin-right: -0.2em;
-                    margin-bottom: -0em;
-                "></i>
-            </i>
-            
-            <div class="content" style="margin-top: 1em; color: #7c7c7c !important;">
-                No Data 
-                <div class="sub header" style="color: #adadad !important;">The selected period contains too little or no request data collected. <br>
-                    Please select a larger range or make sure there are enough traffic routing through this site.</div>
+
+        <div id="statisticRenderElement">
+            <div class="sKpis" id="sKpis">
+                <div class="sKpi" style="--k:#3b82f6"><span class="l">Requests</span><span class="v totalViewCount">-</span><span class="u" id="sKpiRange"></span></div>
+                <div class="sKpi" style="--k:#22a06b"><span class="l">Successful</span><span class="v totalSuccCount">-</span><span class="u" id="sKpiOkPct"></span></div>
+                <div class="sKpi" style="--k:#e5484d"><span class="l">Errors</span><span class="v totalErrorCount">-</span><span class="u" id="sKpiErrPct"></span></div>
+                <button type="button" class="sKpi" style="--k:#f59e0b" id="sKpiBlocked" title="Show what was blocked and why"><span class="l">Blocked</span><span class="v" id="sKpiBlockedVal">-</span><span class="u">see what and why &rsaquo;</span></button>
+                <div class="sKpi" style="--k:#8b5cf6"><span class="l">Client IPs</span><span class="v" id="sKpiIps">-</span><span class="u">distinct addresses</span></div>
             </div>
-        </h4>
-    </div>
-    <div id="statisticRenderElement" class="ui basic segment">
-        <!-- View Counts Statistics -->
-        <div class="ui three small statistics">
-            <div class="statistic">
-              <div class="value totalViewCount">
-                
-              </div>
-              <div class="label">
-                Total Requests
-              </div>
+
+            <div class="sCard wide" id="trendGraphs" style="margin-bottom:1em;">
+                <h4>Requests over time</h4>
+                <p class="sub">Requests per day in the selected range.</p>
+                <div class="sChart tall"><canvas id="requestTrends" role="img" aria-label="Requests per day"></canvas></div>
             </div>
-            <div class="statistic">
-                <div class="value">
-                    <i class="ui green check circle icon"></i> <span class="totalSuccCount"></span>
-                </div>
-              <div class="label">
-                 Success Requests
-              </div>
-            </div>
-            <div class="statistic">
-              <div class="value">
-                <i class="ui red times circle icon"></i> <span class="totalErrorCount"></span>
-              </div>
-              <div class="label">
-                Error Requests
-              </div>
-            </div>
-        </div>
-        <!-- Forward Type Data -->
-        <h3>Forward Traffic Types</h3>
-        <p>Traffic forwarding type classified by their protocols and proxy rules.</p>
-        <table class="ui celled unstackable table">
-            <thead>
-                <tr><th>Forward Type</th>
-                <th>Counts</th>
-                <th>Percentage</th>
-            </tr></thead>
-            <tbody class="forwardTypeCounts">
-            </tbody>
-        </table>
-        <!-- Client Geolocation Analysis-->
-        <h3>Visitors Countries</h3>
-        <p>Distributions of visitors by country code. Access origin are estimated using open source GeoIP database and might not be accurate.</p>
-        <div style="min-height: 400px;">
-            <canvas id="stats_visitors"></canvas>
-        </div>
-        <div class="ui divider"></div>
-        <!-- Client IP Analysis -->
-        <div class="ui stackable grid">
-            <div class="eight wide column">
-                <h3>Requests IP Version</h3>
-                <p>The version of Internet Protocol that the client is using. If the request client is pass through a DNS proxy like CloudFlare, 
-                    the CloudFlare proxy server address will be filtered and only the first value in the RemoteAddress field will be analysised.</p>
-                <div>
-                    <canvas id="stats_ipver"></canvas>
-                </div>
-            </div>
-            <div class="eight wide column">
-                <h3>Request Origins</h3>
-                <p>Top 25 request origin sorted by request count</p>
-                <div style="height: 500px; overflow-y: auto;">
-                    <table class="ui unstackable striped celled table">
-                        <thead>
-                          <tr>
-                            <th class="no-sort">Request Origin</th>
-                            <th class="no-sort">No of Requests</th>
-                        </tr></thead>
-                        <tbody id="stats_requestCountlist">
-                         
-                        </tbody>
+
+            <div class="sCard wide" id="statsSitesSegment" style="margin-bottom:1em;">
+                <h4>Sites</h4>
+                <p class="sub">Per proxy rule traffic of the selected period. Select a row to filter everything on this page by that site.</p>
+                <div class="sTableWrap">
+                    <table class="sTable" id="statsSitesTable">
+                        <thead><tr><th>Site</th><th>Requests</th><th>Errors</th><th>Blocked</th><th>Visitors</th><th>Trend</th></tr></thead>
+                        <tbody id="statsSitesBody"><tr><td colspan="6"><div class="sSkel"></div></td></tr></tbody>
                     </table>
                 </div>
             </div>
+
+            <div class="sGrid">
+                <div class="sCard">
+                    <h4>Visitor countries</h4>
+                    <p class="sub">Estimated with the embedded GeoIP database. Private and loopback addresses are shown as Local network.</p>
+                    <div class="sChart tall"><canvas id="stats_visitors" role="img" aria-label="Requests by country"></canvas></div>
+                </div>
+                <div class="sCard">
+                    <h4>Top client IPs</h4>
+                    <p class="sub">Most active addresses. Select one to look it up in Visitors.</p>
+                    <ul class="sRank" id="stats_requestCountlist"></ul>
+                </div>
+                <div class="sCard">
+                    <h4>Status codes</h4>
+                    <p class="sub">HTTP status returned to clients.</p>
+                    <ul class="sRank" id="stats_StatusTable"></ul>
+                </div>
+                <div class="sCard">
+                    <h4>Top paths</h4>
+                    <p class="sub">Host and path; the query string depends on the <a href="#" id="sFiltersLink">Filters</a> setting.</p>
+                    <ul class="sRank" id="stats_PathTable"></ul>
+                </div>
+                <div class="sCard">
+                    <h4>Requested hostnames</h4>
+                    <p class="sub">Hostnames clients asked for.</p>
+                    <ul class="sRank" id="stats_downstreamTable"></ul>
+                </div>
+                <div class="sCard">
+                    <h4>Forwarded upstreams</h4>
+                    <p class="sub">Where requests were sent.</p>
+                    <ul class="sRank" id="stats_upstreamTable"></ul>
+                </div>
+                <div class="sCard">
+                    <h4>Referring sites</h4>
+                    <p class="sub">Sources of traffic by Referer header.</p>
+                    <ul class="sRank" id="stats_RefererTable"></ul>
+                </div>
+                <div class="sCard">
+                    <h4>User agents</h4>
+                    <p class="sub">Most common User-Agent headers.</p>
+                    <ul class="sRank" id="stats_UserAgentTable"></ul>
+                </div>
+                <div class="sCard">
+                    <h4>Forward traffic types</h4>
+                    <p class="sub">How requests were handled (proxy type, or the rule that answered them).</p>
+                    <ul class="sRank forwardTypeCounts"></ul>
+                </div>
+                <div class="sCard">
+                    <h4>IP versions</h4>
+                    <p class="sub">Share of distinct client addresses.</p>
+                    <div class="sChart"><canvas id="stats_ipver" role="img" aria-label="IPv4 and IPv6 clients"></canvas></div>
+                </div>
+                <div class="sCard">
+                    <h4>Devices</h4>
+                    <p class="sub">Requests by device class. Counts requests, not unique devices.</p>
+                    <div class="sChart"><canvas id="stats_device" role="img" aria-label="Desktop and mobile"></canvas></div>
+                </div>
+                <div class="sCard">
+                    <h4>Browsers</h4>
+                    <p class="sub">Parsed from the User-Agent header.</p>
+                    <div class="sChart"><canvas id="stats_browsers" role="img" aria-label="Browsers"></canvas></div>
+                </div>
+                <div class="sCard">
+                    <h4>Operating systems</h4>
+                    <p class="sub">Parsed from the User-Agent header.</p>
+                    <div class="sChart"><canvas id="stats_OS" role="img" aria-label="Operating systems"></canvas></div>
+                </div>
+                <div class="sCard">
+                    <h4>OS versions</h4>
+                    <p class="sub">Most common operating system versions.</p>
+                    <ul class="sRank" id="stats_OSVersionList"></ul>
+                </div>
+                <div class="sCard">
+                    <h4>Request file types</h4>
+                    <p class="sub">What kind of resources were requested.</p>
+                    <div class="sChart"><canvas id="stats_filetype" role="img" aria-label="File types"></canvas></div>
+                </div>
+            </div>
+            <button type="button" class="sBtn" id="sAdvanced" style="float:right;"><i class="external square alternate icon"></i> Advanced operations</button>
+            <div style="clear:both;"></div>
         </div>
-        <div class="ui divider"></div>
-        <!-- Client Device Analysis -->
-        <div class="ui stackable grid">
-            <div class="eight wide column">
-                <h3>Client Devices</h3>
-                <p>Device type analysis by its request interactions.The number of iteration count does not means the number unique device, as no cookie is used to track the devices identify.</p>
-                <div>
-                    <canvas id="stats_device"></canvas>
-                </div>
-            </div>
-            <div class="eight wide column">
-                <h3>Client Browsers</h3>
-                <p>The browsers where your client is using to visit your site</p>
-                <div>
-                    <canvas id="stats_browsers"></canvas>
-                </div>
-            </div>
-        </div>
-        <div class="ui stackable grid">
-            <div class="eight wide column">
-                <h3>Client OS</h3>
-                <p>The OS where your client is using. Estimated using the UserAgent header sent by the client browser while requesting a resources from one of your host.</p>
-                <div>
-                    <canvas id="stats_OS"></canvas>
-                </div>
-            </div>
-            <div class="eight wide column">
-                <h3>OS Versions</h3>
-                <p>The OS versions most commonly used by your site's visitors.</p>
-                <div style="height: 500px; overflow-y: auto;">
-                    <table class="ui unstackable striped celled table">
-                        <thead>
-                          <tr>
-                            <th>OS Version</th>
-                            <th>Request Counts</th>
-                            <th>Percentage</th>
-                        </tr></thead>
-                        <tbody id="stats_OSVersionList">
-                         
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-        <div class="ui divider"></div>
-        <div class="ui stackable grid">
-            <div class="eight wide column">
-                <h3>Request File Types</h3>
-                <p>The file types being served by this proxy</p>
-                <div>
-                    <canvas id="stats_filetype"></canvas>
-                </div>
-            </div>
-            <div class="eight wide column">
-                <h3>Referring Sites</h3>
-                <p>The Top 100 sources of traffic according to referer header</p>
-                <div>
-                    <div style="height: 500px; overflow-y: auto;">
-                        <table class="ui unstackable striped celled table">
-                            <thead>
-                              <tr>
-                                <th class="no-sort">Referer</th>
-                                <th class="no-sort">Requests</th>
-                            </tr></thead>
-                            <tbody id="stats_RefererTable">
-                             
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div> 
-        <div class="ui divider"></div>
-        <div class="ui stackable grid">
-            <div class="eight wide column">
-                <h3>Top Requested Paths</h3>
-                <p>Most requested pages (host and path, query string depends on the Filters setting)</p>
-                <div style="height: 400px; overflow-y: auto;">
-                    <table class="ui unstackable striped celled table">
-                        <thead><tr><th class="no-sort">URL</th><th class="no-sort">Requests</th></tr></thead>
-                        <tbody id="stats_PathTable"></tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="eight wide column">
-                <h3>Response Status Codes</h3>
-                <p>HTTP status codes returned to clients</p>
-                <div style="height: 400px; overflow-y: auto;">
-                    <table class="ui unstackable striped celled table">
-                        <thead><tr><th class="no-sort">Status</th><th class="no-sort">Requests</th></tr></thead>
-                        <tbody id="stats_StatusTable"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-        <div class="ui divider"></div>
-        <div class="ui stackable grid">
-            <div class="eight wide column">
-                <h3>Requested Hostnames</h3>
-                <p>Most requested hostnames from downstream</p>
-                <div>
-                    <div style="height: 500px; overflow-y: auto;">
-                        <table class="ui unstackable striped celled table">
-                            <thead>
-                              <tr>
-                                <th class="no-sort">Hostname</th>
-                                <th class="no-sort">Requests</th>
-                            </tr></thead>
-                            <tbody id="stats_downstreamTable">
-                             
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-            <div class="eight wide column">
-                <h3>Forwarded Upstreams</h3>
-                <p>The Top 100 upstreams where the requests are forwarded to</p>
-                <div>
-                    <div style="height: 500px; overflow-y: auto;">
-                        <table class="ui unstackable striped celled table">
-                            <thead>
-                              <tr>
-                                <th class="no-sort">Upstream Endpoint</th>
-                                <th class="no-sort">Requests</th>
-                            </tr></thead>
-                            <tbody id="stats_upstreamTable">
-                             
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div> 
-        <div class="ui divider"></div>
-        <div class="ui basic segment" id="trendGraphs">
-            <h3>Visitor Trend Analysis</h3>
-            <p>Request trends in the selected time range</p>
-            <div>
-                <canvas id="requestTrends"></canvas>
-            </div>
-        </div>
-        <button onclick="showSideWrapper('snippet/advanceStatsOprs.html?t=' + Date.now() + '#' + encodeURIComponent(JSON.stringify(getStatisticDateRange())));" class="ui basic right floated black button"><i class="external square alternate icon"></i> Advance Operations</button>
     </div>
-    
-    <!-- <button class="ui icon right floated basic button" onclick="initStatisticSummery();"><i class="green refresh icon"></i> Refresh</button> -->
-    <br><br>
+
+    <!-- ===================== Blocked ===================== -->
+    <div id="sBlocked" style="display:none;">
+        <details class="sInfo" id="sBlockedInfo">
+            <summary>What counts as blocked?</summary>
+            <p style="margin:.5em 0 0;">A request is listed here when Zoraxy itself refused it before it reached your server:</p>
+            <ul>
+                <li>access rules (blacklist, allow list, country rules) and automatic bans,</li>
+                <li>rate limits, the WAF, the exploit detector and bot rules,</li>
+                <li>header rules, path rules, CAPTCHA and country challenges,</li>
+                <li>client certificate and allowed-peer checks, failed basic auth or SSO, and plugins that refuse a request.</li>
+            </ul>
+            <p style="margin:.5em 0 0;">Errors returned by your own server (404, 500 ...) are not blocks. The list keeps the <b>last <span id="sbCap">2000</span></b> blocked requests; the counters on the Status page keep counting beyond that.
+            Query strings are not stored unless <a href="#" id="sbVisitorsLink">Visitors</a> is set to keep them, requests from the statistics exclusion list are not recorded, and rules that opted out of statistics are skipped.</p>
+        </details>
+
+        <div class="sBar">
+            <div class="sSeg" id="sbSince" role="group" aria-label="Time window">
+                <button type="button" data-h="1">1 h</button>
+                <button type="button" data-h="24" class="active">24 h</button>
+                <button type="button" data-h="168">7 days</button>
+                <button type="button" data-h="0">All kept</button>
+            </div>
+            <select id="sbReason" aria-label="Reason"><option value="">All reasons</option></select>
+            <select id="sbHost" aria-label="Host"><option value="">All hosts</option></select>
+            <input type="search" class="sGrow" id="sbSearch" placeholder="Search IP, host, path, rule..." aria-label="Search blocked requests" autocomplete="off">
+            <span class="sIpTag" id="sbIpTag" style="display:none;"><span class="mono" id="sbIpVal"></span><button type="button" id="sbIpClear" aria-label="Clear IP filter">&times;</button></span>
+            <button type="button" class="sBtn" id="sbReload" title="Reload"><i class="sync alternate icon"></i></button>
+        </div>
+
+        <div id="sbEmpty" class="sEmpty" style="display:none;"></div>
+
+        <div id="sbData">
+          <div id="sbMain">
+            <div class="sKpis">
+                <div class="sKpi" style="--k:#f59e0b"><span class="l">Blocked in this view</span><span class="v" id="sbkTotal">-</span><span class="u" id="sbkTotalSub"></span></div>
+                <div class="sKpi" style="--k:#e5484d"><span class="l">Top reason</span><span class="v" id="sbkReason" style="font-size:1.25em;">-</span><span class="u" id="sbkReasonSub"></span></div>
+                <div class="sKpi" style="--k:#3b82f6"><span class="l">Distinct IPs</span><span class="v" id="sbkIps">-</span><span class="u" id="sbkIpsSub"></span></div>
+                <div class="sKpi" style="--k:#8b5cf6"><span class="l">Hosts hit</span><span class="v" id="sbkHosts">-</span><span class="u" id="sbkHostsSub"></span></div>
+            </div>
+
+            <div class="sGrid">
+                <div class="sCard">
+                    <h4>Why requests were blocked</h4>
+                    <p class="sub">Select a reason to filter the list. The link opens the page where that rule lives.</p>
+                    <div id="sbReasons"></div>
+                </div>
+                <div class="sCard">
+                    <h4>Blocked per hour</h4>
+                    <p class="sub">Last 24 hours.</p>
+                    <div class="sChart"><canvas id="sbHourly" role="img" aria-label="Blocked requests per hour over the last 24 hours"></canvas></div>
+                </div>
+                <div class="sCard">
+                    <h4>Top IPs</h4>
+                    <p class="sub">Select an address to filter. The arrow opens it in Visitors.</p>
+                    <ul class="sRank" id="sbTopIps"></ul>
+                </div>
+                <div class="sCard">
+                    <h4>Top hosts</h4>
+                    <ul class="sRank" id="sbTopHosts"></ul>
+                    <h4 style="margin-top:1em;">Top paths</h4>
+                    <ul class="sRank" id="sbTopPaths"></ul>
+                </div>
+            </div>
+
+            <div class="sCard wide">
+                <h4>Recent blocked requests</h4>
+                <p class="sub" id="sbListSub">Newest first.</p>
+                <div class="sTableWrap">
+                    <table class="sTable" id="sbTable">
+                        <thead><tr><th>Time</th><th>IP address</th><th>Host</th><th>Request</th><th>Status</th><th>Reason</th></tr></thead>
+                        <tbody id="sbBody"></tbody>
+                    </table>
+                </div>
+                <div class="sPager">
+                    <button type="button" class="sBtn" id="sbMore" style="display:none;">Load more</button>
+                    <span id="sbShown"></span>
+                </div>
+            </div>
+          </div>
+
+            <div class="sCard wide" style="margin-top:1em;">
+                <h4>Log settings</h4>
+                <p class="sub" id="sbStatsLine"></p>
+                <label style="display:inline-flex; gap:.5em; align-items:center;"><input type="checkbox" id="sbEnabled"> Record blocked requests</label>
+                <span style="margin-left:1.2em;">
+                    <button type="button" class="sBtn danger" id="sbClear"><i class="trash icon"></i> Clear the list</button>
+                    <span id="sbClearConfirm" style="display:none;">Erase every stored blocked request?
+                        <button type="button" class="sBtn danger" id="sbClearYes">Yes, erase</button>
+                        <button type="button" class="sBtn" id="sbClearNo">Cancel</button></span>
+                </span>
+            </div>
+        </div>
+    </div>
+    <br>
 </div>
+
 <script>
-    var statisticCharts = [];
+(function(){
+    var P = "#statsPage ";
+    var DARK = function(){ return document.body.classList.contains("darkTheme"); };
+    var PALETTE = ["#3b82f6","#22a06b","#f59e0b","#8b5cf6","#ec4899","#14b8a6","#f97316","#6366f1","#84cc16","#06b6d4"];
+    var OTHER_COLOR = "#94a3b8";
+    var charts = {};           // canvas id -> Chart
+    var S = {tab: "overview", range: "today", siteBusy: false, dates: [], lastRecords: null};
 
-    function statsSitePara(){
-        let v = $("#statsSiteSelect").val();
-        return v ? "&site=" + encodeURIComponent(v) : "";
+    function esc(t){ return String(t == null ? "" : t).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+    function num(n){ return Number(n || 0).toLocaleString(); }
+    function dec(s){ try { return decodeURIComponent(s); } catch(e) { return s; } }
+    function fmtDay(d){ return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+    function dayOffset(n){ var d = new Date(); d.setDate(d.getDate() + n); return fmtDay(d); }
+    function onScreen(){ return !document.hidden && document.getElementById("statsPage") && $("#stats").is(":visible"); }
+    function sitePara(){ var v = $("#statsSiteSelect").val(); return v ? "&site=" + encodeURIComponent(v) : ""; }
+    var LOCAL_RE = /^(lan|private|loopback|carriernat|linklocal|uniquelocal|multicast|reserved|documentation|interconnect|unspecified|ipv4mapped|6to4|teredo|orchid|benchmarking|discard|translation)$/i;
+
+    function chartTheme(){
+        return {text: DARK() ? "#cbd5e1" : "#475569", grid: DARK() ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.07)"};
     }
+    function killChart(id){ if (charts[id]){ charts[id].destroy(); delete charts[id]; } }
+    function killOverviewCharts(){ Object.keys(charts).forEach(function(id){ if (id !== "sbHourly") killChart(id); }); }
 
-    function escStat(t){
-        return String(t).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    /* top N entries + "Other" for pie style charts */
+    function topWithOther(map, n){
+        var e = Object.entries(map || {}).sort(function(a, b){ return b[1] - a[1]; });
+        var head = e.slice(0, n), rest = e.slice(n).reduce(function(s, x){ return s + x[1]; }, 0);
+        if (rest > 0) head.push(["Other", rest]);
+        return head;
     }
-
-    function renderPathTable(urls){
-        let body = $("#stats_PathTable").empty();
-        let entries = Object.entries(urls || {}).sort((a, b) => b[1] - a[1]).slice(0, 100);
-        if (entries.length == 0){
-            body.html("<tr><td colspan='2'>No data</td></tr>");
-            return;
-        }
-        entries.forEach(function(e){
-            let u = e[0];
-            try { u = decodeURIComponent(u); } catch(ex) {}
-            body.append(`<tr><td style="word-break: break-all;">${escStat(u)}</td><td>${e[1]}</td></tr>`);
+    function doughnut(id, entries, colorFor){
+        killChart(id);
+        var el = document.getElementById(id);
+        if (!el || typeof Chart === "undefined") return;
+        var th = chartTheme();
+        charts[id] = new Chart(el, {
+            type: "doughnut",
+            data: {labels: entries.map(function(e){ return e[0]; }), datasets: [{data: entries.map(function(e){ return e[1]; }),
+                backgroundColor: entries.map(function(e, i){ return e[0] === "Other" ? OTHER_COLOR : (colorFor ? colorFor(e[0], i) : PALETTE[i % PALETTE.length]); }),
+                borderWidth: 2, borderColor: DARK() ? "#1a1a1e" : "#ffffff"}]},
+            options: {responsive: true, maintainAspectRatio: false, cutout: "58%", animation: false,
+                plugins: {legend: {position: "right", labels: {color: th.text, boxWidth: 12, font: {size: 11}}}}}
         });
     }
 
-    function renderStatusTable(codes){
-        let body = $("#stats_StatusTable").empty();
-        let entries = Object.entries(codes || {}).sort((a, b) => b[1] - a[1]);
-        if (entries.length == 0){
-            body.html("<tr><td colspan='2'>No data (status codes are recorded since this version)</td></tr>");
-            return;
+    /* ranked list with inline bars; shows 8 and expands to 100 */
+    function renderRank(sel, map, opts){
+        opts = opts || {};
+        var el = $(sel).empty();
+        var entries = Object.entries(map || {}).filter(function(e){ return e[1] > 0; }).sort(function(a, b){ return b[1] - a[1]; }).slice(0, 100);
+        if (!entries.length){ el.html('<li style="color:var(--text_color_secondary)">No data</li>'); return; }
+        var max = entries[0][1], total = entries.reduce(function(s, x){ return s + x[1]; }, 0);
+        var limit = opts.limit || 8;
+        function row(e, hidden){
+            var label = opts.label ? opts.label(e[0]) : (e[0] === "" ? '<i class="eye slash outline icon"></i> Unknown or hidden' : esc(opts.raw ? e[0] : dec(e[0]).replace(/<[^>]+>/g, "")));
+            var li = $('<li' + (opts.click ? ' class="click" tabindex="0"' : '') + (hidden ? ' style="display:none" data-extra="1"' : '') + '></li>');
+            li.append('<span class="bar" style="width:' + Math.max(2, Math.round(100 * e[1] / max)) + '%"></span>',
+                      '<span class="k" title="' + esc(opts.raw ? e[0] : dec(e[0])) + '">' + label + '</span>',
+                      '<span class="n" title="' + (100 * e[1] / total).toFixed(1) + '%">' + num(e[1]) + '</span>');
+            if (opts.click) li.on("click keydown", function(ev){ if (ev.type === "click" || ev.key === "Enter") opts.click(e[0]); });
+            return li;
         }
-        entries.forEach(function(e){
-            body.append(`<tr><td>${escStat(e[0])}</td><td>${e[1]}</td></tr>`);
+        entries.forEach(function(e, i){ el.append(row(e, i >= limit)); });
+        if (entries.length > limit){
+            var more = $('<button type="button" class="sMore">Show all ' + entries.length + '</button>');
+            more.on("click", function(){
+                var open = el.find("li[data-extra]:visible").length > 0;
+                el.find("li[data-extra]").toggle(!open);
+                more.text(open ? "Show all " + entries.length : "Show less");
+            });
+            el.next(".sMore").remove();
+            el.after(more);
+        }
+    }
+
+    /* ---------- Overview ---------- */
+    function renderCountry(origin){
+        killChart("stats_visitors");
+        var el = document.getElementById("stats_visitors");
+        if (!el || typeof Chart === "undefined") return;
+        var agg = {};
+        Object.keys(origin || {}).forEach(function(cc){
+            var label;
+            if (cc === "") label = "Unknown";
+            else if (LOCAL_RE.test(cc)) label = "Local network";
+            else { var n = ""; try { n = getCountryName(cc); } catch(e) {} label = (n ? n + " " : "") + "[" + cc.toUpperCase() + "]"; }
+            agg[label] = (agg[label] || 0) + origin[cc];
+        });
+        var entries = Object.entries(agg).sort(function(a, b){ return b[1] - a[1]; }).slice(0, 10);
+        var th = chartTheme();
+        charts.stats_visitors = new Chart(el, {
+            type: "bar",
+            data: {labels: entries.map(function(e){ return e[0]; }), datasets: [{data: entries.map(function(e){ return e[1]; }),
+                backgroundColor: entries.map(function(e){ return e[0] === "Local network" ? OTHER_COLOR : "#3b82f6"; }), borderRadius: 3, barPercentage: 0.8, maxBarThickness: 26}]},
+            options: {indexAxis: "y", responsive: true, maintainAspectRatio: false, animation: false, plugins: {legend: {display: false}},
+                scales: {x: {beginAtZero: true, grid: {color: th.grid}, border: {display: false}, ticks: {color: th.text, precision: 0, maxTicksLimit: 5}},
+                         y: {grid: {display: false}, border: {display: false}, ticks: {color: th.text, font: {size: 11}}}}}
+        });
+        if (!entries.length){ $(el).parent().html('<div style="color:var(--text_color_secondary)">No country data</div>'); }
+    }
+
+    function renderIPVersions(ips){
+        var keys = Object.keys(ips || {});
+        var v4 = keys.filter(function(ip){ return ip.indexOf(".") >= 0 && ip.indexOf(":") < 0; }).length;
+        var v6 = keys.filter(function(ip){ return ip.indexOf(":") >= 0; }).length;
+        doughnut("stats_ipver", [["IPv4", v4], ["IPv6", v6]].filter(function(e){ return e[1] > 0; }), function(l){ return l === "IPv4" ? "#6366f1" : "#84cc16"; });
+        var top = {};
+        keys.forEach(function(k){ top[k] = ips[k]; });
+        renderRank("#stats_requestCountlist", top, {raw: true, limit: 10, click: function(ip){ jumpToVisitors(ip); }});
+        return keys.length;
+    }
+
+    function renderUA(uaMap){
+        var mobile = 0, desktop = 0, os = {}, osv = {}, br = {}, uaTop = {};
+        Object.keys(uaMap || {}).forEach(function(ua){
+            var n = uaMap[ua], info = parseUserAgent(ua);
+            if (info.isMobile) mobile += n; else desktop += n;
+            os[info.os] = (os[info.os] || 0) + n;
+            var vk = info.os + " " + String(info.version).split("_").join(".");
+            osv[vk] = (osv[vk] || 0) + n;
+            var b = info.browser;
+            if (b.indexOf("//") >= 0) b = "Bots"; else if (b === "") b = "Unknown";
+            br[b] = (br[b] || 0) + n;
+            uaTop[ua] = n;
+        });
+        doughnut("stats_device", [["Desktop", desktop], ["Mobile", mobile]].filter(function(e){ return e[1] > 0; }), function(l){ return l === "Desktop" ? "#e56b5e" : "#14b8a6"; });
+        doughnut("stats_OS", topWithOther(os, 7));
+        doughnut("stats_browsers", topWithOther(br, 7));
+        renderRank("#stats_OSVersionList", osv, {raw: true});
+        renderRank("#stats_UserAgentTable", uaTop, {raw: true, limit: 6});
+    }
+
+    function renderFileTypes(urls){
+        var ext = {};
+        Object.keys(urls || {}).forEach(function(u){
+            var path = u.split("?")[0], fn = path.split("/").pop(), e;
+            if (fn === "") e = "Folder path"; else if (fn.indexOf(".") >= 0) e = fn.split(".").pop().toLowerCase(); else e = "API call";
+            ext[e] = (ext[e] || 0) + urls[u];
+        });
+        doughnut("stats_filetype", topWithOther(ext, 7));
+    }
+
+    function renderForwardTypes(ft){
+        renderRank(".forwardTypeCounts", ft, {raw: true, limit: 8});
+    }
+
+    function renderTrend(records, dates){
+        killChart("requestTrends");
+        var el = document.getElementById("requestTrends");
+        if (!el || typeof Chart === "undefined") return;
+        var labels = records.map(function(r, i){ return dates && dates.length === records.length ? dates[i].replace(/_/g, "-") : "Day " + (i + 1); });
+        var th = chartTheme();
+        function ds(label, key, color, fill){
+            return {label: label, data: records.map(function(r){ return r[key] || 0; }), borderColor: color, backgroundColor: fill || color, borderWidth: 2,
+                    pointRadius: records.length > 40 ? 0 : 3, tension: 0.3, fill: !!fill};
+        }
+        charts.requestTrends = new Chart(el, {
+            type: "line",
+            data: {labels: labels, datasets: [ds("All requests", "TotalRequest", "#3b82f6", "rgba(59,130,246,0.12)"), ds("Errors", "ErrorRequest", "#e5484d"), ds("Blocked", "BlockedRequest", "#f59e0b")]},
+            options: {responsive: true, maintainAspectRatio: false, animation: false, interaction: {mode: "index", intersect: false},
+                plugins: {legend: {position: "bottom", labels: {color: th.text, boxWidth: 12}}},
+                scales: {x: {grid: {display: false}, border: {display: false}, ticks: {color: th.text, maxRotation: 0, autoSkip: true, maxTicksLimit: 8}},
+                         y: {beginAtZero: true, border: {display: false}, grid: {color: th.grid}, ticks: {color: th.text, precision: 0, maxTicksLimit: 6}}}}
         });
     }
 
-    function statsSparkline(values){
-        if (!values || values.length < 2){ return ""; }
-        let max = Math.max.apply(null, values);
-        if (max <= 0){ max = 1; }
-        let w = 100, h = 22;
-        let pts = values.map((v, i) => (i * w / (values.length - 1)).toFixed(1) + "," + (h - 2 - (v / max) * (h - 4)).toFixed(1)).join(" ");
-        return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="traffic trend"><polyline fill="none" stroke="#2185d0" stroke-width="1.5" points="${pts}"/></svg>`;
+    function renderSummary(d, records){
+        $(P + "#statisticRenderNotEnoughData").hide();
+        $(P + "#statisticRenderElement").show();
+        var total = d.TotalRequest || 0, ok = d.ValidRequest || 0, err = d.ErrorRequest || 0;
+        $(P + ".totalViewCount").text(abbreviateNumber(total));
+        $(P + ".totalSuccCount").text(abbreviateNumber(ok));
+        $(P + ".totalErrorCount").text(abbreviateNumber(err));
+        $(P + "#sKpiOkPct").text(total ? (100 * ok / total).toFixed(1) + "% of requests" : "");
+        $(P + "#sKpiErrPct").text(total ? (100 * err / total).toFixed(1) + "% of requests" : "");
+        $(P + "#sKpiBlockedVal").text(abbreviateNumber(d.BlockedRequest || 0));
+        $(P + "#sKpiRange").text(rangeLabel());
+        $(P + "#sKpiIps").text(abbreviateNumber(Object.keys(d.RequestClientIp || {}).length));
+        renderForwardTypes(d.ForwardTypes || {});
+        renderCountry(d.RequestOrigin);
+        renderIPVersions(d.RequestClientIp);
+        renderUA(d.UserAgent);
+        renderFileTypes(d.RequestURL);
+        renderRank("#stats_RefererTable", d.Referer, {limit: 8});
+        renderRank("#stats_PathTable", d.RequestURL, {limit: 10});
+        renderRank("#stats_StatusTable", d.StatusCodes, {raw: true, limit: 12, label: function(c){ return '<b class="st' + esc(String(c).charAt(0)) + '">' + esc(c) + '</b>'; }});
+        renderRank("#stats_downstreamTable", d.Downstreams, {limit: 8});
+        renderRank("#stats_upstreamTable", d.Upstreams, {limit: 8});
+        if (records && records.length > 1){
+            $(P + "#trendGraphs").show();
+            renderTrend(records, S.dates);
+        } else {
+            killChart("requestTrends");
+            $(P + "#trendGraphs").hide();
+        }
     }
 
-    function loadStatsSites(){
-        let r = getStatisticDateRange();
-        let url = "/api/analytic/sites";
-        if ($("#statsRangeStart").val() != ""){
-            url += "?start=" + r[0] + "&end=" + r[1];
+    function showEmpty(){
+        killOverviewCharts();
+        $(P + "#statisticRenderElement").hide();
+        var site = $("#statsSiteSelect").val();
+        $(P + "#sEmptyScope").text(site ? " for " + site : "");
+        $(P + "#statisticRenderNotEnoughData").show();
+    }
+
+    function rangeLabel(){
+        switch (S.range){
+            case "today": return "today";
+            case "yesterday": return "yesterday";
+            case "7": return "last 7 days";
+            case "30": return "last 30 days";
         }
+        var r = getStatisticDateRange();
+        return r[0] === r[1] ? r[0] : r[0] + " to " + r[1];
+    }
+
+    function getTodayStatisticKey(){ return fmtDay(new Date()).split("-").join("_"); }
+    function getStatisticDateRange(){
+        var sd = $("#statsRangeStart").val(), ed = $("#statsRangeEnd").val();
+        if (ed === "") ed = sd;
+        if (sd === "" && ed === ""){ sd = ed = getTodayStatisticKey(); }
+        if (sd !== "" && ed !== "" && sd > ed){ var t = sd; sd = ed; ed = t; }
+        return [sd, ed];
+    }
+    window.getStatisticDateRange = getStatisticDateRange; // used by snippet/advanceStatsOprs.html
+    window.getTodayStatisticKey = getTodayStatisticKey;
+
+    function currentRange(){
+        switch (S.range){
+            case "today": return [dayOffset(0), dayOffset(0)];
+            case "yesterday": return [dayOffset(-1), dayOffset(-1)];
+            case "7": return [dayOffset(-6), dayOffset(0)];
+            case "30": return [dayOffset(-29), dayOffset(0)];
+        }
+        var r = getStatisticDateRange();
+        return [r[0].split("_").join("-"), r[1].split("_").join("-")];
+    }
+
+    var loadSeq = 0;
+    function loadOverview(){
+        var seq = ++loadSeq, r = currentRange();
+        loadSites(r, seq);
+        if (r[0] === r[1]){
+            $.getJSON("./api/analytic/load?id=" + r[0] + sitePara(), function(d){
+                if (seq !== loadSeq) return;
+                if (d.error !== undefined){ msgbox(d.error, false, 6000); return showEmpty(); }
+                if (!d.TotalRequest) return showEmpty();
+                killOverviewCharts();
+                renderSummary(d, null);
+            }).fail(function(){ if (seq === loadSeq) showEmpty(); });
+        } else {
+            $.getJSON("./api/analytic/loadRange?start=" + r[0] + "&end=" + r[1] + sitePara(), function(d){
+                if (seq !== loadSeq) return;
+                if (d.error !== undefined){ msgbox(d.error, false, 6000); return showEmpty(); }
+                if (!d.Summary || !d.Summary.TotalRequest) return showEmpty();
+                killOverviewCharts();
+                S.lastRecords = d.Records;
+                renderSummary(d.Summary, d.Records);
+            }).fail(function(){ if (seq === loadSeq) showEmpty(); });
+        }
+    }
+
+    function sparkline(values){
+        if (!values || values.length < 2) return "";
+        var max = Math.max.apply(null, values); if (max <= 0) max = 1;
+        var w = 90, h = 22;
+        var pts = values.map(function(v, i){ return (i * w / (values.length - 1)).toFixed(1) + "," + (h - 2 - (v / max) * (h - 4)).toFixed(1); }).join(" ");
+        return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + " " + h + '" role="img" aria-label="traffic trend"><polyline fill="none" stroke="#3b82f6" stroke-width="1.5" points="' + pts + '"/></svg>';
+    }
+
+    function loadSites(r, seq){
+        var url = "./api/analytic/sites?start=" + r[0] + "&end=" + r[1];
         $.getJSON(url, function(data){
-            if (data.error){ $("#statsSitesBody").html("<tr><td colspan='6'>" + escStat(data.error) + "</td></tr>"); return; }
-            let sel = $("#statsSiteSelect");
-            let current = sel.val();
-            sel.find("option:not(:first)").remove();
-            let body = $("#statsSitesBody").empty();
-            let sites = data.Sites || [];
-            if (sites.length == 0){
-                body.html("<tr><td colspan='6'>No per-site data in this period</td></tr>");
+            if (seq !== loadSeq) return;
+            var body = $("#statsSitesBody").empty();
+            if (data.error){ body.html("<tr><td colspan='6'>" + esc(data.error) + "</td></tr>"); return; }
+            S.dates = data.Dates || [];
+            if (S.lastRecords && S.dates.length === S.lastRecords.length && S.lastRecords.length > 1 && charts.requestTrends){
+                charts.requestTrends.data.labels = S.dates.map(function(x){ return x.replace(/_/g, "-"); });
+                charts.requestTrends.update("none");
             }
+            var sel = $("#statsSiteSelect"), current = sel.val();
+            sel.find("option:not(:first)").remove();
+            var sites = data.Sites || [];
+            if (!sites.length) body.html("<tr><td colspan='6' style='color:var(--text_color_secondary)'>No per-site data in this period</td></tr>");
             sites.forEach(function(s){
                 sel.append($("<option>").val(s.Site).text(s.Site));
-                let trend = (data.Dates.length > 1) ? s.PerDay : s.Hourly;
-                let errRate = s.Total > 0 ? " (" + (s.Errors * 100 / s.Total).toFixed(1) + "%)" : "";
-                let row = $("<tr style='cursor:pointer;'>").append(
-                    $("<td>").text(s.Site), $("<td>").text(s.Total), $("<td>").text(s.Errors + errRate),
-                    $("<td>").text(s.Blocked), $("<td>").text(s.Visitors), $("<td>").html(statsSparkline(trend)));
-                row.on("click", function(){ $("#statsSiteSelect").val(s.Site); handleLoadStatisticButtonPress(); });
+                var trend = (S.dates.length > 1) ? s.PerDay : s.Hourly;
+                var errRate = s.Total > 0 ? " (" + (s.Errors * 100 / s.Total).toFixed(1) + "%)" : "";
+                var row = $("<tr class='click'>").append($("<td>").text(s.Site), $("<td>").text(num(s.Total)), $("<td>").text(num(s.Errors) + errRate),
+                    $("<td>").text(num(s.Blocked)), $("<td>").text(num(s.Visitors)), $("<td>").html(sparkline(trend)));
+                row.on("click", function(){ $("#statsSiteSelect").val(s.Site); loadOverview(); });
                 body.append(row);
             });
             sel.val(current);
         });
     }
-    loadStatsSites();
 
-    //Start day must be earlier than end date
-    function initStatisticSummery(startdate="", enddate=""){
-            if (startdate == "" && enddate == "" ){
-                let todaykey = getTodayStatisticKey();
-                loadStatisticByDate(todaykey);
-            }else if ((startdate != "" && enddate == "") || startdate == enddate){
-                //Load the target date
-                let targetDate = startdate.trim();
-                loadStatisticByDate(targetDate);
-            }else{
-                //Two dates are given and they are not identical
-                loadStatisticByRange(startdate, enddate);
-                //console.log(startdate, enddate);
-            }
+    /* ---------- range controls ---------- */
+    function setRange(r, load){
+        S.range = r;
+        $("#sRange button").removeClass("active").filter('[data-range="' + r + '"]').addClass("active");
+        $("#sCustom").toggleClass("show", r === "custom");
+        if (r !== "custom" && load !== false) loadOverview();
+        if (r === "custom" && !$("#statsRangeStart").val()){ $("#statsRangeStart").val(dayOffset(0)); }
+    }
+    $("#sRange").on("click", "button", function(){ setRange($(this).attr("data-range")); });
+    $("#sApply").on("click", function(){ loadOverview(); });
+    $("#statsSiteSelect").on("change", loadOverview);
+    $("#sReload").on("click", loadOverview);
+    function openFilters(){ showSideWrapper("snippet/statsFilters.html?t=" + Date.now()); }
+    $("#sFilters").on("click", openFilters);
+    $("#sFiltersLink").on("click", function(e){ e.preventDefault(); openFilters(); });
+    $("#sAdvanced").on("click", function(){ showSideWrapper("snippet/advanceStatsOprs.html?t=" + Date.now() + "#" + encodeURIComponent(JSON.stringify(getStatisticDateRange()))); });
+    $("#sKpiBlocked").on("click", function(){ setTab("blocked"); });
+    // keep older callers (snippets) working
+    window.handleLoadStatisticButtonPress = function(){ loadOverview(); };
+    window.clearStatisticDateRange = function(){ $("#statsRangeStart").val(""); $("#statsRangeEnd").val(""); };
+    window.initStatisticSummery = loadOverview;
+
+    function jumpToVisitors(ip){
+        openTabById("visitors");
+        setTimeout(function(){ if (typeof window.visitorsFocusIP === "function") window.visitorsFocusIP(ip); }, 150);
     }
 
-   function loadStatisticByDate(dateid){
-        $.getJSON("/api/analytic/load?id=" + dateid + statsSitePara(), function(data){
-            if (data.error != undefined){
-                msgbox(data.error, false, 6000);
-                return;
-            }
-            
-            //Destroy all the previous charts
-            statisticCharts.forEach(function(thisChart){
-                thisChart.destroy();
-            })
+    /* ===================== Blocked ===================== */
+    var REASON_COLOR = {"blacklist":"#dc2626","whitelist":"#b45309","auto-ban":"#9333ea","ratelimit":"#d97706","waf":"#2563eb","exploit":"#be123c",
+        "bot":"#0f766e","header-rule":"#4f46e5","captcha":"#0891b2","country-challenge":"#0e7490","path-rule":"#7c3aed","client-cert":"#475569",
+        "peer":"#64748b","auth":"#c2410c","plugin":"#15803d"};
+    var B = {hours: 24, reason: "", host: "", ip: "", q: "", info: {}, items: [], next: 0, total: 0, loaded: false, lastKey: "", busy: false, hostsKey: "", seq: 0};
 
-            if (data.TotalRequest == 0){
-                //No data to analysis
-                $("#statisticRenderElement").hide()
-                $("#statisticRenderNotEnoughData").show();
-                return;
-            }else{
-                $("#statisticRenderElement").show();
-                $("#statisticRenderNotEnoughData").hide();
-            }
+    function reasonInfo(k){ return B.info[k] || {key: k, label: k, why: "", tab: "", where: ""}; }
+    function chip(k){
+        var i = reasonInfo(k);
+        return '<span class="chip btn" style="--c:' + (REASON_COLOR[k] || "#64748b") + '" data-reason="' + esc(k) + '" title="' + esc(i.why) + '">' + esc(i.label) + '</span>';
+    }
+    function ago(sec){
+        var d = Math.max(0, Math.floor(Date.now() / 1000) - sec);
+        if (d < 60) return d + "s ago";
+        if (d < 3600) return Math.floor(d / 60) + "m ago";
+        if (d < 86400) return Math.floor(d / 3600) + "h ago";
+        return Math.floor(d / 86400) + "d ago";
+    }
+    function blockedQuery(extra){
+        var p = [];
+        function add(k, v){ if (v !== "" && v != null) p.push(k + "=" + encodeURIComponent(v)); }
+        add("since", B.hours); add("reason", B.reason); add("host", B.host); add("ip", B.ip); add("q", B.q);
+        return p.join("&") + (extra ? "&" + extra : "");
+    }
+    function openRule(k){
+        var i = reasonInfo(k);
+        if (!i.tab) return;
+        openTabById(i.tab);
+        if (i.sec) setTimeout(function(){ $('#secTabs .item[data-sec="' + i.sec + '"]').trigger("click"); }, 200);
+    }
 
-            //Render the text values
-            $("#statisticRenderElement").find(".totalViewCount").text(abbreviateNumber(data.TotalRequest));
-            $("#statisticRenderElement").find(".totalSuccCount").text(abbreviateNumber(data.ValidRequest));
-            $("#statisticRenderElement").find(".totalErrorCount").text(abbreviateNumber(data.ErrorRequest));
+    function statusCell(s){
+        if (s === 444) return '<span class="st5" title="Connection closed without an answer">444 dropped</span>';
+        return '<b class="st' + esc(String(s).charAt(0)) + '">' + esc(s) + '</b>';
+    }
+    function blockedRow(e){
+        var tr = $("<tr></tr>");
+        tr.append('<td class="nowrap" title="' + esc(new Date(e.t * 1000).toLocaleString()) + '">' + ago(e.t) + '</td>',
+            '<td class="nowrap"><span class="mono sLink" data-ip="' + esc(e.ip) + '" title="Show only this address">' + esc(e.ip) + '</span>' +
+                ' <button type="button" class="sLink" data-visitor="' + esc(e.ip) + '" title="Open in Visitors" aria-label="Open ' + esc(e.ip) + ' in Visitors"><i class="external alternate icon"></i></button>' +
+                (e.country ? ' <small style="color:var(--text_color_secondary)">' + esc(LOCAL_RE.test(e.country) ? "LAN" : e.country) + '</small>' : '') + '</td>',
+            '<td>' + esc(e.host) + '</td>',
+            '<td style="word-break:break-all;"><b>' + esc(e.method) + '</b> <span class="mono">' + esc(dec(e.path)) + '</span></td>',
+            '<td class="nowrap">' + statusCell(e.status) + '</td>',
+            '<td>' + chip(e.reason) + (e.detail ? '<span class="sDetail">' + esc(e.detail) + '</span>' : '') + '</td>');
+        return tr;
+    }
 
-            //Render forward type data
-            renderForwardTypeCounts(data.ForwardTypes);
-            
-            //Render visitor data
-            renderVisitorChart(data.RequestOrigin);
+    function renderBlockedSummary(s){
+        var cap = s.capacity || 2000;
+        $("#sbCap").text(num(cap));
+        // reason + host filter choices
+        var rk = (s.reasonInfo || []).map(function(r){ return r.key; }).join("|");
+        (s.reasonInfo || []).forEach(function(r){ B.info[r.key] = r; });
+        if (rk !== B.reasonsKey){
+            B.reasonsKey = rk;
+            var cur = $("#sbReason").val();
+            $("#sbReason").html('<option value="">All reasons</option>' + (s.reasonInfo || []).map(function(r){ return '<option value="' + esc(r.key) + '">' + esc(r.label) + '</option>'; }).join("")).val(B.reason || cur);
+        }
+        var hk = (s.topHosts || []).map(function(h){ return h.key; }).join("|");
+        if (hk !== B.hostsKey){
+            B.hostsKey = hk;
+            var hosts = (s.topHosts || []).map(function(h){ return h.key; });
+            if (B.host && hosts.indexOf(B.host) < 0) hosts.push(B.host);
+            $("#sbHost").html('<option value="">All hosts</option>' + hosts.map(function(h){ return '<option value="' + esc(h) + '">' + esc(h) + '</option>'; }).join("")).val(B.host);
+        }
 
-            //Render IP versions
-            renderIPVersionChart(data.RequestClientIp);
+        $("#sbkTotal").text(num(s.total));
+        var oldest = s.oldest ? "since " + new Date(s.oldest * 1000).toLocaleString() : "";
+        $("#sbkTotalSub").text(s.truncated ? "list is full, older ones were dropped" : oldest);
+        var top = (s.reasons || [])[0];
+        $("#sbkReason").text(top ? reasonInfo(top.key).label : "-");
+        $("#sbkReasonSub").text(top ? num(top.n) + " requests (" + Math.round(100 * top.n / Math.max(1, s.total)) + "%)" : "");
+        $("#sbkIps").text(num((s.topIPs || []).length >= 10 ? "10+" : (s.topIPs || []).length));
+        $("#sbkIpsSub").text((s.topIPs || [])[0] ? "most active: " + s.topIPs[0].key : "");
+        $("#sbkHosts").text((s.topHosts || []).length >= 10 ? "10+" : (s.topHosts || []).length);
+        $("#sbkHostsSub").text((s.topHosts || [])[0] ? "most hit: " + s.topHosts[0].key : "");
 
-            //Render user agent analysis
-            renderUserAgentCharts(data.UserAgent);
-
-            //Render file type by analysising request URL paths
-            renderFileTypeGraph(data.RequestURL);
-
-            //Render Referer header
-            renderRefererTable(data.Referer);
-            renderPathTable(data.RequestURL);
-            renderStatusTable(data.StatusCodes);
-
-            if (data.Downstreams == null){
-                //No downstream data to show
-                $("#stats_downstreamTable").html("<tr><td colspan='2'>No data</td></tr>");
-            }else{
-                //Render the downstream table
-                renderDownstreamTable(data.Downstreams);
-            }
-
-            if (data.Upstreams == null){
-                //No upstream data to show
-                $("#stats_upstreamTable").html("<tr><td colspan='2'>No data</td></tr>");
-            }else{
-                //Render the upstream table
-                renderUpstreamTable(data.Upstreams);
-            }
-
-            //Hide the trend graphs
-            $("#trendGraphs").hide();
+        // reasons
+        var box = $("#sbReasons").empty();
+        var maxN = Math.max.apply(null, (s.reasons || []).map(function(r){ return r.n; }).concat([1]));
+        (s.reasons || []).forEach(function(r){
+            var i = reasonInfo(r.key);
+            var row = $('<div class="sReasonRow' + (B.reason === r.key ? " on" : "") + '"></div>');
+            row.append(chip(r.key), '<span class="meter"><i style="width:' + Math.max(3, Math.round(100 * r.n / maxN)) + '%;--c:' + (REASON_COLOR[r.key] || "#64748b") + '"></i></span>',
+                '<b>' + num(r.n) + '</b>',
+                '<span class="why">' + esc(i.why) + (i.tab ? ' <button type="button" class="sLink" data-rule="' + esc(r.key) + '">' + esc(i.where) + ' &rsaquo;</button>' : '') + '</span>');
+            box.append(row);
         });
-   }
-   initStatisticSummery();
-   $("#statsRangeStart").val(getTodayStatisticKey().split("_").join("-"));
+        function rank(sel, list, o){
+            var m = {}; (list || []).forEach(function(c){ m[c.key] = c.n; });
+            renderRank(sel, m, o);
+        }
+        rank("#sbTopIps", s.topIPs, {raw: true, limit: 6, click: function(ip){ setIP(ip); },
+            label: function(k){ return '<span class="mono">' + esc(k) + '</span> <button type="button" class="sLink" data-visitor="' + esc(k) + '" title="Open in Visitors" aria-label="Open in Visitors"><i class="external alternate icon"></i></button>'; }});
+        rank("#sbTopHosts", s.topHosts, {raw: true, limit: 5, click: function(h){ B.host = h; $("#sbHost").val(h); loadBlocked(true); }});
+        rank("#sbTopPaths", s.topPaths, {limit: 5, click: function(p){ $("#sbSearch").val(dec(p)); B.q = dec(p); loadBlocked(true); }});
 
-   function loadStatisticByRange(startdate, endDate){
-        $.getJSON("/api/analytic/loadRange?start=" + startdate + "&end=" + endDate + statsSitePara(), function(data){
-            //console.log(data);
-            //Destroy all the previous charts
-           
-            statisticCharts.forEach(function(thisChart){
-                thisChart.destroy();
-            })
- 
-            if (data.Summary.TotalRequest == 0){
-                //No data to analysis
-                $("#statisticRenderElement").hide()
-                $("#statisticRenderNotEnoughData").show();
-                return;
-            }else{
-                $("#statisticRenderElement").show();
-                $("#statisticRenderNotEnoughData").hide();
+        // hourly chart (rebuilt only when the numbers change)
+        var key = (s.hourly || []).map(function(b){ return b.n; }).join(",") + DARK();
+        if (key !== B.hourKey || !charts.sbHourly){
+            B.hourKey = key;
+            killChart("sbHourly");
+            var el = document.getElementById("sbHourly"), th = chartTheme();
+            if (el && typeof Chart !== "undefined"){
+                charts.sbHourly = new Chart(el, {
+                    type: "bar",
+                    data: {labels: (s.hourly || []).map(function(b){ var d = new Date(b.hour * 1000); return String(d.getHours()).padStart(2, "0") + ":00"; }),
+                        datasets: [{data: (s.hourly || []).map(function(b){ return b.n; }), backgroundColor: "#f59e0b", borderRadius: 3}]},
+                    options: {responsive: true, maintainAspectRatio: false, animation: false, plugins: {legend: {display: false}},
+                        scales: {x: {grid: {display: false}, border: {display: false}, ticks: {color: th.text, maxRotation: 0, autoSkip: true, maxTicksLimit: 8, font: {size: 10}}},
+                                 y: {beginAtZero: true, border: {display: false}, grid: {color: th.grid}, ticks: {color: th.text, precision: 0, maxTicksLimit: 5}}}}
+                });
             }
-
-            //Render the text values
-            $("#statisticRenderElement").find(".totalViewCount").text(abbreviateNumber(data.Summary.TotalRequest));
-            $("#statisticRenderElement").find(".totalSuccCount").text(abbreviateNumber(data.Summary.ValidRequest));
-            $("#statisticRenderElement").find(".totalErrorCount").text(abbreviateNumber(data.Summary.ErrorRequest));
-
-            //Render forward type data
-            renderForwardTypeCounts(data.Summary.ForwardTypes);
-
-            //Render visitor data
-            renderVisitorChart(data.Summary.RequestOrigin);
-
-            //Render IP versions
-            renderIPVersionChart(data.Summary.RequestClientIp);
-
-            //Render user agent analysis
-            renderUserAgentCharts(data.Summary.UserAgent);
-
-            //Render file type by analysising request URL paths
-            renderFileTypeGraph(data.Summary.RequestURL);
-            
-            //Render Referer header
-            renderRefererTable(data.Summary.Referer);
-            renderPathTable(data.Summary.RequestURL);
-            renderStatusTable(data.Summary.StatusCodes);
-
-            //Render the trend graph
-            $("#trendGraphs").show();
-            renderTrendGraph(data.Records);
-        });
-   }
-
-   picker.attach({ target: document.getElementById("statsRangeStart") });
-   picker.attach({ target: document.getElementById("statsRangeEnd") });
-
-   function renderForwardTypeCounts(forwardTypes){
-        let tablBody = $("#statisticRenderElement").find(".forwardTypeCounts");
-        tablBody.empty();
-        let totalForwardCounts = 0;
-        for (let [key, value] of Object.entries(forwardTypes)) {
-            totalForwardCounts += value;
         }
+        $("#sbStatsLine").text(num(s.kept) + " of " + num(cap) + " entries kept, " + num(s.recorded) + " recorded since Zoraxy started. Saved to disk every 5 minutes.");
+        $("#sbEnabled").prop("checked", !!s.enabled);
+    }
 
-        for (let [key, value] of Object.entries(forwardTypes)) {
-            tablBody.append(`<tr>
-                    <td>${key}</td>
-                    <td>${abbreviateNumber(value)} (${value})</td>
-                    <td>${((value/totalForwardCounts)*100).toFixed(3)}%</td>
-                </tr>
-            `);
+    function renderBlockedList(list, append){
+        var body = $("#sbBody");
+        if (!append){ body.empty(); B.items = []; }
+        (list.items || []).forEach(function(e){ B.items.push(e); body.append(blockedRow(e)); });
+        B.next = list.next || 0;
+        B.total = list.total;
+        $("#sbMore").toggle(!!B.next);
+        $("#sbShown").text(B.items.length ? "Showing " + num(B.items.length) + " of " + num(list.total) : "");
+        $("#sbListSub").text(B.reason ? "Newest first, " + reasonInfo(B.reason).label + " only." : "Newest first.");
+    }
+
+    function showBlockedEmpty(s){
+        var anyFilter = B.reason || B.host || B.ip || B.q;
+        var html;
+        if (!s.enabled){
+            html = '<i class="toggle off icon"></i><b>Recording is switched off</b>Blocked requests are not being logged. Switch it on below to see what gets blocked from now on.';
+        } else if (s.kept > 0 || anyFilter){
+            html = '<i class="filter icon"></i><b>No blocked request matches this view</b>Try a longer time window or clear the filters.' +
+                   ' <button type="button" class="sLink" id="sbResetFilters">Reset filters</button>';
+        } else if (s.excludeBlocked){
+            html = '<i class="eye slash icon"></i><b>Blocked requests are excluded from statistics</b>The statistics filter "exclude blocked requests" is on, so nothing is recorded here. Change it under <button type="button" class="sLink" id="sbOpenFilters">Filters</button>.';
+        } else {
+            html = '<i class="check circle outline icon"></i><b>Nothing has been blocked yet</b>When an access rule, the WAF, a rate limit, a bot rule or another protection refuses a request, it shows up here with the reason. ' +
+                   'Counters on the Status page include every block since midnight; this list starts when Zoraxy started (or from the last saved list).';
         }
-   }
+        $("#sbEmpty").html(html).show();
+        $("#sbMain").hide();
+    }
+    function showBlockedData(){
+        $("#sbEmpty").hide();
+        $("#sbMain").show();
+    }
 
-
-   function getTodayStatisticKey(){
-        var today = new Date();
-        var year = today.getFullYear();
-        var month = String(today.getMonth() + 1).padStart(2, '0');
-        var day = String(today.getDate()).padStart(2, '0');
-
-        var formattedDate = year + '_' + month + '_' + day;
-        return formattedDate
-   }
-
-   function handleLoadStatisticButtonPress(){
-        var sd = $("#statsRangeStart").val();
-        var ed = $("#statsRangeEnd").val();
-        //Swap them if sd is later than ed
-        if (sd != "" && ed != "" && sd > ed) {
-            ed = [sd, sd = ed][0];
-            $("#statsRangeStart").val(sd);
-            $("#statsRangeEnd").val(ed);
-        }
-       
-        initStatisticSummery(sd, ed);
-        loadStatsSites();
-   }
-   
-   function getStatisticDateRange(){
-        var sd = $("#statsRangeStart").val();
-        var ed = $("#statsRangeEnd").val();
-
-        if (ed == ""){
-            ed = sd;
-        }
-
-        if (sd == "" && ed == ""){
-            var sk = getTodayStatisticKey();
-            sd = sk;
-            ed = sk;
-        }
-
-         //Swap them if sd is later than ed
-        if (sd != "" && ed != "" && sd > ed) {
-            ed = [sd, sd = ed][0];
-        }
-
-        return [sd, ed];
-   }
-
-   function clearStatisticDateRange(){
-        $("#statsRangeStart").val("");
-        $("#statsRangeEnd").val("");
-   }
-
-   function renderRefererTable(refererList){
-        const sortedEntries = Object.entries(refererList).sort(([, valueA], [, valueB]) => valueB - valueA);
-        $("#stats_RefererTable").html("");
-        let endStop = 100;
-        if (sortedEntries.length < 100){
-            endStop = sortedEntries.length;
-        }
-        for (var i = 0; i < endStop; i++) {
-            let referer = (decodeURIComponent(sortedEntries[i][0])).replace(/(<([^>]+)>)/ig,"");
-            if (sortedEntries[i][0] == ""){
-                //Root
-                referer = `<span style="color: #b5b5b5;">(<i class="eye slash outline icon"></i> Unknown or Hidden)</span>`;
-            }
-            $("#stats_RefererTable").append(`<tr>
-                    <td>${referer}</td>
-                    <td>${sortedEntries[i][1]}</td>
-                </tr>`);
-        }
-   }
-
-   function renderDownstreamTable(downstreamList){
-        const sortedEntries = Object.entries(downstreamList).sort(([, valueA], [, valueB]) => valueB - valueA);
-        $("#stats_downstreamTable").html("");
-        let endStop = 100;
-        if (sortedEntries.length < 100){
-            endStop = sortedEntries.length;
-        }
-        for (var i = 0; i < endStop; i++) {
-            let referer = (decodeURIComponent(sortedEntries[i][0])).replace(/(<([^>]+)>)/ig,"");
-            if (sortedEntries[i][0] == ""){
-                //Root
-                referer = `<span style="color: #b5b5b5;">(<i class="eye slash outline icon"></i> Unknown or Hidden)</span>`;
-            }
-            $("#stats_downstreamTable").append(`<tr>
-                    <td>${referer}</td>
-                    <td>${sortedEntries[i][1]}</td>
-                </tr>`);
-        }
-   }
-
-    function renderUpstreamTable(upstreamList){
-          const sortedEntries = Object.entries(upstreamList).sort(([, valueA], [, valueB]) => valueB - valueA);
-          $("#stats_upstreamTable").html("");
-          let endStop = 100;
-          if (sortedEntries.length < 100){
-                endStop = sortedEntries.length;
-          }
-          for (var i = 0; i < endStop; i++) {
-                let referer = (decodeURIComponent(sortedEntries[i][0])).replace(/(<([^>]+)>)/ig,"");
-                if (sortedEntries[i][0] == ""){
-                 //Root
-                 referer = `<span style="color: #b5b5b5;">(<i class="eye slash outline icon"></i> Unknown or Hidden)</span>`;
+    function loadBlocked(reset){
+        if (B.busy && !reset) return;
+        B.busy = true;
+        var seq = ++B.seq;
+        $.ajax({url: "./api/blocked/overview?" + blockedQuery("limit=50"), dataType: "json",
+            success: function(d){
+                if (seq !== B.seq) return;
+                if (d && d.error){ msgbox(d.error, false); return; }
+                B.loaded = true;
+                var s = d.Summary;
+                renderBlockedSummary(s);
+                if (!s.total){
+                    showBlockedEmpty(s);
+                    B.items = []; B.lastKey = ""; $("#sbBody").empty();
+                    return;
                 }
-                $("#stats_upstreamTable").append(`<tr>
-                      <td>${referer}</td>
-                      <td>${sortedEntries[i][1]}</td>
-                 </tr>`);
-          }
+                showBlockedData();
+                // keep the table untouched when nothing changed (no flicker, keeps the text selection)
+                var key = JSON.stringify([B.hours, B.reason, B.host, B.ip, B.q, d.List.total, (d.List.items[0] || {}).seq]);
+                if (reset || key !== B.lastKey){ B.lastKey = key; renderBlockedList(d.List, false); }
+                else { $("#sbBody tr").each(function(i){ if (B.items[i]) $(this).children().first().text(ago(B.items[i].t)); }); }
+            },
+            error: function(x){ if (seq === B.seq) msgbox("Request failed (HTTP " + x.status + ")", false); },
+            complete: function(){ if (seq === B.seq) B.busy = false; }});
+    }
+    function loadBadge(){
+        $.getJSON("./api/blocked/summary?since=24", function(s){
+            if (s && !s.error && s.total > 0){ $("#sBlockedBadge").text(s.total > 999 ? "999+" : s.total).show(); }
+            else { $("#sBlockedBadge").hide(); }
+        });
     }
 
-   function renderFileTypeGraph(requestURLs){
-     //Create the device chart
-     let fileExtensions = {};
-     for (const [url, count] of Object.entries(requestURLs)) {
-        let filename = url.split("/").pop();
-        let ext = "";
-        if (filename == ""){
-            //Loading from a folder
-            ext = "Folder path"
-        }else{
-            if (filename.includes(".")){
-                ext = filename.split(".").pop();
-            }else{
-                ext = "API call"
-            }
-        }
-
-        if (fileExtensions[ext] != undefined){
-            fileExtensions[ext] = fileExtensions[ext] + count;
-        }else{
-            //First time this ext show up
-            fileExtensions[ext] = count;
-        }
-     }
-
-     //Convert the key-value pairs to array for graph render
-     let fileTypes = [];
-     let fileCounts = [];
-     let colors = [];
-     for (const [ftype, count] of Object.entries(fileExtensions)) {
-        fileTypes.push(ftype);
-        fileCounts.push(count);
-        colors.push(generateColorFromHash(ftype));
-     }  
-
-     let filetypeChart = new Chart(document.getElementById("stats_filetype"), {
-            type: 'pie',
-            data: {
-                labels: fileTypes,
-                datasets: [{
-                    data: fileCounts,
-                    backgroundColor: colors,
-                    hoverBackgroundColor: colors,
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-            }
+    function loadMore(){
+        if (!B.next) return;
+        $.getJSON("./api/blocked/list?" + blockedQuery("limit=50&before=" + B.next), function(l){
+            if (l && l.error){ msgbox(l.error, false); return; }
+            renderBlockedList(l, true);
         });
-
-        statisticCharts.push(filetypeChart);
-   }
-   
-   function renderTrendGraph(dailySummary){
-        // Get the canvas element
-        const canvas = document.getElementById('requestTrends');
-
-        //Generate the X axis labels
-        let datesLabel = [];
-        let succData = [];
-        let errorData = [];
-        let totalData = [];
-        for (var i = 0; i < dailySummary.length; i++){
-            let thisDayData = dailySummary[i];
-            datesLabel.push("Day " + i);
-            succData.push(thisDayData.ValidRequest);
-            errorData.push(thisDayData.ErrorRequest);
-            totalData.push(thisDayData.TotalRequest);
-        }
-        // Create the chart
-        let TrendChart = new Chart(canvas, {
-            type: 'line',
-            data: {
-                labels: datesLabel,
-                datasets: [
-                    {
-                        label: 'All Requests',
-                        data: totalData,
-                        borderColor: '#7d99f7',
-                        backgroundColor: 'rgba(125, 153, 247, 0.4)',
-                        fill: false
-                    },
-                    {
-                        label: 'Success Requests',
-                        data: succData,
-                        borderColor: '#6dad7c',
-                        backgroundColor: "rgba(109, 173, 124, 0.4)",
-                        fill: true
-                    },
-                    {
-                        label: 'Error Requests',
-                        data: errorData,
-                        borderColor: '#de7373',
-                        backgroundColor: "rgba(222, 115, 115, 0.4)",
-                        fill: true
-                    },
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                title: {
-                    display: true,
-                    //text: 'Line Chart Example'
-                },
-                scales: {
-                    x: {
-                        display: true,
-                        title: {
-                            display: false,
-                            text: 'Time'
-                        }
-                    },
-                    y: {
-                        display: true,
-                        title: {
-                            display: true,
-                            text: 'Request Counts'
-                        }
-                    }
-                }
-            }
-        });
-
-        statisticCharts.push(TrendChart);
-   }
-
-    function renderUserAgentCharts(userAgentsEntries){
-        let userAgents = Object.keys(userAgentsEntries);
-        let requestCounts = Object.values(userAgentsEntries);
-        let mobileUser = 0;
-        let desktopUser = 0;
-        let osTypes = {};
-        let osVersion = {};
-        let browserTypes = {};
-        let totalRequestCounts = 0;
-        
-        requestCounts.forEach(function(rc){
-            totalRequestCounts += rc;
-        })
-
-        //Building a statistic summary
-        userAgents.forEach(function(thisUA){
-           var uaInfo = parseUserAgent(thisUA);
-           if (uaInfo.isMobile){
-                mobileUser+=userAgentsEntries[thisUA];
-           }else{
-                desktopUser+=userAgentsEntries[thisUA];
-           }
-
-           let currentNo = osTypes[uaInfo.os];
-           let osVersionKey = uaInfo.os + " " + uaInfo.version.split("_").join(".");
-           if (currentNo == undefined){
-                osTypes[uaInfo.os] = userAgentsEntries[thisUA];
-           }else{
-                osTypes[uaInfo.os] = currentNo + userAgentsEntries[thisUA];
-           }
-
-           let p = osVersion[osVersionKey];
-           if (p == undefined){
-                osVersion[osVersionKey] = userAgentsEntries[thisUA];
-           }else{
-                osVersion[osVersionKey] = p + userAgentsEntries[thisUA];
-           }
-
-
-           let browserTypeKey = uaInfo.browser;
-           if (browserTypeKey.indexOf("//") >= 0){
-                //This is a uncatergorize browser, mostly a bot
-                browserTypeKey = "Bots";
-           }else if (browserTypeKey == ""){
-                //No information
-                browserTypeKey = "Unknown";
-           }
-           let b = browserTypes[browserTypeKey];
-           if (b == undefined){
-                browserTypes[browserTypeKey] = userAgentsEntries[thisUA];
-           }else{
-                browserTypes[browserTypeKey] = b + userAgentsEntries[thisUA];
-           }
- 
-        });
-
-        //Create the device chart
-        let deviceTypeChart = new Chart(document.getElementById("stats_device"), {
-            type: 'pie',
-            data: {
-                labels: ['Desktop', 'Mobile'],
-                datasets: [{
-                    data: [desktopUser, mobileUser],
-                    backgroundColor: ['#e56b5e', '#6eb9c1'],
-                    hoverBackgroundColor: ['#e56b5e', '#6eb9c1']
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-            }
-        });
-
-        statisticCharts.push(deviceTypeChart);
-
-        //Create the OS chart
-        let OSnames = [];
-        let OSCounts = [];
-        let OSColors = [];
-        for (const [key, value] of Object.entries(osTypes)) {
-            OSnames.push(key);
-            OSCounts.push(value);
-            OSColors.push(getOSColorCode(key));
-        }
-    
-        let osTypeChart = new Chart(document.getElementById("stats_OS"), {
-            type: 'pie',
-            data: {
-                labels: OSnames,
-                datasets: [{
-                    data: OSCounts,
-                    backgroundColor: OSColors,
-                    hoverBackgroundColor: OSColors
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-            }
-        });
-
-        statisticCharts.push(osTypeChart);
-
-        //Populate the OS version table
-        let sortedOSVersion = Object.entries(osVersion).sort((a, b) => b[1] - a[1]);
-        $("#stats_OSVersionList").html("");
-        // Loop through the sorted data and populate the table
-        for (let i = 0; i < sortedOSVersion.length; i++) {
-            let osVersion = sortedOSVersion[i][0];
-            let requestcount = abbreviateNumber(sortedOSVersion[i][1]);
-            let percentage = (sortedOSVersion[i][1] / totalRequestCounts * 100).toFixed(3);
-            
-            // Create a new row in the table
-            let row = $("<tr>");
-            
-            // Add the OS version and percentage as columns in the row
-            $("<td>").text(osVersion).appendTo(row);
-            $("<td>").text(requestcount).appendTo(row);
-            $("<td>").text(percentage + "%").appendTo(row);
-            
-            // Add the row to the table body
-            $("#stats_OSVersionList").append(row);
-        }
-
-        //Create the browser charts
-        let browserNames = [];
-        let broserCounts = [];
-        let browserColors = [];
-        let sortedBrowserTypes = Object.entries(browserTypes).sort((a, b) => b[1] - a[1]);
-        console.log(sortedBrowserTypes);
-        sortedBrowserTypes.forEach(function(entry){
-            browserNames.push(entry[0]);
-            broserCounts.push(entry[1]);
-            browserColors.push(generateColorFromHash(entry[0]));
-        });
-    
-        let browserTypeChart = new Chart(document.getElementById("stats_browsers"), {
-            type: 'pie',
-            data: {
-                labels: browserNames,
-                datasets: [{
-                    data: broserCounts,
-                    backgroundColor: browserColors,
-                    hoverBackgroundColor: browserColors
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-            }
-        });
-
-        statisticCharts.push(browserTypeChart);
-
+    }
+    function setIP(ip){
+        B.ip = ip || "";
+        $("#sbIpTag").toggle(!!B.ip); $("#sbIpVal").text(B.ip);
+        loadBlocked(true);
+    }
+    function resetFilters(){
+        B.reason = B.host = B.ip = B.q = ""; B.hours = 24;
+        $("#sbReason, #sbHost").val(""); $("#sbSearch").val("");
+        $("#sbSince button").removeClass("active").filter('[data-h="24"]').addClass("active");
+        $("#sbIpTag").hide();
+        loadBlocked(true);
     }
 
-    //Generate the IPversion pie chart
-    function renderIPVersionChart(RequestClientIp){
-        let ipv4Count = Object.keys(RequestClientIp).filter(ip => ip.includes('.')).length;
-        let ipv6Count = Object.keys(RequestClientIp).filter(ip => ip.includes(':')).length;
-        let totalCount = ipv4Count + ipv6Count;
-        let ipv4Percent = ((ipv4Count / totalCount) * 100).toFixed(2);
-        let ipv6Percent = ((ipv6Count / totalCount) * 100).toFixed(2);
+    $("#sbSince").on("click", "button", function(){
+        B.hours = parseInt($(this).attr("data-h"), 10);
+        $("#sbSince button").removeClass("active"); $(this).addClass("active");
+        loadBlocked(true);
+    });
+    $("#sbReason").on("change", function(){ B.reason = $(this).val(); loadBlocked(true); });
+    $("#sbHost").on("change", function(){ B.host = $(this).val(); loadBlocked(true); });
+    var qTimer = null;
+    $("#sbSearch").on("input", function(){ var v = $(this).val().trim(); clearTimeout(qTimer); qTimer = setTimeout(function(){ B.q = v; loadBlocked(true); }, 250); });
+    $("#sbIpClear").on("click", function(){ setIP(""); });
+    $("#sbReload").on("click", function(){ loadBlocked(true); });
+    $("#sbMore").on("click", loadMore);
+    $("#sBlocked").on("click", "[data-reason]", function(e){
+        var k = $(this).attr("data-reason");
+        B.reason = (B.reason === k) ? "" : k;
+        $("#sbReason").val(B.reason);
+        loadBlocked(true);
+    });
+    $("#sBlocked").on("click", "[data-ip]", function(){ setIP($(this).attr("data-ip")); });
+    $("#sBlocked").on("click", "[data-visitor]", function(e){ e.stopPropagation(); jumpToVisitors($(this).attr("data-visitor")); });
+    $("#sBlocked").on("click", "[data-rule]", function(e){ e.stopPropagation(); openRule($(this).attr("data-rule")); });
+    $("#sBlocked").on("click", "#sbResetFilters", resetFilters);
+    $("#sBlocked").on("click", "#sbOpenFilters", openFilters);
+    $("#sbVisitorsLink").on("click", function(e){ e.preventDefault(); openTabById("visitors"); });
+    $("#sbEnabled").on("change", function(){
+        var on = $(this).prop("checked");
+        $.cjax({url: "./api/blocked/settings", method: "POST", contentType: "application/json", data: JSON.stringify({Enabled: on}), dataType: "json",
+            success: function(d){ if (d && d.error){ msgbox(d.error, false); } else { msgbox(on ? "Recording blocked requests" : "Blocked request log switched off"); loadBlocked(true); } },
+            error: function(x){ msgbox("Request failed (HTTP " + x.status + ")", false); }});
+    });
+    $("#sbClear").on("click", function(){ $(this).hide(); $("#sbClearConfirm").show(); });
+    $("#sbClearNo").on("click", function(){ $("#sbClearConfirm").hide(); $("#sbClear").show(); });
+    $("#sbClearYes").on("click", function(){
+        $.cjax({url: "./api/blocked/clear", method: "POST", data: {confirm: "yes"}, dataType: "json",
+            success: function(d){ if (d && d.error){ msgbox(d.error, false); return; } msgbox("Blocked request list cleared"); $("#sbClearConfirm").hide(); $("#sbClear").show(); B.lastKey = ""; loadBlocked(true); loadBadge(); } });
+    });
 
-        // Create the chart data object
-        let chartData = {
-            labels: ['IPv4', 'IPv6'],
-            datasets: [{
-                data: [ipv4Percent, ipv6Percent],
-                backgroundColor: ['#9295f0', '#bff092'],
-                hoverBackgroundColor: ['#9295f0', '#bff092']
-            }]
-        };
-
-        // Create the chart options object
-        let ipvChartOption = {
-            responsive: true,
-            maintainAspectRatio: false,
-        };
-
-        // Create the pie chart
-        let ipTypeChart = new Chart(document.getElementById("stats_ipver"), {
-            type: 'pie',
-            data: chartData,
-            options: ipvChartOption
-        });
-
-        statisticCharts.push(ipTypeChart);
-
-        //Populate the request count table
-        let requestCounts = Object.entries(RequestClientIp);
-
-        // Sort the array by the value (count)
-        requestCounts.sort((a, b) => b[1] - a[1]);
-
-        // Select the table body and empty it
-        let tableBody = $('#stats_requestCountlist');
-        tableBody.empty();
-
-        // Loop through the sorted array and add the top 25 requested IPs to the table
-        for (let i = 0; i < 25 && i < requestCounts.length; i++) {
-            let [ip, count] = requestCounts[i];
-            let row = $('<tr>').appendTo(tableBody);
-            $('<td style="word-break: break-all;">').text(ip).appendTo(row);
-            $('<td>').text(count).appendTo(row);
-        }
+    /* ---------- tabs ---------- */
+    function setTab(t){
+        S.tab = t;
+        $(P + ".sTabs button").removeClass("active").attr("aria-selected", "false").filter('[data-stab="' + t + '"]').addClass("active").attr("aria-selected", "true");
+        $("#sOverview").toggle(t === "overview");
+        $("#sBlocked").toggle(t === "blocked");
+        if (t === "blocked") loadBlocked(true);
     }
+    $(P + ".sTabs").on("click", "button", function(){ setTab($(this).attr("data-stab")); });
 
-    //Generate a fixed color code from string hash
-    function generateColorFromHash(stringToHash){
-        let hash = 0;
-        for (let i = 0; i < stringToHash.length; i++) {
-            hash = stringToHash.charCodeAt(i) + ((hash << 5) - hash);
+    /* entry point for the Status page: open the Blocked view, optionally filtered */
+    window.statsOpenBlocked = function(opts){
+        opts = opts || {};
+        if (opts.reset !== false){
+            B.reason = opts.reason || ""; B.host = opts.host || ""; B.q = ""; B.ip = opts.ip || ""; B.hours = opts.hours != null ? opts.hours : 24;
+            $("#sbReason").val(B.reason); $("#sbHost").val(B.host); $("#sbSearch").val("");
+            $("#sbSince button").removeClass("active").filter('[data-h="' + B.hours + '"]').addClass("active");
+            $("#sbIpTag").toggle(!!B.ip); $("#sbIpVal").text(B.ip);
         }
-        const hue = hash % 300;
-        const saturation = Math.floor(Math.random() * 20) + 70;
-        const lightness = Math.floor(Math.random() * 20) + 60;
-        return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-    }
+        openTabById("stats");
+        setTab("blocked");
+    };
 
-    //Generate the visitor country pie chart    
-   function renderVisitorChart(visitorData){
-        // Extract the labels and data from the visitor data object
-        let labels = [];
-        let data = Object.values(visitorData);
+    /* ---------- start ---------- */
+    picker.attach({ target: document.getElementById("statsRangeStart") });
+    picker.attach({ target: document.getElementById("statsRangeEnd") });
+    $("#statsRangeStart").val(dayOffset(0));
 
-        Object.keys(visitorData).forEach(function(cc){
-            if (cc == ""){
-                labels.push("Unknown")
-            }else if (/^(lan|private|loopback|carriernat|linklocal|uniquelocal|multicast|reserved|documentation|interconnect|unspecified|ipv4mapped|6to4|teredo|orchid|benchmarking|discard|translation)$/i.test(cc)){
-                labels.push(`Local network`);
-            }else{
-                labels.push(`${getCountryName(cc)} [${cc.toUpperCase()}]` );
-            }
-        });
+    // the Blocked tab refreshes while it is on screen; the Overview does not poll at all
+    setInterval(function(){
+        if (!onScreen() || S.tab !== "blocked") return;
+        loadBlocked(false);
+    }, 10000);
+    tabSwitchEventBind["stats"] = function(){ if (S.tab === "blocked") loadBlocked(false); loadBadge(); };
 
-        // Define the colors to be used in the pie chart
-        let colors = [];
-        labels.forEach(function(cc){
-            colors.push(generateColorFromHash(cc));
-        });
-
-        // Create the chart data object
-        let CCchartData = {
-            labels: labels,
-            datasets: [{
-                data: data,
-                backgroundColor: colors
-            }]
-        };
-
-        // Create the chart options object
-        let CCchartOptions = {
-            responsive: true,
-            maintainAspectRatio: false,
-        };
-
-        // Create the pie chart
-        const visitorsChart = new Chart(document.getElementById("stats_visitors"), {
-            type: 'pie',
-            data: CCchartData,
-            options: CCchartOptions
-        });
-
-        statisticCharts.push(visitorsChart);
-   }
+    loadOverview();
+    loadBadge();
+})();
 </script>

@@ -519,6 +519,86 @@ def i18n_checks(pg, ctx):
             pass
 
 
+def blocked_view(pg):
+    """Statistics > Blocked: honest empty state on a fresh instance, then (with mocked API data, the real data path is
+    covered by the Go tests and tools/e2e blocked_request_log) reason chips, filters, IP click, links and the Status KPI."""
+    import json as _json
+    current["page"] = "stats-blocked"
+    pg.set_viewport_size({"width": 1366, "height": 900})
+    pg.evaluate("openTabById('stats')")
+    settle(pg)
+    pg.evaluate("statsOpenBlocked({})")
+    settle(pg, 900)
+    if "Nothing has been blocked yet" not in pg.inner_text("#sbEmpty"):
+        fail("blocked", "empty state missing on a fresh instance: " + pg.inner_text("#sbEmpty")[:80])
+    pg.screenshot(path=os.path.join(args.out, "blocked-empty.png"))
+    info = [{"key": k, "label": l, "why": "why " + k, "tab": t, "where": w, "sec": sec} for k, l, t, w, sec in (
+        ("waf", "WAF", "waf", "WAF events", ""), ("ratelimit", "Rate limit", "httprp", "HTTP Proxy", ""),
+        ("bot", "Bot rule", "seccenter", "Security Center, Bot rules", "bots"), ("blacklist", "Blacklist", "access", "Access Rules", ""))]
+    items = [{"seq": i, "t": 1700000000 + i, "ip": "198.51.100.%d" % (i % 3 + 1), "host": "a.test", "method": "GET", "path": "/p%d" % i,
+              "status": 403, "reason": ["waf", "ratelimit", "bot"][i % 3], "detail": "d%d" % i} for i in range(1, 7)]
+    seen = []
+
+    def handler(route):
+        url = route.request.url
+        seen.append(url)
+        reason = re.search(r"reason=([a-z-]+)", url)
+        ip = re.search(r"ip=([0-9.]+)", url)
+        its = [x for x in items if (not reason or x["reason"] == reason.group(1)) and (not ip or x["ip"] == ip.group(1))]
+        summ = {"total": len(its), "reasons": [{"key": "waf", "n": 2}, {"key": "ratelimit", "n": 2}, {"key": "bot", "n": 2}], "topIPs": [{"key": "198.51.100.1", "n": 2}],
+                "topHosts": [{"key": "a.test", "n": 6}], "topPaths": [{"key": "/p1", "n": 1}], "hourly": [{"hour": 1700000000 + 3600 * i, "n": i % 4} for i in range(24)],
+                "oldest": 1700000001, "newest": 1700000006, "capacity": 2000, "kept": 6, "recorded": 6, "enabled": True, "truncated": False, "excludeBlocked": False,
+                "sinceStart": {}, "reasonInfo": info}
+        body = {"Summary": summ, "List": {"total": len(its), "items": its[::-1], "next": 0}}
+        route.fulfill(status=200, content_type="application/json", body=_json.dumps(body))
+    pg.route("**/api/blocked/overview*", handler)
+    pg.click("#sbReload")
+    settle(pg, 700)
+    if pg.locator("#sbBody tr").count() != 6:
+        fail("blocked", "expected 6 rows, got %d" % pg.locator("#sbBody tr").count())
+    if pg.locator("#sbReasons .chip").count() != 3:
+        fail("blocked", "reason breakdown missing")
+    pg.click("#sbReasons .chip[data-reason=waf]")
+    settle(pg, 500)
+    if not any("reason=waf" in u for u in seen) or pg.locator("#sbBody tr").count() != 2:
+        fail("blocked", "clicking a reason did not filter (rows %d)" % pg.locator("#sbBody tr").count())
+    pg.click("#sbReasons .chip[data-reason=waf]")  # toggles off
+    pg.click("#sbBody tr >> nth=0 >> .mono")
+    settle(pg, 500)
+    if not any("ip=198.51.100" in u for u in seen) or not pg.is_visible("#sbIpTag"):
+        fail("blocked", "clicking an IP did not filter")
+    pg.click("#sbIpClear")
+    settle(pg, 400)
+    pg.screenshot(path=os.path.join(args.out, "blocked-filled.png"), full_page=True)
+    pg.click("#sbReasons [data-rule=waf]")
+    settle(pg, 400)
+    if not pg.is_visible("#waf"):
+        fail("blocked", "the reason link did not open the WAF page")
+    pg.evaluate("statsOpenBlocked({reason: 'bot'})")
+    settle(pg, 500)
+    if pg.locator("#sbBody tr").count() != 2:
+        fail("blocked", "statsOpenBlocked with a reason did not filter")
+    # Status page: the KPI card and the legend open the view
+    for sel in ("#kpiBlocked", "#legendBlocked"):
+        pg.evaluate("openTabById('status')")
+        settle(pg, 900)
+        pg.click(sel)
+        settle(pg, 500)
+        if not (pg.is_visible("#stats") and pg.is_visible("#sBlocked")):
+            fail("blocked", sel + " on the Status page did not open the Blocked view")
+    pg.unroute("**/api/blocked/overview*")
+    # phone width: no horizontal overflow, rows are cards
+    pg.set_viewport_size({"width": 400, "height": 850})
+    pg.evaluate("statsOpenBlocked({})")
+    settle(pg, 700)
+    check_horizontal(pg, "blocked phone")
+    pg.set_viewport_size({"width": 1366, "height": 900})
+    pg.evaluate("openTabById('stats')")
+    pg.evaluate("document.querySelector('#stats [data-stab=overview]').click()")
+    settle(pg, 700)
+    pg.screenshot(path=os.path.join(args.out, "stats-overview.png"), full_page=True)
+
+
 def main():
     with sync_playwright() as p:
         b = p.chromium.launch()
@@ -1227,6 +1307,7 @@ def main():
             settle(pg, 500)
             check_horizontal(pg, "mobile")
             pg.screenshot(path=os.path.join(args.out, f"mobile-{t}.png"))
+        blocked_view(pg)
         i18n_checks(pg, ctx)
         b.close()
 
