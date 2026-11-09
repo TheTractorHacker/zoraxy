@@ -429,6 +429,9 @@ type ProxyEndpoint struct {
 	Ops            *OpsConfig            `json:",omitempty"` //Error pages, static responses, CORS, bandwidth limit (ops_config.go)
 	Script         *ScriptConfig         `json:",omitempty"` //Lua script handler / hook (script_handler.go), off unless enabled
 	Sablier        *SablierConfig        `json:",omitempty"` //Sablier scale-to-zero gate (sablier_gate.go), off unless enabled
+
+	//API protection (waf/apiguard*.go, waf_api.go): the endpoint's own layer over the WAF policy / profile, off unless set
+	WAFAPI *waf.APIConfig `json:",omitempty"`
 }
 
 /*

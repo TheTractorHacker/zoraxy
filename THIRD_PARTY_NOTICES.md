@@ -24,6 +24,15 @@ Notes required by the Apache License 2.0 section 4:
 - Coraza and the Core Rule Set do not ship a `NOTICE` file at the pinned versions.
 - Zoraxy's own source files are not derived from Coraza or CRS source code; they use the public Coraza Go API.
 
+## API protection (OpenAPI validation)
+
+| Component | Version | Licence | Licence text |
+|---|---|---|---|
+| [kin-openapi](https://github.com/getkin/kin-openapi) (`github.com/getkin/kin-openapi`) | v0.152.0 | MIT | [kin-openapi-MIT.txt](third_party/licenses/kin-openapi-MIT.txt) |
+| Its Go dependencies: `go-openapi/jsonpointer`, `go-openapi/swag/jsonname` (Apache-2.0), `santhosh-tekuri/jsonschema/v6` (Apache-2.0), `oasdiff/yaml` (MIT), `oasdiff/yaml3` (MIT and Apache-2.0) | see `src/go.mod` | Apache-2.0, MIT | [openapi-dependencies.txt](third_party/licenses/openapi-dependencies.txt) |
+
+Used by `src/mod/dynamicproxy/waf/openapi.go`. All are pure Go and compatible with the AGPL v3.
+
 ## Authentik / OIDC support
 
 - **github.com/go-jose/go-jose/v4** - Apache-2.0. JWT/JWS parsing and signature verification of OIDC ID tokens

@@ -27,13 +27,14 @@ type wafRuntime struct {
 	state *waf.State
 	res   waf.Resolved
 	resp  *waf.ResponseGuard // response inspection, nil when off, see waf_response.go
+	api   *waf.Guard         // API protection (waf_api.go), nil when off
 }
 
 var emptyWAFState = waf.EmptyState()
 
 // WAFSetting returns the endpoint's central WAF choice
 func (pe *ProxyEndpoint) WAFSetting() waf.Setting {
-	return waf.Setting{Source: pe.WAFSource, Profile: pe.WAFProfile, Extra: pe.WAFExtra, Custom: pe.WAF}
+	return waf.Setting{Source: pe.WAFSource, Profile: pe.WAFProfile, Extra: pe.WAFExtra, Custom: pe.WAF, API: pe.WAFAPI}
 }
 
 func buildWAFRuntime(set waf.Setting, st *waf.State) (*wafRuntime, error) {
@@ -45,7 +46,11 @@ func buildWAFRuntime(set waf.Setting, st *waf.State) (*wafRuntime, error) {
 	if err != nil {
 		return nil, err
 	}
-	rt := &wafRuntime{inst: inst, state: st, res: res}
+	guard, err := buildAPIGuard(set, st)
+	if err != nil {
+		return nil, err
+	}
+	rt := &wafRuntime{inst: inst, state: st, res: res, api: guard}
 	if res.Config != nil {
 		rt.resp = waf.Default.NewResponseGuard(res.Config.Response, res.Mode)
 	}
@@ -150,6 +155,9 @@ type WAFCoverageEntry struct {
 	// Graduated response (waf_challenge.go): effective challenge band of the endpoint and whether it can be served
 	ChallengeThreshold int  `json:",omitempty"` // 0 = no challenge band
 	ChallengeReady     bool `json:",omitempty"` // a CAPTCHA provider is configured on the endpoint; without one the challenge band blocks
+	// API protection (waf_api.go)
+	APIMode    string `json:",omitempty"` // log or block, empty = off
+	APIWarning string `json:",omitempty"` // e.g. the OpenAPI spec cannot be used
 }
 
 // WAFCoverage lists every endpoint with its effective WAF mode and origin
@@ -166,6 +174,9 @@ func (router *Router) WAFCoverage() []WAFCoverageEntry {
 		if res.Config.ChallengeEnabled() && res.Mode == waf.ModeBlock {
 			e.ChallengeThreshold = res.Config.ChallengeThreshold
 		}
+		if rt := ep.wafRT.Load(); rt != nil && rt.api != nil {
+			e.APIMode, e.APIWarning = rt.api.Mode(), rt.api.SpecError()
+		}
 		out = append(out, e)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Endpoint < out[j].Endpoint })
@@ -179,7 +190,7 @@ func (router *Router) wafInspect(w http.ResponseWriter, r *http.Request, sep *Pr
 		return false
 	}
 	rt := sep.wafRT.Load()
-	if rt == nil || rt.inst == nil {
+	if rt == nil || (rt.inst == nil && rt.api == nil) {
 		return false
 	}
 	clientIP := router.GetClientIPForEndpoint(r, sep)
@@ -187,6 +198,12 @@ func (router *Router) wafInspect(w http.ResponseWriter, r *http.Request, sep *Pr
 		return true
 	}
 	if rt.res.Bypass && rt.state.BypassReason(r, clientIP) != "" {
+		return false
+	}
+	if rt.api != nil && router.apiInspect(w, r, sep, rt, clientIP) {
+		return true
+	}
+	if rt.inst == nil {
 		return false
 	}
 	detail := ""

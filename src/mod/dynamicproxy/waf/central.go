@@ -70,6 +70,8 @@ type Policy struct {
 	TargetExclusions []TargetExclusion `json:",omitempty"` // Variable scoped exclusions, everywhere
 	// --- Response inspection (outbound leak detection), see respinspect.go ---
 	Response *ResponseConfig `json:",omitempty"` // Defaults for every endpoint that has the WAF on; profiles / endpoints override per group
+	// --- API protection (apiguard_config.go) ---
+	API *APIConfig `json:",omitempty"` // Default API protection for endpoints that inherit
 }
 
 // Profile is a reusable named bundle of WAF settings
@@ -92,6 +94,8 @@ type Profile struct {
 	TargetExclusions []TargetExclusion `json:",omitempty"`
 	// --- Response inspection (outbound leak detection), see respinspect.go ---
 	Response *ResponseConfig `json:",omitempty"` // Per group override of the policy
+	// --- API protection (apiguard_config.go) ---
+	API *APIConfig `json:",omitempty"` // Layered over the policy's API protection
 }
 
 // Overrides are the per endpoint additions applied on top of the global
@@ -119,6 +123,9 @@ type Setting struct {
 	Profile string     // for SourceProfile
 	Extra   *Overrides // for every source except custom / off
 	Custom  *Config    // for SourceCustom (and legacy)
+
+	// --- API protection (apiguard_config.go) ---
+	API *APIConfig `json:",omitempty"` // The endpoint's own API protection, layered over policy / profile (ProxyEndpoint.WAFAPI)
 }
 
 // Resolved is the outcome of applying a Setting to a State
@@ -233,6 +240,9 @@ func (p *Policy) validate() error {
 	if err := p.Response.Validate(); err != nil {
 		return err
 	}
+	if err := p.API.Validate(); err != nil {
+		return err
+	}
 	return c.Validate()
 }
 
@@ -254,6 +264,9 @@ func (pr *Profile) validate() error {
 	}
 	c.TargetExclusions = pr.TargetExclusions
 	if err := pr.Response.Validate(); err != nil {
+		return err
+	}
+	if err := pr.API.Validate(); err != nil {
 		return err
 	}
 	return c.Validate()
@@ -340,6 +353,9 @@ func (s *State) ValidateSetting(set Setting) error {
 	}
 	if r := s.Resolve(set); r.bandErr != "" {
 		return errors.New(r.bandErr)
+	}
+	if err := set.API.Validate(); err != nil {
+		return err
 	}
 	return nil
 }

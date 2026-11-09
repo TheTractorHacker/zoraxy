@@ -130,6 +130,9 @@ func HandleWAFProfileSave(w http.ResponseWriter, r *http.Request) {
 			if !rawHasKey(raw, "TargetExclusions") {
 				pr.TargetExclusions = (*profiles)[idx].TargetExclusions
 			}
+			if pr.API == nil {
+				pr.API = (*profiles)[idx].API // clients that do not know API protection must not clear it
+			}
 			(*profiles)[idx] = pr
 		default:
 			*profiles = append(*profiles, pr)

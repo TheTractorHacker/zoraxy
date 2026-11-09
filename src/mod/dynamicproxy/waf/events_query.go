@@ -32,8 +32,18 @@ func (f EventFilter) match(ev *Event) bool {
 	if !f.Since.IsZero() && ev.Time.Before(f.Since) {
 		return false
 	}
-	if f.Kind != "" && (f.Kind == KindResponse) != (ev.Kind == KindResponse) {
-		return false
+	if f.Kind != "" {
+		// "request" (alias "waf") = rule engine events, "response" = leak events, "api" = API protection events
+		want, have := f.Kind, ev.Kind
+		if want == "waf" {
+			want = KindRequest
+		}
+		if have == "" {
+			have = KindRequest
+		}
+		if want != have {
+			return false
+		}
 	}
 	if f.Group != "" && (ev.Response == nil || ev.Response.Group != f.Group) {
 		return false

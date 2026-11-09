@@ -519,6 +519,76 @@ beyond-window pass, large response streaming after the window, SSE, chunked, gRP
 
 **Benchmarks** (`go test ./mod/dynamicproxy/waf -run xxx -bench 'Scan|Inspect|Baseline' -benchmem`): see the PR description for
 the numbers of the machine they were taken on.
+### API protection (structure limits, allow-list, OpenAPI)
+
+Independent of the Coraza / CRS engine and off unless configured. Code: `waf/apiguard_config.go` (config, validation,
+layer merge), `waf/apiguard.go` (the `Guard`), `waf/apiparse_{json,xml,form}.go` (bounded checkers), `waf/openapi.go`
+(kin-openapi wrapper), `dynamicproxy/waf_api.go` (glue), `src/wafapi_openapi.go` (APIs), `web/script/wafapi.js` (editor
+widget used by the WAF page, tab **API protection**, and by the proxy rule editor, WAF tab).
+
+**Where it sits.** `wafInspect` runs the guard first, then the CRS `Instance`. The two are independent: API protection
+works with every WAF source except `off`, including `custom`, and when the resulting CRS mode is `off`. A block is
+reported like a WAF block (`logRequestDetail(..., "waf-blocked", ...)`), so the blocked-request log, notifications and the
+auto-ban (`abuse.KindWAF`) see it; a log-only violation produces an event and nothing else. The same bypass lists as the WAF apply
+(allowed IPs, trusted paths, ACME). `application/grpc*` and `Upgrade` requests are never inspected.
+
+**Layers.** `APIConfig{Mode, Limits, AllowList, OpenAPI}` exists at `Policy.API`, `Profile.API` and `ProxyEndpoint.WAFAPI`
+(passed to the resolver as `Setting.API`). `waf.MergeAPI` applies them policy, profile, rule: `Mode` (`""` inherit, `off`, `log`,
+`block`), `Limits` and `OpenAPI` of a later layer replace the earlier one when set, `AllowList` entries add up (the longest path
+prefix wins, later layers win ties). `State.ResolveAPI(setting)`: source `off` = no API protection; `custom` = only the rule's own
+layer; `inherit` = policy only while the policy is enabled; fixed modes and profiles use the policy regardless of `Enabled`.
+The API config is deliberately not part of `waf.Config`, so it never changes the config hash and never recompiles the CRS.
+`POST /api/waf/api/set` (`scope=policy|profile|endpoint`, `name`, `config`) writes only this part; the policy / profile / rule
+save APIs keep it (the profile save keeps the stored value when the posted profile has none).
+
+**Defaults** (`0` or unset = default, `-1` = unlimited, except the body size which is always bounded to 64 MiB):
+
+| Limit | Default | Violation (HTTP) |
+|---|---|---|
+| `MaxBodyBytes` (buffered, checked, replayed) | 1 MiB | `body.size` (413) |
+| `URLMaxLen` | 8192 | `url.length` (414) |
+| `HeaderMaxCount` / `HeaderMaxSize` (name+value) | 100 / 8192 | `header.count`, `header.size` (431) |
+| `QueryMaxParams` / `QueryMaxParamLen` (also form fields) | 100 / 4096 | `query.params`, `query.param-length` (400) |
+| `JSONMaxDepth` / `JSONMaxKeys` / `JSONMaxArrayLen` / `JSONMaxStringLen` | 20 / 1000 / 10000 / 65536 | `json.depth`, `json.keys`, `json.array-length`, `json.string-length` (400) |
+| `RejectDuplicateKeys`, `RejectInvalidUTF8` | off | `json.duplicate-key`, `json.utf8` (400) |
+| `XMLMaxDepth` / `XMLMaxElements` / `XMLMaxAttrs` | 20 / 10000 / 50 | `xml.depth`, `xml.elements`, `xml.attributes` (400) |
+| `AllowDoctype` | off: any DOCTYPE / directive is rejected (XXE). Entity declarations are rejected even when on | `xml.doctype` (400) |
+| `FormMaxFields` / `MultipartMaxParts` / `MultipartMaxFiles` | 1000 / 100 / 20 | `form.fields`, `multipart.parts`, `multipart.files` (400) |
+| `AllowContentTypeMismatch` | off: a body that does not parse as its declared JSON / XML / multipart type is a violation | `content-type.mismatch` (400) |
+| allow-list | none | `allow.method` (405 with `Allow`), `allow.content-type` (415) |
+
+A limit of N allows N and rejects N+1. Only the first violation of a request is reported. The checkers (`checkJSON`,
+`checkXML`, `checkMultipart`) are single pass and stop at the first violation without building a tree, so a deeply nested
+10 MB payload costs a few bytes of work; memory per request is bounded by `MaxBodyBytes`, the most that is ever buffered.
+Bodies above it are refused (413) in block mode and streamed through untouched in log mode. Bodies that are inspected are
+replayed byte for byte with the same `replayBody` the CRS uses (tests compare sha256 hashes, also chunked and with
+`Expect: 100-continue`; a request rejected on its headers or `Content-Length` never triggers the 100 response). If JSON depth
+is set to unlimited the scanner still stops at 10000 levels.
+
+**Allow-list.** `{Path, Methods, ContentTypes}`. A path matches on segment boundaries (`/api` matches `/api` and `/api/x`, not
+`/apix`), a trailing `*` is a plain string prefix, a trailing `/` requires the slash. Matching is case-insensitive and is done
+for the path as sent and for its cleaned form (`/x/../api`, `//api`), and the request must satisfy the winner of each. Content
+types are only checked on requests with a body and compared on the media type (`type/*` allowed).
+
+**OpenAPI.** `github.com/getkin/kin-openapi` (MIT, pure Go) validates method + path, path / query / header parameters and
+JSON request bodies (other body types are not validated). Specs (JSON or YAML, OpenAPI 3.x only, max 2 MiB) are compiled when
+saved (`APIConfig.Validate`, which rejects the save with the loader's message, a timeout of 10 s protects the API), cached by
+hash, and never fetch external `$ref`s. Server URLs are reduced to their base paths. Security requirements and response
+schemas are not evaluated. A spec that fails to compile at load time (for example after an upgrade) does not stop the proxy: the
+guard keeps enforcing the other limits, the problem shows in the coverage table (`APIWarning`) and the request is let through
+unless `OpenAPI.BlockUnknown` is set. Other options: `AllowUnknownPaths` (spec describes only part of the API), `SkipBody`.
+Event details name the parameter or JSON pointer and the schema reason, never the request values.
+
+**Events.** Same store and audit JSON as the WAF: `kind: "api"`, `violation: "<code>"`, one pseudo rule per violation in the
+`8000xx` range (`waf.APIViolations()` lists them), `action` `blocked` or `detected`. `GET /api/waf/events?kind=api|waf`, stats
+carry `api`, `api_blocked`, `per_violation`; Prometheus has `zoraxy_waf_api_events_total` and `zoraxy_waf_api_blocked_total`.
+
+**Not covered:** GraphQL (query depth / cost, introspection), gRPC and WebSocket traffic, response bodies and response schemas,
+XML schema validation, `application/x-ndjson` line structure, non-JSON bodies in OpenAPI validation, authentication in OpenAPI
+security schemes. Everything is per request: there is no rate or volume accounting (use the rate limit for that).
+
+**Tests:** `waf/apiguard_test.go`, `waf/apiguard_config_test.go`, `waf/openapi_test.go`, `dynamicproxy/waf_api_test.go`,
+`src/wafapi_openapi_test.go`.
 
 ## Customising CAPTCHA pages
 

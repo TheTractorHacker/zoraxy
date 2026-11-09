@@ -59,7 +59,12 @@ type Event struct {
 	// --- Response inspection (outbound leak detection), see respinspect.go ---
 	Kind     string       `json:"kind,omitempty"`     // "" = request event, "response" = response / leak event
 	Response *ResponseHit `json:"response,omitempty"` // set when Kind is "response"
+	// API protection events (apiguard.go): Kind is "api" (see EventKindAPI) and Violation the violated limit / rule code
+	Violation string `json:"violation,omitempty"`
 }
+
+// EventKindAPI marks events produced by the API protection
+const EventKindAPI = "api"
 
 // AuditSink receives one JSON line per event
 type AuditSink interface {
@@ -80,6 +85,10 @@ type Stats struct {
 	Response        uint64            `json:"response,omitempty"`
 	ResponseBlocked uint64            `json:"response_blocked,omitempty"`
 	PerSignature    map[string]uint64 `json:"per_signature,omitempty"`
+	// API protection (included in Total / Blocked above)
+	API          uint64            `json:"api"`
+	APIBlocked   uint64            `json:"api_blocked"`
+	PerViolation map[string]uint64 `json:"per_violation,omitempty"`
 }
 
 // HourStat is the event count of one hour
@@ -106,9 +115,11 @@ type eventStore struct {
 	perHour  map[int64]*HourStat
 	sink     AuditSink
 
-	respTotal   uint64            // response inspection events
-	respBlocked uint64            // response events that replaced the response
-	perSig      map[string]uint64 // response events per signature id
+	respTotal       uint64            // response inspection events
+	respBlocked     uint64            // response events that replaced the response
+	perSig          map[string]uint64 // response events per signature id
+	api, apiBlocked uint64
+	perViolation    map[string]uint64
 }
 
 func newEventStore() *eventStore {
@@ -144,6 +155,16 @@ func (s *eventStore) add(ev Event) {
 		s.passed++
 	}
 	s.perEndpt[ev.Endpoint]++
+	if ev.Kind == EventKindAPI {
+		s.api++
+		if ev.Action == "blocked" {
+			s.apiBlocked++
+		}
+		if s.perViolation == nil {
+			s.perViolation = map[string]uint64{}
+		}
+		s.perViolation[ev.Violation]++
+	}
 	hr := ev.Time.Truncate(time.Hour).Unix()
 	hs := s.perHour[hr]
 	if hs == nil {
@@ -229,6 +250,13 @@ func (s *eventStore) stats() Stats {
 	}
 	for k, v := range s.perEndpt {
 		st.PerEndpoint[k] = v
+	}
+	st.API, st.APIBlocked = s.api, s.apiBlocked
+	if len(s.perViolation) > 0 {
+		st.PerViolation = map[string]uint64{}
+		for k, v := range s.perViolation {
+			st.PerViolation[k] = v
+		}
 	}
 	for _, h := range s.perHour {
 		st.PerHour = append(st.PerHour, *h)
