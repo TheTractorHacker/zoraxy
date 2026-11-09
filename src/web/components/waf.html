@@ -377,7 +377,7 @@
         </div>
         <h4 style="margin-top:1.6em">Signature reference</h4>
         <div class="wafMuted">Every built-in signature, what it needs in order to match, and therefore what it will not match. Click the header to expand.</div>
-        <div class="ui styled fluid accordion" id="wafRespSigAcc" style="margin-top:.6em"><div class="title" id="wafRespSigTitle" tabindex="0" role="button"><i class="dropdown icon"></i> Show signatures</div>
+        <div class="ui fluid accordion" id="wafRespSigAcc" style="margin-top:.6em;border:1px solid rgba(128,128,128,.35);border-radius:6px;padding:.4em .8em;background:transparent;box-shadow:none"><div class="title" id="wafRespSigTitle" tabindex="0" role="button" style="color:inherit;cursor:pointer"><i class="dropdown icon"></i> Show signatures</div>
             <div class="content"><div class="wafScroll"><table class="ui compact very basic small unstackable table wafRespSig"><thead><tr><th>ID</th><th>Group</th><th>Name</th><th>Matches</th></tr></thead><tbody id="wafRespSigBody"><tr><td colspan="4" class="wafMuted">Loading...</td></tr></tbody></table></div></div></div>
     </div>
 
@@ -1092,6 +1092,7 @@
         return out;
     }
     function respLoad(){
+        respLoadSigs();
         loadPolicy(function(){
             respFill("#wafRespPolicyBox", S.policy.Response, false);
         });
@@ -1107,18 +1108,17 @@
         mutatePolicy(function(p){ p.Response = cfg; }, "Response protection saved and applied", function(){ btn.removeClass("loading"); });
         setTimeout(function(){ btn.removeClass("loading"); }, 6000);
     });
-    $("#wafRespSigAcc").accordion({
-        onOpen: function(){
-            if (S.respSigs) return;
-            $.getJSON("/api/waf/response/signatures", function(d){
-                if (fail(d)) return;
-                S.respSigs = d.signatures || [];
-                $("#wafRespSigBody").html(S.respSigs.map(function(s){
-                    return '<tr><td style="white-space:nowrap"><code>' + esc(s.id) + '</code></td><td>' + esc(RESP_GROUP_NAME[s.group] || s.group) + '</td><td>' + esc(s.name) + '</td><td>' + esc(s.doc) + '</td></tr>';
-                }).join(""));
-            });
-        }
-    });
+    $("#wafRespSigAcc").accordion();
+    function respLoadSigs(){
+        if (S.respSigs) return;
+        $.getJSON("/api/waf/response/signatures", function(d){
+            if (fail(d)) return;
+            S.respSigs = d.signatures || [];
+            $("#wafRespSigBody").html(S.respSigs.map(function(s){
+                return '<tr><td style="white-space:nowrap"><code>' + esc(s.id) + '</code></td><td>' + esc(RESP_GROUP_NAME[s.group] || s.group) + '</td><td>' + esc(s.name) + '</td><td>' + esc(s.doc) + '</td></tr>';
+            }).join(""));
+        });
+    }
     function respOverviewTile(sum, st){
         if (!st || !st.response) return;
         $("#wafTiles").append(tile(st.response, "Response leaks (since start)", st.response_blocked ? "tRed" : "tOrange"));

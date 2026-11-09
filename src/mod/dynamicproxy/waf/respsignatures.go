@@ -89,7 +89,7 @@ var builtinSignatures = []*signature{
 		pre: lits("stack trace:"),
 		re:  rx(`Stack trace:` + htmlNL + `#0 [^\n]{1,200}?\.php\(\d+\)`)},
 	{ID: "ST-DOTNET-PAGE", Group: GroupStackTrace, Name: "ASP.NET error page",
-		Doc: "The yellow 'Server Error in \\'/\\' Application' page including its 'Stack Trace:' or 'Exception Details:' section.",
+		Doc: "The yellow 'Server Error in '/' Application' page including its 'Stack Trace:' or 'Exception Details:' section.",
 		pre: lits("server error in '"),
 		re:  rx(`Server Error in '[^']{1,100}' Application`),
 		check: func(d []byte, l []int) int {
@@ -116,7 +116,7 @@ var builtinSignatures = []*signature{
 		pre: lits("action controller: exception caught", "rails.root:"),
 		re:  rx(`<title>Action Controller: Exception caught</title>|Rails\.root: /[^<\n]{1,200}`)},
 	{ID: "ST-DJANGO", Group: GroupStackTrace, Name: "Django debug page",
-		Doc: "The 'You\\'re seeing this error because you have DEBUG = True' notice, or the Django Version / Exception Type table.",
+		Doc: "The 'You're seeing this error because you have DEBUG = True' notice, or the Django Version / Exception Type table.",
 		pre: lits("debug = true", "django version:"),
 		re:  rx(`(?s)You're seeing this error because you have <code>DEBUG = True</code>|Django Version:.{0,400}?Exception Type:`)},
 	{ID: "ST-WERKZEUG", Group: GroupStackTrace, Name: "Flask / Werkzeug debugger",

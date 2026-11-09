@@ -2642,7 +2642,7 @@
             } else {
                 let extra = Object.assign({}, subd.WAFExtra || {});
                 if (resp) extra.Response = resp; else delete extra.Response;
-                let data = {rootname: subd.RootOrMatchingDomain, source: source, extra: Object.keys(extra).length ? JSON.stringify(extra) : ""};
+                let data = {rootname: subd.RootOrMatchingDomain, source: source, extra: JSON.stringify(extra)}; // "{}" clears the overrides (an empty value is not accepted by the API)
                 if (source == "profile") data.profile = subd.WAFProfile;
                 $.cjax({url: "/api/waf/endpoint/set", method: "POST", data: data, success: done, error: fail});
             }
