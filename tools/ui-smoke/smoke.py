@@ -23,6 +23,7 @@ ap.add_argument("--url", default=os.environ.get("ZORAXY_URL", "http://127.0.0.1:
 ap.add_argument("--out", default=os.environ.get("SMOKE_OUT", os.path.expanduser("~/ui-smoke-shots")))
 ap.add_argument("--no-page-sweep", action="store_true", help="skip the per-tab screenshot sweep (faster; for focused runs on a busy machine)")
 ap.add_argument("--i18n-only", action="store_true", help="run only the multi-language scenario")
+ap.add_argument("--zrok-fake", default=os.environ.get("SMOKE_ZROK_FAKE", ""), help="path of a fake zrok script; enables the zrok flow (the instance needs -allow_external_tools)")
 ap.add_argument("--allow", action="append", default=[], help="regex of messages whose failure is tolerated")
 args = ap.parse_args()
 os.makedirs(args.out, exist_ok=True)
@@ -517,6 +518,138 @@ def i18n_checks(pg, ctx):
             pg.evaluate("localStorage.removeItem('zoraxy.lang')")
         except Exception:
             pass
+
+
+def ech_zrok_ui(pg, ctx):
+    """Tools > Encrypted Client Hello and Tools > Tunnels (zrok): guided flows, inline confirmations, dark/light and 400px."""
+    def shot(name):
+        pg.screenshot(path=os.path.join(args.out, name), full_page=True)
+
+    def theme(want_dark):
+        if pg.evaluate("document.body.classList.contains('darkTheme')") != want_dark:
+            pg.evaluate("toggleTheme()")
+            pg.wait_for_timeout(300)
+
+    def small_buttons(sel):
+        bad = pg.evaluate("""sel => [...document.querySelectorAll(sel + ' button, ' + sel + ' a.button')].filter(b => b.offsetParent !== null).filter(b => {
+            const r = b.getBoundingClientRect(); const t = (b.textContent || '').trim() || b.getAttribute('aria-label') || b.getAttribute('title');
+            return !t || r.height < 24 || r.width < 24 }).map(b => b.outerHTML.slice(0, 80))""", sel)
+        if bad:
+            fail("a11y", f"{sel}: buttons without text or smaller than 24px: {bad[:2]}")
+
+    dialogs = []
+    pg.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
+    theme(False)
+    pg.set_viewport_size({"width": 1366, "height": 900})
+
+    # ================= ECH =================
+    current["page"] = "ech-flow"
+    pg.evaluate("""host => new Promise(res => $.cjax({url: '/api/proxy/add', method: 'POST',
+        data: {type: 'host', rootname: host, ep: '127.0.0.1:9', tls: false, tlsval: false, bypassGlobalTLS: false}, success: res, error: res}))""", "ech-smoke.example.com")
+    pg.evaluate("openTabById('ech')")
+    settle(pg, 900)
+    if "Disabled" not in pg.inner_text("#echStatePill"):
+        fail("ech", "state pill should say Disabled by default: " + pg.inner_text("#echStatePill"))
+    shot("ech-initial-light.png")
+    pg.fill("#echPublicName", "ech.example.com")
+    pg.evaluate("$('#echEnabled').checkbox('set checked')")
+    pg.click("#echSave")
+    pg.wait_for_selector("#echApplyWarn", state="visible", timeout=8000)  # no certificate for the public name: warns before enabling
+    if "ERR_ECH_FALLBACK_CERTIFICATE_INVALID" not in pg.inner_text("#echApplyWarn"):
+        fail("ech", "pre-flight warning does not name ERR_ECH_FALLBACK_CERTIFICATE_INVALID")
+    pg.click("#echApplyAnyway")
+    pg.wait_for_function("document.getElementById('echStatePill').innerText.includes('attention')", timeout=8000)
+    if "ERR_ECH_FALLBACK_CERTIFICATE_INVALID" not in pg.inner_text("#echBanners"):
+        fail("ech", "red state banner missing after enabling without a valid public-name certificate")
+    if pg.locator("#echRecords tbody tr").count() != 1 or "ech-smoke.example.com" not in pg.inner_text("#echRecords"):
+        fail("ech", "expected one per-domain DNS record row for ech-smoke.example.com")
+    if "ech=" not in pg.inner_text("#echRecords"):
+        fail("ech", "HTTPS record text missing ech=")
+    pg.click("#echRecords tbody button")
+    pg.click("#echSelfRun")
+    pg.wait_for_selector("#echSelfResult .echBanner", timeout=8000)  # listener not running / not TLS in the smoke instance: a clear message, not raw JSON
+    st = pg.inner_text("#echSelfResult")
+    if "{" in st or ("decrypted" not in st and "not running" not in st and "TLS mode" not in st):
+        fail("ech", "local handshake result should be a readable message (decrypted / not running / TLS mode): " + st)
+    pg.click("#echDomainsRun")
+    pg.wait_for_function("document.querySelector('#echDomainsResult table, #echDomainsResult .echBanner')", timeout=30000)
+    pg.click("#echRotateNow")
+    pg.wait_for_selector("#echRotateConfirm", state="visible")
+    pg.click("#echRotateYes")
+    pg.wait_for_function("document.querySelectorAll('#echKeys tbody tr').length == 2", timeout=8000)
+    pg.locator("#echKeys tbody tr").nth(1).locator("button", has_text="Export").click()
+    pg.wait_for_selector("#echExportBox", state="visible")
+    if "PRIVATE KEY" not in pg.input_value("#echExportText"):
+        fail("ech", "export did not return a PEM")
+    pg.click("#echCloseExport")
+    pg.locator("#echKeys tbody tr").nth(1).locator("button", has_text="Delete").first.click()
+    pg.locator("#echKeys tbody tr").nth(1).locator("button", has_text="Delete key").click()
+    pg.wait_for_function("document.querySelectorAll('#echKeys tbody tr').length == 1", timeout=8000)
+    small_buttons("#echPanel")
+    shot("ech-enabled-light.png")
+    theme(True)
+    shot("ech-enabled-dark.png")
+    pg.set_viewport_size({"width": 400, "height": 800})
+    pg.wait_for_timeout(300)
+    check_horizontal(pg, "ech 400px")
+    shot("ech-400-dark.png")
+    theme(False)
+    shot("ech-400-light.png")
+    pg.set_viewport_size({"width": 1366, "height": 900})
+    pg.evaluate("""() => new Promise(res => $.cjax({url: '/api/ech/settings', method: 'POST', data: {enabled: 'false', publicname: ''}, success: res, error: res}))""")
+    pg.evaluate("""host => new Promise(res => $.cjax({url: '/api/proxy/del', method: 'POST', data: {ep: host}, success: res, error: res}))""", "ech-smoke.example.com")
+
+    # ================= zrok =================
+    current["page"] = "zrok-flow"
+    pg.evaluate("openTabById('zrok')")
+    settle(pg, 900)
+    shot("zrok-initial-light.png")
+    if not args.zrok_fake:
+        if dialogs:
+            fail("dialog", f"native dialogs used: {dialogs}")
+        return
+    if "not installed" not in pg.inner_text("#zkPill"):
+        fail("zrok", "pill should report that zrok is not installed: " + pg.inner_text("#zkPill"))
+    if not pg.is_visible("#zkInstall"):
+        fail("zrok", "install help should be visible while no binary exists")
+    pg.fill("#zkBin", args.zrok_fake)
+    pg.click("#zkSaveSettings")
+    pg.wait_for_function("document.getElementById('zkInstall').style.display == 'none'", timeout=8000)
+    pg.fill("#zkToken", "smokeAccountToken123")
+    pg.click("#zkEnable")
+    pg.wait_for_selector("#zkEnableResult .zkBanner.good", timeout=15000)
+    pg.click("#zrokPanel .zkKind[data-kind=share-private]")
+    pg.fill("#zkName", "smoke-share")
+    pg.fill("#zkTarget", "127.0.0.1:8080")
+    pg.click("#zkTunnelSave")
+    pg.wait_for_selector("#zkTunnels .zkTunnel", timeout=8000)
+    pg.locator("#zkTunnels .zkTunnel").first.locator("button", has_text="Start").click()
+    pg.wait_for_function("document.querySelector('#zkTunnels .zkState.running')", timeout=15000)
+    pg.locator("#zkTunnels .zkTunnel").first.locator("button", has_text="Log").click()
+    pg.wait_for_selector("#zkTunnels .zkLog pre", timeout=8000)
+    shot("zrok-running-light.png")
+    small_buttons("#zrokPanel")
+    theme(True)
+    shot("zrok-running-dark.png")
+    pg.set_viewport_size({"width": 400, "height": 800})
+    pg.wait_for_timeout(300)
+    check_horizontal(pg, "zrok 400px")
+    shot("zrok-400-dark.png")
+    theme(False)
+    shot("zrok-400-light.png")
+    pg.set_viewport_size({"width": 1366, "height": 900})
+    pg.locator("#zkTunnels .zkTunnel").first.locator("button", has_text="Stop").click()
+    pg.wait_for_function("document.querySelector('#zkTunnels .zkState.stopped')", timeout=10000)
+    pg.locator("#zkTunnels .zkTunnel").first.locator("button", has_text="Delete").first.click()
+    pg.locator("#zkTunnels .zkTunnel").first.locator("button", has_text="Delete tunnel").click()
+    pg.wait_for_function("document.querySelectorAll('#zkTunnels .zkTunnel').length == 0", timeout=8000)
+    if "No tunnels yet" not in pg.inner_text("#zkTunnels"):
+        fail("zrok", "empty state missing after deleting the last tunnel")
+    pg.click("#zkDisable")
+    pg.click("#zkConfirmYes")
+    pg.wait_for_function("document.getElementById('zkPill').innerText.includes('not enabled')", timeout=15000)
+    if dialogs:
+        fail("dialog", f"native dialogs used: {dialogs}")
 
 
 def main():
@@ -1195,6 +1328,8 @@ def main():
         pg.click("#vTabs .item[data-vtab=list]")
 
         proxy_ux(pg, ctx)
+
+        ech_zrok_ui(pg, ctx)
 
         # ---- narrow / mobile layout ----
         current["page"] = "mobile"

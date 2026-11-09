@@ -22,7 +22,42 @@ def ech():
         check("ech=" in s2["RecordExample"] or s2["RecordExample"] == "", "record example")
         st, body, _ = c.raw("POST", "/api/ech/export", {"id": [k for k in ids1 if k is not None][0] if ids1 and ids1[0] is not None else ""})
         check(st == 200, f"export {st}")
+        # public name certificate check must be truthful: no certificate for it -> not valid (the localhost fallback is not a certificate)
+        chk = s2.get("PublicNameCheck") or {}
+        check(s2.get("PublicNameCert") is False and chk.get("State") in ("fallback", "missing"), f"public name cert reported valid without a certificate: {chk}")
+        # a rule gives a per-domain record
+        e.add_rule("echhost.example.com")
+        s3 = c.get("/api/ech/status")[1]
+        check([r["Host"] for r in s3.get("Records", [])] == ["echhost.example.com"] and "ech=" in s3["Records"][0]["Record"], f"per-domain records: {s3.get('Records')}")
+        # selfcheck refuses while the listener is plain HTTP
+        sc = c.get("/api/ech/selfcheck")[1]
+        check(isinstance(sc, dict) and sc.get("error"), f"selfcheck on a non-TLS listener should return a clear error: {sc}")
         return "ECH: default off; enabling with a public name generates a key + ECHConfigList; rotate changes the advertised list and retains the old key (decrypt-only); PEM export works. Browser interop NOT-TESTABLE (needs a real browser + published HTTPS RR; Go client interop covered by unit tests)"
+
+
+@scenario("api-ech-selfcheck-tls", ["235"])
+def ech_selfcheck_tls():
+    """Real TLS 1.3 listener: the local ECH handshake is accepted, the DNS classifier runs, and the public-name certificate check is truthful."""
+    with Env("echtls") as e:
+        c = e.c
+        c.ok("/api/cert/tls", set="true")
+        e.add_rule("echhost.example.com")
+        c.ok("/api/ech/settings", enabled="true", publicname="public.ech.test")
+        ok = wait_until(lambda: isinstance(c.get("/api/ech/selfcheck")[1], dict) and c.get("/api/ech/selfcheck")[1].get("Attempted"), 15)
+        sc = c.get("/api/ech/selfcheck", host="echhost.example.com")[1]
+        check(ok and sc.get("Accepted") and sc.get("TLSVersion") == "TLS 1.3", f"local ECH handshake not accepted: {sc}")
+        s = c.get("/api/ech/status")[1]
+        check(s["TLSEnabled"] and s["PublicNameCert"] is False and s["PublicNameCheck"]["State"] == "fallback",
+              f"the built-in localhost certificate must not count as a certificate for the public name: {s['PublicNameCheck']}")
+        # a handshake for the public name itself is counted as an outer handshake with an invalid certificate
+        import ssl, socket
+        ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+        with socket.create_connection(("127.0.0.1", e.pport), 5) as raw:
+            with ctx.wrap_socket(raw, server_hostname="public.ech.test"):
+                pass
+        s = c.get("/api/ech/status")[1]
+        check(s.get("OuterHandshakes", 0) >= 1 and s.get("OuterBadCert", 0) >= 1, f"outer handshake with a bad certificate not counted: {s.get('OuterHandshakes')} {s.get('OuterBadCert')}")
+        return "ECH self-check on a real TLS listener: the local ECH handshake is accepted (TLS 1.3); the localhost fallback certificate is reported as invalid for the public name; handshakes for the public name are counted with an invalid certificate. Browser acceptance NOT-TESTABLE"
 
 
 @scenario("api-lua-script-editor-and-run", ["88"])

@@ -87,6 +87,35 @@ type Manager struct {
 
 	accepted atomic.Uint64 // TLS requests whose ClientHello was decrypted
 	plain    atomic.Uint64 // TLS requests without (or with a rejected) ECH while ECH is enabled
+
+	outer    atomic.Uint64 // TLS handshakes whose (outer) SNI was the public name: ECH rejected, or a direct visit to the public name
+	outerBad atomic.Uint64 // ... of which the certificate served was not valid for the public name
+	warnMu   sync.Mutex
+	lastWarn time.Time
+}
+
+// NoteOuterHandshake is called for every handshake whose SNI equals the public name. certOK says whether the
+// certificate that was served is valid for it. It returns true when the caller should log a warning (rate limited).
+// A handshake for the public name is what a client sends after Zoraxy rejected its ECH (stale or foreign config),
+// but it is also what a direct visit to the public name looks like: the server cannot tell the two apart.
+func (m *Manager) NoteOuterHandshake(certOK bool) (warn bool) {
+	m.outer.Add(1)
+	if certOK {
+		return false
+	}
+	m.outerBad.Add(1)
+	m.warnMu.Lock()
+	defer m.warnMu.Unlock()
+	if m.now().Sub(m.lastWarn) < 10*time.Minute {
+		return false
+	}
+	m.lastWarn = m.now()
+	return true
+}
+
+// OuterStats returns the number of handshakes addressed to the public name and how many were served an invalid certificate
+func (m *Manager) OuterStats() (total, badCert uint64) {
+	return m.outer.Load(), m.outerBad.Load()
 }
 
 var hostnameRe = regexp.MustCompile(`^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$`)

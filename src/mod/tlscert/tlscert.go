@@ -40,6 +40,10 @@ type Manager struct {
 	//(e.g. ACME) can drop the data they keep for it
 	OnCertRemoved func(domain string) `json:"-"`
 
+	//OnServe is called with the SNI and the certificate chosen for every handshake (fallback = the built-in
+	//localhost certificate). It must be cheap and must not block.
+	OnServe func(serverName string, cert *tls.Certificate, fallback bool) `json:"-"`
+
 	/* External handlers */
 	hostSpecificTlsBehavior func(serverName string) (*HostSpecificTlsBehavior, error) // Function to get host specific TLS behavior, if nil, use global TLS options
 }
@@ -272,6 +276,9 @@ func (m *Manager) GetCert(helloInfo *tls.ClientHelloInfo) (*tls.Certificate, err
 	cer, err := tls.LoadX509KeyPair(pubKey, priKey)
 	if err != nil {
 		return nil, nil
+	}
+	if m.OnServe != nil {
+		m.OnServe(helloInfo.ServerName, &cer, pubKey == filepath.Join(m.tmpFolder(), "localhost.pem"))
 	}
 
 	return &cer, nil
