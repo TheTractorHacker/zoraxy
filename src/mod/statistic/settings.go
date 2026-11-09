@@ -5,6 +5,8 @@ import (
 	"net/netip"
 	"strings"
 	"sync/atomic"
+
+	"imuslab.com/zoraxy/mod/blocklog"
 )
 
 /*
@@ -183,15 +185,10 @@ func (c *Collector) shouldRecord(ri *RequestInfo) bool {
 // IsBlockedForwardType reports whether a request class (the "forwardType"
 // given to the router log) means Zoraxy itself rejected the request:
 // access list, rate limit, WAF, CAPTCHA, exploit detection, path rules,
-// plugin or peer / client certificate denial.
+// plugin or peer / client certificate denial. The classification lives in
+// mod/blocklog so the blocked-request log and these counters always agree.
 func IsBlockedForwardType(ft string) bool {
-	switch ft {
-	case "blacklist", "whitelist", "ratelimit", "waf-blocked", "captcha-required",
-		"exploit-blocked", "plugin-blocked", "peer-not-allowed",
-		"path-rule-deny", "path-rule-noauth", "path-rule-ratelimit":
-		return true
-	}
-	return strings.HasPrefix(ft, "client-cert-")
+	return blocklog.IsBlocked(ft)
 }
 
 // BuildStatURL assembles the string recorded as "request URL": host + escaped

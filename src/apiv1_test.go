@@ -63,7 +63,7 @@ func v1TestSetup(t *testing.T) (*apitoken.Manager, http.Handler, *v1Capture, str
 		ProxyList: stub(`[{"RootOrMatchingDomain":"a.example.com","UpstreamOrigins":[]}]`),
 		ProxyAdd:  stub(`"OK"`), ProxyEdit: stub(`"OK"`), ProxyToggle: stub(`"OK"`),
 		ProxyDelete: stub(`{"error":"proxy rule not found"}`),
-		AccessList:  stub(`[]`), RedirectList: stub(`[]`), CertList: stub(`[]`), StatsSummary: stub(`{}`), WAF: stub(`[]`),
+		AccessList:  stub(`[]`), RedirectList: stub(`[]`), CertList: stub(`[]`), StatsSummary: stub(`{}`), WAF: stub(`[]`), StatsBlocked: stub(`{}`),
 	}
 	h := newAPIv1Handler(mgr, b, func(next http.Handler) http.Handler { return next })
 	ro, _, _ := mgr.Create("ro", apitoken.ScopeRead, 0, nil)

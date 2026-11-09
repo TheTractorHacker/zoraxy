@@ -27,6 +27,7 @@ import (
 	"imuslab.com/zoraxy/mod/abuse"
 	"imuslab.com/zoraxy/mod/access"
 	"imuslab.com/zoraxy/mod/auth/sso/forward"
+	"imuslab.com/zoraxy/mod/blocklog"
 	"imuslab.com/zoraxy/mod/botrules"
 	"imuslab.com/zoraxy/mod/dynamicproxy/captcha"
 	"imuslab.com/zoraxy/mod/dynamicproxy/dpcore"
@@ -104,6 +105,7 @@ type RouterOption struct {
 	AccessController     *access.Controller         //Blacklist / whitelist controller
 	StatisticCollector   *statistic.Collector       //Statistic collector for storing stats on incoming visitors
 	VisitorTracker       *visitors.Tracker          `json:"-"` //Optional: per client IP visitor list (who visited, when, via which CDN)
+	BlockLog             *blocklog.Log              `json:"-"` //Optional: bounded log of the requests Zoraxy rejected, and why
 	WebDirectory         string                     //The static web server directory containing the templates folder
 	LoadBalancer         *loadbalance.RouteManager  //Load balancer that handle load balancing of proxy target
 	PersistProxyEndpoint func(*ProxyEndpoint) error `json:"-"` //Optional, called to save an endpoint config after a basic auth hash upgrade

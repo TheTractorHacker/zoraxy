@@ -200,6 +200,45 @@ paths:
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/TooManyRequests"}
+  /api/v1/stats/blocked:
+    get:
+      summary: Requests Zoraxy blocked, and why
+      description: >
+        Summary (counts by reason, top client IPs, hosts and paths, hourly series of the last 24 hours) plus one
+        page of the bounded blocked-request log (the last 2000 entries, newest first). Honours the statistics
+        exclusion settings; query strings are only kept when the visitor list keeps them.
+      operationId: getBlockedRequests
+      parameters:
+        - name: reason
+          in: query
+          description: Only this reason (blacklist, whitelist, auto-ban, ratelimit, waf, exploit, bot, header-rule, captcha, country-challenge, path-rule, client-cert, peer, auth, plugin)
+          schema: {type: string}
+        - name: host
+          in: query
+          schema: {type: string}
+        - name: ip
+          in: query
+          schema: {type: string}
+        - name: q
+          in: query
+          description: Search text (IP, host, path, detail, user agent)
+          schema: {type: string}
+        - name: since
+          in: query
+          description: Only the last N hours (0 = everything kept)
+          schema: {type: integer, minimum: 0}
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 500, default: 100}
+        - name: before
+          in: query
+          description: Sequence number of the last entry of the previous page
+          schema: {type: integer, minimum: 0}
+      responses:
+        "200": {description: Summary and entries, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
   /api/v1/waf/coverage:
     get:
       summary: WAF coverage per proxy rule

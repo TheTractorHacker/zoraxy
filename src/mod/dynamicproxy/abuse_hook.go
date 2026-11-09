@@ -98,12 +98,18 @@ func (router *Router) abuseBegin(w http.ResponseWriter, r *http.Request, sep *Pr
 	}
 	clientIP := router.GetClientIPForEndpoint(r, sep)
 	scope := abuseScope(sep)
-	if _, banned := ab.IsBanned(clientIP, scope); banned {
+	if ban, banned := ab.IsBanned(clientIP, scope); banned {
 		router.Option.Metrics.Event(metrics.EventAccessBlocked, endpointLabel(sep), "auto-ban")
+		detail := ban.Reason
+		if ban.Source != "" {
+			detail = strings.TrimSpace(ban.Source + ": " + ban.Reason)
+		}
 		if ab.DropConnection() {
+			router.logRequestDetail(r, false, 444, "auto-ban-dropped", r.Host, "", sep, detail)
 			dropConnection(w)
 			return w, r, noopDone, true
 		}
+		router.logRequestDetail(r, false, http.StatusForbidden, "auto-ban", r.Host, "", sep, detail)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusForbidden)
 		w.Write(localizedPage(r, page_forbidden))

@@ -391,6 +391,11 @@
     #status .kpiCard.ok{ --kpi-accent: #21ba45; }
     #status .kpiCard.warn{ --kpi-accent: #f2711c; }
     #status .kpiCard.bad{ --kpi-accent: #db2828; }
+    #status .kpiLinked{ cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+    #status .kpiLinked:hover, #status .kpiLinked:focus-visible{ border-color: var(--kpi-accent, #94a3b8); box-shadow: 0 2px 8px rgba(0,0,0,0.10); outline: none; }
+    #status .kpiGo{ float: right; margin: 0; opacity: 0.55; }
+    #status .legendLink{ color: inherit; }
+    #status .legendLink:hover{ color: var(--text_color); text-decoration: underline; }
     #status .kpiLabel{ font-size: 0.85em; color: var(--text_color_secondary); }
     #status .kpiValue{ font-size: 1.7em; font-weight: 600; line-height: 1.25; color: var(--text_color); }
     #status .kpiValue.ok{ color: #21ba45; } #status .kpiValue.warn{ color: #f2711c; } #status .kpiValue.bad{ color: #db2828; }
@@ -495,8 +500,8 @@
             <span class="kpiValue" id="glanceErr">-</span>
             <span class="kpiSub" id="glanceErrSub"></span>
         </div>
-        <div class="kpiCard skel" id="kpiBlocked">
-            <span class="kpiLabel"><i class="ban icon"></i> Blocked today</span>
+        <div class="kpiCard skel kpiLinked" id="kpiBlocked" role="link" tabindex="0" title="See what was blocked and why">
+            <span class="kpiLabel"><i class="ban icon"></i> Blocked today <i class="angle right icon kpiGo"></i></span>
             <span class="kpiValue" id="glanceBlocked">-</span>
             <span class="kpiSub" id="glanceBlockedSub"></span>
         </div>
@@ -529,7 +534,7 @@
             <div class="chartLegend">
                 <span><i class="legendDot" style="background:#3b82f6"></i> Requests</span>
                 <span><i class="legendDot" style="background:#ef4444"></i> Errors</span>
-                <span><i class="legendDot" style="background:#f59e0b"></i> Blocked</span>
+                <a href="#" class="legendLink" id="legendBlocked" title="See what was blocked and why"><i class="legendDot" style="background:#f59e0b"></i> Blocked <i class="angle right icon"></i></a>
             </div>
         </div>
         <div class="trafficChartWrapper">
@@ -1574,6 +1579,7 @@
         setKpi("kpiErr", ec);
         $("#glanceBlocked").text(d.BlockedToday || 0);
         $("#glanceBlockedSub").text((R.BlockedPerMin || 0).toFixed(1) + "/min - traffic today " + bytes((d.BandwidthRx || 0) + (d.BandwidthTx || 0)));
+        loadBlockedTop(d.BlockedToday || 0);
         setKpi("kpiBlocked", (R.BlockedPerMin || 0) > 0 ? "warn" : "ok");
         var down = d.UpstreamsDown || [], uc = d.UpstreamsTotal === 0 ? "" : down.length ? "bad" : "ok";
         $("#glanceUp").text(d.UpstreamsTotal === 0 ? "None" : down.length === 0 ? "All up" : down.length + " down").attr("class", "kpiValue " + uc);
@@ -1616,6 +1622,23 @@
             }).join(""));
 
         updateTrafficChart(R);
+    }
+    /* Blocked today: show the main reason (from the blocked request log) and open the details on click */
+    function openBlocked(e){
+        if (e && e.preventDefault) e.preventDefault();
+        if (typeof window.statsOpenBlocked === "function") window.statsOpenBlocked({}); else openTabById("stats");
+    }
+    $("#kpiBlocked").on("click", openBlocked).on("keydown", function(e){ if (e.key === "Enter" || e.key === " ") openBlocked(e); });
+    $("#legendBlocked").on("click", openBlocked);
+    function loadBlockedTop(count){
+        if (!count){ return; }
+        $.getJSON("./api/blocked/summary?since=24", function(s){
+            if (!s || s.error || !s.total || !s.reasons || !s.reasons.length) return;
+            var lbl = {}; (s.reasonInfo || []).forEach(function(r){ lbl[r.key] = r.label; });
+            var top = s.reasons[0];
+            var txt = "mostly " + (lbl[top.key] || top.key) + " (" + top.n + ")";
+            $("#glanceBlockedSub").text($("#glanceBlockedSub").text().split(" - ")[0] + " - " + txt);
+        });
     }
     function loadGlance(){
         if (!onScreen()) return;

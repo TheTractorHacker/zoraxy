@@ -540,6 +540,15 @@
         refreshAll(false);
     }, 5000);
 
+    // "Blocked" (Statistics) and other pages jump here to look at one address
+    window.visitorsFocusIP = function(ip){
+        $("#vSearch").val(ip);
+        $("#vSince, #vHost, #vCountry, #vVia").val("");
+        $("#vBlocked").prop("checked", false);
+        V.page = 0;
+        setTab("list");
+        loadList(true);
+    };
     tabSwitchEventBind["visitors"] = function(){ V.settingsLoaded = false; refreshAll(true); };
     loadSummary();
     loadList(true);

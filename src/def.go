@@ -21,6 +21,7 @@ import (
 	"imuslab.com/zoraxy/mod/auth"
 	"imuslab.com/zoraxy/mod/auth/sso/forward"
 	"imuslab.com/zoraxy/mod/auth/sso/zorxauth"
+	"imuslab.com/zoraxy/mod/blocklog"
 	"imuslab.com/zoraxy/mod/database"
 	"imuslab.com/zoraxy/mod/dockerux"
 	"imuslab.com/zoraxy/mod/dynamicproxy/loadbalance"
@@ -180,6 +181,7 @@ var (
 	netstatBuffers     *netstat.NetStatBuffers   //Realtime graph buffers
 	statisticCollector *statistic.Collector      //Collecting statistic from visitors
 	visitorTracker     *visitors.Tracker         //Per client IP visitor list (who visited, when, via which CDN)
+	blockLog           *blocklog.Log             //Bounded log of the requests Zoraxy rejected, and why
 	uptimeMonitor      *uptime.Monitor           //Uptime monitor service worker
 	mdnsScanner        *mdns.MDNSHost            //mDNS discovery services
 	webSshManager      *sshprox.Manager          //Web SSH connection service

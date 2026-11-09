@@ -324,7 +324,11 @@ func (h *ProxyHandler) runEndpointChain(w http.ResponseWriter, r *http.Request, 
 	if sep.detector != nil {
 		if sep.detector.CheckIsAttackWithCaptcha(w, r, h.Parent.exploitCaptchaResponder(sep)) {
 			statusCode := sep.detector.GetResponseStatusCode()
-			h.Parent.logRequest(r, false, statusCode, "exploit-blocked", domainOnly, "blocked", sep)
+			detail := "AI crawler / bot signature"
+			if sep.detector.CheckCommonExploits && sep.detector.RequestContainCommonExploits(r) {
+				detail = "common exploit pattern"
+			}
+			h.Parent.logRequestDetail(r, false, statusCode, "exploit-blocked", domainOnly, "blocked", sep, detail)
 			return true
 		}
 	}

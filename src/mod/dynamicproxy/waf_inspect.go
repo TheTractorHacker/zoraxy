@@ -173,7 +173,9 @@ func (router *Router) wafInspect(w http.ResponseWriter, r *http.Request, sep *Pr
 	if rt.res.Bypass && rt.state.BypassReason(r, clientIP) != "" {
 		return false
 	}
+	detail := ""
 	blocked := rt.inst.Inspect(w, r, waf.RequestInfo{
+		OnEvent:  func(ev waf.Event) { detail = ev.BlockSummary() },
 		Endpoint: sep.RootOrMatchingDomain,
 		ClientIP: clientIP,
 		Source:   rt.res.Label,
@@ -184,7 +186,7 @@ func (router *Router) wafInspect(w http.ResponseWriter, r *http.Request, sep *Pr
 		},
 	})
 	if blocked {
-		router.logRequest(r, false, http.StatusForbidden, "waf-blocked", r.Host, "", sep)
+		router.logRequestDetail(r, false, http.StatusForbidden, "waf-blocked", r.Host, "", sep, detail)
 	}
 	return blocked
 }
