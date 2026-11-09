@@ -233,10 +233,12 @@
     var editorDirty = false;
     var editorGuardPass = false;
 
+    window.resetEditorDirty = function () { editorDirty = false; };
+
     function initEditorGuard() {
         // any user edit inside the editor marks it dirty
         $(document).on("input change", "#httprpEditModal input, #httprpEditModal textarea, #httprpEditModal select", function (e) {
-            if (e.originalEvent === undefined) { return; } //programmatic change while populating
+            if (e.originalEvent === undefined || e.originalEvent.isTrusted === false) { return; } //programmatic change while populating
             if ($(this).closest(".ui.dropdown, .search").length && e.type === "input") { /* typing in a dropdown search */ return; }
             editorDirty = true;
         });

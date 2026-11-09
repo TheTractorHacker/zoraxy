@@ -1797,6 +1797,8 @@
         // Fixing a bug in semantic ui that when an element fade in/out on top of checkbox
         // the checkbox suddently flash on top of the fading element
         $(".ui.toggle.tiny.fitted.checkbox").css("z-index", 0);
+        // a freshly opened editor starts clean (populating fields is not a user edit)
+        try { if (window.parent && window.parent.resetEditorDirty) { window.parent.resetEditorDirty(); } if (window.resetEditorDirty) { window.resetEditorDirty(); } } catch (e) {}
         $("#httprpEditModalWrapper").fadeIn("fast", function(){
             $(".ui.toggle.tiny.fitted.checkbox").css("z-index", "auto");
         });
