@@ -52,8 +52,8 @@
    "223",
    "212"
   ],
-  "status": "FAIL",
-  "evidence": "  FAIL [sso-providers] sso-providers: flow failed: [Errno 111] Connection refused (rerun: tools/e2e-admin/run.sh --only ui-sso-providers)",
+  "status": "PASS",
+  "evidence": "SSO: two OAuth2 providers against fake OIDC discovery servers, two rules bound, sign-in redirect leads to each rule's own provider (rerun: tools/e2e-admin/run.sh --only ui-sso-providers)",
   "commits": [
    "580be2f"
   ],
@@ -360,15 +360,15 @@
    "133"
   ],
   "status": "PASS",
-  "evidence": "-webui_tls=auto: HTTPS login works with the self-signed cert, plain HTTP gets a redirect to https://, CSRF/session cookies carry Secure, the loopback plugin listener (port 46155) answers 404 for /, /login.html and the admin API, cert fingerprint identical after restart, webui.key is 0600 (rerun: tools/e2e-admin/run.sh --only admin-https-webui-tls-auto)",
+  "evidence": "-webui_tls=auto: HTTPS login works with the self-signed cert, plain HTTP gets a redirect to https://, CSRF/session cookies carry Secure, the loopback plugin listener (port 45359) answers 404 for /, /login.html and the admin API, cert fingerprint identical after restart, webui.key is 0600 (rerun: tools/e2e-admin/run.sh --only admin-https-webui-tls-auto)",
   "commits": [],
   "notes": ""
  },
  {
   "scenario": "perf-sanity-idle-cpu-status",
   "issues": [],
-  "status": "FAIL",
-  "evidence": "perf.py exit 1: dmin/ui-test-tools/venv/lib/python3.14/site-packages/playwright/_impl/_connection.py\", line 636, in wrap_api_call\n    raise rewrite_error(error, f\"{parsed_st['apiName']}: {error}\") from None\nplaywright._impl._errors.TimeoutError: Page.wait_for_selector: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"#mainmenu .item\") to be visible\n    60 \u00d7 locator resolved to 33 elements. Proceeding with the first one: <a role=\"link\" class=\"item\" tag=\"qstart\" tabindex=\"0\" id=\"qstartNavItem\">\u2026</a>\n\n (rerun: tools/e2e-admin/run.sh --only perf-sanity-idle-cpu-status)",
+  "status": "PASS",
+  "evidence": "tools/ui-perf/perf.py (30 rules, ~600 requests seeded): Status idle busy 3.96% (< 5%; samples [5.17, 3.96]), worst page status 5.17%, 32 pages measured; errors: 0 (rerun: tools/e2e-admin/run.sh --only perf-sanity-idle-cpu-status)",
   "commits": [],
   "notes": ""
  },

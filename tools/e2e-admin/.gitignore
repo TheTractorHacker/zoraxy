@@ -1,2 +1,4 @@
 .build/
 docs/verification/*.partial.json
+__pycache__/
+*.pyc
