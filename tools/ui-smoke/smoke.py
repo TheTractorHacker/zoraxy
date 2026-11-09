@@ -34,6 +34,7 @@ allow = [re.compile(a) for a in args.allow] + [
 
     re.compile(r"ERR_ABORTED"),  # a request cancelled by a reload / page switch is not a failure
     re.compile(r"ERR_(NAME_NOT_RESOLVED|INTERNET_DISCONNECTED|CONNECTION)"),
+    re.compile(r"429.*/api/updater/check|429 \(Too Many Requests\).*/api/updater/check"),  # GitHub unauthenticated quota exhausted: the updater reports it as 429 by design
 ]
 failures = []
 current = {"page": "init"}
@@ -460,6 +461,10 @@ def i18n_checks(pg, ctx):
         pg.evaluate("window.__mo.disconnect()")
         if n > 0:
             fail("i18n", f"{n} text/attribute mutations after settling (feedback loop?)")
+        for _ in range(12):
+            if pg.evaluate("i18n.stats().queued") == 0:
+                break
+            pg.wait_for_timeout(500)
         if pg.evaluate("i18n.stats().queued") != 0:
             fail("i18n", "translation queue never drained")
 
@@ -1169,6 +1174,10 @@ def main():
             fail("visitors", f"CSV export wrong: {ex}")
         pg.click("#vTabs .item[data-vtab=recent]")
         settle(pg, 800)
+        for _ in range(12):
+            if pg.evaluate("document.getElementById('vrBody').innerText.trim().length") >= 10:
+                break
+            pg.wait_for_timeout(500)
         if pg.evaluate("document.getElementById('vrBody').innerText.trim().length") < 10:
             fail("visitors", "recent visits tab shows neither rows nor the empty state")
         pg.click("#vTabs .item[data-vtab=settings]")
