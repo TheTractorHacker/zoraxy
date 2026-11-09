@@ -876,7 +876,7 @@ self-reported by the node.
 1. Same Zoraxy build on all VMs, each with its own `conf` / `sys.db` (no copying `conf` between VMs: `sys.uuid` is the node id).
 2. NTP on every VM (`timedatectl status` shows "System clock synchronized: yes"); skew over 60 s breaks authentication.
 3. Firewall: nodes need outbound TCP to the hub admin port (default 8000); the hub's admin port must accept the nodes' addresses only.
-   Nodes outside the hub's network: start the hub with `-fleet_port :8010`. That listener serves only `/api/fleet/join`, `/api/fleet/config`
+   Nodes outside the hub's network: start the hub with `-fleet_port :8010` (HTTPS with the same certificate and fingerprint as the admin UI when `-webui_tls` is auto/custom, plain HTTP otherwise; plain requests to it are redirected to https). That listener serves only `/api/fleet/join`, `/api/fleet/config`
    and `/api/fleet/heartbeat` (the same token / per-node-key authenticated handlers, 404 unless the role is hub), never the admin UI or any
    session API. Publish it with a proxy rule (e.g. `fleet.example.com` -> `127.0.0.1:8010`) that has a real certificate, and use
    `https://fleet.example.com` as the hub URL on the nodes. Rate limits are per client address, so behind a proxy they are shared.

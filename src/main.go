@@ -212,6 +212,7 @@ func main() {
 		if err != nil {
 			log.Fatal("Unable to prepare web UI TLS certificate: ", err)
 		}
+		fleetTLSCert = webUICert //the Fleet node listener (-fleet_port) uses the same certificate
 		webUILoopbackListener, err = net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			log.Fatal("Unable to open loopback listener for plugins: ", err)

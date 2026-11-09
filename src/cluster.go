@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"imuslab.com/zoraxy/mod/webuitls"
 	"net"
 	"net/http"
 	"os"
@@ -26,10 +27,11 @@ import (
 */
 
 var (
+	fleetTLSCert          *webuitls.CertInfo //set when -webui_tls is on
 	clusterSecretFlag     = flag.String("cluster_secret", "", "Shared cluster secret (min 32 chars). Replaces the node UUID as key input for user facing session cookies (CAPTCHA, load balancer stickiness) so any node accepts them. Overrides conf/cluster.json. Visible in the process list, prefer the Cluster page or conf/cluster.json")
 	clusterGenSecret      = flag.Bool("cluster_gen_secret", false, "Print a new random cluster secret and exit")
 	clusterAllowLocalEdit = flag.Bool("cluster_allow_local_edits", false, "On a cluster follower, allow editing synced objects locally (they are overwritten by the next primary change)")
-	fleetPort             = flag.String("fleet_port", "", "Optional separate listener that serves only the Fleet node endpoints (join, config, heartbeat), for example :8010. Lets nodes outside your network reach the hub without exposing the admin UI: put a reverse proxy rule with a real certificate in front of it and use that https URL as the hub URL")
+	fleetPort             = flag.String("fleet_port", "", "Optional separate listener that serves only the Fleet node endpoints (join, config, heartbeat), for example :8010 (HTTPS with the admin certificate when -webui_tls is on, plain HTTP otherwise). Lets nodes outside your network reach the hub without exposing the admin UI: put a reverse proxy rule with a real certificate in front of it and use that https URL as the hub URL")
 	healthPort            = flag.String("health_port", "", "Optional separate listener for the health endpoint, for example :8081 (serves "+cluster.HealthPath+")")
 
 	clusterMgr *cluster.Manager
@@ -111,9 +113,16 @@ func startCluster() {
 				SystemWideLogger.PrintAndLog("cluster", "Unable to start the Fleet node listener on "+*fleetPort, err)
 				return
 			}
-			SystemWideLogger.Println("Fleet node endpoints (join, config, heartbeat only) listening on " + *fleetPort)
+			var l net.Listener = ln
+			if fleetTLSCert != nil {
+				//-webui_tls is on: serve the Fleet port over https with the same certificate (and fingerprint) as the admin UI
+				l = webuitls.NewSniffListener(ln, webuitls.ServerTLSConfig(fleetTLSCert))
+				SystemWideLogger.Println("Fleet node endpoints (join, config, heartbeat only) listening on " + *fleetPort + " over HTTPS, certificate fingerprint " + fleetTLSCert.Fingerprint)
+			} else {
+				SystemWideLogger.Println("Fleet node endpoints (join, config, heartbeat only) listening on " + *fleetPort + " over plain HTTP; start with -webui_tls auto or custom to serve HTTPS")
+			}
 			srv := &http.Server{Handler: clusterMgr.FleetHandler(), ReadHeaderTimeout: 5 * time.Second}
-			srv.Serve(ln)
+			srv.Serve(l)
 		}()
 	}
 	if *healthPort != "" {
