@@ -15,7 +15,11 @@
     #wafPage .wafHero h2 { margin: 0 0 .35em; }
     #wafPage .wafLead { max-width: 62em; margin: 0; opacity: .85; line-height: 1.55; }
     #wafPage .wafPill { display: inline-flex; align-items: center; gap: .5em; padding: .45em .9em; border-radius: 999px; font-weight: 600; font-size: .95em; border: 1px solid rgba(128,128,128,.4); white-space: nowrap; }
-    #wafPage .wafPill i.icon { margin: 0; }
+    #wafPage .wafPill { line-height: 1.2; }
+    #wafPage .wafPill .wafDot { flex: 0 0 auto; width: .7em; height: .7em; border-radius: 50%; background: currentColor; }
+    #wafPage .wafPill.p-off .wafDot { background: #db2828; }
+    #wafPage .wafPill.p-detection_only .wafDot { background: #f2711c; }
+    #wafPage .wafPill.p-block .wafDot { background: #21ba45; }
     #wafPage .wafPill.p-off { background: rgba(219,40,40,.12); border-color: rgba(219,40,40,.5); }
     #wafPage .wafPill.p-detection_only { background: rgba(242,113,28,.12); border-color: rgba(242,113,28,.5); }
     #wafPage .wafPill.p-block { background: rgba(33,186,69,.12); border-color: rgba(33,186,69,.5); }
@@ -502,9 +506,9 @@
     /* ---------- header status + first run ---------- */
     function renderStatus(){
         var m = effectiveGlobalMode(), html;
-        if (m == "off") html = '<span class="wafPill p-off"><i class="red circle icon"></i> Global policy off</span><span class="wafCover">Rules that inherit it are not protected.</span>';
-        else if (m == "detection_only") html = '<span class="wafPill p-detection_only"><i class="orange circle icon"></i> Detection only</span><span class="wafCover">Attacks are logged, nothing is blocked.</span>';
-        else html = '<span class="wafPill p-block"><i class="green circle icon"></i> Blocking</span><span class="wafCover">Requests over the threshold get HTTP 403.</span>';
+        if (m == "off") html = '<span class="wafPill p-off"><span class="wafDot"></span>Global policy off</span><span class="wafCover">Rules that inherit it are not protected.</span>';
+        else if (m == "detection_only") html = '<span class="wafPill p-detection_only"><span class="wafDot"></span>Detection only</span><span class="wafCover">Attacks are logged, nothing is blocked.</span>';
+        else html = '<span class="wafPill p-block"><span class="wafDot"></span>Blocking</span><span class="wafCover">Requests over the threshold get HTTP 403.</span>';
         if (S.cov){
             var c = {off: 0, detection_only: 0, block: 0};
             S.cov.forEach(function(r){ c[r.Mode] = (c[r.Mode] || 0) + 1; });
