@@ -325,7 +325,13 @@
         if (!recs) { return ""; }
         var seen = 0, up = 0;
         (r.ActiveOrigins || []).forEach(function (o) {
-            var rec = recs[String(o.OriginIpOrDomain).replace(/\/$/, "")];
+            // the probed URL carries the health-check path (host:port/healthz), and results recorded before the
+            // path was changed stay in the log under the old URL: take the newest result of any URL of this upstream
+            var origin = String(o.OriginIpOrDomain).replace(/\/$/, ""), rec = null;
+            Object.keys(recs).forEach(function (u) {
+                if (u !== origin && u.indexOf(origin + "/") !== 0) { return; }
+                if (!rec || recs[u].Timestamp >= rec.Timestamp) { rec = recs[u]; }
+            });
             if (rec) { seen++; if (rec.Online) { up++; } }
         });
         return seen === 0 ? "" : (up > 0 ? "up" : "down");
