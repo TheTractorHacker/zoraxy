@@ -1,155 +1,498 @@
-<!-- Encrypted Client Hello (ECH) page. API: /api/ech/* (src/echapi.go). Off by default. -->
-<div id="echPanel" style="overflow-x:hidden;">
-    <h2 class="ui header"><i class="user secret icon"></i><div class="content">Encrypted Client Hello (ECH)
-        <div class="sub header">Hide the requested host name (SNI) from network observers on the HTTPS listener</div></div></h2>
-    <div class="ui info message">
-        <div class="header">How it works</div>
-        <ol style="margin-bottom:0">
-            <li>Enable ECH and pick a <b>public name</b>: the generic outer name seen on the wire. Zoraxy must serve a valid certificate for it (an existing wildcard certificate covers it).</li>
-            <li>Publish the <b>ECHConfigList</b> below as the <code>ech=</code> parameter of an <b>HTTPS (type 65)</b> DNS record on every host you want to protect.</li>
-            <li>ECH only applies to TLS 1.3. Clients that never saw the DNS record, and TLS 1.2 clients, keep working without it.</li>
-            <li>Rotation keeps the previous key decrypting for the retain window, so clients with a cached DNS answer are not rejected. Keep the retain window longer than your DNS TTL.</li>
-        </ol>
-    </div>
-    <div class="ui warning message" id="echH3Note" style="display:none">
-        <b>HTTP/3:</b> ECH is accepted over QUIC with the bundled quic-go and Go version (covered by a test), but browsers decide per connection which protocol to use; the <code>alpn</code> in the HTTPS record controls that.
-    </div>
-    <div class="ui warning message" id="echTlsNote" style="display:none">The HTTPS listener is not running in TLS mode, ECH has no effect until TLS is enabled.</div>
-
-    <div class="ui form">
-        <div class="field">
-            <div class="ui toggle checkbox" id="echEnabled"><input type="checkbox"><label>Enable Encrypted Client Hello</label></div>
+<!-- Encrypted Client Hello (ECH) page. API: /api/ech/* (src/echapi.go). Off by default. No polling: everything loads on demand. -->
+<style>
+    #echPanel { overflow-x: hidden; color: var(--text_color); }
+    #echPanel .echMuted { color: var(--text_color_secondary); font-size: .92em; }
+    #echPanel .echHero { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: .8em 1.5em; }
+    #echPanel .echHero h2 { margin: 0 0 .35em; }
+    #echPanel .echLead { max-width: 60em; margin: 0; line-height: 1.55; color: var(--text_color_secondary); }
+    #echPanel .echPill { display: inline-flex; align-items: center; gap: .5em; padding: .45em .95em; border-radius: 999px; font-weight: 600; border: 1px solid var(--divider_color); white-space: nowrap; }
+    #echPanel .echPill i.icon { margin: 0; }
+    #echPanel .echPill.on { background: rgba(33,186,69,.14); border-color: rgba(33,186,69,.55); }
+    #echPanel .echPill.off { background: rgba(128,128,128,.14); }
+    #echPanel .echPill.warn { background: rgba(242,113,28,.14); border-color: rgba(242,113,28,.6); }
+    #echPanel .echPill.bad { background: rgba(219,40,40,.14); border-color: rgba(219,40,40,.6); }
+    #echPanel .echCard { background: var(--theme_bg_primary); border: 1px solid var(--divider_color); border-radius: 10px; padding: 1em 1.2em 1.1em; margin: 1em 0; }
+    #echPanel .echCard > h4 { margin: 0 0 .2em; display: flex; align-items: center; gap: .55em; flex-wrap: wrap; }
+    #echPanel .echStep { display: inline-flex; align-items: center; justify-content: center; width: 1.7em; height: 1.7em; border-radius: 50%; background: #2185d0; color: #fff; font-size: .85em; font-weight: 700; flex: 0 0 auto; }
+    #echPanel .echFacts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .7em; margin-top: .8em; }
+    #echPanel .echFact { border-left: 4px solid var(--divider_color); padding: .25em .8em; min-width: 0; }
+    #echPanel .echFact .l { text-transform: uppercase; letter-spacing: .04em; font-size: .72em; color: var(--text_color_secondary); }
+    #echPanel .echFact .v { font-size: 1.05em; font-weight: 600; overflow-wrap: anywhere; }
+    #echPanel .echFact.good { border-left-color: #21ba45; }
+    #echPanel .echFact.warn { border-left-color: #f2711c; }
+    #echPanel .echFact.bad { border-left-color: #db2828; }
+    #echPanel .echBanner { border-radius: 8px; padding: .8em 1em; margin: 1em 0; border: 1px solid; display: flex; gap: .8em; align-items: flex-start; }
+    #echPanel .echBanner > i.icon { margin: .15em 0 0; font-size: 1.3em; flex: 0 0 auto; }
+    #echPanel .echBanner .t { min-width: 0; flex: 1 1 auto; }
+    #echPanel .echBanner .t > b:first-child { display: block; margin-bottom: .15em; }
+    #echPanel .echBanner.bad { background: rgba(219,40,40,.12); border-color: rgba(219,40,40,.6); }
+    #echPanel .echBanner.warn { background: rgba(242,113,28,.12); border-color: rgba(242,113,28,.6); }
+    #echPanel .echBanner.good { background: rgba(33,186,69,.12); border-color: rgba(33,186,69,.55); }
+    #echPanel .echBanner.info { background: rgba(33,133,208,.1); border-color: rgba(33,133,208,.5); }
+    #echPanel .echBtns { display: flex; flex-wrap: wrap; gap: .5em; margin-top: .8em; }
+    #echPanel .echBtns .ui.button { margin: 0; min-height: 32px; }
+    #echPanel .echTableWrap { overflow-x: auto; }
+    #echPanel table.ui.table { background: transparent; color: var(--text_color); border-color: var(--divider_color); }
+    #echPanel table.ui.table td, #echPanel table.ui.table th { color: var(--text_color); border-color: var(--divider_color); background: transparent; vertical-align: middle; }
+    #echPanel code.echRec { display: block; max-width: 38em; overflow-wrap: anywhere; word-break: break-all; font-size: .82em; padding: .35em .5em; border-radius: 5px; background: rgba(128,128,128,.14); color: var(--text_color); }
+    #echPanel .echInline { margin: .6em 0; }
+    #echPanel .ui.form .field > label, #echPanel .ui.form .field small { color: var(--text_color); }
+    #echPanel .ui.form .field small { color: var(--text_color_secondary); display: block; margin-top: .3em; }
+    #echPanel .ui.form input, #echPanel .ui.form textarea, #echPanel .ui.form select { background: var(--theme_bg_primary); color: var(--text_color); border-color: var(--divider_color); }
+    #echPanel .ui.form textarea.mono { font-family: monospace; font-size: .85em; }
+    #echPanel details { border: 1px solid var(--divider_color); border-radius: 8px; padding: .55em .9em; margin: .7em 0; }
+    #echPanel details > summary { cursor: pointer; font-weight: 600; min-height: 24px; }
+    #echPanel details[open] > summary { margin-bottom: .5em; }
+    #echPanel .echPrereq { display: flex; flex-wrap: wrap; gap: .5em; margin-top: .8em; }
+    #echPanel .echChip { display: inline-flex; align-items: center; gap: .4em; padding: .2em .7em; border-radius: 999px; font-size: .88em; border: 1px solid var(--divider_color); }
+    #echPanel .echChip i.icon { margin: 0; }
+    #echPanel .echChip.good i.icon { color: #21ba45; }
+    #echPanel .echChip.bad i.icon { color: #db2828; }
+    #echPanel .echChip.warn i.icon { color: #f2711c; }
+    #echPanel .echChip.unk i.icon { color: var(--text_color_secondary); }
+    #echPanel .ui.button.echConfirm { margin: 0; }
+    #echPanel ul.echHelp { margin: .3em 0 0; padding-left: 1.2em; line-height: 1.55; }
+    #echPanel ul.echHelp li { margin-bottom: .4em; }
+    @media (max-width: 600px) { #echPanel .echCard { padding: .8em .8em 1em; } #echPanel .echPill { white-space: normal; } }
+</style>
+<div id="echPanel">
+    <div class="echHero">
+        <div style="min-width:0; flex:1 1 30em">
+            <h2 class="ui header" style="margin-bottom:.35em"><i class="user secret icon"></i><div class="content">Encrypted Client Hello (ECH)</div></h2>
+            <p class="echLead">ECH hides the host name a visitor asks for (the SNI) from anyone watching the network: the browser wraps the real name in an encrypted envelope addressed to a generic <b>public name</b>.
+                It needs a TLS 1.3 HTTPS listener, an <b>HTTPS (type 65) DNS record</b> carrying Zoraxy's key on every host you protect, and a valid certificate for the public name.</p>
         </div>
-        <div class="two fields">
-            <div class="field">
-                <label>Public name (outer SNI)</label>
-                <input type="text" id="echPublicName" placeholder="ech.example.com">
-                <small>Use a generic name that is not one of the protected hosts. A public name under the same domain hides the sub domain, not the domain.</small>
-            </div>
-            <div class="field">
-                <label>Maximum name length</label>
-                <input type="number" id="echMaxName" min="1" max="255" value="64">
-                <small>Clients pad the hidden host name to this length. Use the longest host name you serve.</small>
-            </div>
-        </div>
-        <div class="two fields">
-            <div class="field">
-                <label>Rotate automatically every (hours, 0 = manual)</label>
-                <input type="number" id="echRotate" min="0" max="8760" value="0">
-            </div>
-            <div class="field">
-                <label>Keep retired keys for (hours)</label>
-                <input type="number" id="echRetain" min="1" max="8760" value="168">
-            </div>
-        </div>
-        <button class="ui basic green button" id="echSave"><i class="save icon"></i> Apply</button>
-        <button class="ui basic button" id="echRotateNow"><i class="sync icon"></i> Rotate key now</button>
-        <button class="ui basic button" id="echRefresh"><i class="refresh icon"></i> Refresh</button>
-    </div>
-    <div class="ui message" id="echState" style="margin-top:1em"></div>
-
-    <h4 class="ui dividing header">Publish in DNS</h4>
-    <div class="ui form">
-        <div class="field"><label>ECHConfigList (base64) for the <code>ech=</code> parameter</label>
-            <textarea id="echList" rows="2" readonly></textarea></div>
-        <div class="field"><label>Example HTTPS record</label>
-            <textarea id="echRecord" rows="2" readonly></textarea></div>
-        <button class="ui basic button" id="echCopyList"><i class="copy icon"></i> Copy list</button>
-        <button class="ui basic button" id="echCopyRecord"><i class="copy icon"></i> Copy record</button>
-    </div>
-
-    <h4 class="ui dividing header">Check a host's DNS record</h4>
-    <div class="ui form">
-        <div class="two fields">
-            <div class="field"><label>Host name</label><input type="text" id="echDnsHost" placeholder="www.example.com"></div>
-            <div class="field"><label>Resolver IP (optional)</label><input type="text" id="echDnsResolver" placeholder="system resolver"></div>
-        </div>
-        <button class="ui basic button" id="echDnsCheck"><i class="search icon"></i> Look up HTTPS record</button>
-        <div class="ui message" id="echDnsResult" style="display:none; margin-top:1em"></div>
+        <div><span class="echPill off" id="echStatePill" role="status"><i class="circle outline icon"></i><span>Loading...</span></span></div>
     </div>
 
-    <h4 class="ui dividing header">Keys</h4>
-    <div style="overflow-x:auto">
-    <table class="ui celled compact table" id="echKeys">
-        <thead><tr><th>Key</th><th>Config ID</th><th>Public name</th><th>State</th><th>Created</th><th>Actions</th></tr></thead>
-        <tbody></tbody>
-    </table></div>
-    <div class="ui form">
-        <div class="field"><label>Import a key (ECH PEM: PRIVATE KEY + ECHCONFIG blocks, added as decrypt-only)</label>
-            <textarea id="echImportText" rows="3" placeholder="-----BEGIN PRIVATE KEY-----"></textarea></div>
-        <button class="ui basic button" id="echImport"><i class="upload icon"></i> Import</button>
+    <div id="echErrorBox" class="echBanner bad" style="display:none" role="alert"><i class="exclamation triangle icon"></i><div class="t"><b>ECH is not available</b><span id="echErrorText"></span></div></div>
+
+    <!-- state -->
+    <div class="echCard" id="echStateCard">
+        <h4><i class="info circle icon"></i> Current state</h4>
+        <div class="echFacts" id="echFacts"></div>
+        <div class="echPrereq" id="echPrereq"></div>
     </div>
-    <div class="ui modal" id="echExportModal"><div class="header">Exported key (contains the private key)</div>
-        <div class="content"><div class="ui form"><div class="field"><textarea id="echExportText" rows="10" readonly></textarea></div></div>
-        <p>Treat this like a TLS private key. Close this dialog when done.</p></div>
-        <div class="actions"><div class="ui cancel button">Close</div></div></div>
+    <div id="echBanners"></div>
+
+    <!-- step 1 -->
+    <div class="echCard">
+        <h4><span class="echStep">1</span> Generate a key and enable ECH</h4>
+        <div class="echMuted">Enabling with a public name generates the first key. Changing the public name generates a new key (the old one keeps decrypting).</div>
+        <div class="ui form" style="margin-top:.8em">
+            <div class="field">
+                <div class="ui toggle checkbox" id="echEnabled"><input type="checkbox" id="echEnabledInput" aria-label="Enable Encrypted Client Hello"><label>Enable Encrypted Client Hello</label></div>
+            </div>
+            <div class="two fields">
+                <div class="field">
+                    <label for="echPublicName">Public name (outer SNI)</label>
+                    <input type="text" id="echPublicName" placeholder="ech.example.com" autocomplete="off">
+                    <small>A generic name that is not one of the protected hosts. Zoraxy must serve a <b>valid certificate for exactly this name</b> (a wildcard certificate that covers it is fine). A public name under your own domain hides the sub domain, not the domain.</small>
+                </div>
+                <div class="field">
+                    <label for="echMaxName">Maximum name length</label>
+                    <input type="number" id="echMaxName" min="1" max="255" value="64">
+                    <small>Clients pad the hidden host name to this length. Use the longest host name you serve.</small>
+                </div>
+            </div>
+            <div class="two fields">
+                <div class="field">
+                    <label for="echRotate">Rotate automatically every (hours, 0 = manual)</label>
+                    <input type="number" id="echRotate" min="0" max="8760" value="0">
+                </div>
+                <div class="field">
+                    <label for="echRetain">Keep retired keys for (hours)</label>
+                    <input type="number" id="echRetain" min="1" max="8760" value="168">
+                    <small>Must be longer than the TTL of your DNS record plus resolver and browser caching.</small>
+                </div>
+            </div>
+        </div>
+        <div id="echApplyWarn" class="echBanner warn" style="display:none" role="alert">
+            <i class="exclamation triangle icon"></i>
+            <div class="t"><b>The public name has no valid certificate</b><span id="echApplyWarnText"></span>
+                <div class="echBtns"><button class="ui orange button echConfirm" id="echApplyAnyway">Enable anyway</button><button class="ui basic button echConfirm" id="echApplyCancel">Cancel</button></div></div>
+        </div>
+        <div class="echBtns">
+            <button class="ui green button" id="echSave"><i class="save icon"></i> Apply</button>
+            <button class="ui basic button" id="echRefresh"><i class="sync icon"></i> Reload state</button>
+        </div>
+    </div>
+
+    <!-- step 2 -->
+    <div class="echCard">
+        <h4><span class="echStep">2</span> Publish the DNS record</h4>
+        <div class="echMuted">Add one <b>HTTPS (type 65)</b> record per protected host at the provider that answers DNS for the zone. The <code>ech=</code> value is Zoraxy's current ECHConfigList.
+            Records for your proxy rules are listed below; a wildcard rule needs a record per concrete host.</div>
+        <div id="echRecordsEmpty" class="echInline echMuted" style="display:none"></div>
+        <div class="echTableWrap"><table class="ui compact table" id="echRecords" style="display:none">
+            <thead><tr><th>Host</th><th>Record to publish</th><th>Copy</th></tr></thead><tbody></tbody></table></div>
+        <details id="echGeneric"><summary>Only the ECHConfigList value (for the <code>ech=</code> parameter)</summary>
+            <div class="ui form"><div class="field"><textarea id="echList" class="mono" rows="3" readonly aria-label="ECHConfigList in base64"></textarea></div></div>
+            <div class="echBtns"><button class="ui basic button" id="echCopyList"><i class="copy icon"></i> Copy ECHConfigList</button></div>
+        </details>
+        <div class="echMuted" style="margin-top:.5em">The record carries <code>alpn</code> so browsers pick HTTP/2 or HTTP/3; with HTTP/3 enabled Zoraxy adds <code>h3</code>.</div>
+    </div>
+
+    <!-- step 3 -->
+    <div class="echCard">
+        <h4><span class="echStep">3</span> Verify</h4>
+        <div class="echBanner info" style="margin:.6em 0"><i class="info circle icon"></i><div class="t"><b>What can and cannot be verified here</b>
+            The checks below prove the <b>server side</b> (Zoraxy decrypts a real ECH handshake) and show what DNS <b>this server</b> sees. They cannot prove that a browser accepts ECH: browsers may use their own DNS-over-HTTPS resolver that returns different records than the ones seen here, and cache HTTPS records.
+            Test with a browser at <a href="https://tls-ech.dev" target="_blank" rel="noopener">tls-ech.dev</a> or an ECH-aware client.</div></div>
+
+        <h5 class="ui header" style="margin-bottom:.3em">A. Local handshake</h5>
+        <div class="echMuted">Opens a real TLS 1.3 connection to this Zoraxy's HTTPS listener using the published config and reports whether the inner ClientHello was decrypted.</div>
+        <div class="ui form" style="margin-top:.5em"><div class="field" style="max-width:26em"><label for="echSelfHost">Host name to put inside the encrypted envelope</label>
+            <select id="echSelfHost" aria-label="Host name for the local handshake"></select></div></div>
+        <div class="echBtns"><button class="ui blue button" id="echSelfRun"><i class="check circle icon"></i> Run local ECH handshake</button></div>
+        <div id="echSelfResult" class="echInline" style="display:none"></div>
+
+        <h5 class="ui header" style="margin:1.4em 0 .3em">B. DNS: what resolvers advertise for each host</h5>
+        <div class="echMuted">For every proxied host, looks up the HTTPS record at this server's resolver and at a public resolver (1.1.1.1), and compares the ECH config with Zoraxy's keys. This is the usual cause of browser errors: a record that still advertises another provider's key or an old Zoraxy key.</div>
+        <div class="echBtns"><button class="ui blue button" id="echDomainsRun"><i class="search icon"></i> Check DNS for all hosts</button></div>
+        <div id="echDomainsResult" class="echInline" style="display:none"></div>
+        <div id="echForeignHelp" class="echBanner bad" style="display:none" role="alert"><i class="exclamation triangle icon"></i><div class="t" id="echForeignHelpText"></div></div>
+
+        <details style="margin-top:1em"><summary>Check one other host or resolver</summary>
+            <div class="ui form"><div class="two fields">
+                <div class="field"><label for="echDnsHost">Host name</label><input type="text" id="echDnsHost" placeholder="www.example.com"></div>
+                <div class="field"><label for="echDnsResolver">Resolver IP (optional)</label><input type="text" id="echDnsResolver" placeholder="system resolver"></div>
+            </div></div>
+            <div class="echBtns"><button class="ui basic button" id="echDnsCheck"><i class="search icon"></i> Look up HTTPS record</button></div>
+            <div id="echDnsResult" class="echInline" style="display:none"></div>
+        </details>
+
+        <details id="echLan"><summary>LAN / split-horizon DNS: why ECH fails there, and how to fix it</summary>
+            <p>With split DNS your local resolver answers the host name with Zoraxy's LAN address, but a browser may still fetch the <b>HTTPS (type 65)</b> record from a <i>public</i> resolver (built-in "secure DNS" / DNS-over-HTTPS) or from a resolver that forwards it upstream.
+                If that record carries another provider's ECH config (for example Cloudflare's <code>cloudflare-ech.com</code>) or an old Zoraxy key, Zoraxy cannot decrypt it. The browser then falls back to the outer name and rejects the certificate with <code>ERR_ECH_FALLBACK_CERTIFICATE_INVALID</code>.</p>
+            <p><b>Fix one of these:</b></p>
+            <ul class="echHelp">
+                <li><b>At the DNS provider of the zone:</b> turn ECH off there (Cloudflare: SSL/TLS &gt; Edge Certificates &gt; Encrypted Client Hello), or publish Zoraxy's record from step 2 instead.</li>
+                <li><b>In the LAN resolver:</b> make it answer the HTTPS record itself with Zoraxy's record from step 2, or answer it empty so the browser stops using the public one. The resolver must be the one the browser really asks (see the DoH note below).</li>
+                <li><b>In the browser:</b> if "Use secure DNS" / DNS-over-HTTPS is on, the browser ignores your LAN resolver. Turn it off, or point it at a DoH server you control.</li>
+                <li>Browsers cache HTTPS records. After changing DNS, restart the browser (or clear its DNS cache) before testing again.</li>
+            </ul>
+            <p><b>Common LAN resolvers</b> (option names vary by version: check your resolver's documentation or man page for the exact spelling, and test with <code>dig HTTPS host @resolver</code>):</p>
+            <ul class="echHelp">
+                <li><b>Pi-hole / dnsmasq:</b> dnsmasq can serve arbitrary record types with <code>dns-rr=name,65,hex-rdata</code> (the hex is the wire form of the record). To suppress the type, recent dnsmasq versions have <code>filter-rr=HTTPS</code>; look in <code>man dnsmasq</code> for <code>filter-rr</code> to see if yours has it. In Pi-hole add such lines as custom dnsmasq configuration (the place differs between Pi-hole v5 and v6).</li>
+                <li><b>AdGuard Home:</b> a custom filtering rule such as <code>||www.example.com^$dnstype=HTTPS</code> blocks only HTTPS lookups for that name. AdGuard's <code>$dnsrewrite</code> modifier can answer other record types; see its documentation for the HTTPS form.</li>
+                <li><b>Unbound:</b> <code>local-data: "www.example.com. 300 IN HTTPS 1 . alpn=\"h2\" ech=\"...\""</code> inside a <code>local-zone</code> for the name; older versions only accept the generic <code>TYPE65 \# length hex</code> form. Run <code>unbound-checkconf</code> before reloading.</li>
+                <li><b>Router DNS:</b> most home routers cannot serve or filter type 65. Use one of the resolvers above, or change the DNS server handed out by DHCP to one that can.</li>
+            </ul>
+        </details>
+    </div>
+
+    <!-- step 4 -->
+    <div class="echCard">
+        <h4><span class="echStep">4</span> Rotate keys, export and import</h4>
+        <div class="echBanner warn" style="margin:.6em 0"><i class="exclamation triangle icon"></i><div class="t"><b>Rotation and key retention</b>
+            Rotating creates a new active key and keeps the previous one decrypting (decrypt-only) for the retention window, so browsers holding a cached DNS answer still work.
+            After a rotation, <b>update the DNS records</b> in step 2. A retired key is deleted after the retention window; a browser still holding its config is then rejected until its cached DNS record expires.</div></div>
+        <div class="echBtns">
+            <button class="ui orange button" id="echRotateNow"><i class="sync icon"></i> Rotate key now</button>
+        </div>
+        <div id="echRotateConfirm" class="echBanner warn" style="display:none" role="alert"><i class="question circle icon"></i>
+            <div class="t"><b>Rotate the key now?</b> The current key becomes decrypt-only for <span id="echRotateRetain">168</span> hours and the DNS records must be updated.
+                <div class="echBtns"><button class="ui orange button echConfirm" id="echRotateYes">Rotate</button><button class="ui basic button echConfirm" id="echRotateNo">Cancel</button></div></div></div>
+        <div class="echTableWrap" style="margin-top:.8em"><table class="ui compact table" id="echKeys">
+            <thead><tr><th>Config ID</th><th>Public name</th><th>State</th><th>Created</th><th>Age</th><th>Actions</th></tr></thead>
+            <tbody></tbody></table></div>
+        <details><summary>Import a key</summary>
+            <div class="ui form"><div class="field"><label for="echImportText">ECH PEM (PRIVATE KEY + ECHCONFIG blocks), added as decrypt-only</label>
+                <textarea id="echImportText" class="mono" rows="4" placeholder="-----BEGIN PRIVATE KEY-----"></textarea></div></div>
+            <div class="echBtns"><button class="ui basic button" id="echImport"><i class="upload icon"></i> Import key</button></div>
+        </details>
+        <div id="echExportBox" class="echInline" style="display:none">
+            <div class="echBanner warn"><i class="key icon"></i><div class="t"><b>Exported key (contains the private key)</b>Treat this like a TLS private key.</div></div>
+            <div class="ui form"><div class="field"><textarea id="echExportText" class="mono" rows="9" readonly aria-label="Exported ECH PEM"></textarea></div></div>
+            <div class="echBtns"><button class="ui basic button" id="echCopyExport"><i class="copy icon"></i> Copy</button><button class="ui basic button" id="echCloseExport">Close and clear</button></div>
+        </div>
+    </div>
+    <div id="echNotice" class="echBanner info" style="display:none" role="status"><i class="info circle icon"></i><div class="t" id="echNoticeText"></div></div>
 </div>
 <script>
 (function(){
+    var cur = null;           // last status
+    var pendingApply = null;  // settings waiting for the user's confirmation
     function esc(s){ return $("<div>").text(s == null ? "" : String(s)).html(); }
-    function load(){
-        $.get("/api/ech/status", function(d){
-            if (d.error != undefined){ $("#echState").removeClass("green").addClass("red").text(d.error); return; }
-            var s = d.Settings;
-            $("#echEnabled").checkbox(s.Enabled ? "set checked" : "set unchecked");
-            $("#echPublicName").val(s.PublicName); $("#echMaxName").val(s.MaxNameLength);
-            $("#echRotate").val(s.RotateEveryHours); $("#echRetain").val(s.RetainHours);
-            $("#echList").val(d.ConfigList); $("#echRecord").val(d.RecordExample);
-            $("#echH3Note").toggle(!!d.HTTP3Enabled && s.Enabled);
-            $("#echTlsNote").toggle(!d.TLSEnabled);
-            var box = $("#echState").removeClass("green red yellow").empty();
-            if (!s.Enabled){ box.text("ECH is disabled. Clients that offer ECH are handled like on any server without it."); }
-            else{
-                var txt = "ECH is enabled. Requests decrypted: " + d.Accepted + ", other TLS requests: " + d.NotAccepted + ".";
-                if (!d.PublicNameCert){ box.addClass("yellow").text(txt + " Warning: no certificate found for the public name " + s.PublicName + ", clients that fall back to it will fail to verify the server."); }
-                else { box.addClass("green").text(txt); }
-            }
-            var tb = $("#echKeys tbody").empty();
-            (d.Keys || []).forEach(function(k){
+    function $id(id){ return $("#" + id); }
+    function notice(msg, kind){
+        var b = $id("echNotice").removeClass("good bad warn info").addClass(kind || "info").show();
+        $id("echNoticeText").text(msg);
+        var el = b[0]; if (el && el.scrollIntoView) { try { el.scrollIntoView({block: "nearest"}); } catch(e){} }
+    }
+    // Friendly text for anything the API or the network returns
+    function errText(r, xhr){
+        if (r && typeof r === "object" && r.error != undefined) { return String(r.error); }
+        if (xhr && xhr.status === 401) { return "Your session has expired. Sign in again."; }
+        if (xhr && xhr.status === 403) { return "You are not allowed to do this."; }
+        if (xhr && xhr.status >= 500) { return "Zoraxy returned a server error. Check the system log."; }
+        return "Zoraxy could not be reached. Check your connection and try again.";
+    }
+    function age(iso){
+        var s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+        if (s < 3600) return Math.max(1, Math.floor(s / 60)) + " min";
+        if (s < 172800) return Math.floor(s / 3600) + " h";
+        return Math.floor(s / 86400) + " days";
+    }
+    function when(iso){ var d = new Date(iso); return isNaN(d) ? "-" : d.toLocaleString(); }
+    function copyText(text, label){
+        function done(ok){ if (ok) { msgbox(label || "Copied"); } else { msgbox("Copy failed. Select the text and copy it by hand.", false, 4000); } }
+        if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(text).then(function(){ done(true); }, function(){ legacy(); }); return; }
+        legacy();
+        function legacy(){
+            var ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta);
+            ta.select(); var ok = false; try { ok = document.execCommand("copy"); } catch(e){} document.body.removeChild(ta); done(ok);
+        }
+    }
+    function fact(l, v, cls){ return $("<div class='echFact'>").addClass(cls || "").append($("<div class='l'>").text(l)).append($("<div class='v'>").text(v)); }
+    function chip(ok, text){ // ok: true/false/"warn"/null (unknown)
+        var cls = ok === true ? "good" : (ok === false ? "bad" : (ok === "warn" ? "warn" : "unk"));
+        var ic = ok === true ? "check circle" : (ok === false ? "times circle" : (ok === "warn" ? "exclamation triangle" : "question circle"));
+        return $("<span class='echChip'>").addClass(cls).append($("<i class='icon'>").addClass(ic)).append(document.createTextNode(text));
+    }
+    function certLabel(c){
+        return {ok: "valid", selfsigned: "self-signed", fallback: "none (localhost fallback)", missing: "none", expired: "expired", mismatch: "does not cover the name"}[c.State] || c.State;
+    }
+
+    function render(d){
+        cur = d;
+        var s = d.Settings, keys = d.Keys || [], active = null;
+        keys.forEach(function(k){ if (k.Advertised) active = k; });
+        var cert = d.PublicNameCheck || {State: "missing", Reason: ""};
+        var certBad = s.Enabled && !cert.Valid;
+        $id("echErrorBox").hide();
+        $id("echEnabled").checkbox(s.Enabled ? "set checked" : "set unchecked");
+        $id("echPublicName").val(s.PublicName); $id("echMaxName").val(s.MaxNameLength);
+        $id("echRotate").val(s.RotateEveryHours); $id("echRetain").val(s.RetainHours); $id("echRotateRetain").text(s.RetainHours);
+
+        // pill
+        var pill = $id("echStatePill").removeClass("on off warn bad");
+        var pt, pc, pi;
+        if (!s.Enabled) { pt = "Disabled"; pc = "off"; pi = "circle outline"; }
+        else if (!d.TLSEnabled || certBad) { pt = "Enabled, needs attention"; pc = certBad && cert.State != "selfsigned" ? "bad" : "warn"; pi = "exclamation triangle"; }
+        else { pt = "Enabled"; pc = "on"; pi = "check circle"; }
+        pill.addClass(pc).empty().append($("<i class='icon'>").addClass(pi)).append($("<span>").text(pt));
+
+        // facts
+        var f = $id("echFacts").empty();
+        f.append(fact("Status", s.Enabled ? "Enabled" : "Disabled", s.Enabled ? "good" : ""));
+        f.append(fact("Active config ID", active ? String(active.ConfigID) : "none", active ? "good" : (s.Enabled ? "bad" : "")));
+        f.append(fact("Key age", active ? age(active.Created) : "-", ""));
+        f.append(fact("Active key created (last rotation)", active ? when(active.Created) : "never", ""));
+        f.append(fact("Public name", s.PublicName || "not set", s.PublicName ? "" : (s.Enabled ? "bad" : "")));
+        f.append(fact("Public name certificate", s.PublicName ? certLabel(cert) : "-", !s.PublicName ? "" : (cert.Valid ? "good" : (cert.State == "selfsigned" ? "warn" : "bad"))));
+        f.append(fact("Keys held", String(keys.length) + (keys.length ? " (" + keys.filter(function(k){ return k.State != "active"; }).length + " retired)" : ""), ""));
+        f.append(fact("Handshakes decrypted", String(d.Accepted), ""));
+        f.append(fact("Other TLS requests", String(d.NotAccepted), ""));
+        f.append(fact("Handshakes for the public name", String(d.OuterHandshakes || 0) + (d.OuterBadCert ? " (" + d.OuterBadCert + " with an invalid certificate)" : ""), d.OuterBadCert ? "bad" : ""));
+
+        // prerequisites
+        var pr = $id("echPrereq").empty();
+        pr.append(chip(d.TLSEnabled ? true : false, d.TLSEnabled ? "HTTPS listener in TLS mode (TLS 1.3 available)" : "HTTPS listener is not in TLS mode"));
+        pr.append(chip(s.PublicName ? true : false, s.PublicName ? "Public name set" : "Public name missing"));
+        pr.append(chip(s.PublicName ? (cert.Valid ? true : (cert.State == "selfsigned" ? "warn" : false)) : null, "Certificate for the public name: " + (s.PublicName ? certLabel(cert) : "unknown")));
+        pr.append(chip(null, "HTTPS DNS record published: check in step 3"));
+        if (d.HTTP3Enabled) { pr.append(chip("warn", "HTTP/3 on: put h3 in the record's alpn")); }
+
+        // banners
+        var bn = $id("echBanners").empty();
+        if (s.Enabled && !d.TLSEnabled) {
+            bn.append(banner("warn", "exclamation triangle", "The HTTPS listener is not running in TLS mode", "ECH has no effect until TLS is enabled in the proxy settings."));
+        }
+        if (certBad) {
+            bn.append(banner(cert.State == "selfsigned" ? "warn" : "bad", "times circle",
+                "Browsers that fall back will show ERR_ECH_FALLBACK_CERTIFICATE_INVALID",
+                cert.Reason + " When a browser's ECH is rejected (stale or foreign DNS config) it validates the certificate served for the public name " + s.PublicName + ". " +
+                "Fix: obtain or upload a valid certificate for " + s.PublicName + " in the certificate manager, or change the public name to a host Zoraxy has a valid certificate for."));
+        }
+        if (s.Enabled && d.OuterBadCert) {
+            bn.append(banner("bad", "exclamation triangle", "Clients are already hitting the broken fallback",
+                d.OuterBadCert + " handshake(s) addressed to " + s.PublicName + " were served a certificate that is not valid for it. This is what a client with a rejected ECH sends (a direct visit to that name looks the same)."));
+        }
+
+        // records
+        var tb = $("#echRecords tbody").empty();
+        var recs = d.Records || [];
+        var emptyBox = $id("echRecordsEmpty");
+        $id("echList").val(d.ConfigList || "");
+        if (!d.ConfigList) {
+            $id("echRecords").hide();
+            emptyBox.show().text("No active key yet. Complete step 1 to generate the first key; the records appear here.");
+        } else if (!recs.length) {
+            $id("echRecords").hide();
+            emptyBox.show().text("No proxy rule has a concrete host name yet. Example record for a host (replace www.example.com): " + (d.RecordExample || ""));
+        } else {
+            emptyBox.hide(); $id("echRecords").show();
+            recs.forEach(function(r){
                 var tr = $("<tr>");
-                tr.append($("<td>").html("<code>" + esc(k.ID) + "</code>" + (k.Advertised ? " <span class='ui tiny green label'>advertised</span>" : "")));
-                tr.append($("<td>").text(k.ConfigID)).append($("<td>").text(k.PublicName));
-                tr.append($("<td>").text(k.State)).append($("<td>").text(new Date(k.Created).toLocaleString()));
-                var act = $("<td>");
-                if (k.State == "active"){ act.append($("<button class='ui mini basic button'>Retire</button>").on("click", function(){ post("/api/ech/retire", {id: k.ID}); })); }
-                act.append($("<button class='ui mini basic button'>Export</button>").on("click", function(){
-                    $.cjax({url: "/api/ech/export", method: "POST", data: {id: k.ID}, success: function(r){
-                        if (r.error){ msgbox(r.error, false, 5000); return; }
-                        $("#echExportText").val(r.PEM); $("#echExportModal").modal("show"); }});
-                }));
-                act.append($("<button class='ui mini basic red button'>Delete</button>").on("click", function(){
-                    if (confirm("Delete this key? Clients holding its config will be told to retry with the current one.")) post("/api/ech/delete", {id: k.ID}); }));
-                tr.append(act); tb.append(tr);
+                tr.append($("<td>").text(r.Host));
+                tr.append($("<td>").append($("<code class='echRec'>").text(r.Record)));
+                tr.append($("<td>").append($("<button class='ui mini basic button'>").attr("aria-label", "Copy the record for " + r.Host).append("<i class='copy icon'></i>").append(document.createTextNode(" Copy"))
+                    .on("click", function(){ copyText(r.Record, "Record for " + r.Host + " copied"); })));
+                tb.append(tr);
             });
-            if (!(d.Keys || []).length){ tb.append("<tr><td colspan='6'><i>No keys yet. Enable ECH with a public name to generate the first one.</i></td></tr>"); }
-        });
+        }
+        // host select for the local handshake
+        var sel = $id("echSelfHost").empty();
+        recs.forEach(function(r){ sel.append($("<option>").val(r.Host).text(r.Host)); });
+        if (s.PublicName) { sel.append($("<option>").val(s.PublicName).text(s.PublicName + " (public name)")); }
+        if (!sel.children().length) { sel.append($("<option value=''>").text("(no host yet)")); }
+
+        // keys
+        var kt = $("#echKeys tbody").empty();
+        keys.forEach(function(k){ kt.append(keyRow(k)); });
+        if (!keys.length) { kt.append("<tr><td colspan='6'><i>No keys yet. Enable ECH with a public name to generate the first one.</i></td></tr>"); }
     }
-    function post(url, data, ok){
+    function banner(kind, icon, title, text){
+        return $("<div class='echBanner' role='alert'>").addClass(kind).append($("<i class='icon'>").addClass(icon)).append($("<div class='t'>").append($("<b>").text(title)).append(document.createTextNode(text)));
+    }
+    function keyRow(k){
+        var tr = $("<tr>");
+        tr.append($("<td>").text(String(k.ConfigID)));
+        tr.append($("<td>").text(k.PublicName));
+        var st = $("<td>").append($("<span class='echChip'>").addClass(k.State == "active" ? "good" : "unk").text(k.State == "active" ? (k.Advertised ? "active, advertised" : "active") : "retired, decrypt-only"));
+        tr.append(st);
+        tr.append($("<td>").text(when(k.Created))).append($("<td>").text(age(k.Created)));
+        var act = $("<td>"), box = $("<div class='echBtns' style='margin:0'>");
+        function mini(label, cls, fn){ return $("<button class='ui mini basic button'>").addClass(cls || "").attr("aria-label", label + " key " + k.ConfigID).text(label).on("click", fn); }
+        var confirmRow = $("<div class='echBtns' style='margin:.4em 0 0; display:none'>");
+        if (k.State == "active") { box.append(mini("Retire", "", function(){ post("/api/ech/retire", {id: k.ID}, "Key retired: it no longer gets advertised but still decrypts"); })); }
+        box.append(mini("Export", "", function(){
+            $.cjax({url: "/api/ech/export", method: "POST", data: {id: k.ID}, success: function(r){
+                if (r && r.error != undefined) { notice(errText(r), "bad"); return; }
+                $id("echExportText").val(r.PEM); $id("echExportBox").show(); $id("echExportText").focus();
+            }, error: function(x){ notice(errText(null, x), "bad"); }});
+        }));
+        box.append(mini("Delete", "red", function(){ confirmRow.toggle(); }));
+        confirmRow.append($("<span class='echMuted'>").text("Delete this key? Clients holding its config will be told to retry with the current one."));
+        confirmRow.append($("<button class='ui mini red button echConfirm'>").text("Delete key").on("click", function(){ post("/api/ech/delete", {id: k.ID}, "Key deleted"); }));
+        confirmRow.append($("<button class='ui mini basic button echConfirm'>").text("Cancel").on("click", function(){ confirmRow.hide(); }));
+        tr.append(act.append(box).append(confirmRow));
+        return tr;
+    }
+
+    function load(){
+        $.ajax({url: "/api/ech/status", dataType: "json", cache: false}).done(function(d){
+            if (d && d.error != undefined) { showUnavailable(errText(d)); return; }
+            render(d);
+        }).fail(function(x){ showUnavailable(errText(null, x)); });
+    }
+    function showUnavailable(msg){
+        $id("echErrorText").text(msg); $id("echErrorBox").show();
+        $id("echStatePill").removeClass("on off warn").addClass("bad").empty().append("<i class='icon times circle'></i>").append($("<span>").text("Unavailable"));
+    }
+    function post(url, data, ok, done){
         $.cjax({url: url, method: "POST", data: data, success: function(r){
-            if (r && r.error != undefined){ msgbox(r.error, false, 6000); } else { msgbox(ok || "Done"); }
+            if (r && typeof r === "object" && r.error != undefined) { notice(errText(r), "bad"); msgbox(errText(r), false, 6000); }
+            else { msgbox(ok || "Done"); notice(ok || "Done", "good"); if (done) { done(r); } }
             load();
-        }});
+        }, error: function(x){ notice(errText(null, x), "bad"); }});
     }
-    $("#echPanel .checkbox").checkbox();
-    $("#echRefresh").on("click", load);
-    $("#echSave").on("click", function(){
-        post("/api/ech/settings", {enabled: $("#echEnabled").checkbox("is checked"), publicname: $("#echPublicName").val().trim(),
-            maxnamelength: $("#echMaxName").val(), rotatehours: $("#echRotate").val(), retainhours: $("#echRetain").val()}, "ECH settings applied");
+
+    function currentForm(){
+        return {enabled: $id("echEnabled").checkbox("is checked"), publicname: $id("echPublicName").val().trim().toLowerCase(),
+            maxnamelength: $id("echMaxName").val(), rotatehours: $id("echRotate").val(), retainhours: $id("echRetain").val()};
+    }
+    function applyNow(data){
+        $id("echApplyWarn").hide(); pendingApply = null;
+        post("/api/ech/settings", data, data.enabled ? "ECH settings applied. Now publish the DNS record (step 2)" : "ECH settings applied");
+    }
+    $id("echPanel").find(".checkbox").checkbox();
+    $id("echRefresh").on("click", load);
+    $id("echSave").on("click", function(){
+        var data = currentForm();
+        if (!data.enabled || !data.publicname) { applyNow(data); return; }
+        // pre-flight: is there a real certificate for this name?
+        $.ajax({url: "/api/ech/status", data: {name: data.publicname}, dataType: "json", cache: false}).done(function(d){
+            var c = d && d.PublicNameCheck;
+            if (c && !c.Valid) {
+                pendingApply = data;
+                $id("echApplyWarnText").text(" " + c.Reason + " Browsers that fall back will show ERR_ECH_FALLBACK_CERTIFICATE_INVALID. Obtain or upload a valid certificate for " + data.publicname + " first, or choose a public name Zoraxy has a valid certificate for.");
+                $id("echApplyWarn").show();
+            } else { applyNow(data); }
+        }).fail(function(x){ notice(errText(null, x), "bad"); });
     });
-    $("#echRotateNow").on("click", function(){ post("/api/ech/rotate", {}, "Key rotated: update the DNS record"); });
-    $("#echImport").on("click", function(){ post("/api/ech/import", {pem: $("#echImportText").val()}, "Key imported"); });
-    function copy(id){ var el = document.getElementById(id); el.select(); try { document.execCommand("copy"); msgbox("Copied"); } catch(e){} }
-    $("#echCopyList").on("click", function(){ copy("echList"); });
-    $("#echCopyRecord").on("click", function(){ copy("echRecord"); });
-    $("#echDnsCheck").on("click", function(){
-        $.get("/api/ech/dnscheck", {host: $("#echDnsHost").val().trim(), resolver: $("#echDnsResolver").val().trim()}, function(r){
-            var box = $("#echDnsResult").removeClass("green red yellow").show().empty();
-            if (r.error != undefined){ box.addClass("red").text(r.error); return; }
-            box.addClass(r.Match ? "green" : (r.HasECH ? "yellow" : "red"));
-            box.append($("<div class='header'>").text(r.Advice));
-            box.append($("<p>").text("Resolver: " + r.Resolver + ". HTTPS record: " + (r.HasHTTPS ? "yes" : "no") + ", ech parameter: " + (r.HasECH ? "yes" : "no") + "."));
-            (r.Published || []).forEach(function(p){ box.append($("<div style='word-break:break-all'>").text("Published: " + p)); });
-        });
+    $id("echApplyAnyway").on("click", function(){ if (pendingApply) { applyNow(pendingApply); } });
+    $id("echApplyCancel").on("click", function(){ pendingApply = null; $id("echApplyWarn").hide(); });
+
+    $id("echRotateNow").on("click", function(){ $id("echRotateConfirm").show(); });
+    $id("echRotateNo").on("click", function(){ $id("echRotateConfirm").hide(); });
+    $id("echRotateYes").on("click", function(){ $id("echRotateConfirm").hide(); post("/api/ech/rotate", {}, "Key rotated: update the DNS records (step 2)"); });
+    $id("echImport").on("click", function(){
+        if (!$id("echImportText").val().trim()) { notice("Paste an ECH PEM first.", "warn"); return; }
+        post("/api/ech/import", {pem: $id("echImportText").val()}, "Key imported", function(){ $id("echImportText").val(""); });
+    });
+    $id("echCopyList").on("click", function(){ copyText($id("echList").val(), "ECHConfigList copied"); });
+    $id("echCopyExport").on("click", function(){ copyText($id("echExportText").val(), "Copied"); });
+    $id("echCloseExport").on("click", function(){ $id("echExportText").val(""); $id("echExportBox").hide(); });
+
+    // ---- verify: local handshake ----
+    $id("echSelfRun").on("click", function(){
+        var btn = $(this).addClass("loading disabled"), box = $id("echSelfResult").show().empty();
+        $.ajax({url: "/api/ech/selfcheck", data: {host: $id("echSelfHost").val()}, dataType: "json", cache: false}).done(function(r){
+            if (r && r.error != undefined) { box.append(banner("warn", "exclamation triangle", "Could not run the check", " " + r.error)); return; }
+            var ok = r.Accepted;
+            box.append(banner(ok ? "good" : "bad", ok ? "check circle" : "times circle", ok ? "The server decrypted the ECH handshake" : "ECH was not accepted by the listener", " " + r.Advice +
+                (r.Attempted ? " (" + (r.TLSVersion || "no TLS") + ", " + r.ElapsedMs + " ms, inner name " + r.InnerName + ")" : "")));
+            box.append($("<div class='echMuted'>").text("This proves the server side only. It does not show that a browser will use ECH."));
+        }).fail(function(x){ box.append(banner("bad", "times circle", "Check failed", " " + errText(null, x))); }).always(function(){ btn.removeClass("loading disabled"); load(); });
+    });
+
+    // ---- verify: DNS per domain ----
+    var CLS = {
+        "ours-active": {t: "Ours (active)", c: "good"}, "ours-retired": {t: "Ours (retired, still decrypts)", c: "warn"},
+        "ours-purged": {t: "Ours, but the key was purged", c: "bad"}, "foreign": {t: "Foreign provider", c: "bad"},
+        "none": {t: "No ECH published", c: "unk"}, "unparsable": {t: "Unreadable ech=", c: "bad"}, "error": {t: "Lookup failed", c: "warn"}
+    };
+    function viewCell(v){
+        var c = CLS[v.Status] || {t: v.Status, c: "unk"};
+        var td = $("<td>");
+        td.append($("<span class='echChip'>").addClass(c.c).append($("<i class='icon'>").addClass(c.c == "good" ? "check circle" : (c.c == "bad" ? "times circle" : (c.c == "warn" ? "exclamation triangle" : "minus circle")))).append(document.createTextNode(c.t)));
+        (v.Configs || []).forEach(function(cf){ td.append($("<div class='echMuted'>").text("config " + cf.ConfigID + ", public name " + (cf.PublicName || "?"))); });
+        td.append($("<div class='echMuted'>").text("via " + v.Resolver));
+        return td;
+    }
+    $id("echDomainsRun").on("click", function(){
+        var btn = $(this).addClass("loading disabled"), box = $id("echDomainsResult").show().empty().text("Looking up...");
+        $id("echForeignHelp").hide();
+        $.ajax({url: "/api/ech/domains", dataType: "json", cache: false}).done(function(r){
+            box.empty();
+            if (r && r.error != undefined) { box.append(banner("warn", "exclamation triangle", "Could not run the check", " " + r.error)); return; }
+            if (!r || !r.length) { box.text("No proxy rule has a concrete host name to check. Use \"Check one other host\" below."); return; }
+            var wrap = $("<div class='echTableWrap'>"), t = $("<table class='ui compact table'><thead><tr><th>Host</th><th>This server's resolver</th><th>Public resolver (1.1.1.1)</th><th>What to do</th></tr></thead><tbody></tbody></table>");
+            var problems = 0, foreignNames = {};
+            r.forEach(function(d){
+                var tr = $("<tr>"); tr.append($("<td>").text(d.Host)).append(viewCell(d.System)).append(viewCell(d.Public));
+                var bad = [d.System, d.Public].filter(function(v){ return v.Status == "foreign" || v.Status == "ours-purged" || v.Status == "ours-retired"; });
+                var advice;
+                if (bad.length) { problems++; advice = bad[0].Advice; bad.forEach(function(v){ (v.Configs || []).forEach(function(cf){ if (v.Status == "foreign") { foreignNames[cf.PublicName] = true; } }); }); }
+                else if (d.System.Status != "ours-active" && d.Public.Status != "ours-active") { advice = "Publish Zoraxy's record from step 2 for this host."; }
+                else if (d.System.Status != d.Public.Status) { advice = "The two resolvers disagree. Browsers use whichever resolver they are configured for (system DNS or their own DNS-over-HTTPS)."; problems++; }
+                else { advice = "Looks right. Browsers may still cache older answers."; }
+                tr.append($("<td>").text(advice)); t.find("tbody").append(tr);
+            });
+            wrap.append(t); box.append(wrap);
+            box.append($("<div class='echMuted'>").text("Results reflect what these two resolvers return to this server. A browser with its own DNS-over-HTTPS setting can see something different."));
+            if (problems) {
+                var names = Object.keys(foreignNames);
+                var h = $id("echForeignHelpText").empty();
+                h.append($("<b>").text(names.length ? "A DNS record advertises another provider's ECH config" + " (" + names.join(", ") + ")" : "A DNS record advertises an ECH config Zoraxy cannot use"));
+                h.append(document.createTextNode("Zoraxy cannot decrypt it, so a browser that uses it gets its ECH rejected and then shows ERR_ECH_FALLBACK_CERTIFICATE_INVALID. This is common with split-horizon DNS: the LAN resolver returns the address of this proxy, while the browser fetches the HTTPS record from a public resolver. Remedies: turn ECH off at the DNS provider of the zone (Cloudflare: SSL/TLS > Edge Certificates > Encrypted Client Hello); or publish Zoraxy's own record (step 2) in the resolver the browser really uses; or make the LAN resolver answer the HTTPS record itself or empty. Browsers cache HTTPS records, so restart the browser afterwards. See \"LAN / split-horizon DNS\" above."));
+                $id("echForeignHelp").show();
+                $id("echLan").attr("open", "open");
+            }
+        }).fail(function(x){ box.empty().append(banner("bad", "times circle", "Check failed", " " + errText(null, x))); }).always(function(){ btn.removeClass("loading disabled"); });
+    });
+
+    $id("echDnsCheck").on("click", function(){
+        var host = $id("echDnsHost").val().trim();
+        var box = $id("echDnsResult").show().empty();
+        if (!host) { box.append(banner("warn", "exclamation triangle", "Enter a host name", "")); return; }
+        $.ajax({url: "/api/ech/dnscheck", data: {host: host, resolver: $id("echDnsResolver").val().trim()}, dataType: "json", cache: false}).done(function(r){
+            if (r && r.error != undefined) { box.append(banner("warn", "exclamation triangle", "Lookup failed", " " + r.error)); return; }
+            box.append(banner(r.Match ? "good" : (r.HasECH ? "warn" : "bad"), r.Match ? "check circle" : "exclamation triangle", r.Advice, " Resolver " + r.Resolver + ". HTTPS record: " + (r.HasHTTPS ? "yes" : "no") + ", ech parameter: " + (r.HasECH ? "yes" : "no") + "."));
+        }).fail(function(x){ box.append(banner("bad", "times circle", "Lookup failed", " " + errText(null, x))); });
     });
     load();
 })();

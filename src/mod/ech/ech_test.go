@@ -444,3 +444,37 @@ func TestSVCBExample(t *testing.T) {
 		t.Fatal(s)
 	}
 }
+
+func TestSelfCheckAcceptedAndDisabled(t *testing.T) {
+	m := newMgr(t, true)
+	cert, _ := testCert(t, pubName, innerName)
+	addr, _ := startServer(t, m, cert, false)
+	res := SelfCheck(context.Background(), addr, innerName, m.ConfigListBase64())
+	if !res.Attempted || !res.Accepted || res.TLSVersion != "TLS 1.3" {
+		t.Fatalf("expected accepted ECH, got %+v", res)
+	}
+	// no key: nothing is attempted
+	if r := SelfCheck(context.Background(), addr, innerName, ""); r.Attempted || r.Accepted || r.Advice == "" {
+		t.Fatalf("empty list must not attempt a handshake: %+v", r)
+	}
+	// nobody listening: clear error, not accepted
+	if r := SelfCheck(context.Background(), "127.0.0.1:1", innerName, m.ConfigListBase64()); !r.Attempted || r.Accepted || r.Error == "" {
+		t.Fatalf("closed port: %+v", r)
+	}
+	// server without ECH keys: handshake works (TLS 1.3) but ECH is not accepted
+	m2 := newMgr(t, false)
+	addr2, _ := startServer(t, m2, cert, false)
+	if r := SelfCheck(context.Background(), addr2, innerName, m.ConfigListBase64()); r.Accepted {
+		t.Fatalf("server without ECH must not report acceptance: %+v", r)
+	}
+}
+
+func TestRecordsFor(t *testing.T) {
+	got := RecordsFor([]string{"B.example.com", "a.example.com.", "*.example.com", "localhost", "10.0.0.1", "a.example.com", "x/y.com", ""}, "AAAA", true)
+	if len(got) != 2 || got[0].Host != "a.example.com" || got[1].Host != "b.example.com" {
+		t.Fatalf("unexpected hosts: %+v", got)
+	}
+	if !strings.Contains(got[0].Record, `ech="AAAA"`) || !strings.Contains(got[0].Record, "h3,h2") {
+		t.Fatalf("record: %s", got[0].Record)
+	}
+}

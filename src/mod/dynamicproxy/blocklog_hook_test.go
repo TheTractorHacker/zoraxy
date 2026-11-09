@@ -164,13 +164,13 @@ func TestBlockLogHonoursStatisticsFilters(t *testing.T) {
 	hit := func(ip string) { serveNonTLS(router, sep, "http://app.example.com/", ip+":1") }
 	hit("198.51.100.2") // excluded network
 	hit("198.51.100.3") // recorded
+	waitBlocked(t, bl, 1) // the log is written asynchronously: let it finish before any setting below changes
 	sep.DisableStatisticCollection = true
 	hit("198.51.100.4") // rule opted out of statistics
 	sep.DisableStatisticCollection = false
 	bl.SetEnabled(false)
 	hit("198.51.100.5") // log switched off
 	bl.SetEnabled(true)
-	waitBlocked(t, bl, 1)
 	time.Sleep(50 * time.Millisecond) // the goroutines of the skipped requests never record, give a wrong one time to show
 	excludeBlocked.Store(true)
 	hit("198.51.100.6") // "exclude blocked requests"

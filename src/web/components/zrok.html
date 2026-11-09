@@ -1,182 +1,439 @@
 <!-- Tunnels (zrok) page. API: /api/zrok/* (src/zrokapi.go). Opt-in: needs -allow_external_tools and an installed zrok binary. -->
-<div id="zrokPanel" style="overflow-x:hidden;">
-    <h2 class="ui header"><i class="plug icon"></i><div class="content">Tunnels (zrok)
-        <div class="sub header">Share a service through an openziti based <a href="https://zrok.io" target="_blank" rel="noopener">zrok</a> tunnel, or reach one from this host</div></div></h2>
-
-    <div class="ui warning message" id="zrokNotAllowed" style="display:none">
-        <div class="header">External tools are disabled</div>
-        <p>This page runs the external <code>zrok</code> program, which is a privilege, so it is off by default. Start Zoraxy with <code>-allow_external_tools</code>
-        (docker: add it to the command line) and reload. Nothing is executed until you do.</p>
-    </div>
-    <div class="ui info message" id="zrokInstall" style="display:none">
-        <div class="header">zrok is not installed</div>
-        <ol style="margin-bottom:0">
-            <li>Download the release for this machine from <a href="https://github.com/openziti/zrok/releases" target="_blank" rel="noopener">github.com/openziti/zrok/releases</a> (binary <code>zrok</code> for 1.x, <code>zrok2</code> for 2.x).</li>
-            <li>Put it on the <code>PATH</code> of the user running Zoraxy (for example <code>/usr/local/bin</code>) or enter its full path below. The file name must start with <code>zrok</code>.</li>
-            <li>Create a free account at <a href="https://zrok.io" target="_blank" rel="noopener">zrok.io</a> (or run your own zrok service) and copy the <b>account token</b>.</li>
-        </ol>
-        <p id="zrokBinErr" style="margin:0.5em 0 0"></p>
-    </div>
-
-    <h4 class="ui dividing header">Environment</h4>
-    <div class="ui form">
-        <div class="three fields">
-            <div class="field"><label>zrok binary (optional)</label><input type="text" id="zBin" placeholder="empty = zrok2 or zrok from PATH"></div>
-            <div class="field"><label>Command line generation</label>
-                <select id="zFlavor"><option value="auto">auto (zrok2 = v2, otherwise v1)</option><option value="v1">v1 (zrok 1.x)</option><option value="v2">v2 (zrok2 2.x)</option></select></div>
-            <div class="field"><label>API endpoint (self-hosted zrok only)</label><input type="text" id="zApi" placeholder="empty = zrok.io default"></div>
+<style>
+    #zrokPanel { overflow-x: hidden; color: var(--text_color); }
+    #zrokPanel .zkMuted { color: var(--text_color_secondary); font-size: .92em; }
+    #zrokPanel .zkHero { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: .8em 1.5em; }
+    #zrokPanel .zkHero h2 { margin: 0 0 .35em; }
+    #zrokPanel .zkLead { max-width: 60em; margin: 0; line-height: 1.55; color: var(--text_color_secondary); }
+    #zrokPanel .zkPill { display: inline-flex; align-items: center; gap: .5em; padding: .45em .95em; border-radius: 999px; font-weight: 600; border: 1px solid var(--divider_color); white-space: nowrap; }
+    #zrokPanel .zkPill i.icon { margin: 0; }
+    #zrokPanel .zkPill.on { background: rgba(33,186,69,.14); border-color: rgba(33,186,69,.55); }
+    #zrokPanel .zkPill.off { background: rgba(128,128,128,.14); }
+    #zrokPanel .zkPill.warn { background: rgba(242,113,28,.14); border-color: rgba(242,113,28,.6); }
+    #zrokPanel .zkPill.bad { background: rgba(219,40,40,.14); border-color: rgba(219,40,40,.6); }
+    #zrokPanel .zkCard { background: var(--theme_bg_primary); border: 1px solid var(--divider_color); border-radius: 10px; padding: 1em 1.2em 1.1em; margin: 1em 0; }
+    #zrokPanel .zkCard > h4 { margin: 0 0 .2em; display: flex; align-items: center; gap: .55em; flex-wrap: wrap; }
+    #zrokPanel .zkStep { display: inline-flex; align-items: center; justify-content: center; width: 1.7em; height: 1.7em; border-radius: 50%; background: #2185d0; color: #fff; font-size: .85em; font-weight: 700; flex: 0 0 auto; }
+    #zrokPanel .zkStep.done { background: #21ba45; }
+    #zrokPanel .zkFacts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .7em; margin-top: .8em; }
+    #zrokPanel .zkFact { border-left: 4px solid var(--divider_color); padding: .25em .8em; min-width: 0; }
+    #zrokPanel .zkFact .l { text-transform: uppercase; letter-spacing: .04em; font-size: .72em; color: var(--text_color_secondary); }
+    #zrokPanel .zkFact .v { font-size: 1.05em; font-weight: 600; overflow-wrap: anywhere; }
+    #zrokPanel .zkFact.good { border-left-color: #21ba45; }
+    #zrokPanel .zkFact.warn { border-left-color: #f2711c; }
+    #zrokPanel .zkFact.bad { border-left-color: #db2828; }
+    #zrokPanel .zkBanner { border-radius: 8px; padding: .8em 1em; margin: 1em 0; border: 1px solid; display: flex; gap: .8em; align-items: flex-start; }
+    #zrokPanel .zkBanner > i.icon { margin: .15em 0 0; font-size: 1.3em; flex: 0 0 auto; }
+    #zrokPanel .zkBanner .t { min-width: 0; flex: 1 1 auto; }
+    #zrokPanel .zkBanner .t > b:first-child { display: block; margin-bottom: .15em; }
+    #zrokPanel .zkBanner.bad { background: rgba(219,40,40,.12); border-color: rgba(219,40,40,.6); }
+    #zrokPanel .zkBanner.warn { background: rgba(242,113,28,.12); border-color: rgba(242,113,28,.6); }
+    #zrokPanel .zkBanner.good { background: rgba(33,186,69,.12); border-color: rgba(33,186,69,.55); }
+    #zrokPanel .zkBanner.info { background: rgba(33,133,208,.1); border-color: rgba(33,133,208,.5); }
+    #zrokPanel .zkBtns { display: flex; flex-wrap: wrap; gap: .5em; margin-top: .8em; }
+    #zrokPanel .zkBtns .ui.button { margin: 0; min-height: 32px; }
+    #zrokPanel .ui.form .field > label { color: var(--text_color); }
+    #zrokPanel .ui.form .field small { color: var(--text_color_secondary); display: block; margin-top: .3em; }
+    #zrokPanel #zkDisable.ui.basic.orange.button { color: #a14a00 !important; box-shadow: 0 0 0 1px #a14a00 inset !important; }
+    body.darkTheme #zrokPanel #zkDisable.ui.basic.orange.button { color: #ffa860 !important; box-shadow: 0 0 0 1px #ffa860 inset !important; }
+    #zrokPanel .ui.form input { box-sizing: border-box; max-width: 100%; }
+    #zrokPanel .ui.form input, #zrokPanel .ui.form textarea, #zrokPanel .ui.form select { background: var(--theme_bg_primary); color: var(--text_color); border-color: var(--divider_color); }
+    #zrokPanel details { border: 1px solid var(--divider_color); border-radius: 8px; padding: .55em .9em; margin: .7em 0; }
+    #zrokPanel details > summary { cursor: pointer; font-weight: 600; min-height: 24px; }
+    #zrokPanel details[open] > summary { margin-bottom: .5em; }
+    #zrokPanel .zkKinds { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: .7em; margin: .5em 0 1em; }
+    #zrokPanel .zkKind { border: 2px solid var(--divider_color); border-radius: 8px; padding: .7em .9em; cursor: pointer; background: transparent; color: var(--text_color); text-align: left; font: inherit; }
+    #zrokPanel .zkKind:hover { border-color: rgba(128,128,128,.8); }
+    #zrokPanel .zkKind:focus-visible { outline: 2px solid #2185d0; outline-offset: 2px; }
+    #zrokPanel .zkKind.sel { border-color: #2185d0; background: rgba(33,133,208,.12); }
+    #zrokPanel .zkKind b { display: flex; align-items: center; gap: .4em; }
+    #zrokPanel .zkKind span { display: block; margin-top: .2em; color: var(--text_color_secondary); font-size: .9em; }
+    #zrokPanel .zkTunnels { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: .9em; margin-top: .8em; }
+    #zrokPanel .zkTunnel { border: 1px solid var(--divider_color); border-left: 5px solid var(--divider_color); border-radius: 8px; padding: .8em 1em; min-width: 0; background: var(--theme_bg_primary); }
+    #zrokPanel .zkTunnel.running { border-left-color: #21ba45; }
+    #zrokPanel .zkTunnel.failed { border-left-color: #db2828; }
+    #zrokPanel .zkTunnel.starting, #zrokPanel .zkTunnel.backoff { border-left-color: #f2711c; }
+    #zrokPanel .zkTunnel h5 { margin: 0 0 .3em; display: flex; flex-wrap: wrap; align-items: center; gap: .5em; }
+    #zrokPanel .zkTunnel dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .15em .8em; margin: .4em 0; }
+    #zrokPanel .zkTunnel dt { color: var(--text_color_secondary); }
+    #zrokPanel .zkTunnel dd { margin: 0; overflow-wrap: anywhere; }
+    #zrokPanel .zkState { display: inline-block; padding: .05em .65em; border-radius: 999px; font-size: .82em; font-weight: 600; background: rgba(128,128,128,.2); }
+    #zrokPanel .zkState.running { background: rgba(33,186,69,.2); }
+    #zrokPanel .zkState.failed { background: rgba(219,40,40,.2); }
+    #zrokPanel .zkState.starting, #zrokPanel .zkState.backoff { background: rgba(242,113,28,.2); }
+    #zrokPanel .zkLog { margin-top: .6em; }
+    #zrokPanel .zkLog pre { max-height: 14em; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .82em; padding: .6em .8em; border-radius: 6px; background: rgba(128,128,128,.14); color: var(--text_color); margin: .4em 0; }
+    #zrokPanel .zkEmpty { text-align: center; padding: 1.4em 1em; color: var(--text_color_secondary); border: 1px dashed var(--divider_color); border-radius: 8px; }
+    #zrokPanel .zkEmpty i.icon { font-size: 2em; display: block; margin: 0 auto .3em; opacity: .6; }
+    #zrokPanel code.zkCode { background: rgba(128,128,128,.16); padding: .05em .4em; border-radius: 4px; overflow-wrap: anywhere; }
+    @media (max-width: 600px) { #zrokPanel .zkCard { padding: .8em .8em 1em; } #zrokPanel .zkPill { white-space: normal; } }
+</style>
+<div id="zrokPanel">
+    <div class="zkHero">
+        <div style="min-width:0; flex:1 1 30em">
+            <h2 class="ui header" style="margin-bottom:.35em"><i class="plug icon"></i><div class="content">Tunnels (zrok)</div></h2>
+            <p class="zkLead">Share a service through an openziti based <a href="https://zrok.io" target="_blank" rel="noopener">zrok</a> tunnel without opening a port, or reach a private share from this host.
+                Zoraxy supervises the external <code>zrok</code> program: install it, enable an environment with your account token, then create shares.</p>
         </div>
-        <div class="field"><label>Account token</label>
-            <input type="password" id="zToken" autocomplete="off" placeholder="" >
-            <small>Stored in <code>conf/zrok/token</code> (0600), never shown again and removed from logs. zrok only accepts the token as a command line argument of <code>zrok enable</code>, so it is visible in the process list for the few seconds that command runs.</small></div>
-        <button class="ui basic green button" id="zSave"><i class="save icon"></i> Save</button>
-        <button class="ui basic button" id="zEnable"><i class="power off icon"></i> Enable environment</button>
-        <button class="ui basic orange button" id="zDisable"><i class="stop icon"></i> Disable environment</button>
-        <button class="ui basic red button" id="zClearToken"><i class="eraser icon"></i> Forget token</button>
-        <button class="ui basic button" id="zRefresh"><i class="refresh icon"></i> Refresh</button>
+        <div><span class="zkPill off" id="zkPill" role="status"><i class="circle outline icon"></i><span>Loading...</span></span></div>
     </div>
-    <div class="ui message" id="zStatus" style="margin-top:1em"></div>
 
-    <h4 class="ui dividing header">Tunnels</h4>
-    <div style="overflow-x:auto">
-    <table class="ui celled compact table" id="zTunnels">
-        <thead><tr><th>Name</th><th>Kind</th><th>Target / token</th><th>State</th><th>URL / access</th><th>Actions</th></tr></thead>
-        <tbody></tbody>
-    </table></div>
+    <div id="zkErrorBox" class="zkBanner bad" style="display:none" role="alert"><i class="exclamation triangle icon"></i><div class="t"><b>Tunnels are not available</b><span id="zkErrorText"></span></div></div>
+    <div class="zkBanner warn" id="zkNotAllowed" style="display:none" role="alert"><i class="lock icon"></i><div class="t"><b>External tools are disabled</b>
+        This page runs the external <code>zrok</code> program, which is a privilege, so it is off by default. Start Zoraxy with <code>-allow_external_tools</code>
+        (docker: add it to the command line) and reload. Nothing is executed until you do.</div></div>
 
-    <div class="ui segment" id="zEditor">
-        <h5 class="ui header" id="zEditorTitle">Add a tunnel</h5>
+    <!-- state -->
+    <div class="zkCard">
+        <h4><i class="info circle icon"></i> Current state</h4>
+        <div class="zkFacts" id="zkFacts"></div>
+    </div>
+
+    <!-- step 1 -->
+    <div class="zkCard">
+        <h4><span class="zkStep" id="zkStep1">1</span> Install zrok</h4>
+        <div id="zkInstallOk" style="display:none" class="zkMuted"></div>
+        <div id="zkInstall" style="display:none">
+            <div class="zkBanner info" style="margin:.6em 0"><i class="download icon"></i><div class="t"><b>zrok was not found on this machine</b>
+                <span id="zkBinErr"></span>
+                <ol style="margin:.5em 0 0; padding-left:1.2em; line-height:1.55">
+                    <li>Download the release for this machine from <a href="https://github.com/openziti/zrok/releases" target="_blank" rel="noopener">github.com/openziti/zrok/releases</a> (binary <code>zrok</code> for 1.x, <code>zrok2</code> for 2.x).</li>
+                    <li>Put it on the <code>PATH</code> of the user running Zoraxy (for example <code>/usr/local/bin</code>), or enter its full path below. The file name must start with <code>zrok</code>.</li>
+                    <li>Press <b>Check again</b>. In a container the binary must exist inside the container.</li>
+                </ol></div></div>
+        </div>
+        <details id="zkAdvanced"><summary>Binary, command line generation and self-hosted endpoint</summary>
+            <div class="ui form">
+                <div class="three fields">
+                    <div class="field"><label for="zkBin">zrok binary (optional)</label><input type="text" id="zkBin" placeholder="empty = zrok2 or zrok from PATH"></div>
+                    <div class="field"><label for="zkFlavor">Command line generation</label>
+                        <select id="zkFlavor"><option value="auto">auto (zrok2 = v2, otherwise v1)</option><option value="v1">v1 (zrok 1.x)</option><option value="v2">v2 (zrok2 2.x)</option></select></div>
+                    <div class="field"><label for="zkApi">API endpoint (self-hosted zrok only)</label><input type="text" id="zkApi" placeholder="empty = zrok.io default"></div>
+                </div>
+            </div>
+        </details>
+        <div class="zkBtns">
+            <button class="ui basic button" id="zkSaveSettings"><i class="save icon"></i> Save binary settings</button>
+            <button class="ui basic button" id="zkRefresh"><i class="sync icon"></i> Check again</button>
+        </div>
+    </div>
+
+    <!-- step 2 -->
+    <div class="zkCard">
+        <h4><span class="zkStep" id="zkStep2">2</span> Enable the environment with your account token</h4>
+        <div class="zkMuted">Create a free account at <a href="https://zrok.io" target="_blank" rel="noopener">zrok.io</a> (or use your own zrok service), copy the <b>account token</b>, paste it here and press Enable.
+            Zoraxy does not learn your account name from zrok: it only knows whether a token is stored and whether <code>zrok enable</code> succeeded.</div>
+        <div class="ui form" style="margin-top:.8em">
+            <div class="field" style="max-width:34em"><label for="zkToken">Account token</label>
+                <input type="password" id="zkToken" autocomplete="off" placeholder="">
+                <small>Stored in <code>conf/zrok/token</code> (0600), never shown again and removed from logs. zrok only accepts the token as a command line argument of <code>zrok enable</code>, so it is visible in the process list for the few seconds that command runs.</small></div>
+        </div>
+        <div class="zkBtns">
+            <button class="ui green button" id="zkEnable"><i class="power off icon"></i> Save token and enable</button>
+            <button class="ui basic orange button" id="zkDisable"><i class="stop icon"></i> Disable environment</button>
+            <button class="ui basic red button" id="zkClearToken"><i class="eraser icon"></i> Forget token</button>
+        </div>
+        <div id="zkConfirm" class="zkBanner warn" style="display:none" role="alert"><i class="question circle icon"></i>
+            <div class="t"><b id="zkConfirmTitle"></b><span id="zkConfirmText"></span>
+                <div class="zkBtns"><button class="ui orange button" id="zkConfirmYes">Confirm</button><button class="ui basic button" id="zkConfirmNo">Cancel</button></div></div></div>
+        <div id="zkEnableResult" style="display:none"></div>
+    </div>
+
+    <!-- step 3 -->
+    <div class="zkCard" id="zkEditor">
+        <h4><span class="zkStep" id="zkStep3">3</span> <span id="zkEditorTitle">Create a share</span></h4>
         <div class="ui form">
-            <input type="hidden" id="zId">
-            <div class="three fields">
-                <div class="field"><label>Name</label><input type="text" id="zName" placeholder="blog"></div>
-                <div class="field"><label>Kind</label>
-                    <select id="zKind">
-                        <option value="share-public">Public share (zrok URL on the internet)</option>
-                        <option value="share-private">Private share (reachable with <code>zrok access</code>)</option>
-                        <option value="access">Access a private share from this host</option>
-                    </select></div>
-                <div class="field"><label>&nbsp;</label><div class="ui checkbox" id="zAutoWrap"><input type="checkbox" id="zAuto"><label>Start automatically with Zoraxy</label></div></div>
+            <input type="hidden" id="zkId">
+            <div class="zkMuted">What do you want to do?</div>
+            <div class="zkKinds" role="radiogroup" aria-label="Tunnel kind">
+                <button type="button" class="zkKind" data-kind="share-public" role="radio"><b><i class="globe icon"></i> Public share</b><span>A zrok URL on the internet that anyone can open.</span></button>
+                <button type="button" class="zkKind" data-kind="share-private" role="radio"><b><i class="lock icon"></i> Private share</b><span>Reachable only with <code>zrok access</code> and the share token.</span></button>
+                <button type="button" class="zkKind" data-kind="access" role="radio"><b><i class="plug icon"></i> Access a private share</b><span>Bind a remote private share to a local address on this host.</span></button>
+            </div>
+            <div class="two fields">
+                <div class="field"><label for="zkName">Name</label><input type="text" id="zkName" placeholder="blog"></div>
+                <div class="field"><label>&nbsp;</label><div class="ui checkbox" id="zkAutoWrap"><input type="checkbox" id="zkAuto"><label for="zkAuto">Start automatically with Zoraxy</label></div></div>
             </div>
             <div class="shareField">
                 <div class="two fields">
-                    <div class="field"><label>Backend target</label><input type="text" id="zTarget" placeholder="127.0.0.1:8080 or http://127.0.0.1:8080">
+                    <div class="field"><label for="zkTarget">Target (what to expose)</label><input type="text" id="zkTarget" placeholder="127.0.0.1:8080 or http://127.0.0.1:8080">
                         <small>host:port or http(s)://host:port[/path]. Credentials, query strings and file paths are refused.</small></div>
-                    <div class="field"><label>Quick fill</label><select id="zQuick"><option value="">choose...</option></select></div>
+                    <div class="field"><label for="zkQuick">Quick fill</label><select id="zkQuick"><option value="">choose...</option></select></div>
                 </div>
-                <div class="three fields">
-                    <div class="field"><label>Backend mode</label><select id="zMode"><option value="proxy">proxy (HTTP)</option><option value="tcpTunnel">tcpTunnel (private only)</option><option value="udpTunnel">udpTunnel (private only)</option></select></div>
-                    <div class="field publicOnly"><label>Frontend / name selection (optional)</label><input type="text" id="zFront" placeholder="public"></div>
-                    <div class="field v1Only"><label>Reserved name (zrok 1.x, optional)</label><input type="text" id="zUnique" placeholder="my-site"></div>
-                </div>
-                <div class="field"><div class="ui checkbox"><input type="checkbox" id="zInsecure"><label>Do not verify the backend's TLS certificate (self-signed upstream)</label></div></div>
+                <details><summary>More options</summary>
+                    <div class="three fields">
+                        <div class="field"><label for="zkMode">Backend mode</label><select id="zkMode"><option value="proxy">proxy (HTTP)</option><option value="tcpTunnel">tcpTunnel (private only)</option><option value="udpTunnel">udpTunnel (private only)</option></select></div>
+                        <div class="field publicOnly"><label for="zkFront">Frontend / name selection (optional)</label><input type="text" id="zkFront" placeholder="public"></div>
+                        <div class="field v1Only"><label for="zkUnique">Reserved name (zrok 1.x, optional)</label><input type="text" id="zkUnique" placeholder="my-site"></div>
+                    </div>
+                    <div class="field"><div class="ui checkbox"><input type="checkbox" id="zkInsecure"><label for="zkInsecure">Do not verify the backend's TLS certificate (self-signed upstream)</label></div></div>
+                </details>
             </div>
             <div class="accessField" style="display:none">
                 <div class="two fields">
-                    <div class="field"><label>Share token</label><input type="text" id="zShareToken" placeholder="token of the private share"></div>
-                    <div class="field"><label>Bind address</label><input type="text" id="zBind" placeholder="127.0.0.1:9191"></div>
+                    <div class="field"><label for="zkShareToken">Share token</label><input type="text" id="zkShareToken" placeholder="token of the private share"></div>
+                    <div class="field"><label for="zkBind">Bind address</label><input type="text" id="zkBind" placeholder="127.0.0.1:9191"></div>
                 </div>
             </div>
-            <button class="ui primary button" id="zTunnelSave"><i class="save icon"></i> Save tunnel</button>
-            <button class="ui basic button" id="zTunnelReset">Clear form</button>
+            <div class="zkBtns">
+                <button class="ui primary button" id="zkTunnelSave"><i class="save icon"></i> Save tunnel</button>
+                <button class="ui basic button" id="zkTunnelReset">Clear form</button>
+            </div>
+            <div class="zkMuted" style="margin-top:.6em">Saving only stores the tunnel. Press <b>Start</b> on its card below to open it, unless it starts automatically.</div>
         </div>
     </div>
 
-    <div class="ui modal" id="zLogModal"><div class="header">Tunnel output</div>
-        <div class="content"><pre id="zLogText" style="max-height:24em; overflow:auto; white-space:pre-wrap;"></pre></div>
-        <div class="actions"><div class="ui cancel button">Close</div></div></div>
-
-    <div class="ui basic message">
-        <b>Not verified against a live zrok service.</b> The command lines are built from the zrok 1.1 and 2.0 sources and exercised with a fake zrok program;
-        report differences you find with your zrok version. Child processes get a minimal environment with their own <code>HOME</code> in <code>conf/zrok/home</code>,
-        are restarted with exponential backoff (and stopped after repeated immediate failures) and receive SIGTERM when Zoraxy shuts down.
+    <!-- tunnels -->
+    <div class="zkCard">
+        <h4><i class="sitemap icon"></i> Your tunnels</h4>
+        <div class="zkMuted">Traffic counters are not available: zrok does not report them to Zoraxy. Uptime is measured since the last (re)start by Zoraxy.</div>
+        <div id="zkTunnels" class="zkTunnels"></div>
     </div>
+
+    <div class="zkBanner info"><i class="info circle icon"></i><div class="t"><b>Not verified against a live zrok service</b>
+        The command lines are built from the zrok 1.1 and 2.0 sources and exercised with a fake zrok program; report differences you find with your zrok version.
+        Child processes get a minimal environment with their own <code>HOME</code> in <code>conf/zrok/home</code>, are restarted with exponential backoff (and stopped after repeated immediate failures) and receive SIGTERM when Zoraxy shuts down.</div></div>
 </div>
 <script>
 (function(){
-    function esc(s){ return $("<div>").text(s == null ? "" : String(s)).html(); }
-    var flavor = "v1";
-    function post(url, data, ok, done){
-        $.cjax({url: url, method: "POST", data: data, success: function(r){
-            if (r && r.error != undefined){ msgbox(r.error, false, 8000); } else { msgbox(ok || "Done"); }
-            if (done) done(r);
-            load();
-        }});
+    var flavor = "v1", status = null, confirmFn = null, logOpen = {}, pendingDelete = {};
+    var LOG_TAIL = 60;
+    function $id(id){ return $("#" + id); }
+    function errText(r, xhr){
+        if (r && typeof r === "object" && r.error != undefined) { return String(r.error); }
+        if (xhr && xhr.status === 401) { return "Your session has expired. Sign in again."; }
+        if (xhr && xhr.status === 403) { return "You are not allowed to do this."; }
+        if (xhr && xhr.status >= 500) { return "Zoraxy returned a server error. Check the system log."; }
+        return "Zoraxy could not be reached. Check your connection and try again.";
     }
-    function syncKind(){
-        var k = $("#zKind").val();
+    function uptime(iso){
+        var t = new Date(iso).getTime(); if (!t || t < 86400000) return "-";
+        var s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+        if (s < 60) return s + " s";
+        if (s < 3600) return Math.floor(s / 60) + " min";
+        if (s < 172800) return Math.floor(s / 3600) + " h " + Math.floor(s % 3600 / 60) + " min";
+        return Math.floor(s / 86400) + " days";
+    }
+    function copyText(text, label){
+        function done(ok){ if (ok) { msgbox(label || "Copied"); } else { msgbox("Copy failed. Select the text and copy it by hand.", false, 4000); } }
+        function legacy(){ var ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select(); var ok = false; try { ok = document.execCommand("copy"); } catch(e){} document.body.removeChild(ta); done(ok); }
+        if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(text).then(function(){ done(true); }, legacy); } else { legacy(); }
+    }
+    function fact(l, v, cls){ return $("<div class='zkFact'>").addClass(cls || "").append($("<div class='l'>").text(l)).append($("<div class='v'>").text(v)); }
+    function banner(kind, icon, title, text){
+        return $("<div class='zkBanner' role='alert'>").addClass(kind).append($("<i class='icon'>").addClass(icon)).append($("<div class='t'>").append($("<b>").text(title)).append(document.createTextNode(text || "")));
+    }
+    function post(url, data, ok, done, quiet){
+        $.cjax({url: url, method: "POST", data: data, success: function(r){
+            if (r && typeof r === "object" && r.error != undefined) { msgbox(errText(r), false, 8000); if (done) { done(r); } }
+            else { if (!quiet) { msgbox(ok || "Done"); } if (done) { done(r); } }
+            load();
+        }, error: function(x){ msgbox(errText(null, x), false, 8000); }});
+    }
+
+    // ---- confirmation built into the page ----
+    function ask(title, text, yesLabel, fn){
+        confirmFn = fn;
+        $id("zkConfirmTitle").text(title); $id("zkConfirmText").text(" " + text); $id("zkConfirmYes").text(yesLabel);
+        var box = $id("zkConfirm").show(); try { box[0].scrollIntoView({block: "nearest"}); } catch(e){}
+    }
+    $id("zkConfirmNo").on("click", function(){ confirmFn = null; $id("zkConfirm").hide(); });
+    $id("zkConfirmYes").on("click", function(){ var f = confirmFn; confirmFn = null; $id("zkConfirm").hide(); if (f) { f(); } });
+
+    // ---- form ----
+    function setKind(k){
+        $("#zrokPanel .zkKind").each(function(){ var on = $(this).data("kind") == k; $(this).toggleClass("sel", on).attr("aria-checked", on ? "true" : "false"); });
+        $id("zkEditor").data("kind", k);
         $(".shareField").toggle(k != "access"); $(".accessField").toggle(k == "access");
         $(".publicOnly").toggle(k == "share-public");
         $(".v1Only").toggle(k != "access" && flavor != "v2");
     }
+    function kind(){ return $id("zkEditor").data("kind") || "share-public"; }
     function resetForm(){
-        $("#zId").val(""); $("#zName").val(""); $("#zKind").val("share-public"); $("#zTarget").val(""); $("#zMode").val("proxy");
-        $("#zFront").val(""); $("#zUnique").val(""); $("#zInsecure").prop("checked", false); $("#zShareToken").val(""); $("#zBind").val("");
-        $("#zAuto").prop("checked", false); $("#zEditorTitle").text("Add a tunnel"); syncKind();
+        $id("zkId").val(""); $id("zkName").val(""); $id("zkTarget").val(""); $id("zkMode").val("proxy");
+        $id("zkFront").val(""); $id("zkUnique").val(""); $id("zkInsecure").prop("checked", false); $id("zkShareToken").val(""); $id("zkBind").val("");
+        $id("zkAuto").prop("checked", false); $id("zkEditorTitle").text("Create a share"); setKind("share-public");
     }
     function edit(t){
-        $("#zId").val(t.ID); $("#zName").val(t.Name); $("#zKind").val(t.Kind); $("#zTarget").val(t.Target || ""); $("#zMode").val(t.BackendMode || "proxy");
-        $("#zFront").val(t.Frontend || ""); $("#zUnique").val(t.UniqueName || ""); $("#zInsecure").prop("checked", !!t.Insecure);
-        $("#zShareToken").val(t.ShareToken || ""); $("#zBind").val(t.Bind || ""); $("#zAuto").prop("checked", !!t.AutoStart);
-        $("#zEditorTitle").text("Edit tunnel " + t.Name); syncKind(); $("#zEditor")[0].scrollIntoView();
+        $id("zkId").val(t.ID); $id("zkName").val(t.Name); $id("zkTarget").val(t.Target || ""); $id("zkMode").val(t.BackendMode || "proxy");
+        $id("zkFront").val(t.Frontend || ""); $id("zkUnique").val(t.UniqueName || ""); $id("zkInsecure").prop("checked", !!t.Insecure);
+        $id("zkShareToken").val(t.ShareToken || ""); $id("zkBind").val(t.Bind || ""); $id("zkAuto").prop("checked", !!t.AutoStart);
+        $id("zkEditorTitle").text("Edit tunnel " + t.Name); setKind(t.Kind);
+        try { $id("zkEditor")[0].scrollIntoView(); } catch(e){}
     }
+    $("#zrokPanel .zkKind").on("click", function(){ setKind($(this).data("kind")); });
+
+    // ---- rendering ----
+    function kindLabel(k){ return {"share-public": "Public share", "share-private": "Private share", "access": "Access"}[k] || k; }
+    function renderTunnel(t){
+        var card = $("<div class='zkTunnel'>").addClass(t.State);
+        var h = $("<h5>").append($("<span>").text(t.Name)).append($("<span class='zkState'>").addClass(t.State).text(t.State));
+        card.append(h);
+        var dl = $("<dl>");
+        function row(k, v){ dl.append($("<dt>").text(k)).append($("<dd>").append(v)); }
+        row("Kind", document.createTextNode(kindLabel(t.Kind)));
+        row(t.Kind == "access" ? "Share token -> bind" : "Target", document.createTextNode(t.Kind == "access" ? (t.ShareToken || "?") + " -> " + (t.Bind || "127.0.0.1:9191") : (t.Target || "-") + (t.UniqueName ? " (reserved " + t.UniqueName + ")" : "")));
+        var running = t.State == "running";
+        if (t.PublicURL) {
+            var u = $("<span>").append($("<code class='zkCode'>").text(t.PublicURL)).append(" ");
+            u.append($("<button class='ui mini basic icon button' type='button'>").attr("aria-label", "Copy URL of " + t.Name).attr("title", "Copy URL").append("<i class='copy icon'></i>").on("click", function(){ copyText(t.PublicURL, "URL copied"); }));
+            row("URL", u);
+        } else if (t.Kind != "access") { row("URL", document.createTextNode(running ? "not announced yet" : "-")); }
+        if (t.Token) { row("Share token", $("<span>").append($("<code class='zkCode'>").text(t.Token))); }
+        row("Uptime", document.createTextNode(running ? uptime(t.StartedAt) : "-"));
+        row("Traffic", document.createTextNode("not reported by zrok"));
+        if (t.Restarts) { row("Restarts", document.createTextNode(String(t.Restarts))); }
+        card.append(dl);
+        if (t.LastExit && !running) { card.append($("<div class='zkMuted'>").text("Last exit: " + t.LastExit)); }
+        var btns = $("<div class='zkBtns'>");
+        function b(label, cls, fn){ return $("<button type='button' class='ui mini button'>").addClass(cls || "basic").attr("aria-label", label + " " + t.Name).text(label).on("click", fn); }
+        if (running || t.State == "starting" || t.State == "backoff") { btns.append(b("Stop", "basic", function(){ post("/api/zrok/tunnel/stop", {id: t.ID}, "Stopped"); })); }
+        else { btns.append(b("Start", "green", function(){ post("/api/zrok/tunnel/start", {id: t.ID}, "Starting"); })); }
+        btns.append(b("Log", "basic", function(){ logOpen[t.ID] = !logOpen[t.ID]; if (logOpen[t.ID]) { showLog(t.ID, card, false); } else { card.find(".zkLog").remove(); } }));
+        btns.append(b("Edit", "basic", function(){ edit(t); }));
+        btns.append(b("Delete", "basic red", function(){ pendingDelete[t.ID] = !pendingDelete[t.ID]; confirmRow.toggle(!!pendingDelete[t.ID]); }));
+        card.append(btns);
+        var confirmRow = $("<div class='zkBanner warn' style='display:" + (pendingDelete[t.ID] ? "flex" : "none") + "' role='alert'>").append("<i class='question circle icon'></i>");
+        var ct = $("<div class='t'>").append($("<b>").text("Delete tunnel " + t.Name + "?")).append(document.createTextNode("A running tunnel is stopped first."));
+        ct.append($("<div class='zkBtns'>").append($("<button type='button' class='ui mini red button'>").text("Delete tunnel").on("click", function(){ pendingDelete[t.ID] = false; delete logOpen[t.ID]; post("/api/zrok/tunnel/delete", {id: t.ID}, "Deleted"); }))
+            .append($("<button type='button' class='ui mini basic button'>").text("Cancel").on("click", function(){ pendingDelete[t.ID] = false; confirmRow.hide(); })));
+        confirmRow.append(ct); card.append(confirmRow);
+        if (logOpen[t.ID]) { showLog(t.ID, card, true); }
+        return card;
+    }
+    // The server keeps at most 200 lines; show the newest ones and let the user expand
+    function showLog(id, card, keepScroll){
+        card.find(".zkLog").remove();
+        var wrap = $("<div class='zkLog'>").appendTo(card);
+        wrap.append($("<div class='zkMuted'>").text("Loading output..."));
+        $.ajax({url: "/api/zrok/logs", data: {id: id}, dataType: "json", cache: false}).done(function(lines){
+            lines = lines || []; wrap.empty();
+            var all = false;
+            function draw(){
+                wrap.find("pre,.zkLogBar").remove();
+                var shown = all ? lines : lines.slice(-LOG_TAIL);
+                var bar = $("<div class='zkLogBar zkBtns' style='margin:0'>");
+                bar.append($("<span class='zkMuted'>").text(lines.length ? "Showing " + shown.length + " of " + lines.length + " captured lines (secrets removed)" : "No output yet."));
+                if (lines.length > LOG_TAIL && !all) { bar.append($("<button type='button' class='ui mini basic button'>").text("Show all").on("click", function(){ all = true; draw(); })); }
+                bar.append($("<button type='button' class='ui mini basic button'>").text("Reload").on("click", function(){ showLog(id, card, true); }));
+                if (lines.length) { bar.append($("<button type='button' class='ui mini basic button'>").text("Copy").on("click", function(){ copyText(lines.join("\n"), "Output copied"); })); }
+                bar.append($("<button type='button' class='ui mini basic button'>").text("Close").on("click", function(){ logOpen[id] = false; wrap.remove(); }));
+                wrap.append(bar);
+                if (lines.length) { var pre = $("<pre>").text(shown.join("\n")).appendTo(wrap); pre[0].scrollTop = pre[0].scrollHeight; }
+            }
+            draw();
+        }).fail(function(x){ wrap.empty().append(banner("bad", "times circle", "Could not load the output", " " + errText(null, x))); });
+    }
+
+    function render(d){
+        status = d;
+        var s = d.Settings, haveBin = !!d.Binary;
+        flavor = d.Flavor || "v1";
+        $id("zkErrorBox").hide();
+        $id("zrokNotAllowed").toggle(!d.Allowed);
+        $id("zkBin").val(s.BinaryPath); $id("zkFlavor").val(s.Flavor || "auto"); $id("zkApi").val(s.ApiEndpoint);
+        $id("zkToken").val("").attr("placeholder", d.TokenSet ? "a token is stored (enter a new one to replace it)" : "paste the account token");
+        var tunnels = d.Tunnels || [], running = tunnels.filter(function(t){ return t.State == "running"; }).length;
+
+        // pill
+        var pc, pt, pi;
+        if (!d.Allowed) { pc = "bad"; pt = "External tools disabled"; pi = "lock"; }
+        else if (!haveBin) { pc = "warn"; pt = "zrok not installed"; pi = "download"; }
+        else if (!s.EnabledEnv) { pc = "warn"; pt = "Environment not enabled"; pi = "exclamation triangle"; }
+        else if (running) { pc = "on"; pt = running + " tunnel" + (running == 1 ? "" : "s") + " running"; pi = "check circle"; }
+        else { pc = "off"; pt = "Ready, no tunnel running"; pi = "circle outline"; }
+        $id("zkPill").removeClass("on off warn bad").addClass(pc).empty().append($("<i class='icon'>").addClass(pi)).append($("<span>").text(pt));
+
+        var f = $id("zkFacts").empty();
+        f.append(fact("External tools", d.Allowed ? "Allowed" : "Disabled (-allow_external_tools)", d.Allowed ? "good" : "bad"));
+        f.append(fact("zrok binary", haveBin ? d.Binary : "not found", haveBin ? "good" : "bad"));
+        f.append(fact("Version", haveBin ? (d.Version || (d.Allowed ? "unknown" : "not queried")) + " [" + flavor + "]" : "-", haveBin && d.Version ? "good" : ""));
+        f.append(fact("Account token", d.TokenSet ? "stored" : "not set", d.TokenSet ? "good" : "warn"));
+        f.append(fact("Environment", s.EnabledEnv ? "enabled" : "not enabled", s.EnabledEnv ? "good" : "warn"));
+        f.append(fact("Tunnels", tunnels.length + " saved, " + running + " running", running ? "good" : ""));
+
+        // steps
+        $id("zkStep1").toggleClass("done", haveBin).text(haveBin ? "✓" : "1");
+        $id("zkStep2").toggleClass("done", !!s.EnabledEnv).text(s.EnabledEnv ? "✓" : "2");
+        $id("zkStep3").toggleClass("done", tunnels.length > 0).text(tunnels.length ? "✓" : "3");
+        $id("zkInstall").toggle(!haveBin);
+        $id("zkBinErr").text(d.BinaryError ? " " + d.BinaryError : "");
+        $id("zkInstallOk").toggle(haveBin).text(haveBin ? "Found " + d.Binary + (d.Version ? ", version " + d.Version : "") + "." : "");
+        if (!haveBin) { $id("zkAdvanced").attr("open", "open"); }
+        setKind(kind());
+
+        var list = $id("zkTunnels").empty();
+        if (!tunnels.length) {
+            list.append($("<div class='zkEmpty'>").css("grid-column", "1 / -1").append("<i class='plug icon'></i>").append($("<div>").text(
+                !haveBin ? "No tunnels yet. Install zrok first (step 1)." : (!s.EnabledEnv ? "No tunnels yet. Enable the environment first (step 2)." : "No tunnels yet. Create your first share in step 3."))));
+        } else { tunnels.forEach(function(t){ list.append(renderTunnel(t)); }); }
+        schedule(tunnels);
+    }
+
     function load(){
-        $.get("/api/zrok/status", function(d){
-            if (d.error != undefined){ $("#zStatus").removeClass("green").addClass("red").text(d.error); return; }
-            $("#zrokNotAllowed").toggle(!d.Allowed);
-            $("#zrokInstall").toggle(!d.Binary); $("#zrokBinErr").text(d.BinaryError || "");
-            var s = d.Settings;
-            $("#zBin").val(s.BinaryPath); $("#zFlavor").val(s.Flavor || "auto"); $("#zApi").val(s.ApiEndpoint);
-            $("#zToken").val("").attr("placeholder", d.TokenSet ? "a token is stored (enter a new one to replace it)" : "paste the account token");
-            flavor = d.Flavor || "v1"; syncKind();
-            var box = $("#zStatus").removeClass("green red yellow").empty();
-            var line = (d.Binary ? "Binary: " + d.Binary + (d.Version ? " (" + d.Version + ")" : "") + " [" + flavor + "]. " : "No zrok binary found. ") +
-                       "Token: " + (d.TokenSet ? "stored" : "not set") + ". Environment: " + (s.EnabledEnv ? "enabled" : "not enabled") + ".";
-            box.addClass(s.EnabledEnv && d.Binary && d.Allowed ? "green" : "yellow").text(line);
-            var tb = $("#zTunnels tbody").empty();
-            (d.Tunnels || []).forEach(function(t){
-                var tr = $("<tr>");
-                tr.append($("<td>").text(t.Name)).append($("<td>").text(t.Kind));
-                tr.append($("<td>").text(t.Kind == "access" ? t.ShareToken + " -> " + (t.Bind || "127.0.0.1:9191") : t.Target + (t.UniqueName ? " (reserved " + t.UniqueName + ")" : "")));
-                var st = $("<td>").append($("<span class='ui tiny label'>").addClass(t.State == "running" ? "green" : (t.State == "failed" ? "red" : (t.State == "stopped" ? "" : "yellow"))).text(t.State));
-                if (t.Restarts) { st.append(" restarts: " + t.Restarts); }
-                if (t.LastExit && t.State != "running") { st.append($("<div style='font-size:85%'>").text(t.LastExit)); }
-                tr.append(st);
-                var acc = $("<td style='word-break:break-all'>");
-                if (t.PublicURL) { acc.append($("<code>").text(t.PublicURL)); }
-                if (t.Token) { acc.append($("<div>").text("share token: " + t.Token)); }
-                tr.append(acc);
-                var a = $("<td>");
-                if (t.State == "running" || t.State == "starting" || t.State == "backoff") { a.append($("<button class='ui mini basic button'>Stop</button>").on("click", function(){ post("/api/zrok/tunnel/stop", {id: t.ID}, "Stopped"); })); }
-                else { a.append($("<button class='ui mini basic green button'>Start</button>").on("click", function(){ post("/api/zrok/tunnel/start", {id: t.ID}, "Starting"); })); }
-                a.append($("<button class='ui mini basic button'>Log</button>").on("click", function(){
-                    $.get("/api/zrok/logs", {id: t.ID}, function(l){ $("#zLogText").text((l || []).join("\n") || "(no output yet)"); $("#zLogModal").modal("show"); }); }));
-                a.append($("<button class='ui mini basic button'>Edit</button>").on("click", function(){ edit(t); }));
-                a.append($("<button class='ui mini basic red button'>Delete</button>").on("click", function(){ if (confirm("Delete tunnel " + t.Name + "?")) post("/api/zrok/tunnel/delete", {id: t.ID}, "Deleted"); }));
-                tr.append(a); tb.append(tr);
-            });
-            if (!(d.Tunnels || []).length){ tb.append("<tr><td colspan='6'><i>No tunnels yet.</i></td></tr>"); }
-        });
+        $.ajax({url: "/api/zrok/status", dataType: "json", cache: false}).done(function(d){
+            if (d && d.error != undefined) { showUnavailable(errText(d)); return; }
+            render(d);
+        }).fail(function(x){ showUnavailable(errText(null, x)); });
     }
-    $("#zrokPanel .checkbox").checkbox();
-    $("#zKind").on("change", syncKind);
-    $("#zRefresh").on("click", load);
-    $("#zSave").on("click", function(){ post("/api/zrok/settings", {binary: $("#zBin").val().trim(), flavor: $("#zFlavor").val(), apiendpoint: $("#zApi").val().trim(), token: $("#zToken").val().trim()}, "Saved"); });
-    $("#zClearToken").on("click", function(){ post("/api/zrok/settings", {binary: $("#zBin").val().trim(), flavor: $("#zFlavor").val(), apiendpoint: $("#zApi").val().trim(), cleartoken: "true"}, "Token removed"); });
-    $("#zEnable").on("click", function(){ post("/api/zrok/enable", {}, "Environment enabled"); });
-    $("#zDisable").on("click", function(){ if (confirm("Stop all tunnels and disable the zrok environment?")) post("/api/zrok/disable", {}, "Environment disabled"); });
-    $("#zTunnelReset").on("click", resetForm);
-    $("#zTunnelSave").on("click", function(){
-        var t = {ID: $("#zId").val(), Name: $("#zName").val().trim(), Kind: $("#zKind").val(), AutoStart: $("#zAuto").prop("checked")};
-        if (t.Kind == "access") { t.ShareToken = $("#zShareToken").val().trim(); t.Bind = $("#zBind").val().trim(); }
-        else { t.Target = $("#zTarget").val().trim(); t.BackendMode = $("#zMode").val(); t.Insecure = $("#zInsecure").prop("checked"); t.UniqueName = $("#zUnique").val().trim();
-               if (t.Kind == "share-public") { t.Frontend = $("#zFront").val().trim(); } }
-        post("/api/zrok/tunnel/save", {tunnel: JSON.stringify(t)}, "Tunnel saved", function(r){ if (!(r && r.error)) resetForm(); });
+    function showUnavailable(msg){
+        $id("zkErrorText").text(msg); $id("zkErrorBox").show();
+        $id("zkPill").removeClass("on off warn").addClass("bad").empty().append("<i class='icon times circle'></i>").append($("<span>").text("Unavailable"));
+    }
+
+    // Refresh while tunnels are active; skipped while the browser tab or this page is hidden
+    var timer = null;
+    function schedule(tunnels){
+        var active = (tunnels || []).some(function(t){ return t.State == "running" || t.State == "starting" || t.State == "backoff"; });
+        if (active && !timer) {
+            timer = setInterval(function(){
+                if (document.hidden || !document.getElementById("zrokPanel") || !$id("zrokPanel").is(":visible")) { return; }
+                load();
+            }, 15000);
+        } else if (!active && timer) { clearInterval(timer); timer = null; }
+    }
+
+    // ---- actions ----
+    function settingsData(){ return {binary: $id("zkBin").val().trim(), flavor: $id("zkFlavor").val(), apiendpoint: $id("zkApi").val().trim()}; }
+    $id("zkRefresh").on("click", load);
+    $id("zkSaveSettings").on("click", function(){ post("/api/zrok/settings", settingsData(), "Saved"); });
+    $id("zkEnable").on("click", function(){
+        var data = settingsData(), tok = $id("zkToken").val().trim();
+        if (tok) { data.token = tok; }
+        else if (!(status && status.TokenSet)) { msgbox("Paste the account token first.", false, 4000); $id("zkToken").focus(); return; }
+        var btn = $(this).addClass("loading disabled"), res = $id("zkEnableResult").show().empty();
+        $.cjax({url: "/api/zrok/settings", method: "POST", data: data, success: function(r){
+            if (r && r.error != undefined) { btn.removeClass("loading disabled"); res.append(banner("bad", "times circle", "Could not save", " " + errText(r))); return; }
+            $.cjax({url: "/api/zrok/enable", method: "POST", data: {}, success: function(r2){
+                btn.removeClass("loading disabled");
+                if (r2 && r2.error != undefined) { res.append(banner("bad", "times circle", "zrok could not enable the environment", " " + errText(r2))); }
+                else { res.append(banner("good", "check circle", "Environment enabled", " You can create shares now (step 3).")); }
+                load();
+            }, error: function(x){ btn.removeClass("loading disabled"); res.append(banner("bad", "times circle", "Request failed", " " + errText(null, x))); }});
+        }, error: function(x){ btn.removeClass("loading disabled"); res.append(banner("bad", "times circle", "Request failed", " " + errText(null, x))); }});
+    });
+    $id("zkDisable").on("click", function(){
+        ask("Disable the zrok environment?", "All tunnels are stopped and zrok disables the environment. Saved tunnels stay.", "Disable", function(){ post("/api/zrok/disable", {}, "Environment disabled"); });
+    });
+    $id("zkClearToken").on("click", function(){
+        ask("Forget the stored token?", "The token file is deleted. You need to paste it again to enable an environment.", "Forget token", function(){
+            var d = settingsData(); d.cleartoken = "true"; post("/api/zrok/settings", d, "Token removed"); });
+    });
+    $id("zkTunnelReset").on("click", resetForm);
+    $id("zkTunnelSave").on("click", function(){
+        var k = kind();
+        var t = {ID: $id("zkId").val(), Name: $id("zkName").val().trim(), Kind: k, AutoStart: $id("zkAuto").prop("checked")};
+        if (k == "access") { t.ShareToken = $id("zkShareToken").val().trim(); t.Bind = $id("zkBind").val().trim(); }
+        else { t.Target = $id("zkTarget").val().trim(); t.BackendMode = $id("zkMode").val(); t.Insecure = $id("zkInsecure").prop("checked"); t.UniqueName = $id("zkUnique").val().trim();
+               if (k == "share-public") { t.Frontend = $id("zkFront").val().trim(); } }
+        if (!t.Name) { msgbox("Give the tunnel a name.", false, 4000); $id("zkName").focus(); return; }
+        post("/api/zrok/tunnel/save", {tunnel: JSON.stringify(t)}, "Tunnel saved", function(r){ if (!(r && r.error)) { resetForm(); } });
     });
     $.get("/api/zrok/targets", function(list){
-        (list || []).forEach(function(x){ $("#zQuick").append($("<option>").val(x.Value).text(x.Label + " - " + x.Value)); });
+        (list || []).forEach(function(x){ $id("zkQuick").append($("<option>").val(x.Value).text(x.Label + " - " + x.Value)); });
     });
-    $("#zQuick").on("change", function(){ if ($(this).val()) { $("#zTarget").val($(this).val()); } });
+    $id("zkQuick").on("change", function(){ if ($(this).val()) { $id("zkTarget").val($(this).val()); } });
+    $id("zrokPanel").find(".checkbox").checkbox();
     resetForm(); load();
 })();
 </script>
