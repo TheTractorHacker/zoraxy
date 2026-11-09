@@ -230,6 +230,9 @@ func HandleProxyBulk(w http.ResponseWriter, r *http.Request) {
 	results, err := dynamicProxyRouter.BulkEdit(req, dynamicproxy.BulkHooks{
 		Persist: SaveReverseProxyConfig,
 		Remove:  RemoveReverseProxyConfig,
+		AccessRuleExists: func(id string) bool {
+			return accessController != nil && accessController.AccessRuleExists(id)
+		},
 		CertCovers: func(certName, host string) (bool, error) {
 			return tlsCertManager.CertCoversHost(certName, host)
 		},

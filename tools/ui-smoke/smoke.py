@@ -291,6 +291,13 @@ def proxy_ux(pg, ctx):
         pg.screenshot(path=out("httprp-bulk-preview.png"))
         pg.click("#bulkModal .actions button:has-text('Cancel')")
         pg.wait_for_timeout(600)
+        pg.click("#bulkBar button[data-act=access]")
+        pg.wait_for_selector("#bulkAccess", state="visible", timeout=5000)
+        pg.click("#bulkModal .actions button:has-text('Preview')")
+        pg.wait_for_function("document.querySelector('#bulkModal .content').innerText.indexOf('rule(s)') > -1", timeout=8000)
+        pg.screenshot(path=out("httprp-bulk-access.png"))
+        pg.click("#bulkModal .actions button:has-text('Cancel')")
+        pg.wait_for_timeout(600)
         pg.keyboard.press("Escape")
         pg.wait_for_timeout(200)
         if pg.evaluate("ProxyTable.selected().length") != 0 or pg.is_visible("#bulkBar"):

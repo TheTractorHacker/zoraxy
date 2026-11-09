@@ -239,3 +239,39 @@ func TestBulkSetCertificate(t *testing.T) {
 		t.Fatal("path-like certificate name must be rejected")
 	}
 }
+
+func TestBulkSetAccessRule(t *testing.T) {
+	router := bulkRouter(t, "a.example.com", "b.example.com")
+	hooks := BulkHooks{AccessRuleExists: func(id string) bool { return id == "default" || id == "strict" }}
+	run := func(id string, dry bool) []BulkResult {
+		res, err := router.BulkEdit(&BulkRequest{Rules: []string{"a.example.com", "b.example.com"}, Action: BulkSetAccess, Params: BulkParams{AccessRuleID: id}, DryRun: dry}, hooks)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	acc := func(n string) string { ep, _ := router.LoadProxy(n); return ep.AccessFilterUUID }
+	run("strict", true)
+	if acc("a.example.com") == "strict" {
+		t.Fatal("dry run must not change anything")
+	}
+	for _, r := range run("strict", false) {
+		if !r.OK {
+			t.Fatalf("%+v", r)
+		}
+	}
+	if acc("a.example.com") != "strict" || acc("b.example.com") != "strict" {
+		t.Fatal("access rule not applied")
+	}
+	for _, r := range run("ghost", false) {
+		if r.OK {
+			t.Fatal("unknown access rule must fail per rule")
+		}
+	}
+	if acc("a.example.com") != "strict" {
+		t.Fatal("a failed apply must leave the rule as it was")
+	}
+	if _, err := router.BulkEdit(&BulkRequest{Rules: []string{"a.example.com"}, Action: BulkSetAccess}, hooks); err == nil {
+		t.Fatal("missing access rule id must be rejected")
+	}
+}

@@ -24,14 +24,16 @@
         #httprpPage .ptLink{ background:none; border:0; color:#4b75ff; cursor:pointer; font:inherit; padding:0 0.3em; }
 
         /* bulk action bar: only exists while something is selected, sticks to the top while scrolling */
-        #bulkBar{ position:sticky; top:4em; /* below the fixed menu bar */ z-index:6; display:flex; flex-wrap:wrap; gap:0.4em; align-items:center; padding:0.55em 0.8em; margin:0 0 0.8em; border-radius:0.6em; background:var(--theme_bg_inverted); color:var(--text_color_inverted); box-shadow:0 4px 14px rgba(0,0,0,0.25); }
+        #bulkBar{ position:sticky; top:4em; /* below the fixed menu bar */ z-index:6; display:flex; flex-wrap:wrap; gap:0.4em; align-items:center; padding:0.55em 0.8em; margin:0 0 0.8em; border-radius:0.6em; background:#fff; color:#1b1c1d; border:1px solid #d4d4d5; border-left:4px solid #4183c4; box-shadow:0 6px 18px rgba(0,0,0,0.12); }
         #bulkBar[hidden]{ display:none !important; }
-        body.darkTheme #bulkBar{ background:#25262b; color:var(--text_color); border:1px solid var(--divider_color); box-shadow:0 6px 18px rgba(0,0,0,0.55); }
-        #bulkBar .bulkCount{ font-weight:700; margin-right:0.4em; }
+        body.darkTheme #bulkBar{ background:#25262b; color:var(--text_color); border:1px solid var(--divider_color); border-left:4px solid #4183c4; box-shadow:0 6px 18px rgba(0,0,0,0.55); }
+        #bulkBar .bulkCount{ font-weight:700; margin-right:0.4em; color:#2185d0; }
+        body.darkTheme #bulkBar .bulkCount{ color:#6ab0f3; }
         #bulkBar .bulkAllSel{ opacity:0.75; font-size:0.9em; margin-right:0.4em; }
         #bulkBar .ui.button{ margin:0; background:rgba(127,127,127,0.18) !important; color:inherit !important; box-shadow:none !important; border:1px solid rgba(127,127,127,0.35) !important; }
-        #bulkBar .ui.button:hover{ background:rgba(127,127,127,0.35) !important; }
-        #bulkBar .ui.button.danger{ color:#ff6b6b !important; }
+        #bulkBar .ui.button:hover{ background:rgba(65,131,196,0.18) !important; border-color:#4183c4 !important; }
+        #bulkBar .ui.button.danger{ color:#c92a2a !important; }
+        body.darkTheme #bulkBar .ui.button.danger{ color:#ff6b6b !important; }
         #bulkBar .bulkSpacer{ flex:1 1 auto; }
         #bulkBar .bulkHint{ opacity:0.6; font-size:0.85em; margin-left:0.3em; }
         #bulkSelectMatching{ display:none; padding:0.45em 0.8em; margin-bottom:0.6em; border-radius:0.5em; background:var(--theme_bg_active); font-size:0.92em; }
@@ -295,6 +297,7 @@
         <button type="button" class="ui mini button" data-act="waf" title="Set the WAF of the selected rules" aria-label="WAF of the selected rules"><i class="shield alternate icon"></i> WAF</button>
         <button type="button" class="ui mini button" data-act="rate" title="Set the rate limit of the selected rules" aria-label="Rate limit of the selected rules"><i class="tachometer alternate icon"></i> Rate limit</button>
         <button type="button" class="ui mini button" data-act="auth" title="Set the authentication of the selected rules" aria-label="Authentication of the selected rules"><i class="key icon"></i> Authentication</button>
+        <button type="button" class="ui mini button" data-act="access" title="Choose the access rule of the selected rules" aria-label="Access rule of the selected rules"><i class="ban icon"></i> Access rule</button>
         <button type="button" class="ui mini button" data-act="cert" title="Choose the certificate of the selected rules" aria-label="Certificate of the selected rules"><i class="lock icon"></i> Certificate</button>
         <button type="button" class="ui mini button" data-act="template" title="Apply a template to the selected rules" aria-label="Apply a template to the selected rules"><i class="clone icon"></i> Template</button>
         <button type="button" class="ui mini button danger" data-act="delete" title="Delete the selected rules" aria-label="Delete the selected rules"><i class="trash icon"></i> Delete</button>

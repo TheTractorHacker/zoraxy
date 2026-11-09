@@ -905,7 +905,6 @@
   "OAuth2": "OAuth2",
   "OAuth2 / OIDC (global provider)": "OAuth2 / OIDC (глобальный провайдер)",
   "Observability": "Наблюдаемость",
-  "of {0} rule(s) {1}.": "из правил: {0} {1}.",
   "Off": "Выкл.",
   "off": "выкл.",
   "Off for this rule": "Выключено для этого правила",

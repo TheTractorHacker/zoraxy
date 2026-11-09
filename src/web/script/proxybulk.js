@@ -33,7 +33,8 @@
 
     function showResults(results, dry){
         var ok = results.filter(function(r){ return r.OK; }).length;
-        var html = '<div class="ui ' + (ok === results.length ? 'positive' : 'warning') + ' message">' + (dry ? 'Preview: ' : '') + ok + ' of ' + results.length + ' rule(s) ' + (dry ? 'would change' : 'updated') + '.</div>';
+        var changed = results.filter(function(r){ return r.OK && r.Changes && r.Changes.length; }).length;
+        var html = '<div class="ui ' + (ok === results.length ? 'positive' : 'warning') + ' message">' + (dry ? 'Preview: ' : '') + changed + ' of ' + results.length + ' rule(s) ' + (dry ? 'would change' : 'updated') + (ok < results.length ? ', ' + (results.length - ok) + ' cannot be changed' : '') + '.</div>';
         html += '<table class="ui very compact table"><thead><tr><th>Rule</th><th>Result</th></tr></thead><tbody>';
         results.forEach(function(r){
             html += '<tr><td>' + esc(r.Rule) + '</td><td>';
@@ -112,6 +113,17 @@
                 [{ label: "Preview", cls: "primary", fn: function(){
                     execute("set_auth", { AuthMethod: $("#bulkAuth").val(), Confirm: $("#bulkAuthConfirm").is(":checked") }, null, "Authentication", true);
                 } }, { label: "Cancel", fn: closeModal }]);
+        }
+        else if (act === "access") {
+            $.get("/api/access/list", function(list){
+                var opts = (list || []).map(function(a){ return '<option value="' + esc(a.ID) + '">' + esc(a.Name || a.ID) + ' (' + esc(a.ID) + ')</option>'; }).join("");
+                openModal("Access rule for " + n + " rule(s)",
+                    '<div class="ui form"><div class="field"><label>Access rule</label><select id="bulkAccess">' + opts + '</select></div>' +
+                    '<div class="ui basic message">Replaces the access rule (blacklist, whitelist, trusted proxy gating) of every selected proxy rule. A preview shows each rule\'s change before anything is applied.</div></div>',
+                    [{ label: "Preview", cls: "primary", fn: function(){
+                        execute("set_access", { AccessRuleID: $("#bulkAccess").val() }, null, "Access rule", true);
+                    } }, { label: "Cancel", fn: closeModal }]);
+            });
         }
         else if (act === "cert") {
             $.get("/api/cert/list", function(list){

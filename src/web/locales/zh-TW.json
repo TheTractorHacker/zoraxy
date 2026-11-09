@@ -902,7 +902,6 @@
   "OAuth2": "OAuth2",
   "OAuth2 / OIDC (global provider)": "OAuth2 / OIDC（全域提供者）",
   "Observability": "可觀測性",
-  "of {0} rule(s) {1}.": "共 {0} 條規則 {1}。",
   "Off": "關閉",
   "off": "關閉",
   "Off for this rule": "此規則已關閉",

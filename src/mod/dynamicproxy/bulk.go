@@ -29,6 +29,7 @@ const (
 	BulkSetAuth       = "set_auth"
 	BulkApplyTemplate = "apply_template"
 	BulkSetCert       = "set_certificate"
+	BulkSetAccess     = "set_access"
 	BulkDelete        = "delete"
 
 	MaxBulkRules = 500
@@ -48,6 +49,8 @@ type BulkParams struct {
 
 	//set_certificate: CertName is a certificate store name; empty clears the preferred certificate
 	//(automatic matching). Unless CertForce is set, only hostnames the certificate covers are changed.
+	AccessRuleID string `json:",omitempty"` //set_access: ID of the access rule to attach ("default" is the built in one)
+
 	CertName  string `json:",omitempty"`
 	CertForce bool   `json:",omitempty"`
 
@@ -72,9 +75,10 @@ type BulkResult struct {
 
 // BulkHooks connect the engine to the persistence layer of the caller
 type BulkHooks struct {
-	Persist    func(*ProxyEndpoint) error
-	Remove     func(name string) error                   //delete the stored config of a rule
-	CertCovers func(certName, host string) (bool, error) //set_certificate: does the certificate cover the host
+	Persist          func(*ProxyEndpoint) error
+	Remove           func(name string) error                   //delete the stored config of a rule
+	AccessRuleExists func(id string) bool                      //set_access: does the access rule exist
+	CertCovers       func(certName, host string) (bool, error) //set_certificate: does the certificate cover the host
 }
 
 var wafBulkSources = map[string]bool{"inherit": true, "off": true, "detection_only": true, "block": true, "profile": true}
@@ -122,6 +126,10 @@ func (r *BulkRequest) Validate() error {
 		case "oauth2", "zorxauth":
 		default:
 			return errors.New("bulk authentication change supports none, oauth2 and zorxauth only")
+		}
+	case BulkSetAccess:
+		if strings.TrimSpace(p.AccessRuleID) == "" {
+			return errors.New("no access rule chosen")
 		}
 	case BulkSetCert:
 		if strings.ContainsAny(p.CertName, "/\\") || strings.Contains(p.CertName, "..") {
@@ -281,6 +289,16 @@ func (router *Router) bulkOne(name string, req *BulkRequest, hooks BulkHooks) ([
 		nu := map[string]AuthMethod{"none": AuthMethodNone, "oauth2": AuthMethodOauth2, "zorxauth": AuthMethodZorxAuth}[p.AuthMethod]
 		note("Authentication", names[updated.AuthenticationProvider.AuthMethod], p.AuthMethod)
 		updated.AuthenticationProvider.AuthMethod = nu
+	case BulkSetAccess:
+		if hooks.AccessRuleExists == nil || !hooks.AccessRuleExists(p.AccessRuleID) {
+			return nil, errors.New("access rule not found")
+		}
+		old := updated.AccessFilterUUID
+		if old == "" {
+			old = "default"
+		}
+		note("Access rule", old, p.AccessRuleID)
+		updated.AccessFilterUUID = p.AccessRuleID
 	case BulkSetCert:
 		hosts := []string{updated.RootOrMatchingDomain}
 		for _, a := range updated.MatchingDomainAlias {
