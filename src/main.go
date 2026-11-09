@@ -282,6 +282,10 @@ func main() {
 		}
 		SystemWideLogger.Println(SYSTEM_NAME + " started. Visit control panel at https://" + host + ":" + portOf(*webUIPort))
 		SystemWideLogger.Println("Web UI certificate SHA-256 fingerprint: " + webUICert.Fingerprint)
+		//The admin listener is bound and the proxy router is initialised: this start is healthy, so confirm a
+		//pending in-app update. Without this the HTTPS admin path never confirmed it and every update was
+		//rolled back after 90 seconds.
+		updateManager.MarkHealthy()
 		SystemWideLogger.Println("Plain HTTP requests on this port are redirected to HTTPS. Plugins use loopback " + webUILoopbackListener.Addr().String())
 		err = http.Serve(webuitls.NewSniffListener(ln, webuitls.ServerTLSConfig(webUICert)), adminHandler)
 		if err != nil {
