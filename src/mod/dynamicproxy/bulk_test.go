@@ -191,3 +191,51 @@ func TestRuleTemplateValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestBulkSetCertificate(t *testing.T) {
+	router := bulkRouter(t, "a.example.com", "b.other.org")
+	covers := func(cert, host string) (bool, error) { return strings.HasSuffix(host, ".example.com"), nil }
+	hooks := BulkHooks{CertCovers: covers}
+	req := func(dry bool, p BulkParams) []BulkResult {
+		res, err := router.BulkEdit(&BulkRequest{Rules: []string{"a.example.com", "b.other.org"}, Action: BulkSetCert, Params: p, DryRun: dry}, hooks)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	pref := func(n string) string {
+		ep, _ := router.LoadProxy(n)
+		if ep.TlsOptions == nil {
+			return ""
+		}
+		return ep.TlsOptions.PreferredCertificate[n]
+	}
+
+	// preview changes nothing
+	req(true, BulkParams{CertName: "wild"})
+	if pref("a.example.com") != "" {
+		t.Fatal("dry run must not change the rule")
+	}
+	// only the covered rule is changed; the other is reported, not touched
+	res := req(false, BulkParams{CertName: "wild"})
+	if !res[0].OK || res[1].OK || res[1].Error == "" {
+		t.Fatalf("results: %+v", res)
+	}
+	if pref("a.example.com") != "wild" || pref("b.other.org") != "" {
+		t.Fatalf("a=%q b=%q", pref("a.example.com"), pref("b.other.org"))
+	}
+	// force sets it everywhere
+	req(false, BulkParams{CertName: "wild", CertForce: true})
+	if pref("b.other.org") != "wild" {
+		t.Fatal("force should set the certificate on uncovered names")
+	}
+	// empty name clears
+	req(false, BulkParams{})
+	if pref("a.example.com") != "" || pref("b.other.org") != "" {
+		t.Fatal("clearing should remove the preferred certificate")
+	}
+	// bad names are refused up front
+	if _, err := router.BulkEdit(&BulkRequest{Rules: []string{"a.example.com"}, Action: BulkSetCert, Params: BulkParams{CertName: "../x"}}, hooks); err == nil {
+		t.Fatal("path-like certificate name must be rejected")
+	}
+}

@@ -113,6 +113,18 @@
                     execute("set_auth", { AuthMethod: $("#bulkAuth").val(), Confirm: $("#bulkAuthConfirm").is(":checked") }, null, "Authentication", true);
                 } }, { label: "Cancel", fn: closeModal }]);
         }
+        else if (act === "cert") {
+            $.get("/api/cert/list", function(list){
+                var opts = '<option value="">Automatic (clear the preferred certificate)</option>' + (list || []).map(function(c){ return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join("");
+                openModal("Certificate for " + n + " rule(s)",
+                    '<div class="ui form"><div class="field"><label>Certificate</label><select id="bulkCert">' + opts + '</select></div>' +
+                    '<div class="field"><div class="ui checkbox"><input type="checkbox" id="bulkCertForce"><label>Also set it on hostnames the certificate does not cover</label></div></div>' +
+                    '<div class="ui basic message">Applies to each rule\'s main hostname and its aliases. By default hostnames the certificate does not cover are skipped and listed in the preview. Nothing changes until you press Apply on the preview.</div></div>',
+                    [{ label: "Preview", cls: "primary", fn: function(){
+                        execute("set_certificate", { CertName: $("#bulkCert").val(), CertForce: $("#bulkCertForce").is(":checked") }, null, "Certificate", true);
+                    } }, { label: "Cancel", fn: closeModal }]);
+            });
+        }
         else if (act === "template") {
             $.get("/api/proxy/templates/list", function(list){
                 var opts = (list || []).map(function(t){ return '<option value="' + esc(t.Name) + '">' + esc(t.Name) + (t.Builtin ? " (built in)" : "") + '</option>'; }).join("");

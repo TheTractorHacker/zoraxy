@@ -230,6 +230,9 @@ func HandleProxyBulk(w http.ResponseWriter, r *http.Request) {
 	results, err := dynamicProxyRouter.BulkEdit(req, dynamicproxy.BulkHooks{
 		Persist: SaveReverseProxyConfig,
 		Remove:  RemoveReverseProxyConfig,
+		CertCovers: func(certName, host string) (bool, error) {
+			return tlsCertManager.CertCoversHost(certName, host)
+		},
 	})
 	if err != nil {
 		utils.SendErrorResponse(w, err.Error())

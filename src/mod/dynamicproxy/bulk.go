@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"imuslab.com/zoraxy/mod/tlscert"
 )
 
 /*
@@ -26,6 +28,7 @@ const (
 	BulkSetRateLimit  = "set_ratelimit"
 	BulkSetAuth       = "set_auth"
 	BulkApplyTemplate = "apply_template"
+	BulkSetCert       = "set_certificate"
 	BulkDelete        = "delete"
 
 	MaxBulkRules = 500
@@ -42,6 +45,11 @@ type BulkParams struct {
 	RateLimitBurst   int64 `json:",omitempty"`
 
 	AuthMethod string `json:",omitempty"` //"none", "oauth2" or "zorxauth"; basic and forward auth need per rule data and are refused
+
+	//set_certificate: CertName is a certificate store name; empty clears the preferred certificate
+	//(automatic matching). Unless CertForce is set, only hostnames the certificate covers are changed.
+	CertName  string `json:",omitempty"`
+	CertForce bool   `json:",omitempty"`
 
 	Template *RuleTemplate `json:",omitempty"` //resolved template for apply_template
 
@@ -64,8 +72,9 @@ type BulkResult struct {
 
 // BulkHooks connect the engine to the persistence layer of the caller
 type BulkHooks struct {
-	Persist func(*ProxyEndpoint) error
-	Remove  func(name string) error //delete the stored config of a rule
+	Persist    func(*ProxyEndpoint) error
+	Remove     func(name string) error                   //delete the stored config of a rule
+	CertCovers func(certName, host string) (bool, error) //set_certificate: does the certificate cover the host
 }
 
 var wafBulkSources = map[string]bool{"inherit": true, "off": true, "detection_only": true, "block": true, "profile": true}
@@ -113,6 +122,10 @@ func (r *BulkRequest) Validate() error {
 		case "oauth2", "zorxauth":
 		default:
 			return errors.New("bulk authentication change supports none, oauth2 and zorxauth only")
+		}
+	case BulkSetCert:
+		if strings.ContainsAny(p.CertName, "/\\") || strings.Contains(p.CertName, "..") {
+			return errors.New("invalid certificate name")
 		}
 	case BulkApplyTemplate:
 		if p.Template == nil {
@@ -268,6 +281,54 @@ func (router *Router) bulkOne(name string, req *BulkRequest, hooks BulkHooks) ([
 		nu := map[string]AuthMethod{"none": AuthMethodNone, "oauth2": AuthMethodOauth2, "zorxauth": AuthMethodZorxAuth}[p.AuthMethod]
 		note("Authentication", names[updated.AuthenticationProvider.AuthMethod], p.AuthMethod)
 		updated.AuthenticationProvider.AuthMethod = nu
+	case BulkSetCert:
+		hosts := []string{updated.RootOrMatchingDomain}
+		for _, a := range updated.MatchingDomainAlias {
+			if a != "" {
+				hosts = append(hosts, a)
+			}
+		}
+		if updated.TlsOptions == nil {
+			updated.TlsOptions = tlscert.GetDefaultHostSpecificTlsBehavior()
+		}
+		skipped := []string{}
+		for _, h := range hosts {
+			old := updated.TlsOptions.PreferredCertificate[h]
+			if p.CertName == "" {
+				if old != "" {
+					note("Certificate for "+h, old, "(automatic)")
+					delete(updated.TlsOptions.PreferredCertificate, h)
+				}
+				continue
+			}
+			if !p.CertForce {
+				if hooks.CertCovers == nil {
+					return nil, errors.New("certificate check unavailable")
+				}
+				ok, cerr := hooks.CertCovers(p.CertName, h)
+				if cerr != nil {
+					return nil, cerr
+				}
+				if !ok {
+					skipped = append(skipped, h)
+					continue
+				}
+			}
+			if old == "" {
+				old = "(automatic)"
+			}
+			note("Certificate for "+h, old, p.CertName)
+			if updated.TlsOptions.PreferredCertificate == nil {
+				updated.TlsOptions.PreferredCertificate = map[string]string{}
+			}
+			updated.TlsOptions.PreferredCertificate[h] = p.CertName
+		}
+		for _, h := range skipped {
+			changes = append(changes, RuleChange{"Skipped " + h, "", "certificate does not cover this name"})
+		}
+		if len(skipped) == len(hosts) {
+			return changes, errors.New("the certificate covers none of this rule's hostnames")
+		}
 	case BulkApplyTemplate:
 		changes, err = ApplyRuleTemplate(updated, p.Template)
 		if err != nil {
