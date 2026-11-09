@@ -386,7 +386,10 @@ func (t *Tracker) apply(evs []Event) {
 		}
 		path := clean(SplitPath(ev.Path, s.KeepQuery), maxPathLen)
 		ua := clean(ev.UA, maxUALen)
-		cc := strings.ToUpper(trunc(ev.Country, 2))
+		cc := normalizeCountry(ev.Country)
+		if isNonPublicIP(ev.IP) {
+			cc = LocalCountry
+		}
 		via := ev.Via
 		if via == "" {
 			via = ViaDirect
@@ -697,6 +700,11 @@ func (t *Tracker) load() {
 		if v.Hosts == nil {
 			v.Hosts = map[string]uint32{}
 		}
+		// records written by older builds cut zone names to two letters ("Private" became PR =
+		// Puerto Rico, "CarrierNAT" CA = Canada); a non-public address has no country
+		if isNonPublicIP(v.IP) {
+			v.Country = LocalCountry
+		}
 		t.visitors[v.IP] = &v
 		if v.Country != "" {
 			t.countries[v.Country] = struct{}{}
@@ -704,6 +712,9 @@ func (t *Tracker) load() {
 	}
 	t.seq = ff.Seq
 	for _, v := range ff.Visits {
+		if isNonPublicIP(v.IP) {
+			v.Country = LocalCountry
+		}
 		t.pushRingLocked(v)
 	}
 	t.pruneLocked(time.Now(), t.settings.Load())
@@ -773,4 +784,35 @@ func sameAddr(a, b string) bool {
 	pa, e1 := netip.ParseAddr(a)
 	pb, e2 := netip.ParseAddr(b)
 	return e1 == nil && e2 == nil && pa.Unmap() == pb.Unmap()
+}
+
+// LocalCountry is stored instead of a country for private, loopback, link-local,
+// CGNAT and other non-public addresses. It is three letters on purpose so it can
+// never be mistaken for an ISO 3166 code.
+const LocalCountry = "LAN"
+
+// normalizeCountry returns the upper-case two-letter ISO code, "" for no answer, or
+// LocalCountry when the geo database answered with a zone name such as "Private".
+func normalizeCountry(c string) string {
+	c = strings.TrimSpace(c)
+	if c == "" {
+		return ""
+	}
+	if len(c) == 2 {
+		return strings.ToUpper(c)
+	}
+	return LocalCountry
+}
+
+var cgnatPrefix = netip.MustParsePrefix("100.64.0.0/10")
+
+// isNonPublicIP reports addresses that cannot sit in any country.
+func isNonPublicIP(ip string) bool {
+	a, err := netip.ParseAddr(strings.TrimSpace(ip))
+	if err != nil {
+		return false
+	}
+	a = a.Unmap().WithZone("")
+	return a.IsPrivate() || a.IsLoopback() || a.IsLinkLocalUnicast() || a.IsLinkLocalMulticast() ||
+		a.IsMulticast() || a.IsUnspecified() || cgnatPrefix.Contains(a)
 }

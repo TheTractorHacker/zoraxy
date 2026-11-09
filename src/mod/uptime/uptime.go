@@ -373,18 +373,8 @@ func (m *Monitor) getWebsiteStatusWithLatency(target *Target, timeout time.Durat
 	}
 
 	diff := end - start
-	succ := false
-	if statusCode >= 200 && statusCode < 300 {
-		//OK
-		succ = true
-	} else if statusCode >= 300 && statusCode < 400 {
-		//Redirection code
-		succ = true
-	} else {
-		succ = false
-	}
 	m.Config.OnlineStateNotify(target.URL, true)
-	return succ, diff, statusCode
+	return statusMeansReachable(statusCode), diff, statusCode
 
 }
 
@@ -474,4 +464,21 @@ func buildHealthCheckURL(baseURL, uri string) string {
 		uri = "/" + uri
 	}
 	return base + uri
+}
+
+// statusMeansReachable decides whether an HTTP answer to the health check proves the
+// upstream is up. Any answer does, apart from the gateway style failures: a login
+// protected app that answers 401/403, a virtual host that answers 404 or 421 for
+// "/" and an HTTP service reached over HTTPS (525) are all running and reachable, they
+// just do not like the probe. Listing them as offline made working backends look dead
+// on the dashboard and fired false "went offline" notifications. The status code stays
+// in the record so the operator can still see it.
+func statusMeansReachable(code int) bool {
+	switch code {
+	case 0:
+		return false
+	case 502, 503, 504, 521, 522, 523, 524:
+		return false
+	}
+	return code >= 100 && code < 600
 }

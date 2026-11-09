@@ -10,6 +10,58 @@
     #wafPage .wafCard h4 { margin: 0 0 .25em; }
     #wafPage .wafCard p { margin: 0; opacity: .85; font-size: .92em; }
     #wafPage .wafMuted { opacity: .75; font-size: .92em; }
+    /* hero */
+    #wafPage .wafHero { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: .8em 1.5em; }
+    #wafPage .wafHero h2 { margin: 0 0 .35em; }
+    #wafPage .wafLead { max-width: 62em; margin: 0; opacity: .85; line-height: 1.55; }
+    #wafPage .wafPill { display: inline-flex; align-items: center; gap: .5em; padding: .45em .9em; border-radius: 999px; font-weight: 600; font-size: .95em; border: 1px solid rgba(128,128,128,.4); white-space: nowrap; }
+    #wafPage .wafPill i.icon { margin: 0; }
+    #wafPage .wafPill.p-off { background: rgba(219,40,40,.12); border-color: rgba(219,40,40,.5); }
+    #wafPage .wafPill.p-detection_only { background: rgba(242,113,28,.12); border-color: rgba(242,113,28,.5); }
+    #wafPage .wafPill.p-block { background: rgba(33,186,69,.12); border-color: rgba(33,186,69,.5); }
+    #wafPage .wafCover { display: block; margin-top: .35em; text-align: right; opacity: .75; font-size: .88em; }
+    /* first run */
+    #wafPage .wafFirst { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1em 1.5em; }
+    #wafPage .wafFirst .txt { flex: 1 1 28em; min-width: 0; }
+    #wafPage .wafFirst .txt p { margin: .3em 0 0; opacity: .9; }
+    #wafPage .wafFirst .act { flex: 0 1 auto; text-align: center; }
+    #wafPage .wafFirst .act .button { margin: 0 0 .4em; }
+    #wafPage .wafFirst .act small { display: block; opacity: .75; max-width: 22em; margin: 0 auto; }
+    /* tabs */
+    #wafTabs .item { display: inline-flex !important; align-items: center; gap: .45em; white-space: nowrap; padding: .85em 1.1em !important; }
+    #wafTabs .item > i.icon { margin: 0 !important; opacity: .8; }
+    /* mode cards */
+    #wafPage .wafCard { position: relative; border-top-width: 4px; padding: 1em 1.1em; }
+    #wafPage .wafCard.m-off { border-top-color: #db2828; }
+    #wafPage .wafCard.m-detection_only { border-top-color: #f2711c; }
+    #wafPage .wafCard.m-block { border-top-color: #21ba45; }
+    #wafPage .wafCard h4 { display: flex; align-items: center; gap: .45em; font-size: 1.08em; }
+    #wafPage .wafCard h4 i.icon { margin: 0; }
+    #wafPage .wafCard.m-off h4 i.icon { color: #db2828; }
+    #wafPage .wafCard.m-detection_only h4 i.icon { color: #f2711c; }
+    #wafPage .wafCard.m-block h4 i.icon { color: #21ba45; }
+    #wafPage .wafCard.sel.m-off { border-color: #db2828; background: rgba(219,40,40,.09); }
+    #wafPage .wafBadge { margin-left: auto; font-size: .68em; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: .15em .6em; border-radius: 999px; background: rgba(128,128,128,.25); }
+    #wafPage .wafCard.sel.m-off .wafBadge { background: #db2828; color: #fff; }
+    #wafPage .wafCard.sel.m-detection_only .wafBadge { background: #f2711c; color: #fff; }
+    #wafPage .wafCard.sel.m-block .wafBadge { background: #21ba45; color: #fff; }
+    /* tiles */
+    #wafPage .wafTile { border-left: 4px solid rgba(128,128,128,.45); background: rgba(128,128,128,.05); }
+    #wafPage .wafTile:has(.tRed) { border-left-color: #db2828; }
+    #wafPage .wafTile:has(.tOrange) { border-left-color: #f2711c; }
+    #wafPage .wafTile .l { text-transform: uppercase; letter-spacing: .04em; font-size: .76em; margin-top: .15em; }
+    /* overview panels */
+    #wafPage .wafPanels { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: .9em; margin-top: .4em; }
+    #wafPage .wafPanel { border: 1px solid rgba(128,128,128,.35); border-radius: 8px; padding: .8em 1em 1em; background: rgba(128,128,128,.04); min-width: 0; }
+    #wafPage .wafPanel h5 { margin: 0 0 .55em; font-size: 1em; display: flex; flex-wrap: wrap; align-items: baseline; gap: .2em .6em; }
+    #wafPage .wafPanel h5 small { font-weight: 400; opacity: .7; }
+    #wafPage .wafPanel .item { padding: .35em 0; border-top: 1px solid rgba(128,128,128,.18); }
+    #wafPage .wafPanel .item:first-of-type { border-top: 0; }
+    #wafPage .wafSparkWrap { position: relative; }
+    #wafPage .wafSparkEmpty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; opacity: .65; font-size: .92em; pointer-events: none; }
+    #wafPage .wafTile .l { font-size: .7em; }
+    @media (max-width: 700px) { #wafPage #wafStatus { text-align: left !important; } #wafPage .wafCover { text-align: left; } }
+    #wafPage .wafSparkAxis { display: flex; justify-content: space-between; opacity: .55; font-size: .78em; margin-top: .25em; }
     #wafPage .wafTiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .8em; margin: 1em 0; }
     #wafPage .wafTile { border: 1px solid rgba(128,128,128,.35); border-radius: 8px; padding: .7em .9em; }
     #wafPage .wafTile .v { font-size: 1.9em; font-weight: 700; line-height: 1.1; }
@@ -57,20 +109,30 @@
 </style>
 <div class="standardContainer" id="wafPage">
     <div class="ui basic segment">
-        <h2><i class="shield alternate icon"></i> Web Application Firewall</h2>
-        <p>The WAF (Coraza with the OWASP Core Rule Set) inspects every request for SQL injection, cross-site scripting, path traversal and similar
-            attacks <b>before</b> it reaches your service. One global policy covers every proxy rule that follows it; single rules can use a profile or
-            their own settings. Nothing changes until you turn it on.</p>
-        <div id="wafStatus" class="wafMuted"></div>
+        <div class="wafHero">
+            <div style="flex:1 1 30em; min-width:0">
+                <h2><i class="shield alternate icon"></i> Web Application Firewall</h2>
+                <p class="wafLead">The WAF (Coraza with the OWASP Core Rule Set) inspects every request for SQL injection, cross-site scripting, path traversal and similar
+                    attacks <b>before</b> it reaches your service. One global policy covers every proxy rule that follows it; single rules can use a profile or
+                    their own settings. Nothing changes until you turn it on.</p>
+            </div>
+            <div id="wafStatus" style="text-align:right"></div>
+        </div>
     </div>
 
     <!-- first run -->
     <div class="ui segment" id="wafFirstRun" style="display:none; margin-left:1em; margin-right:1em;">
-        <h3 class="ui header"><i class="lightbulb icon"></i><div class="content">New here? Start safely<div class="sub header">The WAF is currently off for every proxy rule.</div></div></h3>
-        <p><b>Detection only</b> mode watches and logs what the WAF <i>would</i> block, but never rejects a request, so nothing can break. Run it for a few days,
-            check the <b>Events</b> tab for false positives (add exclusions for them), then switch to <b>Block</b>.</p>
-        <button class="ui primary button" id="wafQuickStart"><i class="play circle icon"></i> Enable in detection-only mode for all rules</button>
-        <span class="wafMuted">Paranoia level 1 (fewest false positives). You can undo this at any time with the mode selector below.</span>
+        <div class="wafFirst">
+            <div class="txt">
+                <h3 class="ui header"><i class="lightbulb icon"></i><div class="content">New here? Start safely<div class="sub header">The WAF is currently off for every proxy rule.</div></div></h3>
+                <p><b>Detection only</b> mode watches and logs what the WAF <i>would</i> block, but never rejects a request, so nothing can break. Run it for a few days,
+                    check the <b>Events</b> tab for false positives (add exclusions for them), then switch to <b>Block</b>.</p>
+            </div>
+            <div class="act">
+                <button class="ui primary button" id="wafQuickStart"><i class="play circle icon"></i> Enable in detection-only mode for all rules</button>
+                <small>Paranoia level 1 (fewest false positives). You can undo this at any time with the mode selector below.</small>
+            </div>
+        </div>
     </div>
 
     <div class="ui top attached tabular menu" id="wafTabs" style="overflow-x:auto; overflow-y:hidden; flex-wrap:nowrap;">
@@ -88,19 +150,27 @@
         <h4>Global mode <span class="wafMuted">(applies to every proxy rule set to "Inherit")</span></h4>
         <div class="wafCards" id="wafModeCards" role="radiogroup" aria-label="Global WAF mode"></div>
         <div class="wafTiles" id="wafTiles"></div>
-        <div class="ui stackable two column grid">
-            <div class="column">
-                <b>Events per hour</b> <span class="wafMuted">(last 48 hours, red = blocked)</span>
-                <div class="wafSpark" id="wafSpark" style="margin-top:.4em"></div>
+        <div class="wafPanels">
+            <div class="wafPanel">
+                <h5>Events per hour <small>last 48 hours, red = blocked</small></h5>
+                <div class="wafSparkWrap">
+                    <div class="wafSpark" id="wafSpark"></div>
+                    <div class="wafSparkEmpty" id="wafSparkEmpty" style="display:none">No events in the last 48 hours</div>
+                </div>
+                <div class="wafSparkAxis"><span>48 h ago</span><span>now</span></div>
             </div>
-            <div class="column">
-                <b>Needs attention</b>
+            <div class="wafPanel">
+                <h5>Needs attention</h5>
                 <div id="wafNeeds" class="wafNeeds"></div>
             </div>
-        </div>
-        <div class="ui stackable two column grid" style="margin-top:.5em">
-            <div class="column"><b>Top rules</b> <span class="wafMuted">(click to filter the events)</span><div id="wafTopRules"></div></div>
-            <div class="column"><b>Top client IPs</b><div id="wafTopIPs"></div></div>
+            <div class="wafPanel">
+                <h5>Top rules <small>click to filter the events</small></h5>
+                <div id="wafTopRules"></div>
+            </div>
+            <div class="wafPanel">
+                <h5>Top client IPs</h5>
+                <div id="wafTopIPs"></div>
+            </div>
         </div>
     </div>
 
@@ -331,7 +401,7 @@
             ["off", "detection_only", "block"].forEach(function(m){
                 var info = MODE_INFO[m];
                 html += '<div class="wafCard m-' + m + (cur == m ? " sel" : "") + '" role="radio" tabindex="0" aria-checked="' + (cur == m) + '" data-m="' + m + '">' +
-                    '<h4><i class="' + info.i + ' icon"></i> ' + info.t + '</h4><p>' + info.d + '</p></div>';
+                    '<h4><i class="' + info.i + ' icon"></i> ' + info.t + (cur == m ? ' <span class="wafBadge">Active</span>' : '') + '</h4><p>' + info.d + '</p></div>';
             });
             $(this).html(html);
         });
@@ -432,13 +502,13 @@
     /* ---------- header status + first run ---------- */
     function renderStatus(){
         var m = effectiveGlobalMode(), html;
-        if (m == "off") html = '<i class="red circle icon"></i> Global policy <b>off</b>: rules that inherit it are not protected.';
-        else if (m == "detection_only") html = '<i class="orange circle icon"></i> Global policy <b>detection only</b>: attacks are logged, nothing is blocked.';
-        else html = '<i class="green circle icon"></i> Global policy <b>blocking</b>.';
+        if (m == "off") html = '<span class="wafPill p-off"><i class="red circle icon"></i> Global policy off</span><span class="wafCover">Rules that inherit it are not protected.</span>';
+        else if (m == "detection_only") html = '<span class="wafPill p-detection_only"><i class="orange circle icon"></i> Detection only</span><span class="wafCover">Attacks are logged, nothing is blocked.</span>';
+        else html = '<span class="wafPill p-block"><i class="green circle icon"></i> Blocking</span><span class="wafCover">Requests over the threshold get HTTP 403.</span>';
         if (S.cov){
             var c = {off: 0, detection_only: 0, block: 0};
             S.cov.forEach(function(r){ c[r.Mode] = (c[r.Mode] || 0) + 1; });
-            html += ' &nbsp;|&nbsp; ' + (S.cov.length - c.off) + ' of ' + S.cov.length + ' proxy rules inspected.';
+            html += '<span class="wafCover"><b>' + (S.cov.length - c.off) + ' of ' + S.cov.length + '</b> proxy rules inspected</span>';
         }
         $("#wafStatus").html(html);
         var first = S.policy && !S.policy.Enabled && (!S.cov || S.cov.every(function(r){ return r.Mode == "off"; }));
@@ -512,7 +582,9 @@
         var byHour = {};
         perHour.forEach(function(h){ byHour[h.hour] = h; });
         var now = Math.floor(Date.now() / 3600000) * 3600, max = 1, cols = [];
-        for (var i = 47; i >= 0; i--){ var h = byHour[now - i * 3600] || {total: 0, blocked: 0}; max = Math.max(max, h.total); cols.push(h); }
+        var any = false;
+        for (var i = 47; i >= 0; i--){ var h = byHour[now - i * 3600] || {total: 0, blocked: 0}; max = Math.max(max, h.total); if (h.total) any = true; cols.push(h); }
+        $("#wafSparkEmpty").toggle(!any);
         $("#wafSpark").html(cols.map(function(h){
             var ht = Math.round(h.total / max * 50), bl = Math.round(h.blocked / max * 50);
             return '<div title="' + h.total + ' events, ' + h.blocked + ' blocked" role="img" aria-label="' + h.total + ' events"><div style="height:' + Math.max(ht - bl, 0) + 'px;background:#f2711c"></div><div style="height:' + bl + 'px;background:#db2828"></div>' +

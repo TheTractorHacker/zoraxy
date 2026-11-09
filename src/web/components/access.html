@@ -1593,7 +1593,8 @@
     initBlacklistQuickBanTable();
 
     function getCountryISOFromQuickBan(ip){
-        if (access_ip_country_map[ip] === "") {
+        var cc = access_ip_country_map[ip];
+        if (cc === "" || /^(lan|private|loopback|carriernat|linklocal|uniquelocal|multicast|reserved|documentation|interconnect|unspecified|ipv4mapped|6to4|teredo|orchid|benchmarking|discard|translation)$/i.test(cc || "")) {
             return "LAN / Reserved";
         }
         return access_ip_country_map[ip];

@@ -26,6 +26,7 @@
         /* bulk action bar: only exists while something is selected, sticks to the top while scrolling */
         #bulkBar{ position:sticky; top:4em; /* below the fixed menu bar */ z-index:6; display:flex; flex-wrap:wrap; gap:0.4em; align-items:center; padding:0.55em 0.8em; margin:0 0 0.8em; border-radius:0.6em; background:var(--theme_bg_inverted); color:var(--text_color_inverted); box-shadow:0 4px 14px rgba(0,0,0,0.25); }
         #bulkBar[hidden]{ display:none !important; }
+        body.darkTheme #bulkBar{ background:#25262b; color:var(--text_color); border:1px solid var(--divider_color); box-shadow:0 6px 18px rgba(0,0,0,0.55); }
         #bulkBar .bulkCount{ font-weight:700; margin-right:0.4em; }
         #bulkBar .bulkAllSel{ opacity:0.75; font-size:0.9em; margin-right:0.4em; }
         #bulkBar .ui.button{ margin:0; background:rgba(127,127,127,0.18) !important; color:inherit !important; box-shadow:none !important; border:1px solid rgba(127,127,127,0.35) !important; }

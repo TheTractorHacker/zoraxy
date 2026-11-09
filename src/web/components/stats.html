@@ -982,11 +982,10 @@
         let data = Object.values(visitorData);
 
         Object.keys(visitorData).forEach(function(cc){
-            console.log(cc);
             if (cc == ""){
                 labels.push("Unknown")
-            }else if (cc == "lan"){
-                labels.push(`LAN / Loopback`);
+            }else if (/^(lan|private|loopback|carriernat|linklocal|uniquelocal|multicast|reserved|documentation|interconnect|unspecified|ipv4mapped|6to4|teredo|orchid|benchmarking|discard|translation)$/i.test(cc)){
+                labels.push(`Local network`);
             }else{
                 labels.push(`${getCountryName(cc)} [${cc.toUpperCase()}]` );
             }

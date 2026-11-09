@@ -210,13 +210,16 @@
              summaryLoaded: false, hostsKey: "", countriesKey: "", rows: [], drawerIP: ""};
 
     function esc(t){ return String(t == null ? "" : t).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+    var LOCAL_ZONES = {private:1, loopback:1, carriernat:1, linklocal:1, uniquelocal:1, multicast:1, reserved:1, documentation:1, interconnect:1, unspecified:1, lan:1, ipv4mapped:1, "6to4":1, teredo:1, orchid:1, benchmarking:1, discard:1, translation:1};
+    function isLocalZone(cc){ return !!cc && LOCAL_ZONES[String(cc).toLowerCase()] === 1; }
     function flag(cc){
-        if (!cc || cc.length !== 2) return "";
+        if (!cc || cc.length !== 2 || isLocalZone(cc)) return "";
         var A = 0x1F1E6, a = "A".charCodeAt(0), u = cc.toUpperCase();
         return String.fromCodePoint(A + u.charCodeAt(0) - a, A + u.charCodeAt(1) - a);
     }
     function country(cc){
         if (!cc) return '<span style="color:var(--text_color_secondary)">unknown</span>';
+        if (isLocalZone(cc)) return '<span title="Private, loopback or other non-public address: no country applies"><i class="home icon"></i> Local network</span>';
         var name = "";
         try { name = getCountryName(cc); } catch (e) {}
         return '<span title="' + esc(name) + '">' + flag(cc) + " " + esc(cc) + (name ? " <small style='color:var(--text_color_secondary)'>" + esc(name) + "</small>" : "") + "</span>";
@@ -287,6 +290,7 @@
                 var cc = $("#vCountry").val();
                 $("#vCountry").html('<option value="">All countries</option>' + (s.countries || []).map(function(c){
                     var n = ""; try { n = getCountryName(c); } catch (e) {}
+                    if (isLocalZone(c)) return '<option value="' + esc(c) + '">Local network</option>';
                     return '<option value="' + esc(c) + '">' + flag(c) + " " + esc(c) + (n ? " " + esc(n) : "") + "</option>";
                 }).join("")).val(cc);
             }

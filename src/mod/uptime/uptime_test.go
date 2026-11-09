@@ -65,3 +65,18 @@ func TestGetWebsiteStatusClosesConnections(t *testing.T) {
 		t.Fatalf("expected at least %d closed connections after %d checks, got %d closed (opened=%d) - connections are leaking", n, n, closedNow, atomic.LoadInt64(&opened))
 	}
 }
+
+func TestStatusMeansReachable(t *testing.T) {
+	up := []int{200, 204, 301, 302, 401, 403, 404, 405, 421, 429, 500, 525}
+	down := []int{0, 502, 503, 504, 521, 522, 523, 524}
+	for _, c := range up {
+		if !statusMeansReachable(c) {
+			t.Errorf("%d should count as reachable", c)
+		}
+	}
+	for _, c := range down {
+		if statusMeansReachable(c) {
+			t.Errorf("%d should count as unreachable", c)
+		}
+	}
+}
