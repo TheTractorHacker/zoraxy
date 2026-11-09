@@ -12,6 +12,7 @@ Run it against a throw-away instance started with -noauth (see run.sh).
 Exit code 0 = pass, 1 = failures.
 """
 import argparse
+import json
 import os
 import re
 import sys
@@ -605,6 +606,107 @@ def blocked_view(pg):
     pg.evaluate("document.querySelector('#stats [data-stab=overview]').click()")
     settle(pg, 700)
     pg.screenshot(path=os.path.join(args.out, "stats-overview.png"), full_page=True)
+def waf_graduated_ui(pg):
+    """WAF > Policy > Graduated response (log / challenge / block): band visual, validation, save, provider warning;
+    profile editor fields; Events filter. Light, dark and 390px screenshots."""
+    def shot(name):
+        pg.screenshot(path=os.path.join(args.out, name), full_page=True)
+
+    def theme(want_dark):
+        if pg.evaluate("document.body.classList.contains('darkTheme')") != want_dark:
+            pg.evaluate("toggleTheme()")
+            pg.wait_for_timeout(300)
+
+    def api(path, data=None):
+        return pg.evaluate("""([p, d]) => new Promise(res => (d ? $.cjax({url: p, method: 'POST', data: d, success: r => res(r), error: e => res({error: 'http ' + e.status})})
+            : $.getJSON(p, r => res(r)).fail(e => res({error: 'http ' + e.status}))))""", [path, data])
+
+    theme(False)
+    pg.set_viewport_size({"width": 1366, "height": 900})
+    orig = api("/api/waf/policy")
+    try:
+        pg.click("#wafTabs .item[data-tab=waf-policy]")
+        settle(pg, 600)
+        for sel in ("#wafpChallenge", "#wafpChallengeTTL", "#wafpBands"):
+            if not pg.is_visible(sel):
+                fail("waf-bands", f"{sel} is not visible on the policy tab")
+        if pg.locator("#wafpBands .wafBand").count() != 2:
+            fail("waf-bands", "with the challenge band off the bar must show log and block only")
+        pg.fill("#wafpChallenge", "3")
+        pg.wait_for_timeout(200)
+        labels = pg.inner_text("#wafpBands")
+        if pg.locator("#wafpBands .wafBand").count() != 3 or "Challenge" not in labels or "3 - 4" not in labels:
+            fail("waf-bands", f"band bar does not show log | challenge | block for 3/5: {labels!r}")
+        # invalid: not below the block threshold
+        pg.fill("#wafpChallenge", "5")
+        pg.wait_for_timeout(200)
+        if "must be lower" not in pg.inner_text("#wafpBandWarn"):
+            fail("waf-bands", "challenge >= block shows no warning")
+        pg.click("#wafpSave")
+        pg.wait_for_timeout(1200)
+        if (api("/api/waf/policy") or {}).get("ChallengeThreshold", 0) != 0:
+            fail("waf-bands", "an invalid challenge threshold was saved")
+        # valid save; then the policy is enabled in block mode so the root rule shows the missing-provider warning
+        pg.fill("#wafpChallenge", "3")
+        pg.fill("#wafpChallengeTTL", "45")
+        pg.click("#wafpSave")
+        pg.wait_for_timeout(1500)
+        pol = api("/api/waf/policy") or {}
+        if pol.get("ChallengeThreshold") != 3 or pol.get("ChallengeTTLMinutes") != 45:
+            fail("waf-bands", f"challenge settings were not saved: {pol.get('ChallengeThreshold')}/{pol.get('ChallengeTTLMinutes')}")
+        r = api("/api/waf/policy", {"policy": json.dumps(dict(pol, Enabled=True, DefaultMode="block"))})
+        if isinstance(r, dict) and r.get("error"):
+            fail("waf-bands", f"could not enable the policy: {r['error']}")
+        pg.click("#wafTabs .item[data-tab=waf-coverage]")
+        settle(pg, 900)
+        pg.click("#wafTabs .item[data-tab=waf-policy]")
+        settle(pg, 600)
+        if not pg.is_visible("#wafpBandWarn") or "CAPTCHA provider" not in pg.inner_text("#wafpBandWarn"):
+            fail("waf-bands", "no provider warning although a Block rule has no CAPTCHA provider")
+        pg.click("#wafTabs .item[data-tab=waf-overview]")
+        settle(pg, 900)
+        if "CAPTCHA provider" not in pg.inner_text("#wafNeeds"):
+            fail("waf-bands", "the overview does not flag the challenge band without a provider")
+        pg.click("#wafTabs .item[data-tab=waf-policy]")
+        settle(pg, 500)
+        pg.locator("#wafpBandBox").scroll_into_view_if_needed()
+        shot("waf-bands-light.png")
+        theme(True)
+        pg.locator("#wafpBandBox").scroll_into_view_if_needed()
+        shot("waf-bands-dark.png")
+        pg.set_viewport_size({"width": 390, "height": 800})
+        settle(pg, 400)
+        pg.locator("#wafpBandBox").scroll_into_view_if_needed()
+        shot("waf-bands-390-dark.png")
+        if pg.evaluate("document.documentElement.scrollWidth > innerWidth + 2"):
+            fail("waf-bands", "the policy tab scrolls horizontally at 390px")
+        theme(False)
+        settle(pg, 300)
+        shot("waf-bands-390-light.png")
+        pg.set_viewport_size({"width": 1366, "height": 900})
+
+        # profile editor fields
+        pg.click("#wafTabs .item[data-tab=waf-profiles]")
+        settle(pg, 500)
+        pg.click("#wafPrNew")
+        pg.wait_for_timeout(300)
+        if not pg.is_visible("#wafprChallenge") or not pg.is_visible("#wafprChallengeTTL"):
+            fail("waf-bands", "profile editor has no challenge fields")
+        shot("waf-bands-profile.png")
+        pg.click("#wafprClose")
+        # events filter
+        pg.click("#wafTabs .item[data-tab=waf-events]")
+        settle(pg, 500)
+        opts = pg.evaluate("[...document.querySelectorAll('#wafevAction option')].map(o => o.value)")
+        if "challenged" not in opts or "challenge_passed" not in opts:
+            fail("waf-bands", f"events filter lacks the challenge results: {opts}")
+    finally:
+        theme(False)
+        pg.set_viewport_size({"width": 1366, "height": 900})
+        if isinstance(orig, dict) and "error" not in orig:
+            api("/api/waf/policy", {"policy": json.dumps(orig)})
+
+
 def ech_zrok_ui(pg, ctx):
     """Tools > Encrypted Client Hello and Tools > Tunnels (zrok): guided flows, inline confirmations, dark/light and 400px."""
     def shot(name):
@@ -1202,6 +1304,7 @@ def main():
             if "942999" in pg.inner_text("#wafxBody"):
                 fail("waf", "removed exclusion is still listed")
             pg.fill("#wafxFilter", "")
+            waf_graduated_ui(pg)
         except Exception as ex:
             fail("waf", f"waf page flow failed: {' '.join(str(ex).split()[:30])}")
 

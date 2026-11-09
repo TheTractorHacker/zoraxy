@@ -293,6 +293,57 @@ of policy, profiles and endpoint WAF settings.
 **Tests:** `waf/central_test.go`, `dynamicproxy/waf_central_test.go` (inheritance matrix through `ProxyHandler.ServeHTTP`
 and the non-TLS path, bypass tricks, profile propagation, concurrency), `src/wafcentral_test.go` (APIs, persistence, cluster).
 
+### Graduated response (log, challenge, block)
+
+Without it a request is blocked when its anomaly score reaches `InboundThreshold` and passes otherwise. With a **challenge
+threshold** the score picks one of three bands:
+
+| score | band | what happens | event `action` |
+|---|---|---|---|
+| below `ChallengeThreshold` | log | request passes, rule matches are logged | `detected` |
+| `ChallengeThreshold` up to `InboundThreshold - 1` | challenge | CAPTCHA page instead of the site; a visitor with a valid challenge cookie passes | `challenged` / `challenge_passed` |
+| `InboundThreshold` and above | block | HTTP 403 as before; a challenge cookie never helps | `blocked` |
+
+**Settings** (`ChallengeThreshold`, `ChallengeTTLMinutes`) exist on `Config`, `Policy`, `Profile` and `Overrides`, each in its own
+commented block at the end of the struct. `ChallengeThreshold` 0 = off; when set it must be at least 1 and **lower** than the
+block threshold; negative values are rejected. `ChallengeTTLMinutes` defaults to 60, maximum 1440. Merge rules are those of
+the paranoia level / threshold (`waf/bands.go` `applyBands`, called from `State.Resolve`): policy value, a profile value above 0
+replaces it, an endpoint override above 0 replaces that and is only honoured when the policy has `AllowEndpointOverride`
+(saving an override while it is not allowed is refused). The merged result is checked as well: if a profile or override lowers the block
+threshold to or under an inherited challenge threshold, saving is refused (`NewState`, `ValidateSetting`), and at runtime the band
+is dropped with a warning in the coverage list rather than breaking the config load.
+
+**Engine** (`waf/bands.go`, `Instance.Inspect`). CRS keeps blocking at `tx.inbound_anomaly_score_threshold` (REQUEST-949), so
+the block band, `detection_only` and the body replay are exactly as before. For a transaction that was *not* interrupted, the final
+`tx.blocking_inbound_anomaly_score` (set by the 949 rules at the end of phase 2) is read through Coraza's `plugintypes.TransactionState` and
+compared with `ChallengeThreshold` in Go. The decision is taken before the request is forwarded; the body was already read once and
+replayed by the existing `replayBody`, nothing is read twice. Only `Mode: block` challenges; `detection_only` never challenges or blocks
+(events carry `score`, `band` for tuning).
+
+**Challenge mechanism** (`dynamicproxy/waf_challenge.go`). The endpoint's own `CaptchaConfig` is used (providers, branding, custom
+templates, siteverify), the "Require CAPTCHA" switch does not have to be on. The page is the usual CAPTCHA page, **HTTP 403** (the CAPTCHA convention:
+`captcha.RenderChallenge`). The verification endpoint (`/.zoraxy/captcha/verify`, Altcha challenge path) is answered by the WAF layer before inspection
+when the band is on, so solving it cannot itself land in the band, and a successful answer adds a second cookie, `zoraxy_waf_challenge`:
+`base64(w1|expiry|endpoint|client IP|sha256(User-Agent)[:12]) . base64(HMAC-SHA256)`, HttpOnly, SameSite=Lax, Secure on TLS, `MaxAge` = the TTL. The HMAC key is a random
+32 byte per-install key in `<conf>/waf_challenge.key` (created 0600 on first use; part of the config backup; deleting it invalidates all
+challenge cookies). Verification recomputes the binding and compares with `hmac.Equal`; another IP, another User-Agent, another endpoint,
+a tampered, forged or expired value are all rejected. The plain CAPTCHA session cookie does not unlock the band.
+
+**Fallbacks (decided explicitly, fail closed).** A request in the challenge band is **blocked** (normal 403 page, event `blocked` with `band: challenge`, counted by the
+auto-ban like any block) when
+- the endpoint has no configured CAPTCHA provider (the UI warns in the policy tab, the overview "needs attention" list and the rule editor), or
+- the client cannot show a page: only **GET requests that accept `text/html`** and are not `fetch`/XHR (`Sec-Fetch-Mode` other than `navigate`, `X-Requested-With: XMLHttpRequest`) are challenged. API clients,
+  POST/PUT/..., HEAD and `*/*` clients get the block-band logic.
+
+**Events and side effects.** New `Action` values `challenged` and `challenge_passed` (filterable in the Events tab and `GET /api/waf/events?action=`, own badges, counted in
+`Stats.Challenged` / `Stats.Passed`, `HourStat`, `Summary`, Prometheus `zoraxy_waf_challenged_total`, `zoraxy_waf_challenge_passed_total`). A challenged request is logged in the access log as
+`waf-challenged` (not a block: not in the blocked-requests log or block counters), tells the abuse hook "nothing to report" (`abuseNoteKind(r, "")`, otherwise the 403 status would be read as a
+forbidden event), and does not reach `BlockObserver`, so neither the auto-ban nor the notification spike detector see it; `waf-blocked` still feeds both. Failed verifications still count as
+`captcha_fail`.
+
+**Tests:** `waf/bands_test.go` (bands, fallbacks, validation, merge, events), `dynamicproxy/waf_challenge_test.go` (cookie signer matrix, key persistence, full flow through
+`ProxyHandler.ServeHTTP` with a stubbed Turnstile siteverify, auto-ban and spike observer). Not verifiable in CI: a real provider widget in a real browser.
+
 ## Customising CAPTCHA pages
 
 Each proxy endpoint with "Require CAPTCHA Challenge" enabled can restyle its bot-check pages from the endpoint editor

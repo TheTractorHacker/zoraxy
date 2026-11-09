@@ -339,6 +339,8 @@ func ReverseProxyInit() {
 		UseProxyProtocol:   useProxyProtocol,
 
 		SanitiseClientIPHeaders: sanitiseClientIP,
+
+		WAFChallengeKeyFile: CONF_FOLDER + "/waf_challenge.key", //WAF graduated response, see mod/dynamicproxy/waf_challenge.go
 		/* Routing Service Managers */
 		TlsManager:          tlsCertManager,
 		RedirectRuleTable:   redirectTable,

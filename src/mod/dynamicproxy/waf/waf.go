@@ -47,6 +47,13 @@ type RequestInfo struct {
 	// OnEvent (optional) receives the audit event of a transaction that matched at least one rule,
 	// before OnBlock runs. Used to tell the blocked-request log which rule blocked the request.
 	OnEvent func(ev Event)
+
+	// Graduated response (bands.go). Both optional.
+	// ChallengeValid reports whether the request carries a valid challenge cookie (client IP, User-Agent and
+	// endpoint bound). OnChallenge writes the challenge page (the existing CAPTCHA machinery). When OnChallenge
+	// is nil, or the client cannot render a page (see CanChallenge), a request in the challenge band is blocked.
+	ChallengeValid func(r *http.Request) bool
+	OnChallenge    func(w http.ResponseWriter, r *http.Request, txID string)
 }
 
 // Mode returns the effective mode
@@ -101,10 +108,33 @@ func (in *Instance) Inspect(w http.ResponseWriter, r *http.Request, info Request
 	}
 	doBlock := in.cfg.Mode == ModeBlock && it != nil
 
+	// Graduated response: an uninterrupted transaction whose score reached the challenge threshold
+	score := anomalyScore(tx)
+	band, doChallenge := "", false
+	if in.cfg.Mode == ModeBlock && !doBlock && in.cfg.ChallengeThreshold > 0 && score >= in.cfg.ChallengeThreshold {
+		band = "challenge"
+	}
+	passed := false
+	if band != "" {
+		switch {
+		case info.ChallengeValid != nil && info.ChallengeValid(r):
+			passed = true
+		case info.OnChallenge != nil && CanChallenge(r):
+			doChallenge = true
+		default:
+			doBlock = true // no provider / client cannot show a page: the safe answer is the block band
+		}
+	}
+
 	if len(hits) > 0 {
 		action := "detected"
-		if doBlock {
+		switch {
+		case doBlock:
 			action = "blocked"
+		case doChallenge:
+			action = ActionChallenged
+		case passed:
+			action = ActionChallengePassed
 		}
 		ev := Event{
 			Time:          time.Now(),
@@ -120,6 +150,8 @@ func (in *Instance) Inspect(w http.ResponseWriter, r *http.Request, info Request
 			Mode:          in.cfg.Mode,
 			Source:        info.Source,
 			Rules:         hits,
+			Score:         score,
+			Band:          band,
 		}
 		in.events.add(ev)
 		if info.OnEvent != nil {
@@ -127,6 +159,10 @@ func (in *Instance) Inspect(w http.ResponseWriter, r *http.Request, info Request
 		}
 	}
 
+	if doChallenge {
+		info.OnChallenge(w, r, tx.ID())
+		return true
+	}
 	if doBlock {
 		if info.OnBlock != nil {
 			info.OnBlock(w, r, tx.ID())
