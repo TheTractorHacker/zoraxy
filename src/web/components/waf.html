@@ -170,6 +170,20 @@
     #wafTuneDlg .wafTuneChoice { display: block; margin: .25em 0; }
     #wafTuneDlg .wafTuneBtns { display: flex; flex-wrap: wrap; gap: .5em; justify-content: flex-end; }
     @media (max-width: 480px) { #wafTuneDlg dl { grid-template-columns: 1fr; gap: 0; } #wafTuneDlg dt { margin-top: .4em; } }
+    /* Response protection (outbound leak detection) */
+    #wafPage .wafRespRow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .4em 1.2em; padding: .7em 0; border-top: 1px solid rgba(128,128,128,.25); }
+    #wafPage .wafRespRow:first-child { border-top: 0; }
+    #wafPage .wafRespRow .txt { flex: 1 1 18em; min-width: 0; }
+    #wafPage .wafRespRow .act { flex: 0 1 15em; min-width: 11em; }
+    #wafPage .wafRespRow .act select { width: 100%; }
+    #wafPage .wafRespWin { display: flex; flex-wrap: wrap; align-items: center; gap: .4em 1em; padding: .7em 0 0; border-top: 1px solid rgba(128,128,128,.25); }
+    #wafPage .wafRespWin input { width: 7em; }
+    #wafPage .wafRespNote { border-left: 3px solid #2185d0; padding: .5em .9em; background: rgba(33,133,208,.08); border-radius: 0 4px 4px 0; margin: .6em 0 1em; }
+    #wafPage .wafRespNote ul { margin: .3em 0 0 1.2em; padding: 0; }
+    #wafPage .wafRespSig td, #wafPage .wafRespSig th { vertical-align: top; }
+    #wafPage .wafLeak { display: inline-block; padding: 0 .55em; border-radius: 3px; font-size: .8em; font-weight: 700; line-height: 1.7; background: rgba(128,60,200,.18); color: #5b2a91; white-space: nowrap; }
+    body.darkTheme #wafPage .wafLeak { color: #d4b3f5; background: rgba(160,100,230,.25); }
+    #wafDrawer .wafLeak { margin-right: .4em; }
 </style>
 <div class="standardContainer" id="wafPage">
     <div class="ui basic segment">
@@ -207,6 +221,7 @@
         <a class="item" data-tab="waf-policy"><i class="sliders horizontal icon"></i> Policy</a>
         <a class="item" data-tab="waf-profiles"><i class="clone icon"></i> Profiles</a>
         <a class="item" data-tab="waf-exclusions"><i class="eraser icon"></i> Exclusions</a>
+        <a class="item" data-tab="waf-response"><i class="user secret icon"></i> Response protection</a>
         <a class="item" data-tab="waf-rules"><i class="book icon"></i> Rules reference</a>
     </div>
 
@@ -248,6 +263,8 @@
                 <div class="field"><label for="wafevAction">Result</label>
                     <select class="ui dropdown" id="wafevAction"><option value="">All</option><option value="blocked">Blocked</option><option value="challenged">Challenged</option><option value="challenge_passed">Challenge passed</option><option value="detected">Detected</option></select></div>
                 <div class="field"><label for="wafevIP">Client IP</label><input type="text" id="wafevIP" style="width:10em"></div>
+                <div class="field"><label for="wafevKind">Kind</label>
+                    <select class="ui dropdown" id="wafevKind"><option value="">All</option><option value="request">Request rules</option><option value="response">Response leaks</option></select></div>
                 <div class="field"><label for="wafevSince">Time</label>
                     <select class="ui dropdown" id="wafevSince"><option value="1">Last hour</option><option value="24" selected>Last 24 hours</option><option value="168">Last 7 days</option><option value="0">Everything buffered</option></select></div>
                 <div class="field"><label for="wafevGroup">Group by</label>
@@ -433,10 +450,39 @@
                 <div class="field"><label for="wafprPathEx">Path scoped exclusions</label><textarea id="wafprPathEx" rows="3" placeholder="/api/search 942100,942200&#10;=/login 920420"></textarea></div>
                 <div class="field"><div class="ui checkbox"><input type="checkbox" id="wafprCookies"><label>Do not inspect analytics cookies</label></div></div>
                 <div class="field"><label for="wafprRules">Custom rules (SecLang)</label><textarea id="wafprRules" rows="4" style="font-family:monospace;"></textarea></div>
+                <div class="field" id="wafprRespField"><label>Response protection <span class="wafMuted">(per group; "Inherit" uses the global setting)</span></label><div id="wafprRespBox"></div></div>
                 <button class="ui green button" id="wafprSave"><i class="save icon"></i> Save profile</button>
                 <button class="ui basic button" id="wafprClose">Close</button>
             </div>
         </div>
+    </div>
+
+    <!-- Response protection (outbound leak detection), self-contained: see "response protection" in the script below -->
+    <div class="ui bottom attached tab segment" data-tab="waf-response">
+        <h4>Response protection <span class="wafMuted">(information-leak detection on what the upstream sends back)</span></h4>
+        <p class="wafMuted">Looks at the first part of text responses (HTML, JSON, XML, text, JavaScript) for stack traces, database errors, secrets and directory listings, and at the headers for server banners.
+            Applies to every proxy rule that has the WAF on; profiles and single proxy rules can override each group. A leaking server is not a misbehaving client, so blocked responses never feed the automatic ban.</p>
+        <div class="wafRespNote">
+            <b>What it can and cannot do</b>
+            <ul>
+                <li><b>Block</b> replaces the response with a generic <code>502</code> page, but only when the leak is inside the inspected window (the first N KiB of the body). A leak further down is not seen. <b>Log only</b> never changes a single byte.</li>
+                <li>Streams are never held back: Server-Sent Events, gRPC, WebSocket and other upgrades, partial content (206), chunked responses of unknown length and non-text content are passed through untouched.</li>
+                <li>gzip and deflate are decoded for inspection with a hard cap (never more than the window is decompressed); Brotli and zstd responses are not inspected.</li>
+                <li>Both <b>Block</b> and <b>Strip</b> only act when the WAF of the proxy rule is in <b>Block</b> mode; in detection-only mode they are logged as "would block".</li>
+                <li>Secrets with a checksum (GitHub tokens) or a pair (AWS key and secret) are blockable; weaker hits (a Stripe test key, a JSON <code>password</code> value) are only ever logged.</li>
+            </ul>
+        </div>
+        <div class="ui form">
+            <div id="wafRespPolicyBox"></div>
+            <div style="margin-top:1em">
+                <button class="ui green button" id="wafRespSave"><i class="save icon"></i> Save response protection</button>
+                <span class="wafMuted" style="margin-left:1em">Applies immediately, no restart. <span id="wafRespStats"></span></span>
+            </div>
+        </div>
+        <h4 style="margin-top:1.6em">Signature reference</h4>
+        <div class="wafMuted">Every built-in signature, what it needs in order to match, and therefore what it will not match. Click the header to expand.</div>
+        <div class="ui fluid accordion" id="wafRespSigAcc" style="margin-top:.6em;border:1px solid rgba(128,128,128,.35);border-radius:6px;padding:.4em .8em;background:transparent;box-shadow:none"><div class="title" id="wafRespSigTitle" tabindex="0" role="button" style="color:inherit;cursor:pointer"><i class="dropdown icon"></i> Show signatures</div>
+            <div class="content"><div class="wafScroll"><table class="ui compact very basic small unstackable table wafRespSig"><thead><tr><th>ID</th><th>Group</th><th>Name</th><th>Matches</th></tr></thead><tbody id="wafRespSigBody"><tr><td colspan="4" class="wafMuted">Loading...</td></tr></tbody></table></div></div></div>
     </div>
 
     <!-- Exclusions -->
@@ -718,6 +764,7 @@
                 return '<a class="wafLink wafGoIP" data-ip="' + esc(it.key) + '"><b>' + esc(it.key) + '</b></a> <span class="wafMuted">x' + it.count + '</span>';
             });
             spark(st.per_hour || []);
+            respOverviewTile(sum, st);
             needs();
         });
     }
@@ -788,6 +835,7 @@
         if ($("#wafevRule").val().trim()) q.rule = $("#wafevRule").val().trim();
         if ($("#wafevAction").val()) q.action = $("#wafevAction").val();
         if ($("#wafevIP").val().trim()) q.ip = $("#wafevIP").val().trim();
+        if ($("#wafevKind").val()) q.kind = $("#wafevKind").val();
         if (hours > 0) q.since = Math.floor(Date.now() / 1000) - hours * 3600;
         loadRules(function(){
             $.getJSON("/api/waf/events?" + $.param(q), function(events){
@@ -811,6 +859,7 @@
         return ev.would_block ? '<span class="res res-would" title="Detection only: this request would have been blocked in Block mode">would block</span>' : '<span>detected</span>';
     }
     function eventRow(ev, i){
+        if (ev.kind == "response") return respEventRow(ev, i);
         var hits = visibleHits(ev);
         var what = hits.slice(0, 2).map(function(r){
             return '<div>' + sevBadge(r.severity) + ' <b>' + esc(r.id) + '</b> ' + esc(ruleDesc(r)) + '</div>';
@@ -819,6 +868,7 @@
             '</td><td>' + esc(ev.client_ip) + '</td><td style="word-break:break-all"><b>' + esc(ev.method) + '</b> ' + esc((ev.uri || "").slice(0, 160)) + '</td><td>' + resultHtml(ev) + '</td><td>' + what + '</td></tr>';
     }
     function groupKey(ev, g){
+        if (ev.kind == "response" && g == "rule") return "Response: " + (ev.response ? ev.response.signature + " " + ev.response.name : "leak");
         if (g == "ip") return ev.client_ip;
         if (g == "url") return ev.method + " " + (ev.path || ev.uri || "").slice(0, 120);
         if (g == "endpoint") return ev.endpoint;
@@ -869,13 +919,14 @@
     });
     $("#wafEvMore").on("click", function(){ S.evShown += EV_PAGE; renderEvents(); });
     $("#wafevRefresh").on("click", loadEvents);
-    $("#wafevGroup, #wafevEndpoint, #wafevAction, #wafevSince").on("change", loadEvents);
+    $("#wafevGroup, #wafevEndpoint, #wafevAction, #wafevSince, #wafevKind").on("change", loadEvents);
     $("#wafevRule, #wafevIP").on("change", loadEvents);
 
     /* ---------- event detail drawer ---------- */
     function clean(s, max){ return String(s == null ? "" : s).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "·").slice(0, max || 400); }
     function openDrawer(ev){
         if (!ev) return;
+        if (ev.kind == "response"){ respDrawer(ev); return; }
         var hits = visibleHits(ev);
         var verdict;
         if (ev.action == "blocked") verdict = '<span class="res res-blocked">Blocked</span>: the combined anomaly score of the rules below reached the threshold, so the request was rejected with HTTP 403.';
@@ -1049,6 +1100,7 @@
         $("#wafprParanoia").val(p.ParanoiaLevel || 0); $("#wafprThreshold").val(p.InboundThreshold || 0);
         $("#wafprChallenge").val(p.ChallengeThreshold || 0); $("#wafprChallengeTTL").val(p.ChallengeTTLMinutes || 0);
         $("#wafprExcluded").val((p.ExcludedRuleIDs || []).join(", ")); $("#wafprPathEx").val(pathExToText(p.PathExclusions)); $("#wafprRules").val(p.CustomRules || ""); $("#wafprCookies").prop("checked", !!p.IgnoreAnalyticsCookies);
+        respFill("#wafprRespBox", p.Response, true);
         $("#wafProfileEditor").find("input,select,textarea,#wafPresets button").prop("disabled", !!ro);
         $("#wafprName").prop("disabled", !editingNew || !!ro);
         $("#wafprSave").toggle(!ro);
@@ -1064,6 +1116,7 @@
                 ChallengeThreshold: parseInt($("#wafprChallenge").val()) || 0, ChallengeTTLMinutes: parseInt($("#wafprChallengeTTL").val()) || 0,
                 ExcludedRuleIDs: ids($("#wafprExcluded").val()), PathExclusions: textToPathEx($("#wafprPathEx").val()), CustomRules: $("#wafprRules").val(), IgnoreAnalyticsCookies: $("#wafprCookies").prop("checked")};
         } catch (e){ msgbox(e.message, false, 5000); return; }
+        var respCfg = respRead("#wafprRespBox", true); if (respCfg) prof.Response = respCfg;
         var btn = $(this).addClass("loading");
         $.cjax({url: "/api/waf/profile/save", method: "POST", data: {profile: JSON.stringify(prof), create: editingNew},
             success: function(d){ btn.removeClass("loading"); if (!fail(d)){ msgbox("Profile saved and applied to all proxy rules using it"); $("#wafProfileEditor").hide(); loadProfiles(); loadCoverage(); } },
@@ -1313,6 +1366,106 @@
         post("/api/waf/tuning/remove", {scope: "global", target: b.attr("data-target"), path: b.attr("data-path"), exact: b.attr("data-exact") == "1", ruleid: b.attr("data-id")},
             function(){ msgbox("Exclusion removed"); loadPolicy(); });
     });
+    /* ---------- response protection (outbound leak detection) ---------- */
+    var RESP_GROUPS = [
+        {id: "stacktrace", name: "Stack traces and debug pages", desc: "Java, Python, PHP, .NET, Node.js and Go stack traces; Rails, Django and Flask debug pages."},
+        {id: "dberror", name: "Database error messages", desc: "MySQL / MariaDB, PostgreSQL, SQL Server, Oracle, SQLite and MongoDB errors."},
+        {id: "secrets", name: "Secrets and credentials", desc: "Private key blocks, AWS, GitHub, GitLab, Slack and Stripe tokens, credential values in JSON and .env files."},
+        {id: "dirlisting", name: "Directory listings", desc: "Apache / nginx \"Index of /\", Python and IIS listings."},
+        {id: "headers", name: "Server banners in headers", desc: "Server (when it carries a version), X-Powered-By, X-AspNet-Version. Strip removes the header."}
+    ];
+    var RESP_GROUP_NAME = {}; RESP_GROUPS.forEach(function(g){ RESP_GROUP_NAME[g.id] = g.name; });
+    // override = true adds an "Inherit" choice and leaves undecided groups out of the saved value
+    function respFill(sel, cfg, override, disabled){
+        cfg = cfg || {};
+        var groups = cfg.Groups || {};
+        var html = RESP_GROUPS.map(function(g){
+            var opts = (override ? [["", "Inherit"]] : []).concat([["off", "Off"], ["log", "Log only"], g.id == "headers" ? ["strip", "Strip the header"] : ["block", "Block (replace the response)"]]);
+            var cur = groups[g.id] || (override ? "" : "off");
+            return '<div class="wafRespRow"><div class="txt"><b>' + esc(g.name) + '</b><div class="wafMuted">' + esc(g.desc) + '</div></div><div class="act">' +
+                '<select class="ui dropdown wafRespSel" data-g="' + g.id + '" aria-label="' + esc(g.name) + '">' + opts.map(function(o){
+                    return '<option value="' + o[0] + '"' + (o[0] == cur ? " selected" : "") + '>' + esc(o[1]) + '</option>'; }).join("") + '</select></div></div>';
+        }).join("");
+        html += '<div class="wafRespWin"><label for="' + sel.replace("#", "") + 'Win"><b>Inspection window (KiB)</b></label><input type="number" min="1" max="1024" class="wafRespWinIn" id="' + sel.replace("#", "") + 'Win" placeholder="' + (override ? "inherit" : "64") + '" value="' + (cfg.WindowKiB || "") + '">' +
+            '<span class="wafMuted">Only the first part of a response is read before the headers are sent; the rest streams through. 64 by default, 1024 at most.</span></div>';
+        $(sel).html(html).find("select,input").prop("disabled", !!disabled);
+    }
+    function respRead(sel, override){
+        var groups = {}, any = false;
+        $(sel).find(".wafRespSel").each(function(){
+            var v = $(this).val();
+            if (override && v == "") return;
+            groups[$(this).attr("data-g")] = v; any = true;
+        });
+        var win = parseInt($(sel).find(".wafRespWinIn").val()) || 0;
+        if (win < 0 || win > 1024){ throw new Error("The inspection window must be between 1 and 1024 KiB"); }
+        if (override && !any && !win) return null;
+        var out = {Groups: groups};
+        if (win) out.WindowKiB = win;
+        return out;
+    }
+    function respLoad(){
+        respLoadSigs();
+        loadPolicy(function(){
+            respFill("#wafRespPolicyBox", S.policy.Response, false);
+        });
+        $.getJSON("/api/waf/stats", function(st){
+            if (!st || st.error) return;
+            $("#wafRespStats").text(st.response ? (st.response + " response event" + (st.response > 1 ? "s" : "") + " since start, " + (st.response_blocked || 0) + " blocked.") : "No response events since start.");
+        });
+    }
+    $("#wafRespSave").on("click", function(){
+        var cfg;
+        try { cfg = respRead("#wafRespPolicyBox", false); } catch (e){ msgbox(e.message, false, 5000); return; }
+        var btn = $(this).addClass("loading");
+        mutatePolicy(function(p){ p.Response = cfg; }, "Response protection saved and applied", function(){ btn.removeClass("loading"); });
+        setTimeout(function(){ btn.removeClass("loading"); }, 6000);
+    });
+    $("#wafRespSigAcc").accordion();
+    function respLoadSigs(){
+        if (S.respSigs) return;
+        $.getJSON("/api/waf/response/signatures", function(d){
+            if (fail(d)) return;
+            S.respSigs = d.signatures || [];
+            $("#wafRespSigBody").html(S.respSigs.map(function(s){
+                return '<tr><td style="white-space:nowrap"><code>' + esc(s.id) + '</code></td><td>' + esc(RESP_GROUP_NAME[s.group] || s.group) + '</td><td>' + esc(s.name) + '</td><td>' + esc(s.doc) + '</td></tr>';
+            }).join(""));
+        });
+    }
+    function respOverviewTile(sum, st){
+        if (!st || !st.response) return;
+        $("#wafTiles").append(tile(st.response, "Response leaks (since start)", st.response_blocked ? "tRed" : "tOrange"));
+    }
+    function respResult(ev){
+        if (ev.action == "blocked") return '<span class="res res-blocked">blocked</span>';
+        if (ev.action == "stripped") return '<span class="res">stripped</span>';
+        return ev.would_block ? '<span class="res res-would" title="This group is set to block or strip, but the WAF of the proxy rule is in detection-only mode">would block</span>' : '<span>logged</span>';
+    }
+    function respEventRow(ev, i){
+        var r = ev.response || {};
+        return '<tr class="wafEvRow" tabindex="0" data-i="' + i + '"><td style="white-space:nowrap">' + esc(new Date(ev.time).toLocaleString()) + '</td><td>' + esc(ev.endpoint) +
+            '</td><td>' + esc(ev.client_ip) + '</td><td style="word-break:break-all"><b>' + esc(ev.method) + '</b> ' + esc((ev.uri || "").slice(0, 160)) + ' <span class="wafMuted">(HTTP ' + esc(r.status) + ')</span></td><td>' + respResult(ev) +
+            '</td><td><span class="wafLeak" title="Response leak">LEAK</span> <b>' + esc(r.signature) + '</b> ' + esc(r.name) + (r.sample ? '<div class="wafMuted" style="word-break:break-all">' + esc(clean(r.sample, 90)) + '</div>' : "") + '</td></tr>';
+    }
+    function respDrawer(ev){
+        var r = ev.response || {}, verdict;
+        if (ev.action == "blocked") verdict = '<span class="res res-blocked">Blocked</span>: the upstream response contained this data inside the inspection window, so the client received a generic HTTP 502 page instead. The original body was never sent.';
+        else if (ev.action == "stripped") verdict = '<span class="res">Header stripped</span>: the response header was removed before the response reached the client.';
+        else if (ev.would_block) verdict = '<span class="res res-would">Would have been blocked</span>: the group is set to block or strip, but the WAF of this proxy rule is in detection-only mode, so the response went out unchanged.';
+        else verdict = 'Logged. The response was forwarded unchanged' + (r.confidence == "low" ? ' (low confidence signature: it can only be logged, never blocked).' : '.');
+        var h = '<button class="ui right floated basic icon button" id="wafDrawerClose" aria-label="Close details"><i class="times icon"></i></button><h3><span class="wafLeak">LEAK</span> Response protection</h3><p>' + verdict + '</p>' +
+            '<dl><dt>Time</dt><dd>' + esc(new Date(ev.time).toLocaleString()) + '</dd><dt>Proxy rule</dt><dd>' + esc(ev.endpoint) + '</dd>' +
+            '<dt>Client</dt><dd>' + esc(ev.client_ip) + '</dd><dt>Request</dt><dd><b>' + esc(ev.method) + '</b> ' + esc(clean(ev.uri, 500)) + '</dd>' +
+            '<dt>Response</dt><dd>HTTP ' + esc(r.status) + (r.content_type ? ', ' + esc(r.content_type) : '') + '</dd>' +
+            '<dt>Group</dt><dd>' + esc(RESP_GROUP_NAME[r.group] || r.group) + '</dd><dt>Signature</dt><dd><code>' + esc(r.signature) + '</code> ' + esc(r.name) + '</dd>' +
+            (r.confidence ? '<dt>Confidence</dt><dd>' + esc(r.confidence) + '</dd>' : '') + (r.offset ? '<dt>Offset</dt><dd>byte ' + esc(r.offset) + ' of the response body</dd>' : '') +
+            '<dt>WAF settings</dt><dd>' + esc(ev.mode || "") + (ev.source ? ' (' + esc(ev.source) + ')' : '') + '</dd><dt>Event</dt><dd>' + esc(ev.txid) + '</dd></dl>' +
+            '<h4>Redacted sample</h4><pre>' + esc(clean(r.sample, 200)) + '</pre><div class="wafMuted">Secrets are masked in the middle; the full value is never stored. Quoted values of error messages are removed too.</div>' +
+            '<h4>Quick actions</h4><div class="ui small buttons" style="flex-wrap:wrap"><button class="ui basic button" id="wafDRespTab"><i class="user secret icon"></i> Response protection settings</button></div>';
+        $("#wafDrawer").html(h).show().data("ev", ev);
+        $("#wafDrawerClose").focus();
+    }
+    PAGE.on("click", "#wafDRespTab", function(){ closeDrawer(); gotoTab("waf-response"); });
 
     /* ---------- tabs ---------- */
     $("#wafTabs .item").tab({
@@ -1325,6 +1478,7 @@
             else if (tab == "waf-events"){ loadEndpointFilter(loadEvents); }
             else if (tab == "waf-tuning"){ loadTuneEndpoints(loadTuning); }
             else if (tab == "waf-rules"){ loadRules(renderRules); }
+            else if (tab == "waf-response"){ respLoad(); }
             else if (tab == "waf-coverage"){ loadCoverage(); }
         }
     });

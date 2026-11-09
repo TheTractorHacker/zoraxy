@@ -60,6 +60,9 @@ type Config struct {
 	ChallengeTTLMinutes int `json:",omitempty"`
 	// --- WAF tuning assistant (variable scoped exclusions, see tuning.go) ---
 	TargetExclusions []TargetExclusion `json:",omitempty"` // Rules that must not inspect one variable (optionally on one path)
+	// --- Response inspection (outbound leak detection), see respinspect.go ---
+	// Not part of the compiled rule set: it is excluded from Hash() so changing it never recompiles Coraza.
+	Response *ResponseConfig `json:",omitempty"`
 }
 
 var (
@@ -152,13 +155,14 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("custom rules line %d: file based operators are not allowed", i+1)
 		}
 	}
-	return nil
+	return n.Response.Validate()
 }
 
 // Hash returns a stable identifier of the effective configuration, used to
 // share compiled WAF instances between endpoints with identical settings.
 func (c *Config) Hash() string {
 	n := c.Normalize()
+	n.Response = nil // response inspection does not influence the compiled request rules
 	b, _ := json.Marshal(n)
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])

@@ -422,6 +422,7 @@ func (router *Router) handleNonTLSRequest(w http.ResponseWriter, r *http.Request
 		Version:                 sep.parent.Option.HostVersion,
 		DevelopmentMode:         sep.parent.Option.DevelopmentMode,
 		AltSvc:                  router.getAltSvcValue(),
+		ResponseGuard:           router.responseGuard(r, sep),
 	})
 }
 

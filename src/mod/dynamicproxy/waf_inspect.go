@@ -26,6 +26,7 @@ type wafRuntime struct {
 	inst  *waf.Instance
 	state *waf.State
 	res   waf.Resolved
+	resp  *waf.ResponseGuard // response inspection, nil when off, see waf_response.go
 }
 
 var emptyWAFState = waf.EmptyState()
@@ -44,7 +45,11 @@ func buildWAFRuntime(set waf.Setting, st *waf.State) (*wafRuntime, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &wafRuntime{inst: inst, state: st, res: res}, nil
+	rt := &wafRuntime{inst: inst, state: st, res: res}
+	if res.Config != nil {
+		rt.resp = waf.Default.NewResponseGuard(res.Config.Response, res.Mode)
+	}
+	return rt, nil
 }
 
 // InitializeWAF resolves the endpoint's WAF against the default (empty, disabled)

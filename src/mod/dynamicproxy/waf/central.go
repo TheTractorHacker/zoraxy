@@ -68,6 +68,8 @@ type Policy struct {
 	ChallengeTTLMinutes int `json:",omitempty"` // 0 = default (60)
 	// --- WAF tuning assistant (see tuning.go) ---
 	TargetExclusions []TargetExclusion `json:",omitempty"` // Variable scoped exclusions, everywhere
+	// --- Response inspection (outbound leak detection), see respinspect.go ---
+	Response *ResponseConfig `json:",omitempty"` // Defaults for every endpoint that has the WAF on; profiles / endpoints override per group
 }
 
 // Profile is a reusable named bundle of WAF settings
@@ -88,6 +90,8 @@ type Profile struct {
 	ChallengeTTLMinutes int `json:",omitempty"`
 	// --- WAF tuning assistant (see tuning.go) ---
 	TargetExclusions []TargetExclusion `json:",omitempty"`
+	// --- Response inspection (outbound leak detection), see respinspect.go ---
+	Response *ResponseConfig `json:",omitempty"` // Per group override of the policy
 }
 
 // Overrides are the per endpoint additions applied on top of the global
@@ -105,6 +109,8 @@ type Overrides struct {
 	ChallengeTTLMinutes int `json:",omitempty"`
 	// --- WAF tuning assistant (see tuning.go) ---
 	TargetExclusions []TargetExclusion `json:",omitempty"`
+	// --- Response inspection (outbound leak detection), see respinspect.go ---
+	Response *ResponseConfig `json:",omitempty"` // Per group override of the policy / profile
 }
 
 // Setting is the WAF choice of one endpoint
@@ -224,6 +230,9 @@ func (p *Policy) validate() error {
 	if c.Mode == ModeOff {
 		c.Mode = ModeDetectionOnly
 	}
+	if err := p.Response.Validate(); err != nil {
+		return err
+	}
 	return c.Validate()
 }
 
@@ -244,6 +253,9 @@ func (pr *Profile) validate() error {
 		return err
 	}
 	c.TargetExclusions = pr.TargetExclusions
+	if err := pr.Response.Validate(); err != nil {
+		return err
+	}
 	return c.Validate()
 }
 
@@ -320,6 +332,9 @@ func (s *State) ValidateSetting(set Setting) error {
 			ExcludedRuleIDs: set.Extra.ExcludedRuleIDs, PathExclusions: set.Extra.PathExclusions, CustomRules: set.Extra.CustomRules}
 		c.TargetExclusions = set.Extra.TargetExclusions
 		if err := c.Validate(); err != nil {
+			return err
+		}
+		if err := set.Extra.Response.Validate(); err != nil {
 			return err
 		}
 	}
@@ -424,6 +439,7 @@ func (s *State) Resolve(set Setting) Resolved {
 	s.applyBands(&cfg, prof, set.Extra, &res)
 	cfg.ExcludedRuleIDs = dedupe(cfg.ExcludedRuleIDs)
 	cfg.TargetExclusions = dedupeTargetExclusions(cfg.TargetExclusions)
+	s.resolveResponse(&cfg, prof, set.Extra)
 	res.Config = &cfg
 	return res
 }

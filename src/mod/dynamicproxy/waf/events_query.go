@@ -13,6 +13,10 @@ type EventFilter struct {
 	Action   string    // blocked / detected / challenged / challenge_passed
 	ClientIP string    // exact match
 	Since    time.Time // events at or after
+
+	// --- Response inspection filters ---
+	Kind  string // "request" (rule events), "response" (leak events); empty = both
+	Group string // response protection group
 }
 
 func (f EventFilter) match(ev *Event) bool {
@@ -26,6 +30,12 @@ func (f EventFilter) match(ev *Event) bool {
 		return false
 	}
 	if !f.Since.IsZero() && ev.Time.Before(f.Since) {
+		return false
+	}
+	if f.Kind != "" && (f.Kind == KindResponse) != (ev.Kind == KindResponse) {
+		return false
+	}
+	if f.Group != "" && (ev.Response == nil || ev.Response.Group != f.Group) {
 		return false
 	}
 	if f.RuleID != 0 {
@@ -80,6 +90,7 @@ type Summary struct {
 	TopRules     []Count `json:"top_rules"`
 	TopClientIPs []Count `json:"top_client_ips"`
 	TopEndpoints []Count `json:"top_endpoints"`
+	Response     int     `json:"response,omitempty"` // response inspection events among Events
 }
 
 func topN(m map[string]int, n int) []Count {
@@ -114,6 +125,9 @@ func (s *eventStore) summary(since time.Time, top int) Summary {
 			sum.Passed++
 		default:
 			sum.Detected++
+		}
+		if ev.Kind == KindResponse {
+			sum.Response++
 		}
 		ips[ev.ClientIP]++
 		eps[ev.Endpoint]++
