@@ -123,6 +123,9 @@ func HandleWAFProfileSave(w http.ResponseWriter, r *http.Request) {
 			return errProfileMissing
 		case idx >= 0:
 			pr.Name = (*profiles)[idx].Name // name is the identity, keep its case
+			if pr.API == nil {
+				pr.API = (*profiles)[idx].API // clients that do not know API protection must not clear it
+			}
 			(*profiles)[idx] = pr
 		default:
 			*profiles = append(*profiles, pr)

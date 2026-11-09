@@ -13,6 +13,7 @@ type EventFilter struct {
 	Action   string    // blocked / detected
 	ClientIP string    // exact match
 	Since    time.Time // events at or after
+	Kind     string    // "api" = API protection events only, "waf" = rule engine events only, "" = all
 }
 
 func (f EventFilter) match(ev *Event) bool {
@@ -20,6 +21,9 @@ func (f EventFilter) match(ev *Event) bool {
 		return false
 	}
 	if f.Action != "" && ev.Action != f.Action {
+		return false
+	}
+	if f.Kind != "" && (f.Kind == EventKindAPI) != (ev.Kind == EventKindAPI) {
 		return false
 	}
 	if f.ClientIP != "" && ev.ClientIP != f.ClientIP {

@@ -1205,6 +1205,116 @@ def main():
         except Exception as ex:
             fail("waf", f"waf page flow failed: {' '.join(str(ex).split()[:30])}")
 
+        # ---- WAF page: API protection (policy defaults, profile picker, per-rule editor), light / dark / 390px ----
+        current["page"] = "waf-api"
+        api_host = "smoke-api.invalid"
+        api_get = lambda q: pg.evaluate("q => fetch('/api/waf/api/get?' + q).then(r => r.json())", q)
+        smoke_spec = "openapi: 3.0.0\\ninfo: {title: Smoke, version: '1'}\\npaths:\\n  /a:\\n    get: {responses: {'200': {description: ok}}}\\n  /b:\\n    post: {responses: {'200': {description: ok}}}\\n"
+        try:
+            pg.set_viewport_size({"width": 1366, "height": 900})
+            pg.evaluate("""host => new Promise(res => $.cjax({url: '/api/proxy/add', method: 'POST',
+                data: {type: 'host', rootname: host, ep: '127.0.0.1:9', tls: false, tlsval: false, bypassGlobalTLS: false}, success: res, error: res}))""", api_host)
+            pg.evaluate("openTabById('waf')")
+            settle(pg, 900)
+            pg.click("#wafTabs .item[data-tab=waf-api]")
+            pg.wait_for_selector("#wafApiPolicy .wfa", timeout=5000)
+            settle(pg, 700)
+            if pg.locator("#wafApiPolicy .wfaN").count() < 12:
+                fail("waf-api", "limits form is incomplete")
+            if pg.get_attribute("#wafApiPolicy .wfaN[data-k=JSONMaxDepth]", "placeholder") != "20":
+                fail("waf-api", "default JSON depth (20) is not shown")
+            pg.select_option("#wafApiPolicy .wfaMode", "log")
+            pg.locator("#wafApiPolicy .wfaCustom").check(force=True)
+            pg.fill("#wafApiPolicy .wfaN[data-k=JSONMaxDepth]", "7")
+            pg.click("#wafApiPolicy .wfaAddRule")
+            pg.fill("#wafApiPolicy .wfaAllowBody tr:last-child .wfaP", "/api")
+            pg.fill("#wafApiPolicy .wfaAllowBody tr:last-child .wfaM", "get, post")
+            pg.click("#wafApiPolicy .wfaSave")
+            pg.wait_for_timeout(1500)
+            v = api_get("scope=policy")
+            c = v.get("config") or {}
+            if c.get("Mode") != "log" or (c.get("Limits") or {}).get("JSONMaxDepth") != 7 or (c.get("AllowList") or [{}])[0].get("Methods") != ["GET", "POST"]:
+                fail("waf-api", "policy API protection was not saved as entered: " + str(c)[:200])
+            # an invalid value is refused with a message and nothing is saved
+            pg.fill("#wafApiPolicy .wfaN[data-k=JSONMaxKeys]", "-7")
+            pg.click("#wafApiPolicy .wfaSave")
+            pg.wait_for_timeout(1200)
+            if (api_get("scope=policy").get("config") or {}).get("Limits", {}).get("JSONMaxKeys"):
+                fail("waf-api", "an invalid limit was saved")
+            pg.fill("#wafApiPolicy .wfaN[data-k=JSONMaxKeys]", "")
+            # profile picker: built-in profiles are read-only
+            pg.select_option("#wafApiProfileSel", "Strict")
+            pg.wait_for_timeout(500)
+            if "read-only" not in pg.inner_text("#wafApiProfileMsg"):
+                fail("waf-api", "built-in profile did not show the read-only note")
+            pg.screenshot(path=os.path.join(args.out, "waf-api-policy.png"), full_page=True)
+
+            # per-rule editor with an OpenAPI spec
+            pg.evaluate("openTabById('httprp')")
+            settle(pg, 900)
+            pg.click(f"#httpProxyList tr.ptRow[data-ep='{api_host}'] .editBtn")
+            pg.wait_for_selector("#httprpEditModal", state="visible", timeout=5000)
+            settle(pg, 600)
+            pg.click("#httprpEditModal .hrpedit_menu_item[cfgpage=waf]")
+            pg.wait_for_selector("#httprpEditModal .wafApiMount .wfa", timeout=5000)
+            settle(pg, 600)
+            pg.select_option("#httprpEditModal .wafApiMount .wfaMode", "block")
+            pg.fill("#httprpEditModal .wafApiMount .wfaSpec", "this is not a spec")
+            pg.click("#httprpEditModal .wafApiMount .wfaCheckSpec")
+            pg.wait_for_selector("#httprpEditModal .wafApiMount .wfaResult.bad", timeout=5000)
+            pg.fill("#httprpEditModal .wafApiMount .wfaSpec", smoke_spec.replace("\\n", "\n"))
+            pg.click("#httprpEditModal .wafApiMount .wfaCheckSpec")
+            pg.wait_for_selector("#httprpEditModal .wafApiMount .wfaResult.ok", timeout=5000)
+            summary = pg.inner_text("#httprpEditModal .wafApiMount .wfaResult")
+            if "2 paths" not in summary or "2 operations" not in summary:
+                fail("waf-api", "spec summary is wrong: " + summary)
+            pg.click("#httprpEditModal .wafApiMount .wfaSave")
+            pg.wait_for_timeout(1500)
+            v = api_get("scope=endpoint&name=" + api_host)
+            if (v.get("config") or {}).get("Mode") != "block" or not v.get("spec") or v["spec"].get("paths") != 2:
+                fail("waf-api", "rule API protection / spec not saved: " + str(v)[:200])
+            pg.screenshot(path=os.path.join(args.out, "waf-api-rule-light.png"), full_page=True)
+            pg.evaluate("toggleTheme()")
+            pg.wait_for_timeout(300)
+            pg.screenshot(path=os.path.join(args.out, "waf-api-rule-dark.png"), full_page=True)
+            pg.set_viewport_size({"width": 390, "height": 800})
+            pg.wait_for_timeout(400)
+            pg.evaluate("document.querySelector('#httprpEditModal .wafApiMount').scrollIntoView()")
+            pg.screenshot(path=os.path.join(args.out, "waf-api-rule-390-dark.png"))
+            check_horizontal(pg, "waf-api rule editor 390px")
+            pg.evaluate("toggleTheme()")
+            pg.set_viewport_size({"width": 1366, "height": 900})
+            pg.click("#httprpEditModalWrapper .httpProxyEditClosePC")
+            pg.wait_for_timeout(500)
+
+            # events tab has the type filter; 390px view of the policy tab in both themes
+            pg.evaluate("openTabById('waf')")
+            settle(pg, 700)
+            pg.click("#wafTabs .item[data-tab=waf-events]")
+            settle(pg, 500)
+            if not pg.is_visible("div.ui.dropdown:has(> #wafevKind)"):
+                fail("waf-api", "events type filter is missing")
+            pg.evaluate("$('#wafevKind').dropdown('set selected', 'api')")
+            settle(pg, 500)
+            pg.evaluate("$('#wafevKind').dropdown('set selected', '')")
+            pg.click("#wafTabs .item[data-tab=waf-api]")
+            settle(pg, 500)
+            pg.set_viewport_size({"width": 390, "height": 800})
+            pg.wait_for_timeout(400)
+            pg.screenshot(path=os.path.join(args.out, "waf-api-policy-390-light.png"), full_page=True)
+            check_horizontal(pg, "waf-api tab 390px")
+            pg.evaluate("toggleTheme()")
+            pg.wait_for_timeout(300)
+            pg.screenshot(path=os.path.join(args.out, "waf-api-policy-390-dark.png"), full_page=True)
+            pg.evaluate("toggleTheme()")
+            pg.set_viewport_size({"width": 1366, "height": 900})
+        except Exception as ex:
+            fail("waf-api", f"API protection flow failed: {' '.join(str(ex).split()[:30])}")
+            pg.screenshot(path=os.path.join(args.out, "waf-api-failure.png"))
+        finally:
+            pg.evaluate("""host => new Promise(res => $.cjax({url: '/api/proxy/del', method: 'POST', data: {ep: host}, success: res, error: res}))""", api_host)
+            pg.evaluate("""() => new Promise(res => $.cjax({url: '/api/waf/api/set', method: 'POST', data: {scope: 'policy', name: '', config: ''}, success: res, error: res}))""")
+
         # ---- SSO: OAuth2 provider manager and per-rule provider selection ----
         # Two fake OIDC providers (discovery only) are started here; two proxy rules are bound to them and
         # the sign-in redirect of each rule must lead to its own provider.

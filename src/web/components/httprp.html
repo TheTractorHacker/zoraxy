@@ -1049,6 +1049,12 @@
                             </div>
                             </div>
                         </div>
+                        <!-- API protection (limits, allow-list, OpenAPI): script/wafapi.js -->
+                        <div class="ui segment wafApiEditor">
+                            <h4><i class="plug icon"></i> API protection</h4>
+                            <p style="opacity:0.7;">Structural limits for JSON, XML and form bodies, a method / content type allow-list per path and optional OpenAPI 3 validation. Independent of the WAF source above; violations appear in the events below and on the WAF page.</p>
+                            <div class="wafApiMount"></div>
+                        </div>
                         <div class="ui segment">
                             <button class="ui right floated basic mini icon button wafRefreshBtn" title="Refresh"><i class="sync icon"></i></button>
                             <h4><i class="list icon"></i> Recent WAF events</h4>
@@ -2456,6 +2462,7 @@
 
         /* ------------ WAF ------------ */
         initWAFEditor(editor, subd);
+        initWAFApiEditor(editor, subd);
 
         console.log(subd);
     }
@@ -2563,6 +2570,14 @@
         loadWAFEvents(editor, ep);
     }
 
+    /* API protection editor of the proxy rule (shared widget in script/wafapi.js) */
+    function initWAFApiEditor(editor, subd){
+        if (!window.WafApi) return;
+        let ctl = WafApi.mount(editor.find(".wafApiMount"), {scope: "endpoint", name: subd.RootOrMatchingDomain, spec: true,
+            onSaved: function(){ loadWAFEvents(editor, subd.RootOrMatchingDomain); }});
+        ctl.reload();
+    }
+
     function loadWAFEvents(editor, ep){
         $.get("/api/waf/events?limit=200&endpoint=" + encodeURIComponent(ep), function(events){
             let body = editor.find(".wafEventsBody");
@@ -2573,9 +2588,11 @@
             }
             events.forEach(function(ev){
                 let rules = (ev.rules || []).filter(r => r.id != 949110).map(function(r){
-                    return `<div><b>${wafEsc(r.id)}</b> ${wafEsc(r.msg)}
+                    let line = `<div><b>${wafEsc(r.id)}</b> ${wafEsc(r.msg)}
                         <a href="#" class="wafExcludeRule" data-rule="${wafEsc(r.id)}" data-path="${wafEsc(ev.path)}" title="Do not apply this rule to this path"><small>exclude for this path</small></a>
                         | <a href="#" class="wafExcludeRule" data-rule="${wafEsc(r.id)}" data-path="" title="Do not apply this rule anywhere on this endpoint"><small>exclude everywhere</small></a></div>`;
+                    // API protection pseudo rules cannot be excluded
+                    return (r.id >= 800010 && r.id < 800100) ? line.replace(/<a href="#" class="wafExcludeRule"[\s\S]*<\/a>/, "") : line;
                 }).join("");
                 let result = ev.action == "blocked" ? '<span style="color:#db2828;">blocked</span>'
                     : (ev.would_block ? '<span style="color:#f2711c;">detected (would block)</span>' : 'detected');

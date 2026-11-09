@@ -26,13 +26,14 @@ type wafRuntime struct {
 	inst  *waf.Instance
 	state *waf.State
 	res   waf.Resolved
+	api   *waf.Guard // API protection (waf_api.go), nil when off
 }
 
 var emptyWAFState = waf.EmptyState()
 
 // WAFSetting returns the endpoint's central WAF choice
 func (pe *ProxyEndpoint) WAFSetting() waf.Setting {
-	return waf.Setting{Source: pe.WAFSource, Profile: pe.WAFProfile, Extra: pe.WAFExtra, Custom: pe.WAF}
+	return waf.Setting{Source: pe.WAFSource, Profile: pe.WAFProfile, Extra: pe.WAFExtra, Custom: pe.WAF, API: pe.WAFAPI}
 }
 
 func buildWAFRuntime(set waf.Setting, st *waf.State) (*wafRuntime, error) {
@@ -44,7 +45,11 @@ func buildWAFRuntime(set waf.Setting, st *waf.State) (*wafRuntime, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &wafRuntime{inst: inst, state: st, res: res}, nil
+	guard, err := buildAPIGuard(set, st)
+	if err != nil {
+		return nil, err
+	}
+	return &wafRuntime{inst: inst, state: st, res: res, api: guard}, nil
 }
 
 // InitializeWAF resolves the endpoint's WAF against the default (empty, disabled)
@@ -141,6 +146,10 @@ type WAFCoverageEntry struct {
 	Profile  string
 	Mode     string // effective mode
 	Warning  string `json:",omitempty"`
+
+	// API protection (waf_api.go)
+	APIMode    string `json:",omitempty"` // log or block, empty = off
+	APIWarning string `json:",omitempty"` // e.g. the OpenAPI spec cannot be used
 }
 
 // WAFCoverage lists every endpoint with its effective WAF mode and origin
@@ -152,6 +161,9 @@ func (router *Router) WAFCoverage() []WAFCoverageEntry {
 		e := WAFCoverageEntry{Endpoint: ep.RootOrMatchingDomain, IsRoot: ep == router.Root, Source: res.Source, Origin: res.Label, Mode: res.Mode, Warning: res.Warning}
 		if res.Source == waf.SourceProfile {
 			e.Profile = ep.WAFProfile
+		}
+		if rt := ep.wafRT.Load(); rt != nil && rt.api != nil {
+			e.APIMode, e.APIWarning = rt.api.Mode(), rt.api.SpecError()
 		}
 		out = append(out, e)
 	}
@@ -166,11 +178,17 @@ func (router *Router) wafInspect(w http.ResponseWriter, r *http.Request, sep *Pr
 		return false
 	}
 	rt := sep.wafRT.Load()
-	if rt == nil || rt.inst == nil {
+	if rt == nil || (rt.inst == nil && rt.api == nil) {
 		return false
 	}
 	clientIP := router.GetClientIPForEndpoint(r, sep)
 	if rt.res.Bypass && rt.state.BypassReason(r, clientIP) != "" {
+		return false
+	}
+	if rt.api != nil && router.apiInspect(w, r, sep, rt, clientIP) {
+		return true
+	}
+	if rt.inst == nil {
 		return false
 	}
 	detail := ""

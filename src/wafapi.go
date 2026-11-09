@@ -48,6 +48,7 @@ func RegisterWAFAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/waf/stats", HandleWAFStats)
 	authRouter.HandleFunc("/api/waf/exclude", HandleWAFExclude)
 	RegisterWAFCentralAPIs(authRouter)
+	RegisterWAFAPIProtectionAPIs(authRouter)
 }
 
 func parseWAFConfig(r *http.Request) (*waf.Config, error) {
@@ -117,7 +118,7 @@ func HandleWAFEvents(w http.ResponseWriter, r *http.Request) {
 	if limit <= 0 || limit > 1000 {
 		limit = 200
 	}
-	f := waf.EventFilter{Limit: limit, Endpoint: q.Get("endpoint"), Action: q.Get("action"), ClientIP: q.Get("ip")}
+	f := waf.EventFilter{Limit: limit, Endpoint: q.Get("endpoint"), Action: q.Get("action"), ClientIP: q.Get("ip"), Kind: q.Get("kind")}
 	if rule := strings.TrimSpace(q.Get("rule")); rule != "" {
 		id, err := strconv.Atoi(rule)
 		if err != nil {

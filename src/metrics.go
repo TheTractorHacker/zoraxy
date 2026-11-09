@@ -143,6 +143,8 @@ func collectZoraxyMetrics(e *metrics.Emitter) {
 	ws := waf.Default.Stats()
 	e.Counter("zoraxy_waf_events_all_total", "WAF events (rule matches that produced a decision).", float64(ws.Total))
 	e.Counter("zoraxy_waf_blocked_total", "WAF events that blocked the request.", float64(ws.Blocked))
+	e.Counter("zoraxy_waf_api_events_total", "API protection events (limit, allow-list and OpenAPI violations), also counted in the WAF totals.", float64(ws.API))
+	e.Counter("zoraxy_waf_api_blocked_total", "API protection events that blocked the request.", float64(ws.APIBlocked))
 	eps := make([]string, 0, len(ws.PerEndpoint))
 	for k := range ws.PerEndpoint {
 		eps = append(eps, k)
