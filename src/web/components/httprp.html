@@ -1202,6 +1202,9 @@
                             console.log("Selected certificate for domain:", $(this).parent().attr("domain"), "Value:", value);
                             let domain = $(this).parent().attr("domain");
                             let newCertificateName = value;
+                            // populating the dropdown fires onChange too; only save a real change
+                            if (!value || certMap[domain] === value) { return; }
+                            certMap[domain] = value;
                             $.cjax({
                                 url: "/api/cert/setPreferredCertificate",
                                 method: "POST",
