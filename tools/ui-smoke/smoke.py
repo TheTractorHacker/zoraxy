@@ -1242,6 +1242,37 @@ def main():
             pg.screenshot(path=os.path.join(args.out, "httprp-editor.png"))
             pg.click("#httprpEditModalWrapper .httpProxyEditClosePC")  # clean: closes at once
             pg.wait_for_selector("#httprpEditModal", state="hidden", timeout=5000)
+            # the WAF tab of the rule editor carries the sections of every WAF feature (bands, response, API, variable exclusions)
+            current["page"] = "editor-waf"
+            pg.click("#httpProxyList .editBtn")
+            pg.wait_for_selector("#httprpEditModal", state="visible", timeout=5000)
+            settle(pg, 600)
+            pg.click("#httprpEditModal .hrpedit_menu_item[cfgpage=waf]")
+            settle(pg, 900)
+            for sel, what in (("#httprpEditModal .wafRespEditor", "response protection"), ("#httprpEditModal .wafApiEditor", "API protection")):
+                if not pg.locator(sel).first.is_visible():
+                    fail("editor-waf", f"the {what} section is not visible in the rule editor WAF tab")
+            pg.evaluate("$('#httprpEditModal .wafSource').dropdown('set selected', 'inherit')")
+            settle(pg, 500)
+            if not pg.locator("#httprpEditModal .wafChallengeOverride").first.is_visible():
+                fail("editor-waf", "the challenge band override is not shown for a rule that follows the global policy")
+            pg.screenshot(path=os.path.join(args.out, "httprp-editor-waf-light.png"))
+            pg.evaluate("$('#httprpEditModal .wafSource').dropdown('set selected', 'block')")
+            settle(pg, 500)
+            for sel, what in (("#httprpEditModal .wafChallenge", "challenge threshold"), ("#httprpEditModal .wafIgnoreCookies", "analytics cookie option")):
+                if pg.locator(sel).count() != 1:
+                    fail("editor-waf", f"expected exactly one {what} field in the rule editor")
+            pg.evaluate("document.body.classList.add('darkTheme')")
+            settle(pg, 400)
+            pg.screenshot(path=os.path.join(args.out, "httprp-editor-waf-dark.png"))
+            pg.evaluate("document.body.classList.remove('darkTheme')")
+            pg.click("#httprpEditModalWrapper .httpProxyEditClosePC")
+            pg.wait_for_timeout(400)
+            if pg.is_visible("#confirmBox"):
+                pg.evaluate("$('#confirmBox').hide()")
+                pg.evaluate("window.resetEditorDirty && window.resetEditorDirty()")
+                pg.click("#httprpEditModalWrapper .httpProxyEditClosePC")
+            pg.wait_for_selector("#httprpEditModal", state="hidden", timeout=5000)
             pg.click("#httpProxyList .editBtn")
             pg.wait_for_selector("#httprpEditModal", state="visible", timeout=5000)
             settle(pg, 800)
