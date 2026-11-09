@@ -5,13 +5,13 @@
             visitor sessions (CAPTCHA, load balancer stickiness) valid on every node. A <b>primary</b> can push its proxy
             configuration to <b>followers</b>, which pull a signed, encrypted snapshot. Standalone nodes (the default) are unaffected.</p>
     </div>
-    <div class="ui small info message"><b>Legacy shared-secret mode.</b> This page configures the original primary/follower mirror, where every node knows one
+    <div class="ui small info message" style="margin:1em 14px;"><b>Legacy shared-secret mode.</b> This page configures the original primary/follower mirror, where every node knows one
         cluster secret. For central management of several nodes with per-node credentials, scoped config, groups, staged rollouts and rollback, use the
         <a href="#" onclick="$('[tag=fleet]').first().click(); return false;">Fleet</a> page. Both modes keep working; a node uses one of them.
         <span id="clFleetRole" style="display:none;"></span></div>
-    <div class="ui divider"></div>
+    <div class="ui divider" style="margin:1em 14px;"></div>
 
-    <div id="clMsg" class="ui small message" style="display:none;"></div>
+    <div id="clMsg" class="ui small message" style="display:none; margin:1em 14px;"></div>
 
     <!-- Role -->
     <div class="ui basic segment">
@@ -38,11 +38,11 @@
                 </div>
             </div>
             <div id="clPrimaryFields" style="display:none;">
-                <div class="field">
+                <div class="field" style="margin-bottom:1.2em;">
                     <div class="ui toggle checkbox"><input type="checkbox" id="clSyncCerts"><label>Sync certificates (private keys are sent to followers; the primary should be the only ACME issuer)</label></div>
                 </div>
             </div>
-            <button class="ui basic primary button" id="clSaveBtn"><i class="save icon"></i> Save</button>
+            <button class="ui basic primary button" id="clSaveBtn" style="margin-top:.6em;"><i class="save icon"></i> Save</button>
         </div>
         <div id="clReadOnly" class="ui small warning message" style="display:none; margin-top:1em;">
             This node is a follower. Proxy rules, redirects, access rules, stream proxies, path rules, trusted proxies and ACME

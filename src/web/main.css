@@ -1205,3 +1205,11 @@ html:not([lang^="en"]) .menugroup-header span{
 }
 html:not([lang^="en"]) .ui.buttons .button{ white-space: normal; }
 html:not([lang^="en"]) th{ overflow-wrap: break-word; word-break: keep-all; }
+
+/* Raw checkboxes/radios (tables, forms without Fomantic wrappers): a sensible size, theme-aware accent */
+input[type="checkbox"]:not(.hidden), input[type="radio"]:not(.hidden) { accent-color: #2185d0; }
+table input[type="checkbox"], .ui.form .field > input[type="checkbox"] { width: 1.1em; height: 1.1em; vertical-align: middle; cursor: pointer; }
+body.darkTheme input[type="checkbox"]:not(.hidden), body.darkTheme input[type="radio"]:not(.hidden) { accent-color: #5583ee; }
+/* number cells in settings tables should not stretch full width */
+.ui.table td input[type="number"] { width: 6.5em; max-width: 100%; }
+.ui.very.basic.table td, .ui.very.basic.table th { padding-top: .55em; padding-bottom: .55em; }

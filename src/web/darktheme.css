@@ -1233,3 +1233,55 @@ body.darkTheme .navFilter .ui.input > input {
     color: var(--text_color, #eee);
     border-color: rgba(255, 255, 255, 0.15);
 }
+
+/* Cards (Updater version cards etc.) and preformatted blocks follow the theme */
+body.darkTheme .ui.card,
+body.darkTheme .ui.cards > .card {
+    background: var(--theme_bg_primary);
+    color: var(--text_color);
+    box-shadow: 0 0 0 1px var(--divider_color);
+}
+body.darkTheme .ui.card > .content > .header,
+body.darkTheme .ui.cards > .card > .content > .header,
+body.darkTheme .ui.card > .content > .header:not(.ui) {
+    color: var(--text_color);
+}
+body.darkTheme .ui.card .meta,
+body.darkTheme .ui.cards > .card .meta,
+body.darkTheme .ui.card .description,
+body.darkTheme .ui.cards > .card .description {
+    color: var(--text_color_secondary) !important;
+}
+body.darkTheme pre.themed-pre {
+    background: var(--theme_advance) !important;
+    color: var(--text_color) !important;
+    border: 1px solid var(--divider_color);
+}
+
+/* Bare form controls (not wrapped in .ui.input) were left white in dark mode */
+body.darkTheme .ui.form input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="hidden"]),
+body.darkTheme .ui.form select,
+body.darkTheme table input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="hidden"]),
+body.darkTheme table select {
+    background-color: var(--theme_bg_active) !important;
+    color: var(--text_color) !important;
+    border: 1px solid var(--button_border_color) !important;
+}
+body.darkTheme .ui.form input::placeholder { color: var(--text_color_secondary); opacity: .7; }
+body.darkTheme .ui.form input:focus,
+body.darkTheme .ui.form select:focus,
+body.darkTheme table input:focus,
+body.darkTheme table select:focus {
+    border-color: var(--theme_highlight) !important;
+    outline: none;
+}
+body.darkTheme .ui.form input:disabled,
+body.darkTheme .ui.form select:disabled { opacity: .55; }
+body.darkTheme input[type="checkbox"],
+body.darkTheme input[type="radio"] { color-scheme: dark; }
+body.darkTheme select:not(.i18n-picker):not(.ui) {
+    background-color: var(--theme_bg_active);
+    color: var(--text_color);
+    border: 1px solid var(--button_border_color);
+    border-radius: 4px;
+}

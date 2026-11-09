@@ -427,7 +427,7 @@
             let h = "<h4>v" + (a || "(empty)") + " to v" + b + "</h4>";
             (d || []).forEach(function(x){
                 h += "<div><span class='ui " + (x.change == "added" ? "green" : x.change == "removed" ? "red" : "orange") + " mini label'>" + x.change + "</span> " + esc(x.scope) + " / " + esc(x.path) + "</div>";
-                if (x.change == "changed" && (x.old || x.new)) h += "<pre style='font-size:0.8em;overflow:auto;background:#f6f6f6;padding:4px;'>- " + esc(x.old) + "\n+ " + esc(x.new) + "</pre>";
+                if (x.change == "changed" && (x.old || x.new)) h += "<pre class='themed-pre' style='font-size:0.8em;overflow:auto;background:#f6f6f6;color:#222;padding:4px;'>- " + esc(x.old) + "\n+ " + esc(x.new) + "</pre>";
             });
             $("#flDiff").html(h + ((d || []).length ? "" : "<p>No differences.</p>")).show();
         }, error: fail});
