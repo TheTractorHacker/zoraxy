@@ -36,6 +36,10 @@ while getopts "k:o:t:b:" opt; do
 done
 
 [ -n "$tag" ] || { echo "-t TAG is required (the release tag to sign)" >&2; exit 2; }
+# The in-app updater smoke-tests the new binary and requires "Version X.Y.Z" in its output to match the tag.
+srcver=$(sed -n 's/.*SYSTEM_VERSION *= *"\([^"]*\)".*/\1/p' "$(dirname "$0")/../src/def.go" | head -1)
+tagver=$(printf '%s' "$tag" | sed -n 's/^v\([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p')
+[ "$srcver" = "$tagver" ] || { echo "tag $tag has base version '$tagver' but src/def.go SYSTEM_VERSION is '$srcver': the in-app updater would reject this build" >&2; exit 2; }
 [ -r "$key" ] || { echo "private key not readable: $key (use -k or \$ZORAXY_RELEASE_KEY)" >&2; exit 1; }
 [ -r "$pub" ] || { echo "public key not found: $pub" >&2; exit 1; }
 

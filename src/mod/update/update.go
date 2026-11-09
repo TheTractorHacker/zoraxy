@@ -64,8 +64,8 @@ func RunConfigUpdateInDir(confDir string, fromVersion int, toVersion int) {
 
 		if fromVersion == toVersion {
 			// No need to update, but check if v3.3.5 rc1→rc2 migration is needed
-			if toVersion == 335 {
-				runUpdateRoutineWithVersion(confDir, 335, 335)
+			if toVersion == 335 || toVersion == 336 {
+				runUpdateRoutineWithVersion(confDir, 335, toVersion)
 			}
 			return
 		}
