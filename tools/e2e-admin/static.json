@@ -1,0 +1,127 @@
+[
+ {
+  "scenario": "acme-issuance-real-ca",
+  "issues": [
+   433,
+   798,
+   1123,
+   408,
+   1332,
+   380,
+   1267
+  ],
+  "status": "NOT-TESTABLE",
+  "evidence": "Issuance, renewal, EAB, ACME profile selection and DNS-01 need a real ACME CA (Let's Encrypt staging / ZeroSSL) and a real DNS provider account; the repo has no fake ACME directory (no pebble / httptest ACME server in any test). The surrounding plumbing IS verified in api-certs-upload-csr-usage-keytype and api-certs-dir-import (upload, CSR, certbot-layout import, expiry data, usage, key-type default, CA profile with profile field).",
+  "commits": [],
+  "notes": "Evidence needed: a staging issuance run (Let's Encrypt Staging) for a public name with HTTP-01 and one DNS-01 run with a real provider profile, plus a ZeroSSL EAB account for the EAB path."
+ },
+ {
+  "scenario": "notifications-real-third-parties",
+  "issues": [
+   1046,
+   899
+  ],
+  "status": "NOT-TESTABLE",
+  "evidence": "Telegram, Pushover, SMTP and the hosted forms of Discord / Slack / ntfy / Gotify have fixed third-party endpoints or need a real mail server. Discord, Slack, ntfy and Gotify channel formats were verified against local receivers (api-notifications-uptime-channels).",
+  "commits": [],
+  "notes": "Evidence needed: one real message received per channel type (Telegram bot, Pushover app, an SMTP relay account) from the Test button."
+ },
+ {
+  "scenario": "sso-real-identity-provider",
+  "issues": [
+   172,
+   223,
+   212
+  ],
+  "status": "NOT-TESTABLE",
+  "evidence": "The two-provider registry, per-rule binding and the sign-in redirect to each rule's own provider are driven through the real UI against two fake OIDC discovery servers (ui-sso-providers). The authorization-code exchange, ID-token signature verification against a real JWKS, refresh and logout need a real IdP (Authentik, Keycloak, Authelia); OIDC session persistence over restart is covered by Go tests only.",
+  "commits": [],
+  "notes": "Evidence needed: a login round trip with a real Authentik/Keycloak realm for each of two rules bound to two different providers, then a Zoraxy restart with the session still valid."
+ },
+ {
+  "scenario": "blocklist-scheduled-url-download",
+  "issues": [
+   512,
+   1100
+  ],
+  "status": "NOT-TESTABLE",
+  "evidence": "A successful scheduled download is impossible against a local server by design: the SSRF guard refuses any non-public address and has no toggle (verified: http:// and https://127.0.0.1 sources are refused without a connection, in api-blocklist-import-and-rules). The refresh logic (tag prefix, ErrWouldEmpty, stale removal) is covered by Go tests with a stub dialer.",
+  "commits": [],
+  "notes": "Evidence needed: a source pointing at a public https list (e.g. a published blocklist) refreshed once and then on schedule."
+ },
+ {
+  "scenario": "ech-real-browser",
+  "issues": [
+   235
+  ],
+  "status": "NOT-TESTABLE",
+  "evidence": "Key generation, rotation, retirement, export and the advertised ECHConfigList are verified (api-ech); handshake interop is covered by Go client tests. A browser negotiating ECH needs a published HTTPS resource record and a public name certificate.",
+  "commits": [],
+  "notes": "Evidence needed: Firefox or Chrome with DoH loading a site through the ECH-enabled listener (about:networking / devtools shows ECH used)."
+ },
+ {
+  "scenario": "sablier-zrok-real-services",
+  "issues": [
+   120,
+   564,
+   136
+  ],
+  "status": "NOT-TESTABLE",
+  "evidence": "Sablier is verified against a fake server following the documented contract and zrok against a fake CLI script (api-sablier-gate-and-test, api-zrok-fake-binary). A real Sablier with Docker/Swarm/Kubernetes providers and a real zrok service (account token, public frontend) are not available.",
+  "commits": [],
+  "notes": "Evidence needed: a Docker container scaled to zero and woken through the waiting page; a zrok account enabling a public share reachable from outside."
+ },
+ {
+  "scenario": "fixed-bulk-blocklist-import-multipart",
+  "issues": [
+   512,
+   1100
+  ],
+  "status": "FIXED-NOW",
+  "evidence": "The admin UI posts the bulk import form as multipart/form-data (FormData) but the handler read fields with utils.PostPara, which does not parse multipart bodies, so every paste/file import from the UI failed with 'list must be blacklist or whitelist'. Found by api-blocklist-import-and-rules; regression test TestBlocklistImportAPIMultipart (fails before, passes after). Rerun: tools/e2e-admin/run.sh --only api-blocklist",
+  "commits": [
+   "4ca92d9"
+  ],
+  "notes": ""
+ },
+ {
+  "scenario": "fixed-update-page-mobile-overflow",
+  "issues": [
+   110
+  ],
+  "status": "FIXED-NOW",
+  "evidence": "The Update page's preflight/history tables made the whole page 25px wider than a 390px phone viewport (smoke check 'mobile/updater layout'). Tables are now in an overflow-x:auto wrapper. Rerun: tools/e2e-admin/run.sh --only ui-status",
+  "commits": [
+   "580be2f"
+  ],
+  "notes": ""
+ },
+ {
+  "scenario": "fixed-wol-mdns-disabled-js-error",
+  "issues": [],
+  "status": "FIXED-NOW",
+  "evidence": "With -mdns=false /api/mdns/list answers an error object and the Network Tools Wake-on-LAN helper threw 'data.forEach is not a function' on every page load (uncaught pageerror in the smoke test). The call is now guarded with Array.isArray. Rerun: tools/e2e-admin/run.sh --only ui-",
+  "commits": [
+   "8e67ca0"
+  ],
+  "notes": ""
+ },
+ {
+  "scenario": "_commits",
+  "map": {
+   "api-blocklist-import-and-rules": [
+    "4ca92d9"
+   ],
+   "ui-status-visitors-editors": [
+    "580be2f",
+    "8e67ca0"
+   ],
+   "ui-proxy-table-newrule-quickstart-nav": [
+    "8e67ca0"
+   ],
+   "ui-sso-providers": [
+    "580be2f"
+   ]
+  }
+ }
+]

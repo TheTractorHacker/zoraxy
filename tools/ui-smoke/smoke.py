@@ -1087,8 +1087,15 @@ def main():
             pg.wait_for_timeout(1500)
             import http.client
             def first_hop(host, path="/private"):
-                c = http.client.HTTPConnection("127.0.0.1", proxy_port, timeout=8)
-                c.request("GET", path, headers={"Host": host})
+                for attempt in range(40):  # the listener starts asynchronously; a loaded machine needs more than the fixed wait above
+                    c = http.client.HTTPConnection("127.0.0.1", proxy_port, timeout=8)
+                    try:
+                        c.request("GET", path, headers={"Host": host})
+                        break
+                    except ConnectionRefusedError:
+                        if attempt == 39:
+                            raise
+                        pg.wait_for_timeout(500)
                 resp = c.getresponse()
                 resp.read(200)
                 return resp.status, resp.getheader("Location") or ""

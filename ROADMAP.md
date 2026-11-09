@@ -215,3 +215,12 @@ FriendlyCaptcha, counting SSO redirect failures in the auto-ban, per-user admin 
 - ✅ Visitor pages follow `Accept-Language`: CAPTCHA challenge / failed / blocked defaults and the built-in 403 / 404 / 521 pages.
 - 📋 Native-speaker review of every locale; more strings for the non-Chinese locales (long help texts, snippets); plural forms; RTL languages; translating `apidocs`, `tools/*.html` pages and plugin UIs; templating the login page server side.
 - ✅ **Data-plane end-to-end suite** (`tools/e2e`, DEVELOPMENT.md "End-to-end verification"): 50+ scenarios against a real binary with real traffic; evidence in `docs/verification/e2e-dataplane.md`. 📋 Observed, not changed: virtual directories match a string prefix without a segment boundary (`/apix` -> vdir `/api`); with a trusted proxy `X-Real-Ip` outranks `CF-Connecting-IP`; Playwright coverage of the per-feature editors.
+
+
+## Admin end-to-end verification follow-ups
+
+`tools/e2e-admin` (see DEVELOPMENT.md, "Admin end-to-end verification") verified the admin and operations features end to end. What still needs
+a real third party before the matching issues can be called verified: a staging ACME issuance (HTTP-01 and DNS-01, EAB), one real message per
+Telegram / Pushover / SMTP channel, a login round trip against a real OIDC provider, a scheduled blocklist download from a public https list,
+ECH in a real browser, and real Sablier / zrok services. Details and the exact evidence needed are in `docs/verification/e2e-admin.json`.
+The Status page idles at about 4.5 to 5.5 percent of one core on a loaded machine (budget 5 percent); the next saving is in the traffic diagram canvas.

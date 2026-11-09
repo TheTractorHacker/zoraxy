@@ -73,11 +73,11 @@
     <!-- Preflight -->
     <div class="ui basic segment">
         <h3>Preflight checks</h3>
-        <table class="ui unstackable basic celled table">
+        <div style="overflow-x:auto; max-width:100%;"><table class="ui unstackable basic celled table">
             <thead><tr><th style="width:2.5em;"></th><th>Check</th><th>Detail</th></tr></thead>
             <tbody id="upPreflight"><tr><td colspan="3">Loading...</td></tr></tbody>
-        </table>
-        <div style="color:grey;">Restart method: <b id="upMethod">-</b> &nbsp; Binary: <code id="upExe">-</code></div>
+        </table></div>
+        <div style="color:grey; overflow-wrap:anywhere;">Restart method: <b id="upMethod">-</b> &nbsp; Binary: <code id="upExe">-</code></div>
     </div>
 
     <!-- Live log -->
@@ -90,10 +90,10 @@
     <!-- History -->
     <div class="ui basic segment">
         <h3>History</h3>
-        <table class="ui unstackable basic celled table">
+        <div style="overflow-x:auto; max-width:100%;"><table class="ui unstackable basic celled table">
             <thead><tr><th>Time</th><th>Action</th><th>From</th><th>To</th><th>Result</th><th>Detail</th></tr></thead>
             <tbody id="upHistory"><tr><td colspan="6">No history</td></tr></tbody>
-        </table>
+        </table></div>
     </div>
 </div>
 
