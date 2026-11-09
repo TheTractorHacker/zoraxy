@@ -9,7 +9,6 @@
  "strings": {
   "\"Add Redirection Rule\"": "\"Añadir regla de redirección\"",
   "\"Blocked\" page": "Página de \"Bloqueado\"",
-  "\"Create Endpoint\"": "\"Crear endpoint\"",
   "\"Create\"": "\"Crear\"",
   "\"Enable Certificate Auto Renew\"": "\"Activar renovación automática de certificados\"",
   "\"Enable WebDAV Server\"": "\"Activar servidor WebDAV\"",
@@ -19,7 +18,6 @@
   "\"Success\" text": "Texto de \"Éxito\"",
   "\"Verifying\" text": "Texto de \"Verificando\"",
   "\"{0}\" is not a valid hostname.": "\"{0}\" no es un nombre de host válido.",
-  "(adjust if you changed the WebDAV port). Click": "(ajústelo si cambió el puerto WebDAV). Haga clic en",
   "(applies to every proxy rule set to \"Inherit\")": "(se aplica a toda regla de proxy configurada como \"Heredar\")",
   "(click to filter the events)": "(haga clic para filtrar los eventos)",
   "(clicking a mode applies it immediately)": "(al hacer clic en un modo se aplica de inmediato)",
@@ -1217,7 +1215,6 @@
   "🌊 Stream Proxy (TCP / UDP)": "🌊 Proxy de flujo (TCP / UDP)",
   "🌐 Add DNS Record for WebDAV": "🌐 Añadir registro DNS para WebDAV",
   "🌐 Enable Static Web Server": "🌐 Activar servidor web estático",
-  "🌐 Matching Keyword / Domain": "🌐 Palabra clave / dominio coincidente",
   "🌐 Redirection URL (From)": "🌐 URL de redirección (Desde)",
   "🌲 HTTP Proxy List": "🌲 Lista de proxies HTTP",
   "🎉 Certificate Installed!": "🎉 ¡Certificado instalado!",
@@ -1248,7 +1245,6 @@
   "🔐 Enable HTTPS (TLS) for your site": "🔐 Activar HTTPS (TLS) en su sitio",
   "🔐 TLS / SSL Certificates": "🔐 Certificados TLS / SSL",
   "🔑 Enable TLS Serving": "🔑 Activar servicio TLS",
-  "🔓 Ignore TLS Validation Error": "🔓 Ignorar error de validación TLS",
   "🔖 Status Code": "🔖 Código de estado",
   "🔬 Proxy Protocol (Advanced)": "🔬 Proxy Protocol (avanzado)",
   "😭 Tour not found": "😭 Recorrido no encontrado"

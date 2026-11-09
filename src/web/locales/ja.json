@@ -9,7 +9,6 @@
  "strings": {
   "\"Add Redirection Rule\"": "「リダイレクトルールを追加」",
   "\"Blocked\" page": "「ブロック」ページ",
-  "\"Create Endpoint\"": "「エンドポイントを作成」",
   "\"Create\"": "「作成」",
   "\"Enable Certificate Auto Renew\"": "「証明書の自動更新を有効化」",
   "\"Enable WebDAV Server\"": "「WebDAVサーバーを有効化」",
@@ -20,7 +19,6 @@
   "\"Verifying\" text": "「確認中」テキスト",
   "\"{0}\" is not a valid hostname.": "「{0}」は有効なホスト名ではありません。",
   "&rarr;": "&rarr;",
-  "(adjust if you changed the WebDAV port). Click": "(WebDAVのポートを変更した場合は調整してください)。クリック:",
   "(applies to every proxy rule set to \"Inherit\")": "(「継承」に設定されたすべてのプロキシルールに適用されます)",
   "(click to filter the events)": "(クリックでイベントを絞り込み)",
   "(clicking a mode applies it immediately)": "(モードをクリックすると即座に適用されます)",
@@ -1193,7 +1191,6 @@
   "🌊 Stream Proxy (TCP / UDP)": "🌊 ストリームプロキシ (TCP / UDP)",
   "🌐 Add DNS Record for WebDAV": "🌐 WebDAV用のDNSレコードを追加",
   "🌐 Enable Static Web Server": "🌐 静的Webサーバーを有効化",
-  "🌐 Matching Keyword / Domain": "🌐 一致するキーワード / ドメイン",
   "🌐 Redirection URL (From)": "🌐 リダイレクト元URL (From)",
   "🌲 HTTP Proxy List": "🌲 HTTPプロキシ一覧",
   "🎉 Certificate Installed!": "🎉 証明書をインストールしました!",
@@ -1224,7 +1221,6 @@
   "🔐 Enable HTTPS (TLS) for your site": "🔐 サイトのHTTPS (TLS) を有効化",
   "🔐 TLS / SSL Certificates": "🔐 TLS / SSL 証明書",
   "🔑 Enable TLS Serving": "🔑 TLS配信を有効化",
-  "🔓 Ignore TLS Validation Error": "🔓 TLS検証エラーを無視",
   "🔖 Status Code": "🔖 ステータスコード",
   "🔬 Proxy Protocol (Advanced)": "🔬 Proxy Protocol (詳細)",
   "😭 Tour not found": "😭 ツアーが見つかりません"

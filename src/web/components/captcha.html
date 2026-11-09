@@ -189,6 +189,12 @@
                                 <select data-cp="captchaTheme" class="ui fluid dropdown"><option value="">Auto (follow browser)</option><option value="light">Light</option><option value="dark">Dark</option></select></div>
                         </div>
                         <div class="cpHelp"><a class="cqResetColors" style="cursor:pointer">reset colours to default</a></div>
+                        <div class="three fields" style="margin-top:.8em">
+                            <div class="field"><label>Footer text</label><input type="text" data-cp="captchaFooterText" maxlength="200" placeholder="Performance &amp; security by"></div>
+                            <div class="field"><label>Footer link label</label><input type="text" data-cp="captchaFooterLinkText" maxlength="120" placeholder="Zoraxy"></div>
+                            <div class="field"><label>Footer link URL</label><input type="url" data-cp="captchaFooterLinkURL" maxlength="512" placeholder="https://zoraxy.aroz.org"></div>
+                        </div>
+                        <div class="cpHelp">Leave empty for the default. Ignored when the footer is hidden.</div>
                         <div class="field" style="margin-top:.8em"><div class="ui checkbox"><input type="checkbox" data-cp="captchaHideFooter"><label>Hide the "Performance &amp; security by Zoraxy" footer</label></div></div>
                     </div>
 
@@ -464,6 +470,7 @@
             captchaErrorText: b.ErrorText, captchaRetryText: b.RetryText, captchaBlockedTitle: b.BlockedTitle,
             captchaBlockedHeading: b.BlockedHeading, captchaBlockedMessage: b.BlockedMessage, captchaLogo: b.LogoURL,
             captchaAccent: b.AccentColor, captchaBackground: b.BackgroundColor, captchaTheme: b.Theme,
+            captchaFooterText: b.FooterText, captchaFooterLinkText: b.FooterLinkText, captchaFooterLinkURL: b.FooterLinkURL,
             captchaCustomTemplate: b.CustomTemplate,
             turnstileMode: t.Mode, turnstileAppearance: t.Appearance, turnstileTheme: t.Theme, turnstileSize: t.Size,
             turnstileAction: t.Action, turnstileCData: t.CData, captchaRecaptchaAction: cfg.RecaptchaAction
@@ -564,7 +571,7 @@
             // only the branding / text fields belong to the default
             var data = {};
             Object.keys(f).forEach(function (k) {
-                if (/^captcha(Title|Heading|Message|Notice|VerifyingText|SuccessText|FailedText|ErrorText|RetryText|BlockedTitle|BlockedHeading|BlockedMessage|Logo|Accent|Background|Theme|HideFooter|CustomTemplate)$/.test(k)) { data[k] = f[k]; }
+                if (/^captcha(Title|Heading|Message|Notice|VerifyingText|SuccessText|FailedText|ErrorText|RetryText|BlockedTitle|BlockedHeading|BlockedMessage|Logo|Accent|Background|Theme|HideFooter|FooterText|FooterLinkText|FooterLinkURL|CustomTemplate)$/.test(k)) { data[k] = f[k]; }
             });
             $.cjax({ url: "/api/proxy/captcha/default", method: "POST", data: data, success: function (resp) {
                 done();

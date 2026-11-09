@@ -855,6 +855,11 @@
                                                     </select></div>
                                             </div>
                                             <small><a class="cpResetColors" style="cursor:pointer;">reset colours to default</a></small>
+                                            <div class="three fields" style="margin-top:0.8em">
+                                                <div class="field"><label>Footer text</label><input type="text" data-cp="captchaFooterText" maxlength="200" placeholder="Performance &amp; security by"></div>
+                                                <div class="field"><label>Footer link label</label><input type="text" data-cp="captchaFooterLinkText" maxlength="120" placeholder="Zoraxy"></div>
+                                                <div class="field"><label>Footer link URL</label><input type="url" data-cp="captchaFooterLinkURL" maxlength="512" placeholder="https://zoraxy.aroz.org"></div>
+                                            </div>
                                             <div class="ui checkbox" style="display:block; margin-top: 0.8em;">
                                                 <input type="checkbox" data-cp="captchaHideFooter">
                                                 <label>Hide the "Performance &amp; security by Zoraxy" footer</label>
@@ -1274,6 +1279,7 @@
             captchaErrorText: b.ErrorText, captchaRetryText: b.RetryText, captchaBlockedTitle: b.BlockedTitle,
             captchaBlockedHeading: b.BlockedHeading, captchaBlockedMessage: b.BlockedMessage, captchaLogo: b.LogoURL,
             captchaAccent: b.AccentColor, captchaBackground: b.BackgroundColor, captchaTheme: b.Theme,
+            captchaFooterText: b.FooterText, captchaFooterLinkText: b.FooterLinkText, captchaFooterLinkURL: b.FooterLinkURL,
             captchaCustomTemplate: b.CustomTemplate,
             turnstileMode: t.Mode, turnstileAppearance: t.Appearance, turnstileTheme: t.Theme, turnstileSize: t.Size,
             turnstileAction: t.Action, turnstileCData: t.CData,

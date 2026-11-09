@@ -9,7 +9,6 @@
  "strings": {
   "\"Add Redirection Rule\"": "«Добавить правило перенаправления»",
   "\"Blocked\" page": "Страница «Заблокировано»",
-  "\"Create Endpoint\"": "«Создать конечную точку»",
   "\"Create\"": "«Создать»",
   "\"Enable Certificate Auto Renew\"": "«Включить автопродление сертификата»",
   "\"Enable WebDAV Server\"": "«Включить сервер WebDAV»",
@@ -19,7 +18,6 @@
   "\"Success\" text": "Текст «Успех»",
   "\"Verifying\" text": "Текст «Проверка»",
   "\"{0}\" is not a valid hostname.": "«{0}» — недопустимое имя хоста.",
-  "(adjust if you changed the WebDAV port). Click": "(измените, если вы меняли порт WebDAV). Нажмите",
   "(applies to every proxy rule set to \"Inherit\")": "(применяется ко всем правилам прокси со значением «Наследовать»)",
   "(click to filter the events)": "(нажмите, чтобы отфильтровать события)",
   "(clicking a mode applies it immediately)": "(выбор режима применяется сразу)",
@@ -1238,7 +1236,6 @@
   "🌊 Stream Proxy (TCP / UDP)": "🌊 Потоковый прокси (TCP / UDP)",
   "🌐 Add DNS Record for WebDAV": "🌐 Добавить DNS-запись для WebDAV",
   "🌐 Enable Static Web Server": "🌐 Включить статический веб-сервер",
-  "🌐 Matching Keyword / Domain": "🌐 Ключевое слово / домен для сопоставления",
   "🌐 Redirection URL (From)": "🌐 URL перенаправления (откуда)",
   "🌲 HTTP Proxy List": "🌲 Список HTTP-прокси",
   "🎉 Certificate Installed!": "🎉 Сертификат установлен!",
@@ -1269,7 +1266,6 @@
   "🔐 Enable HTTPS (TLS) for your site": "🔐 Включите HTTPS (TLS) для вашего сайта",
   "🔐 TLS / SSL Certificates": "🔐 Сертификаты TLS / SSL",
   "🔑 Enable TLS Serving": "🔑 Включить обслуживание по TLS",
-  "🔓 Ignore TLS Validation Error": "🔓 Игнорировать ошибки проверки TLS",
   "🔖 Status Code": "🔖 Код состояния",
   "🔬 Proxy Protocol (Advanced)": "🔬 Proxy Protocol (расширенный)",
   "😭 Tour not found": "😭 Обзор не найден"

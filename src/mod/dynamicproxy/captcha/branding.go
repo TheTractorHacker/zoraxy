@@ -80,6 +80,9 @@ type Branding struct {
 	BackgroundColor string `json:"BackgroundColor,omitempty"` // CSS hex colour, default follows the theme
 	Theme           string `json:"Theme,omitempty"`           // auto (default), light or dark
 	HideFooter      bool   `json:"HideFooter,omitempty"`      // hide the "Performance & security by Zoraxy" footer
+	FooterText      string `json:"FooterText,omitempty"`      // replaces "Performance & security by"
+	FooterLinkText  string `json:"FooterLinkText,omitempty"`  // replaces the link label "Zoraxy"
+	FooterLinkURL   string `json:"FooterLinkURL,omitempty"`   // http(s) URL of the footer link; empty = Zoraxy website
 
 	// CustomTemplate replaces the built-in challenge page for this endpoint.
 	// It is an html/template, see DEVELOPMENT.md ("Customising CAPTCHA pages").
@@ -182,6 +185,7 @@ func (b *Branding) Validate() error {
 		{"Heading", b.Heading, maxHeadingLen}, {"Blocked page heading", b.BlockedHeading, maxHeadingLen},
 		{"Message", b.Message, maxMessageLen}, {"Notice", b.Notice, maxMessageLen}, {"Blocked page message", b.BlockedMessage, maxMessageLen},
 		{"Verifying text", b.VerifyingText, maxStringLen}, {"Success text", b.SuccessText, maxStringLen},
+		{"Footer text", b.FooterText, maxStringLen}, {"Footer link text", b.FooterLinkText, maxTitleLen}, {"Footer link URL", b.FooterLinkURL, 512},
 		{"Failed text", b.FailedText, maxStringLen}, {"Error text", b.ErrorText, maxStringLen}, {"Retry text", b.RetryText, maxStringLen},
 	} {
 		if err := checkLen(f.name, f.v, f.max); err != nil {
@@ -196,6 +200,9 @@ func (b *Branding) Validate() error {
 	}
 	if b.Theme != "" && !oneOf(b.Theme, ThemeAuto, ThemeLight, ThemeDark) {
 		return errors.New("theme must be auto, light or dark")
+	}
+	if b.FooterLinkURL != "" && safeFooterURL(b.FooterLinkURL) == "" {
+		return errors.New("footer link must be an http:// or https:// URL")
 	}
 	return ValidateLogo(b.LogoURL)
 }
@@ -259,4 +266,16 @@ func safeLogo(logo string) template.URL {
 		return ""
 	}
 	return template.URL(logo)
+}
+
+// DefaultFooterURL is where the footer link leads unless branding overrides it.
+const DefaultFooterURL = "https://zoraxy.aroz.org"
+
+// safeFooterURL returns u if it is a plain http(s) URL, otherwise "".
+func safeFooterURL(u string) string {
+	p, err := url.Parse(strings.TrimSpace(u))
+	if err != nil || (p.Scheme != "http" && p.Scheme != "https") || p.Host == "" || p.User != nil {
+		return ""
+	}
+	return p.String()
 }

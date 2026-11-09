@@ -9,7 +9,6 @@
  "strings": {
   "\"Add Redirection Rule\"": "„Weiterleitungsregel hinzufügen“",
   "\"Blocked\" page": "Seite „Blockiert“",
-  "\"Create Endpoint\"": "„Endpunkt erstellen“",
   "\"Create\"": "„Erstellen“",
   "\"Enable Certificate Auto Renew\"": "„Automatische Zertifikatserneuerung aktivieren“",
   "\"Enable WebDAV Server\"": "„WebDAV-Server aktivieren“",
@@ -1196,7 +1195,6 @@
   "🌊 Stream Proxy (TCP / UDP)": "🌊 Stream-Proxy (TCP / UDP)",
   "🌐 Add DNS Record for WebDAV": "🌐 DNS-Eintrag für WebDAV hinzufügen",
   "🌐 Enable Static Web Server": "🌐 Statischen Webserver aktivieren",
-  "🌐 Matching Keyword / Domain": "🌐 Passendes Stichwort / Domain",
   "🌐 Redirection URL (From)": "🌐 Weiterleitungs-URL (Von)",
   "🌲 HTTP Proxy List": "🌲 HTTP-Proxy-Liste",
   "🎉 Certificate Installed!": "🎉 Zertifikat installiert!",
@@ -1227,7 +1225,6 @@
   "🔐 Enable HTTPS (TLS) for your site": "🔐 HTTPS (TLS) für Ihre Seite aktivieren",
   "🔐 TLS / SSL Certificates": "🔐 TLS-/SSL-Zertifikate",
   "🔑 Enable TLS Serving": "🔑 TLS-Auslieferung aktivieren",
-  "🔓 Ignore TLS Validation Error": "🔓 TLS-Validierungsfehler ignorieren",
   "🔖 Status Code": "🔖 Statuscode",
   "🔬 Proxy Protocol (Advanced)": "🔬 Proxy Protocol (erweitert)",
   "😭 Tour not found": "😭 Tour nicht gefunden"

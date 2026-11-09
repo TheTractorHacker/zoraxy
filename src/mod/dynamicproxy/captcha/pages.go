@@ -56,12 +56,14 @@ const (
 
 // PageStrings are the status texts of the page, already defaulted.
 type PageStrings struct {
-	Verifying string
-	Success   string
-	Failed    string
-	Error     string
-	Retry     string
-	FooterBy  string // "Performance & security by" (footer, localised)
+	Verifying     string
+	Success       string
+	Failed        string
+	Error         string
+	Retry         string
+	FooterBy      string // "Performance & security by" (footer, localised or custom)
+	FooterLink    string // footer link label, "Zoraxy" by default
+	FooterLinkURL string // footer link target (validated http/https)
 }
 
 // ClientConfig is serialised as a JSON object into the page script. Custom
@@ -225,12 +227,14 @@ func buildData(cfg *Config, kind PageKind, domain, nonce string, opts RenderOpti
 	// branding text always wins; only the built-in defaults are localised
 	text := func(v, def string) string { return expandDomain(pick(v, i18n.Tr(opts.Lang, def)), domain) }
 	d.Strings = PageStrings{
-		Verifying: text(b.VerifyingText, DefaultVerifyingText),
-		Success:   text(b.SuccessText, DefaultSuccessText),
-		Failed:    text(b.FailedText, DefaultFailedText),
-		Error:     text(b.ErrorText, DefaultErrorText),
-		Retry:     text(b.RetryText, DefaultRetryText),
-		FooterBy:  i18n.Tr(opts.Lang, "Performance & security by"),
+		Verifying:     text(b.VerifyingText, DefaultVerifyingText),
+		Success:       text(b.SuccessText, DefaultSuccessText),
+		Failed:        text(b.FailedText, DefaultFailedText),
+		Error:         text(b.ErrorText, DefaultErrorText),
+		Retry:         text(b.RetryText, DefaultRetryText),
+		FooterBy:      text(b.FooterText, "Performance & security by"),
+		FooterLink:    pick(b.FooterLinkText, "Zoraxy"),
+		FooterLinkURL: pick(safeFooterURL(b.FooterLinkURL), DefaultFooterURL),
 	}
 
 	switch kind {

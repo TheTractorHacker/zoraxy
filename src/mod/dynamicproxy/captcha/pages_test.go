@@ -476,3 +476,34 @@ func TestHandleVerificationEnforcesBindingsAndShowsFailedPage(t *testing.T) {
 		t.Errorf("hostname not checked unless enabled: %d", w.Code)
 	}
 }
+
+func TestCustomFooter(t *testing.T) {
+	cfg := &Config{Provider: ProviderCloudflare, SiteKey: "SK", Branding: &Branding{
+		FooterText: "Protected by", FooterLinkText: "Acme IT", FooterLinkURL: "https://acme.example/security",
+	}}
+	body := render(t, cfg, PageChallenge).Body.String()
+	for _, s := range []string{"Protected by", `href="https://acme.example/security"`, ">Acme IT</a>"} {
+		if !strings.Contains(body, s) {
+			t.Errorf("missing %q in footer", s)
+		}
+	}
+	if strings.Contains(body, "zoraxy.aroz.org") {
+		t.Error("default link must be replaced")
+	}
+	// default footer unchanged
+	def := render(t, &Config{Provider: ProviderCloudflare, SiteKey: "SK"}, PageChallenge).Body.String()
+	if !strings.Contains(def, "https://zoraxy.aroz.org") || !strings.Contains(def, ">Zoraxy</a>") {
+		t.Error("default footer changed")
+	}
+	// hide still wins
+	cfg.Branding.HideFooter = true
+	if strings.Contains(render(t, cfg, PageChallenge).Body.String(), "Acme IT") {
+		t.Error("hidden footer shown")
+	}
+	// unsafe link rejected by validation
+	for _, u := range []string{"javascript:alert(1)", "data:text/html,x", "//evil.example", "ftp://x.example"} {
+		if (&Branding{FooterLinkURL: u}).Validate() == nil {
+			t.Errorf("%q accepted", u)
+		}
+	}
+}

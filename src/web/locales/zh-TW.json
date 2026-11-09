@@ -9,7 +9,6 @@
  "strings": {
   "\"Add Redirection Rule\"": "「新增重新導向規則」",
   "\"Blocked\" page": "「已封鎖」頁面",
-  "\"Create Endpoint\"": "「建立端點」",
   "\"Create\"": "「建立」",
   "\"Enable Certificate Auto Renew\"": "「啟用憑證自動續期」",
   "\"Enable WebDAV Server\"": "「啟用 WebDAV 伺服器」",
@@ -19,7 +18,6 @@
   "\"Success\" text": "「成功」文字",
   "\"Verifying\" text": "「驗證中」文字",
   "\"{0}\" is not a valid hostname.": "「{0}」不是有效的主機名稱。",
-  "(adjust if you changed the WebDAV port). Click": "（若您變更了 WebDAV 連接埠，請自行調整）。請點擊",
   "(applies to every proxy rule set to \"Inherit\")": "（套用於所有設為「繼承」的代理規則）",
   "(click to filter the events)": "（點擊以篩選事件）",
   "(clicking a mode applies it immediately)": "（點擊模式即立即套用）",
@@ -1229,7 +1227,6 @@
   "🌊 Stream Proxy (TCP / UDP)": "🌊 串流代理 (TCP / UDP)",
   "🌐 Add DNS Record for WebDAV": "🌐 為 WebDAV 新增 DNS 記錄",
   "🌐 Enable Static Web Server": "🌐 啟用靜態網頁伺服器",
-  "🌐 Matching Keyword / Domain": "🌐 比對關鍵字 / 網域",
   "🌐 Redirection URL (From)": "🌐 重新導向 URL（來源）",
   "🌲 HTTP Proxy List": "🌲 HTTP 代理清單",
   "🎉 Certificate Installed!": "🎉 憑證已安裝！",
@@ -1260,7 +1257,6 @@
   "🔐 Enable HTTPS (TLS) for your site": "🔐 為您的網站啟用 HTTPS (TLS)",
   "🔐 TLS / SSL Certificates": "🔐 TLS / SSL 憑證",
   "🔑 Enable TLS Serving": "🔑 啟用 TLS 服務",
-  "🔓 Ignore TLS Validation Error": "🔓 忽略 TLS 驗證錯誤",
   "🔖 Status Code": "🔖 狀態碼",
   "🔬 Proxy Protocol (Advanced)": "🔬 Proxy Protocol（進階）",
   "😭 Tour not found": "😭 找不到導覽"

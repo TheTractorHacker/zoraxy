@@ -78,6 +78,9 @@ func parseCaptchaPageSettings(r *http.Request, cfg *captcha.Config) {
 		AccentColor:     postText(r, "captchaAccent"),
 		BackgroundColor: postText(r, "captchaBackground"),
 		Theme:           postText(r, "captchaTheme"),
+		FooterText:      postText(r, "captchaFooterText"),
+		FooterLinkText:  postText(r, "captchaFooterLinkText"),
+		FooterLinkURL:   postText(r, "captchaFooterLinkURL"),
 	}
 	b.HideFooter, _ = utils.PostBool(r, "captchaHideFooter")
 	// the template is not trimmed: whitespace is the author's business
