@@ -10,7 +10,7 @@ type EventFilter struct {
 	Limit    int
 	Endpoint string
 	RuleID   int       // events that matched this rule
-	Action   string    // blocked / detected
+	Action   string    // blocked / detected / challenged / challenge_passed
 	ClientIP string    // exact match
 	Since    time.Time // events at or after
 }
@@ -75,6 +75,8 @@ type Summary struct {
 	Events       int     `json:"events"`
 	Blocked      int     `json:"blocked"`
 	Detected     int     `json:"detected"`
+	Challenged   int     `json:"challenged"`
+	Passed       int     `json:"challenge_passed"`
 	TopRules     []Count `json:"top_rules"`
 	TopClientIPs []Count `json:"top_client_ips"`
 	TopEndpoints []Count `json:"top_endpoints"`
@@ -103,9 +105,14 @@ func (s *eventStore) summary(since time.Time, top int) Summary {
 	rules, ips, eps := map[string]int{}, map[string]int{}, map[string]int{}
 	for _, ev := range evs {
 		sum.Events++
-		if ev.Action == "blocked" {
+		switch ev.Action {
+		case "blocked":
 			sum.Blocked++
-		} else {
+		case ActionChallenged:
+			sum.Challenged++
+		case ActionChallengePassed:
+			sum.Passed++
+		default:
 			sum.Detected++
 		}
 		ips[ev.ClientIP]++

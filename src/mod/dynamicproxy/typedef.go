@@ -98,6 +98,8 @@ type RouterOption struct {
 
 	SanitiseClientIPHeaders bool //Global default (off): drop client supplied X-Forwarded-For / X-Real-IP / ... from peers that are not trusted proxies
 
+	WAFChallengeKeyFile string `json:"-"` //WAF graduated response: file holding the per-install key that signs challenge cookies (created when missing); empty = random key per start
+
 	/* Routing Service Managers */
 	TlsManager           *tlscert.Manager           //TLS manager for serving SAN certificates
 	RedirectRuleTable    *redirection.RuleTable     //Redirection rules handler and table
@@ -169,6 +171,8 @@ type Router struct {
 	rateLimitCounter RequestCountPerIpTable                                        //Request counter for rate limter
 
 	captchaSessionStore *captcha.SessionStore //CAPTCHA session store for tracking verified sessions
+
+	wafChallenge atomic.Pointer[wafChallengeSigner] //WAF graduated response: challenge cookie signer, see waf_challenge.go
 
 	// Secondary listening ports and their servers
 	secondaryServers     map[string]*http.Server //Map of secondary listening servers, key is the listening address (ip:port or :port)

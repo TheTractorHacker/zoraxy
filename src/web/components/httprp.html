@@ -990,6 +990,17 @@
                                     </div>
                                 </div>
                                 <small class="wafSourceInfo" style="opacity:0.7;display:block;margin-bottom:0.6em;"></small>
+                                <div class="wafChallengeOverride" style="display:none; border:1px solid rgba(128,128,128,.35); border-radius:6px; padding:.7em .9em; margin-bottom:.8em;">
+                                    <b><i class="signal icon"></i> Challenge band for this rule</b>
+                                    <small style="opacity:0.7;display:block;margin:.2em 0 .6em;">Scores between the challenge threshold and the block threshold get a CAPTCHA instead of a 403. 0 = use the global policy / profile value.
+                                        Only applied when the global WAF policy allows rules to override its thresholds.</small>
+                                    <div class="two fields">
+                                        <div class="field"><label>Challenge threshold (0 = inherit)</label><input type="number" class="wafXChallenge" min="0" value="0"></div>
+                                        <div class="field"><label>Challenge validity in minutes (0 = inherit)</label><input type="number" class="wafXChallengeTTL" min="0" max="1440" value="0"></div>
+                                    </div>
+                                    <div class="ui warning message wafChallengeProviderWarn" style="display:none;margin-top:0;"></div>
+                                    <button class="ui basic small green button wafChallengeSaveBtn"><i class="save icon"></i> Apply challenge override</button>
+                                </div>
                                 <button class="ui basic small green button wafSourceSaveBtn"><i class="save icon"></i> Apply source</button>
                                 <small style="opacity:0.7;margin-left:0.6em;">Global policy, profiles, exclusions and coverage are managed on the <b>Security &gt; WAF</b> page.</small>
                             </div>
@@ -1027,6 +1038,19 @@
                                         <small>Larger bodies, gRPC and WebSocket traffic are passed through uninspected.</small>
                                     </div>
                                 </div>
+                                <div class="two fields wafCustomChallenge">
+                                    <div class="field">
+                                        <label>Challenge threshold (0 = off)</label>
+                                        <input type="number" class="wafChallenge" min="0" value="0">
+                                        <small>Graduated response: scores from here up to the block threshold get a CAPTCHA instead of a 403. Must be lower than the anomaly score threshold.</small>
+                                    </div>
+                                    <div class="field">
+                                        <label>Challenge validity (minutes)</label>
+                                        <input type="number" class="wafChallengeTTL" min="1" max="1440" value="60">
+                                        <small>How long a solved challenge keeps the visitor in the pass band.</small>
+                                    </div>
+                                </div>
+                                <div class="ui warning message wafCustomChallengeWarn" style="display:none;"></div>
                                 <div class="field">
                                     <label>Excluded rule IDs (whole endpoint)</label>
                                     <input type="text" class="wafExcludedIds" placeholder="942100, 949000-949999">
@@ -2476,6 +2500,7 @@
             box.find(".wafProfileField").toggle(v == "profile");
             box.find(".wafCustomOnly").toggle(v == "custom");
             box.find(".wafSourceSaveBtn").toggle(v != "custom");
+            box.find(".wafChallengeOverride").toggle(v == "inherit" || v == "detection_only" || v == "block" || v == "profile");
             box.find(".wafSourceInfo").text({
                 inherit: "Follows the global WAF policy (off until it is enabled on the WAF page).",
                 off: "No WAF inspection for this proxy rule.",
@@ -2503,6 +2528,41 @@
                     btn.removeClass("loading");
                     if (r.error != undefined){ msgbox(r.error, false, 6000); }
                     else { msgbox("WAF source updated"); }
+                },
+                error: function(){ btn.removeClass("loading"); msgbox("Request failed", false, 4000); }
+            });
+        });
+        /* Graduated response (challenge band): override for the central sources, own fields for custom */
+        let capCfg = subd.CaptchaConfig || {};
+        let hasProvider = !!(capCfg.SecretKey && (capCfg.SiteKey || capCfg.Provider == 2));
+        let providerMsg = hasProvider ? "" : "This proxy rule has no CAPTCHA provider configured, so requests in the challenge band are blocked instead of challenged. Set one up under CAPTCHA in this editor.";
+        function refreshChallengeWarn(){
+            let xOn = (parseInt(box.find(".wafXChallenge").val()) || 0) > 0;
+            box.find(".wafChallengeProviderWarn").text(providerMsg).toggle(xOn && !hasProvider);
+            let cOn = (parseInt(box.find(".wafChallenge").val()) || 0) > 0;
+            box.find(".wafCustomChallengeWarn").text(providerMsg).toggle(cOn && !hasProvider);
+        }
+        let xtra = subd.WAFExtra || {};
+        box.find(".wafXChallenge").val(xtra.ChallengeThreshold || 0);
+        box.find(".wafXChallengeTTL").val(xtra.ChallengeTTLMinutes || 0);
+        box.find(".wafChallenge").val(cfg.ChallengeThreshold || 0);
+        box.find(".wafChallengeTTL").val(cfg.ChallengeTTLMinutes || 60);
+        box.find(".wafXChallenge, .wafChallenge").off("input.wafch").on("input.wafch", refreshChallengeWarn);
+        refreshChallengeWarn();
+        box.find(".wafChallengeSaveBtn").off("click").on("click", function(){
+            let btn = $(this).addClass("loading");
+            let extra = Object.assign({}, subd.WAFExtra || {}, {
+                ChallengeThreshold: parseInt(box.find(".wafXChallenge").val()) || 0,
+                ChallengeTTLMinutes: parseInt(box.find(".wafXChallengeTTL").val()) || 0
+            });
+            let data = {rootname: subd.RootOrMatchingDomain, source: srcSel.val(), extra: JSON.stringify(extra)};
+            if (data.source == "profile") data.profile = profSel.val();
+            $.cjax({
+                url: "/api/waf/endpoint/set", method: "POST", data: data,
+                success: function(r){
+                    btn.removeClass("loading");
+                    if (r.error != undefined){ msgbox(r.error, false, 6000); }
+                    else { subd.WAFExtra = extra; msgbox("Challenge override saved"); }
                 },
                 error: function(){ btn.removeClass("loading"); msgbox("Request failed", false, 4000); }
             });
@@ -2539,7 +2599,9 @@
                 ExcludedRuleIDs: box.find(".wafExcludedIds").val().split(/[\s,]+/).filter(x => x != ""),
                 PathExclusions: pathEx,
                 CustomRules: box.find(".wafCustomRules").val(),
-                IgnoreAnalyticsCookies: box.find(".wafIgnoreCookies").prop("checked")
+                IgnoreAnalyticsCookies: box.find(".wafIgnoreCookies").prop("checked"),
+                ChallengeThreshold: parseInt(box.find(".wafChallenge").val()) || 0,
+                ChallengeTTLMinutes: parseInt(box.find(".wafChallengeTTL").val()) || 0
             };
             let btn = $(this).addClass("loading");
             $.cjax({
@@ -2578,6 +2640,8 @@
                         | <a href="#" class="wafExcludeRule" data-rule="${wafEsc(r.id)}" data-path="" title="Do not apply this rule anywhere on this endpoint"><small>exclude everywhere</small></a></div>`;
                 }).join("");
                 let result = ev.action == "blocked" ? '<span style="color:#db2828;">blocked</span>'
+                    : ev.action == "challenged" ? '<span style="color:#2185d0;">challenged</span>'
+                    : ev.action == "challenge_passed" ? '<span style="color:#21ba45;">challenge passed</span>'
                     : (ev.would_block ? '<span style="color:#f2711c;">detected (would block)</span>' : 'detected');
                 body.append(`<tr>
                     <td>${wafEsc(new Date(ev.time).toLocaleString())}</td>

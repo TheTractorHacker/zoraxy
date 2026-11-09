@@ -141,6 +141,10 @@ type WAFCoverageEntry struct {
 	Profile  string
 	Mode     string // effective mode
 	Warning  string `json:",omitempty"`
+
+	// Graduated response (waf_challenge.go): effective challenge band of the endpoint and whether it can be served
+	ChallengeThreshold int  `json:",omitempty"` // 0 = no challenge band
+	ChallengeReady     bool `json:",omitempty"` // a CAPTCHA provider is configured on the endpoint; without one the challenge band blocks
 }
 
 // WAFCoverage lists every endpoint with its effective WAF mode and origin
@@ -152,6 +156,10 @@ func (router *Router) WAFCoverage() []WAFCoverageEntry {
 		e := WAFCoverageEntry{Endpoint: ep.RootOrMatchingDomain, IsRoot: ep == router.Root, Source: res.Source, Origin: res.Label, Mode: res.Mode, Warning: res.Warning}
 		if res.Source == waf.SourceProfile {
 			e.Profile = ep.WAFProfile
+		}
+		e.ChallengeReady = router.wafChallengeAvailable(ep)
+		if res.Config.ChallengeEnabled() && res.Mode == waf.ModeBlock {
+			e.ChallengeThreshold = res.Config.ChallengeThreshold
 		}
 		out = append(out, e)
 	}
@@ -170,11 +178,15 @@ func (router *Router) wafInspect(w http.ResponseWriter, r *http.Request, sep *Pr
 		return false
 	}
 	clientIP := router.GetClientIPForEndpoint(r, sep)
+	if router.wafChallengeVerify(w, r, sep, rt.res.Config, clientIP) {
+		return true
+	}
 	if rt.res.Bypass && rt.state.BypassReason(r, clientIP) != "" {
 		return false
 	}
 	detail := ""
-	blocked := rt.inst.Inspect(w, r, waf.RequestInfo{
+	challenged := false
+	info := waf.RequestInfo{
 		OnEvent:  func(ev waf.Event) { detail = ev.BlockSummary() },
 		Endpoint: sep.RootOrMatchingDomain,
 		ClientIP: clientIP,
@@ -184,8 +196,17 @@ func (router *Router) wafInspect(w http.ResponseWriter, r *http.Request, sep *Pr
 			// Rule details are logged server side only, never sent to the client.
 			serveWAFBlockPage(w, router, txID)
 		},
-	})
-	if blocked {
+	}
+	// Graduated response: the challenge band needs a CAPTCHA provider on the endpoint, else it blocks
+	if rt.res.Config.ChallengeEnabled() && router.wafChallengeAvailable(sep) {
+		info.ChallengeValid = func(r *http.Request) bool { return router.wafChallengeValid(r, sep, clientIP) }
+		info.OnChallenge = func(w http.ResponseWriter, r *http.Request, txID string) {
+			challenged = true
+			router.wafServeChallenge(w, r, sep, detail)
+		}
+	}
+	blocked := rt.inst.Inspect(w, r, info)
+	if blocked && !challenged {
 		router.logRequestDetail(r, false, http.StatusForbidden, "waf-blocked", r.Host, "", sep, detail)
 	}
 	return blocked

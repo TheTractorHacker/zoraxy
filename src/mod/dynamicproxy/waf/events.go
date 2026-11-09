@@ -40,11 +40,15 @@ type Event struct {
 	Host          string    `json:"host"`
 	Path          string    `json:"path"`
 	URI           string    `json:"uri"`
-	Action        string    `json:"action"` // "blocked" or "detected"
+	Action        string    `json:"action"` // "blocked", "detected", "challenged" or "challenge_passed"
 	WouldBlock    bool      `json:"would_block"`
 	Mode          string    `json:"mode"`
 	Source        string    `json:"source,omitempty"` // global, profile:X, custom, endpoint
 	Rules         []RuleHit `json:"rules"`
+
+	// Graduated response (bands.go)
+	Score int    `json:"score,omitempty"` // final inbound anomaly score of the transaction
+	Band  string `json:"band,omitempty"`  // "challenge" when the score was in the challenge band, whatever the action
 }
 
 // AuditSink receives one JSON line per event
@@ -56,6 +60,8 @@ type AuditSink interface {
 type Stats struct {
 	Total       uint64            `json:"total"`
 	Blocked     uint64            `json:"blocked"`
+	Challenged  uint64            `json:"challenged"`       // challenge page served (graduated response)
+	Passed      uint64            `json:"challenge_passed"` // request in the challenge band let through by a valid challenge cookie
 	PerRule     map[string]uint64 `json:"per_rule"`
 	PerEndpoint map[string]uint64 `json:"per_endpoint"`
 	PerHour     []HourStat        `json:"per_hour,omitempty"` // last 24 * 7 hours with events, oldest first
@@ -66,6 +72,9 @@ type HourStat struct {
 	Hour    int64  `json:"hour"` // unix seconds at the start of the hour
 	Total   uint64 `json:"total"`
 	Blocked uint64 `json:"blocked"`
+
+	Challenged uint64 `json:"challenged,omitempty"`
+	Passed     uint64 `json:"challenge_passed,omitempty"`
 }
 
 type eventStore struct {
@@ -75,6 +84,8 @@ type eventStore struct {
 	full     bool
 	total    uint64
 	blocked  uint64
+	chall    uint64
+	passed   uint64
 	perRule  map[int]uint64
 	perEndpt map[string]uint64
 	perHour  map[int64]*HourStat
@@ -107,6 +118,12 @@ func (s *eventStore) add(ev Event) {
 	if ev.Action == "blocked" {
 		s.blocked++
 	}
+	if ev.Action == ActionChallenged {
+		s.chall++
+	}
+	if ev.Action == ActionChallengePassed {
+		s.passed++
+	}
 	s.perEndpt[ev.Endpoint]++
 	hr := ev.Time.Truncate(time.Hour).Unix()
 	hs := s.perHour[hr]
@@ -126,6 +143,12 @@ func (s *eventStore) add(ev Event) {
 	hs.Total++
 	if ev.Action == "blocked" {
 		hs.Blocked++
+	}
+	if ev.Action == ActionChallenged {
+		hs.Challenged++
+	}
+	if ev.Action == ActionChallengePassed {
+		hs.Passed++
 	}
 	for _, r := range ev.Rules {
 		s.perRule[r.ID]++
@@ -166,7 +189,7 @@ func (s *eventStore) recent(limit int, endpoint string) []Event {
 func (s *eventStore) stats() Stats {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	st := Stats{Total: s.total, Blocked: s.blocked, PerRule: map[string]uint64{}, PerEndpoint: map[string]uint64{}}
+	st := Stats{Total: s.total, Blocked: s.blocked, Challenged: s.chall, Passed: s.passed, PerRule: map[string]uint64{}, PerEndpoint: map[string]uint64{}}
 	ids := make([]int, 0, len(s.perRule))
 	for id := range s.perRule {
 		ids = append(ids, id)

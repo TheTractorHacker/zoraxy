@@ -110,6 +110,25 @@
     body.darkTheme #wafPage .ui.basic.buttons .button:not(.active) { color: #e6e6e6 !important; }
     #wafPage .ui.basic.buttons .button.active { background: #1e6fb8 !important; color: #fff !important; }
     #wafPage .ui.label { white-space: nowrap; }
+    /* graduated response (log / challenge / block) */
+    #wafPage .wafBandBox { border: 1px solid rgba(128,128,128,.35); border-radius: 8px; padding: .9em 1em 1em; margin: 0 0 1em; background: rgba(128,128,128,.04); }
+    #wafPage .wafBandBox h4 { margin: 0 0 .3em; }
+    #wafPage .wafBands { display: flex; gap: 3px; margin: .8em 0 .4em; border-radius: 8px; overflow: hidden; }
+    #wafPage .wafBand { display: flex; flex-direction: column; justify-content: center; min-width: 5.2em; padding: .5em .7em; line-height: 1.25; transition: flex-grow .2s; }
+    #wafPage .wafBand b { font-size: .95em; }
+    #wafPage .wafBand small { opacity: .85; font-size: .82em; }
+    #wafPage .wafBand.b-log { background: rgba(33,186,69,.22); border-bottom: 4px solid #21ba45; }
+    #wafPage .wafBand.b-chal { background: rgba(242,113,28,.24); border-bottom: 4px solid #f2711c; }
+    #wafPage .wafBand.b-block { background: rgba(219,40,40,.22); border-bottom: 4px solid #db2828; }
+    #wafPage .wafBandBox.noChal .wafBand.b-chal { display: none; }
+    #wafPage .wafBandNote { margin-top: .5em; }
+    #wafPage .res-chal { color: #14639c; }
+    #wafPage .res-pass { color: #1a7a32; }
+    body.darkTheme #wafPage .res-chal { color: #7fc0f2; }
+    body.darkTheme #wafPage .res-pass { color: #6fe08a; }
+    #wafPage .tBlue { color: #14639c; }
+    body.darkTheme #wafPage .tBlue { color: #7fc0f2; }
+    #wafPage .wafTile:has(.tBlue) { border-left-color: #2185d0; }
 </style>
 <div class="standardContainer" id="wafPage">
     <div class="ui basic segment">
@@ -185,7 +204,7 @@
                 <div class="field"><label for="wafevEndpoint">Proxy rule</label><select class="ui dropdown" id="wafevEndpoint"><option value="">All</option></select></div>
                 <div class="field"><label for="wafevRule">Rule ID</label><input type="text" id="wafevRule" placeholder="942100" style="width:7em"></div>
                 <div class="field"><label for="wafevAction">Result</label>
-                    <select class="ui dropdown" id="wafevAction"><option value="">All</option><option value="blocked">Blocked</option><option value="detected">Detected</option></select></div>
+                    <select class="ui dropdown" id="wafevAction"><option value="">All</option><option value="blocked">Blocked</option><option value="challenged">Challenged</option><option value="challenge_passed">Challenge passed</option><option value="detected">Detected</option></select></div>
                 <div class="field"><label for="wafevIP">Client IP</label><input type="text" id="wafevIP" style="width:10em"></div>
                 <div class="field"><label for="wafevSince">Time</label>
                     <select class="ui dropdown" id="wafevSince"><option value="1">Last hour</option><option value="24" selected>Last 24 hours</option><option value="168">Last 7 days</option><option value="0">Everything buffered</option></select></div>
@@ -264,6 +283,29 @@
                     <div class="wafMuted">Only this much of a request body is inspected.</div>
                 </div>
             </div>
+            <div class="wafBandBox" id="wafpBandBox">
+                <h4><i class="signal icon"></i> Graduated response <span class="wafMuted">(log, challenge, block)</span></h4>
+                <div class="wafMuted">Instead of a hard 403 for every borderline request, add a middle band: a visitor whose score is between the challenge threshold and the block
+                    threshold gets a CAPTCHA page once, and passes for the validity time after solving it. Scores at or above the block threshold (the anomaly score threshold above) are
+                    still blocked, and a solved challenge never opens that band. Challenged requests do not count towards the automatic ban.</div>
+                <div class="wafBands" id="wafpBands" role="img" aria-label="Score bands"></div>
+                <div class="two fields" style="margin-top:.8em">
+                    <div class="field">
+                        <label for="wafpChallenge">Challenge threshold (0 = off)</label>
+                        <input type="number" id="wafpChallenge" min="0" value="0">
+                        <div class="wafMuted">Must be lower than the anomaly score threshold. For example 3 with a block threshold of 5 challenges a lone warning rule (3) or error rule (4) and still blocks a critical rule (5).</div>
+                    </div>
+                    <div class="field">
+                        <label for="wafpChallengeTTL">Challenge validity (minutes)</label>
+                        <input type="number" id="wafpChallengeTTL" min="1" max="1440" value="60">
+                        <div class="wafMuted">How long a solved challenge keeps the visitor in the pass band (1 - 1440). The pass is tied to the visitor's IP address and browser.</div>
+                    </div>
+                </div>
+                <div class="ui warning message wafBandNote" id="wafpBandWarn" style="display:none"></div>
+                <div class="wafMuted wafBandNote" id="wafpBandRules" style="display:none">The challenge uses the CAPTCHA provider configured on the proxy rule (the same page and provider as "Require CAPTCHA").
+                    It is only shown to page navigations (GET requests that accept HTML). A rule without a CAPTCHA provider, and API or script clients, are <b>blocked</b> in the challenge band instead.
+                    Detection-only mode never challenges.</div>
+            </div>
             <div class="field">
                 <div class="ui checkbox" id="wafpOverrideBox"><input type="checkbox" id="wafpOverride"><label>Allow proxy rules to override paranoia level and threshold</label></div>
                 <div class="ui checkbox" id="wafpCookiesBox" style="display:block;margin-top:0.6em;"><input type="checkbox" id="wafpCookies"><label>Do not inspect analytics cookies (PostHog, Google Analytics, Facebook pixel, Hotjar, Mixpanel, Segment, Amplitude, Matomo, Clarity)</label></div>
@@ -324,6 +366,11 @@
                         <select class="ui dropdown" id="wafprMode"><option value="detection_only">Detection only (log, never block)</option><option value="block">Block</option><option value="off">Off</option></select></div>
                     <div class="field"><label for="wafprParanoia">Paranoia level (0 = global)</label><input type="number" id="wafprParanoia" min="0" max="4" value="0"></div>
                     <div class="field"><label for="wafprThreshold">Threshold (0 = global)</label><input type="number" id="wafprThreshold" min="0" value="0"></div>
+                </div>
+                <div class="two fields">
+                    <div class="field"><label for="wafprChallenge">Challenge threshold (0 = global)</label><input type="number" id="wafprChallenge" min="0" value="0">
+                        <div class="wafMuted">Below the block threshold. A CAPTCHA instead of a 403 for borderline scores.</div></div>
+                    <div class="field"><label for="wafprChallengeTTL">Challenge validity in minutes (0 = global)</label><input type="number" id="wafprChallengeTTL" min="0" max="1440" value="0"></div>
                 </div>
                 <div class="field"><label for="wafprExcluded">Excluded rule IDs</label><input type="text" id="wafprExcluded" placeholder="942100, 949000-949999"></div>
                 <div class="field"><label for="wafprPathEx">Path scoped exclusions</label><textarea id="wafprPathEx" rows="3" placeholder="/api/search 942100,942200&#10;=/login 920420"></textarea></div>
@@ -478,6 +525,9 @@
         $("#wafpBodyLimit").val(Math.round((p.MaxBodyBytes || 131072) / 1024));
         $("#wafpOverride").prop("checked", !!p.AllowEndpointOverride);
         $("#wafpCookies").prop("checked", !!p.IgnoreAnalyticsCookies);
+        $("#wafpChallenge").val(p.ChallengeThreshold || 0);
+        $("#wafpChallengeTTL").val(p.ChallengeTTLMinutes || 60);
+        renderBands();
         $("#wafpCustomRules").val(p.CustomRules || "");
         $("#wafpTrustedPaths").val(trustedToText(p.TrustedPaths));
         $("#wafpAllowedIPs").val((p.AllowedIPs || []).join("\n"));
@@ -501,12 +551,43 @@
             p.MaxBodyBytes = (parseInt($("#wafpBodyLimit").val()) || 128) * 1024;
             p.AllowEndpointOverride = $("#wafpOverride").prop("checked");
             p.IgnoreAnalyticsCookies = $("#wafpCookies").prop("checked");
+            p.ChallengeThreshold = parseInt($("#wafpChallenge").val()) || 0;
+            p.ChallengeTTLMinutes = parseInt($("#wafpChallengeTTL").val()) || 0;
+            if (p.ChallengeThreshold < 0) throw new Error("The challenge threshold cannot be negative (0 turns the challenge band off).");
+            if (p.ChallengeThreshold >= p.InboundThreshold) throw new Error("The challenge threshold (" + p.ChallengeThreshold + ") must be lower than the anomaly score threshold (" + p.InboundThreshold + ").");
+            if (p.ChallengeTTLMinutes < 0 || p.ChallengeTTLMinutes > 1440) throw new Error("The challenge validity must be between 1 and 1440 minutes.");
             p.CustomRules = $("#wafpCustomRules").val();
             p.TrustedPaths = textToTrusted($("#wafpTrustedPaths").val());
             p.AllowedIPs = lines($("#wafpAllowedIPs").val());
         }, "WAF policy saved and applied", function(){ btn.removeClass("loading"); });
         setTimeout(function(){ btn.removeClass("loading"); }, 6000);
     });
+
+    /* ---------- graduated response bands ---------- */
+    function bandRange(lo, hi){ return hi <= lo ? String(lo) : lo + " - " + hi; }
+    function renderBands(){
+        var block = parseInt($("#wafpThreshold").val()) || 5, chal = parseInt($("#wafpChallenge").val()) || 0;
+        var on = chal > 0 && chal < block;
+        var logHi = (on ? chal : block) - 1;
+        var parts = '<div class="wafBand b-log" style="flex:' + Math.max(on ? chal : block, 1) + ' 1 0"><b>Log</b><small>score ' + bandRange(0, Math.max(logHi, 0)) + '</small></div>';
+        if (on) parts += '<div class="wafBand b-chal" style="flex:' + Math.max(block - chal, 1) + ' 1 0"><b>Challenge</b><small>score ' + bandRange(chal, block - 1) + '</small></div>';
+        parts += '<div class="wafBand b-block" style="flex:' + Math.max(Math.ceil(block * 0.6), 2) + ' 1 0"><b>Block</b><small>score ' + block + ' and above</small></div>';
+        $("#wafpBands").html(parts);
+        $("#wafpBandBox").toggleClass("noChal", !on);
+        $("#wafpBandRules").toggle(chal > 0);
+        var bad = chal > 0 && chal >= block;
+        var noProv = bandNoProvider();
+        var msg = "";
+        if (bad) msg = "The challenge threshold must be lower than the anomaly score threshold (" + block + "). The band is ignored until you fix it.";
+        else if (chal > 0 && noProv.length) msg = noProv.length + " proxy rule" + (noProv.length > 1 ? "s run" : " runs") + " in Block mode without a CAPTCHA provider (" + noProv.slice(0, 4).join(", ") + (noProv.length > 4 ? ", ..." : "") +
+            "). For them the challenge band blocks instead of challenging. Configure a CAPTCHA provider on the proxy rule (Edit &gt; CAPTCHA) to challenge visitors.";
+        $("#wafpBandWarn").html(msg).toggle(msg != "");
+    }
+    // Proxy rules that inherit the policy in Block mode but cannot serve a challenge
+    function bandNoProvider(){
+        return (S.cov || []).filter(function(r){ return r.Mode == "block" && r.Source != "custom" && !r.ChallengeReady; }).map(function(r){ return r.Endpoint; });
+    }
+    $("#wafpThreshold, #wafpChallenge").on("input change", renderBands);
 
     /* ---------- header status + first run ---------- */
     function renderStatus(){
@@ -568,7 +649,7 @@
             var sum = s.summary, st = s.stats;
             var prot = S.cov ? S.cov.filter(function(r){ return r.Mode != "off"; }).length : null;
             $("#wafTiles").html(
-                tile(sum.events, "Events (24 h)", "") + tile(sum.blocked, "Blocked", "tRed") + tile(sum.detected, "Detected only", "tOrange") +
+                tile(sum.events, "Events (24 h)", "") + tile(sum.blocked, "Blocked", "tRed") + tile(sum.detected, "Detected only", "tOrange") + tile(sum.challenged || 0, "Challenged", "tBlue") +
                 tile(prot == null ? "-" : prot + " / " + S.cov.length, "Rules inspected", "") + tile(st.total, "Since start", ""));
             top("#wafTopRules", (sum.top_rules || []).filter(function(it){ return it.key != "949110" && it.key != "949111"; }), function(it){
                 var r = S.ruleMap[it.key];
@@ -609,6 +690,10 @@
             if (off.length && m != "off") items.push('<i class="orange exclamation triangle icon"></i> ' + off.length + ' proxy rule' + (off.length > 1 ? "s have" : " has") + ' no WAF. <a class="wafLink wafGoTab" data-t="waf-coverage" data-f="off">Review</a>');
             var warn = S.cov.filter(function(r){ return r.Warning; });
             if (warn.length) items.push('<i class="yellow info circle icon"></i> ' + warn.length + ' warning' + (warn.length > 1 ? "s" : "") + ' in the coverage list. <a class="wafLink wafGoTab" data-t="waf-coverage">Open</a>');
+        }
+        if (S.cov){
+            var noChal = S.cov.filter(function(r){ return r.ChallengeThreshold > 0 && !r.ChallengeReady; });
+            if (noChal.length) items.push('<i class="orange exclamation triangle icon"></i> ' + noChal.length + ' proxy rule' + (noChal.length > 1 ? "s have" : " has") + ' the challenge band on but no CAPTCHA provider, so the band blocks instead. <a class="wafLink wafGoTab" data-t="waf-policy">Graduated response</a>');
         }
         if (S.summary && S.summary.summary.detected > 0 && m == "detection_only") items.push('<i class="blue info circle icon"></i> ' + S.summary.summary.detected + ' events were only detected. Review them for false positives before switching to Block. <a class="wafLink wafGoTab" data-t="waf-events">Events</a>');
         $("#wafNeeds").html(items.length ? items.map(function(h){ return '<div class="item">' + h + '</div>'; }).join("") : '<div class="item"><i class="green check circle icon"></i> Nothing needs attention.</div>');
@@ -661,7 +746,9 @@
         return name;
     }
     function resultHtml(ev){
-        if (ev.action == "blocked") return '<span class="res res-blocked">blocked</span>';
+        if (ev.action == "blocked") return '<span class="res res-blocked">blocked</span>' + (ev.band == "challenge" ? ' <span class="wafMuted" title="The score was in the challenge band but this client could not be challenged (no CAPTCHA provider, or not a page navigation)">(challenge band)</span>' : '');
+        if (ev.action == "challenged") return '<span class="res res-chal" title="Answered with a CAPTCHA page; the request did not reach the service">challenged</span>';
+        if (ev.action == "challenge_passed") return '<span class="res res-pass" title="Score in the challenge band, let through because the visitor solved the challenge">challenge passed</span>';
         return ev.would_block ? '<span class="res res-would" title="Detection only: this request would have been blocked in Block mode">would block</span>' : '<span>detected</span>';
     }
     function eventRow(ev, i){
@@ -733,12 +820,14 @@
         var hits = visibleHits(ev);
         var verdict;
         if (ev.action == "blocked") verdict = '<span class="res res-blocked">Blocked</span>: the combined anomaly score of the rules below reached the threshold, so the request was rejected with HTTP 403.';
+        else if (ev.action == "challenged") verdict = '<span class="res res-chal">Challenged</span>: the anomaly score (' + esc(ev.score) + ') was in the challenge band, so the visitor was shown a CAPTCHA page instead of the site. The request did not reach the service.';
+        else if (ev.action == "challenge_passed") verdict = '<span class="res res-pass">Challenge passed</span>: the anomaly score (' + esc(ev.score) + ') was in the challenge band, but the visitor had solved the CAPTCHA recently, so the request was let through.';
         else if (ev.would_block) verdict = '<span class="res res-would">Would have been blocked</span>: the request reached the blocking threshold, but this rule runs in detection-only mode, so it was let through and logged.';
         else verdict = 'Detected and logged. The score stayed below the blocking threshold.';
         var h = '<button class="ui right floated basic icon button" id="wafDrawerClose" aria-label="Close details"><i class="times icon"></i></button><h3>Why was this flagged?</h3><p>' + verdict + '</p>' +
             '<dl><dt>Time</dt><dd>' + esc(new Date(ev.time).toLocaleString()) + '</dd><dt>Proxy rule</dt><dd>' + esc(ev.endpoint) + '</dd>' +
             '<dt>Client</dt><dd>' + esc(ev.client_ip) + '</dd><dt>Request</dt><dd><b>' + esc(ev.method) + '</b> ' + esc(clean(ev.uri, 500)) + '</dd>' +
-            '<dt>WAF settings</dt><dd>' + esc(ev.mode || "") + (ev.source ? ' (' + esc(ev.source) + ')' : '') + '</dd><dt>Transaction</dt><dd>' + esc(ev.txid) + '</dd></dl>';
+            '<dt>WAF settings</dt><dd>' + esc(ev.mode || "") + (ev.source ? ' (' + esc(ev.source) + ')' : '') + '</dd><dt>Transaction</dt><dd>' + esc(ev.txid) + '</dd>' + (ev.score ? '<dt>Score</dt><dd>' + esc(ev.score) + '</dd>' : '') + '</dl>';
         h += '<h4>Rules that matched</h4>';
         if (!hits.length) h += '<div class="wafMuted">Only the score evaluation rule matched.</div>';
         hits.forEach(function(r){
@@ -867,7 +956,7 @@
                 var actions = p.BuiltIn ? '<button class="ui mini basic button wafPrView" data-i="' + i + '">View</button> <button class="ui mini basic button wafPrClone" data-i="' + i + '">Clone</button>' :
                     '<button class="ui mini basic button wafPrEdit" data-i="' + i + '">Edit</button> <button class="ui mini basic button wafPrClone" data-i="' + i + '">Clone</button> <button class="ui mini basic button wafPrDel" data-i="' + i + '" style="color:#db2828">Delete</button>';
                 html += '<tr><td><b>' + esc(p.Name) + '</b>' + (p.BuiltIn ? ' <span class="ui mini label">built-in</span>' : '') + '<br><span class="wafMuted">' + esc(p.Description) + '</span></td><td>' + modeBadge(p.Mode) +
-                    '</td><td>' + (p.ParanoiaLevel || "global") + '</td><td>' + (p.InboundThreshold || "global") + '</td><td>' + (used.length ? esc(used.join(", ")) : '<span class="wafMuted">unused</span>') + '</td><td style="white-space:nowrap">' + actions + '</td></tr>';
+                    '</td><td>' + (p.ParanoiaLevel || "global") + '</td><td>' + (p.InboundThreshold || "global") + (p.ChallengeThreshold ? '<div class="wafMuted">challenge ' + p.ChallengeThreshold + '</div>' : '') + '</td><td>' + (used.length ? esc(used.join(", ")) : '<span class="wafMuted">unused</span>') + '</td><td style="white-space:nowrap">' + actions + '</td></tr>';
             });
             $("#wafProfilesBody").html(html || '<tr><td colspan="6" class="wafMuted">No profiles.</td></tr>');
         });
@@ -890,6 +979,7 @@
         $("#wafProfileEditorTitle").text(editingNew ? "New profile" : (ro ? "Built-in profile (read-only)" : "Edit profile"));
         $("#wafprName").val(p.Name); $("#wafprDesc").val(p.Description || ""); $("#wafprMode").val(p.Mode || "detection_only");
         $("#wafprParanoia").val(p.ParanoiaLevel || 0); $("#wafprThreshold").val(p.InboundThreshold || 0);
+        $("#wafprChallenge").val(p.ChallengeThreshold || 0); $("#wafprChallengeTTL").val(p.ChallengeTTLMinutes || 0);
         $("#wafprExcluded").val((p.ExcludedRuleIDs || []).join(", ")); $("#wafprPathEx").val(pathExToText(p.PathExclusions)); $("#wafprRules").val(p.CustomRules || ""); $("#wafprCookies").prop("checked", !!p.IgnoreAnalyticsCookies);
         $("#wafProfileEditor").find("input,select,textarea,#wafPresets button").prop("disabled", !!ro);
         $("#wafprName").prop("disabled", !editingNew || !!ro);
@@ -903,6 +993,7 @@
         try {
             prof = {Name: $("#wafprName").val().trim(), Description: $("#wafprDesc").val(), Mode: $("#wafprMode").val(),
                 ParanoiaLevel: parseInt($("#wafprParanoia").val()) || 0, InboundThreshold: parseInt($("#wafprThreshold").val()) || 0,
+                ChallengeThreshold: parseInt($("#wafprChallenge").val()) || 0, ChallengeTTLMinutes: parseInt($("#wafprChallengeTTL").val()) || 0,
                 ExcludedRuleIDs: ids($("#wafprExcluded").val()), PathExclusions: textToPathEx($("#wafprPathEx").val()), CustomRules: $("#wafprRules").val(), IgnoreAnalyticsCookies: $("#wafprCookies").prop("checked")};
         } catch (e){ msgbox(e.message, false, 5000); return; }
         var btn = $(this).addClass("loading");
@@ -919,6 +1010,7 @@
                 if (fail(cov)) return;
                 S.cov = cov || [];
                 S.covShown = COV_PAGE;
+                renderBands();
                 renderStatus();
                 renderCoverage();
             });

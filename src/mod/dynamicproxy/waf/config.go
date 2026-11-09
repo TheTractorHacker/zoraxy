@@ -50,6 +50,14 @@ type Config struct {
 	// Segment, Amplitude, Matomo, Clarity). Their JSON or encoded values look like attacks to the CRS and get
 	// ordinary visitors blocked. Every other cookie, argument and header is inspected as before.
 	IgnoreAnalyticsCookies bool
+
+	// --- Graduated response (bands.go) ---------------------------------------------------------
+	// ChallengeThreshold turns on the challenge band: requests whose anomaly score is at least this
+	// value but below InboundThreshold get a CAPTCHA instead of being let through. 0 = off.
+	ChallengeThreshold int `json:",omitempty"`
+	// ChallengeTTLMinutes is how long a solved challenge keeps the client in the pass band.
+	// Default 60, maximum 1440. Only used when ChallengeThreshold is set.
+	ChallengeTTLMinutes int `json:",omitempty"`
 }
 
 var (
@@ -83,6 +91,9 @@ func (c *Config) Normalize() Config {
 	if n.MaxBodyBytes <= 0 {
 		n.MaxBodyBytes = DefaultMaxBodyBytes
 	}
+	if n.ChallengeThreshold > 0 && n.ChallengeTTLMinutes <= 0 {
+		n.ChallengeTTLMinutes = DefaultChallengeTTLMinutes
+	}
 	n.ExcludedRuleIDs = append([]string(nil), n.ExcludedRuleIDs...)
 	n.PathExclusions = append([]PathExclusion(nil), n.PathExclusions...)
 	n.CustomRules = strings.TrimSpace(n.CustomRules)
@@ -91,6 +102,9 @@ func (c *Config) Normalize() Config {
 
 // Validate checks everything that can be checked without compiling rules
 func (c *Config) Validate() error {
+	if err := c.validateBands(); err != nil {
+		return err
+	}
 	n := c.Normalize()
 	switch n.Mode {
 	case ModeOff, ModeDetectionOnly, ModeBlock:

@@ -62,6 +62,10 @@ type Policy struct {
 	TrustedPaths           []TrustedPath   // Requests that skip the WAF
 	AllowedIPs             []string        // IPs / CIDRs that skip the WAF
 	IgnoreAnalyticsCookies bool            `json:",omitempty"` // Do not inspect the values of analytics cookies (PostHog, Google Analytics, ...), see Config
+
+	// Graduated response, see bands.go. ChallengeThreshold 0 = challenge band off.
+	ChallengeThreshold  int `json:",omitempty"`
+	ChallengeTTLMinutes int `json:",omitempty"` // 0 = default (60)
 }
 
 // Profile is a reusable named bundle of WAF settings
@@ -76,6 +80,10 @@ type Profile struct {
 	PathExclusions         []PathExclusion
 	CustomRules            string
 	IgnoreAnalyticsCookies bool `json:",omitempty"` // Additive: on if the policy or the profile turns it on
+
+	// Graduated response, see bands.go. 0 = use the global policy value.
+	ChallengeThreshold  int `json:",omitempty"`
+	ChallengeTTLMinutes int `json:",omitempty"`
 }
 
 // Overrides are the per endpoint additions applied on top of the global
@@ -86,6 +94,11 @@ type Overrides struct {
 	ExcludedRuleIDs  []string
 	PathExclusions   []PathExclusion
 	CustomRules      string
+
+	// Graduated response, see bands.go. 0 = inherit. Like the paranoia level and threshold they are
+	// only honoured when the policy allows endpoint override.
+	ChallengeThreshold  int `json:",omitempty"`
+	ChallengeTTLMinutes int `json:",omitempty"`
 }
 
 // Setting is the WAF choice of one endpoint
@@ -104,6 +117,8 @@ type Resolved struct {
 	Config  *Config // nil when the WAF is off
 	Bypass  bool    // trusted path / IP lists apply
 	Warning string
+
+	bandErr string // set when the merged challenge threshold is not below the block threshold, see applyBands
 }
 
 // State is an immutable policy + profiles snapshot
@@ -165,6 +180,11 @@ func NewState(p Policy, profiles []Profile) (*State, error) {
 		}
 		s.profiles[k] = pr
 	}
+	for _, pr := range s.profiles {
+		if r := s.Resolve(Setting{Source: SourceProfile, Profile: pr.Name}); r.bandErr != "" {
+			return nil, fmt.Errorf("profile %q: %s", pr.Name, r.bandErr)
+		}
+	}
 	return s, nil
 }
 
@@ -192,7 +212,8 @@ func (p *Policy) validate() error {
 		}
 	}
 	c := Config{Mode: p.DefaultMode, ParanoiaLevel: p.ParanoiaLevel, InboundThreshold: p.InboundThreshold,
-		MaxBodyBytes: p.MaxBodyBytes, ExcludedRuleIDs: p.ExcludedRuleIDs, PathExclusions: p.PathExclusions, CustomRules: p.CustomRules}
+		MaxBodyBytes: p.MaxBodyBytes, ExcludedRuleIDs: p.ExcludedRuleIDs, PathExclusions: p.PathExclusions, CustomRules: p.CustomRules,
+		ChallengeThreshold: p.ChallengeThreshold, ChallengeTTLMinutes: p.ChallengeTTLMinutes}
 	if c.Mode == ModeOff {
 		c.Mode = ModeDetectionOnly
 	}
@@ -212,6 +233,9 @@ func (pr *Profile) validate() error {
 	}
 	c := Config{Mode: pr.Mode, ParanoiaLevel: pr.ParanoiaLevel, InboundThreshold: pr.InboundThreshold,
 		ExcludedRuleIDs: pr.ExcludedRuleIDs, PathExclusions: pr.PathExclusions, CustomRules: pr.CustomRules}
+	if err := validateBandValues(pr.ChallengeThreshold, pr.ChallengeTTLMinutes); err != nil {
+		return err
+	}
 	return c.Validate()
 }
 
@@ -278,11 +302,20 @@ func (s *State) ValidateSetting(set Setting) error {
 		if (set.Extra.ParanoiaLevel != 0 || set.Extra.InboundThreshold != 0) && !s.Policy.AllowEndpointOverride {
 			return errors.New("endpoint paranoia / threshold override is not allowed by the global WAF policy")
 		}
+		if err := validateBandValues(set.Extra.ChallengeThreshold, set.Extra.ChallengeTTLMinutes); err != nil {
+			return err
+		}
+		if (set.Extra.ChallengeThreshold != 0 || set.Extra.ChallengeTTLMinutes != 0) && !s.Policy.AllowEndpointOverride {
+			return errors.New("endpoint challenge override is not allowed by the global WAF policy")
+		}
 		c := Config{Mode: ModeBlock, ParanoiaLevel: set.Extra.ParanoiaLevel, InboundThreshold: set.Extra.InboundThreshold,
 			ExcludedRuleIDs: set.Extra.ExcludedRuleIDs, PathExclusions: set.Extra.PathExclusions, CustomRules: set.Extra.CustomRules}
 		if err := c.Validate(); err != nil {
 			return err
 		}
+	}
+	if r := s.Resolve(set); r.bandErr != "" {
+		return errors.New(r.bandErr)
 	}
 	return nil
 }
@@ -376,6 +409,7 @@ func (s *State) Resolve(set Setting) Resolved {
 		}
 	}
 	cfg.CustomRules = strings.Join(joined, "\n")
+	s.applyBands(&cfg, prof, set.Extra, &res)
 	cfg.ExcludedRuleIDs = dedupe(cfg.ExcludedRuleIDs)
 	res.Config = &cfg
 	return res
