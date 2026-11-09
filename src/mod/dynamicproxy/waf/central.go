@@ -62,6 +62,9 @@ type Policy struct {
 	TrustedPaths           []TrustedPath   // Requests that skip the WAF
 	AllowedIPs             []string        // IPs / CIDRs that skip the WAF
 	IgnoreAnalyticsCookies bool            `json:",omitempty"` // Do not inspect the values of analytics cookies (PostHog, Google Analytics, ...), see Config
+
+	// --- Response inspection (outbound leak detection), see respinspect.go ---
+	Response *ResponseConfig `json:",omitempty"` // Defaults for every endpoint that has the WAF on; profiles / endpoints override per group
 }
 
 // Profile is a reusable named bundle of WAF settings
@@ -76,6 +79,9 @@ type Profile struct {
 	PathExclusions         []PathExclusion
 	CustomRules            string
 	IgnoreAnalyticsCookies bool `json:",omitempty"` // Additive: on if the policy or the profile turns it on
+
+	// --- Response inspection (outbound leak detection), see respinspect.go ---
+	Response *ResponseConfig `json:",omitempty"` // Per group override of the policy
 }
 
 // Overrides are the per endpoint additions applied on top of the global
@@ -86,6 +92,9 @@ type Overrides struct {
 	ExcludedRuleIDs  []string
 	PathExclusions   []PathExclusion
 	CustomRules      string
+
+	// --- Response inspection (outbound leak detection), see respinspect.go ---
+	Response *ResponseConfig `json:",omitempty"` // Per group override of the policy / profile
 }
 
 // Setting is the WAF choice of one endpoint
@@ -196,6 +205,9 @@ func (p *Policy) validate() error {
 	if c.Mode == ModeOff {
 		c.Mode = ModeDetectionOnly
 	}
+	if err := p.Response.Validate(); err != nil {
+		return err
+	}
 	return c.Validate()
 }
 
@@ -212,6 +224,9 @@ func (pr *Profile) validate() error {
 	}
 	c := Config{Mode: pr.Mode, ParanoiaLevel: pr.ParanoiaLevel, InboundThreshold: pr.InboundThreshold,
 		ExcludedRuleIDs: pr.ExcludedRuleIDs, PathExclusions: pr.PathExclusions, CustomRules: pr.CustomRules}
+	if err := pr.Response.Validate(); err != nil {
+		return err
+	}
 	return c.Validate()
 }
 
@@ -281,6 +296,9 @@ func (s *State) ValidateSetting(set Setting) error {
 		c := Config{Mode: ModeBlock, ParanoiaLevel: set.Extra.ParanoiaLevel, InboundThreshold: set.Extra.InboundThreshold,
 			ExcludedRuleIDs: set.Extra.ExcludedRuleIDs, PathExclusions: set.Extra.PathExclusions, CustomRules: set.Extra.CustomRules}
 		if err := c.Validate(); err != nil {
+			return err
+		}
+		if err := set.Extra.Response.Validate(); err != nil {
 			return err
 		}
 	}
@@ -377,6 +395,7 @@ func (s *State) Resolve(set Setting) Resolved {
 	}
 	cfg.CustomRules = strings.Join(joined, "\n")
 	cfg.ExcludedRuleIDs = dedupe(cfg.ExcludedRuleIDs)
+	s.resolveResponse(&cfg, prof, set.Extra)
 	res.Config = &cfg
 	return res
 }

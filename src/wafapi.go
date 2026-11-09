@@ -48,6 +48,7 @@ func RegisterWAFAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/waf/stats", HandleWAFStats)
 	authRouter.HandleFunc("/api/waf/exclude", HandleWAFExclude)
 	RegisterWAFCentralAPIs(authRouter)
+	RegisterWAFResponseAPIs(authRouter)
 }
 
 func parseWAFConfig(r *http.Request) (*waf.Config, error) {
@@ -110,7 +111,7 @@ func HandleWAFValidate(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleWAFEvents lists recent events across all endpoints, newest first.
-// GET limit, endpoint, rule, action (blocked|detected), ip, since (unix seconds or RFC3339)
+// GET limit, endpoint, rule, action (blocked|detected|stripped), ip, since, kind (request|response), group (unix seconds or RFC3339)
 func HandleWAFEvents(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	limit, _ := strconv.Atoi(q.Get("limit"))
@@ -127,6 +128,7 @@ func HandleWAFEvents(w http.ResponseWriter, r *http.Request) {
 		f.RuleID = id
 	}
 	f.Since = parseSince(q.Get("since"))
+	f.Kind, f.Group = q.Get("kind"), q.Get("group") // response inspection filters
 	js, _ := json.Marshal(waf.Default.QueryEvents(f))
 	utils.SendJSONResponse(w, string(js))
 }

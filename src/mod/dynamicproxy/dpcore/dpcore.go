@@ -103,6 +103,9 @@ type ResponseRewriteRuleSet struct {
 
 	/* HTTP/3 (QUIC) */
 	AltSvc string //Alt-Svc header value to advertise HTTP/3 support; empty = no header
+
+	/* Response inspection (outbound leak detection) */
+	ResponseGuard ResponseGuard //nil = off (one nil check), see respguard.go
 }
 
 type DpcoreOptions struct {
@@ -555,6 +558,13 @@ func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request, rrr 
 	//Add debug X-Proxy-By tracker
 	if rrr.DevelopmentMode {
 		res.Header.Set("x-proxy-by", "zoraxy/"+rrr.Version)
+	}
+
+	// Response inspection (outbound leak detection), see respguard.go
+	if rrr.ResponseGuard != nil {
+		if st, handled := p.applyResponseGuard(rw, req, res, rrr.ResponseGuard); handled {
+			return st, nil
+		}
 	}
 
 	//Custom Location header rewriter functions

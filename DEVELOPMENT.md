@@ -293,6 +293,130 @@ of policy, profiles and endpoint WAF settings.
 **Tests:** `waf/central_test.go`, `dynamicproxy/waf_central_test.go` (inheritance matrix through `ProxyHandler.ServeHTTP`
 and the non-TLS path, bypass tricks, profile propagation, concurrency), `src/wafcentral_test.go` (APIs, persistence, cluster).
 
+### Response protection (outbound leak detection)
+
+An optional part of the WAF that looks at what the upstream sends back and can log, block or clean it: stack traces and
+debug pages, database errors, secrets, directory listings and server banners. It does **not** use the Coraza response
+phases (they need the whole body buffered, which cannot coexist with streaming); it is a separate, self-contained detector.
+Code: `waf/respconfig.go` (config, per group merge), `waf/respsignatures.go` (the signatures), `waf/respmatch.go`
+(Aho-Corasick anchor prefilter), `waf/respinspect.go` (window, encodings, events, headers), `dpcore/respguard.go` (the single
+hook in the proxy core), `dynamicproxy/waf_response.go` (glue), `src/wafresponseapi.go`. UI: **Security > WAF > Response
+protection**, the profile editor, and the WAF page of a proxy rule.
+
+**Config.** `ResponseConfig{WindowKiB, Groups}` in a clearly marked block at the end of `waf.Config`, `waf.Policy`,
+`waf.Profile` and `waf.Overrides` (all `omitempty`, so old files load and save unchanged). `Groups` maps a group to an action:
+`stacktrace`, `dberror`, `secrets`, `dirlisting`: `off | log | block`; `headers`: `off | log | strip`. A missing or empty
+value means "inherit". `State.Resolve` merges per group: policy, then profile, then the endpoint's `WAFExtra`; the most
+specific non-empty value wins and `WindowKiB` is the last non-zero one. A `custom` endpoint uses only its own `Config.Response`.
+`Config.Hash()` ignores the response part, so editing it never recompiles Coraza. Response protection exists where the WAF
+of the endpoint is on: with WAF mode `off` nothing is inspected. In `detection_only` mode `block` and `strip` do not act;
+they are recorded as "would block".
+
+**Actions.** `log` records an event and never changes a byte. `block` replaces the response with a generic `502` text page
+(`Bad Gateway`; nothing from the upstream, not even its headers) and closes the upstream body unread. `strip` (headers only)
+deletes the header. Only high confidence hits can block (see the table); low confidence hits are logged at most.
+
+**Where it runs.** `ResponseRewriteRuleSet.ResponseGuard` (nil when off: one nil check per request, no allocation; the
+`responseGuard()` helper returns a nil interface unless the endpoint has an active guard) is consulted in
+`ReverseProxy.ProxyHTTP` after the upstream headers arrived and before anything is copied to the client.
+
+**Safety rules (what is inspected, what never is).**
+
+- Header banners are checked on every response except `101`. Everything below concerns the body.
+- Body candidates need a known length (`Content-Length > 0`) and a text-like type: `text/*` (not `text/event-stream`),
+  JSON (`application/json`, `+json`, ndjson), XML (`application/xml`, `+xml`), JavaScript. Everything else is untouched.
+- Never inspected, never read, never wrapped (tests assert zero reads of the body): chunked or otherwise unknown length
+  (`ContentLength == -1`, these are the responses the proxy treats as streams), SSE, gRPC, trailers, `101`/upgrades and
+  requests carrying `Upgrade`, `206` and responses with `Content-Range`, `HEAD`, `1xx/204/205/304`, anything the proxy core flags as a
+  bidirectional stream, `Content-Encoding` other than identity, gzip or deflate (so `br`, `zstd` and stacked encodings pass
+  through uninspected).
+- **Window.** At most `WindowKiB` KiB (default 64, max 1024) of the body are read into a buffer *before the headers are sent*; the
+  buffer is then put back in front of the rest of the body, which streams through unread. The client always receives the
+  original bytes unless the response is blocked. **A leak beyond the window is not seen** (tested), and `block` only
+  works for leaks inside it. Signatures never match across the window end. A leak split over several network reads
+  inside the window is found (the window is filled completely, tested with 1 byte reads).
+- **Compression.** gzip and deflate (zlib) are decoded *only to inspect*; the client still gets the compressed bytes. Hard
+  caps, whatever the stream claims: at most `WindowKiB` KiB are ever decompressed (decoding stops there) and at most
+  `2 * window + 16 KiB` compressed bytes are buffered. A 400 MiB zip bomb therefore costs the same as an ordinary page,
+  a stream of empty stored blocks stops at the compressed cap, and a corrupt stream is simply not inspected (all tested).
+  Brotli is not decoded (no decoder in the dependencies).
+- A slow upstream that sends headers and then stalls delays the response by up to the time it needs to deliver the
+  window. Hostile content: the anchor prefilter records each anchor at most 16 times (512 bytes apart), a signature gets at most 6
+  windows of 3 KiB around anchors, and one response gets a 64 KiB regex budget, which caps the worst case (a page stuffed with
+  every keyword) at a few milliseconds.
+- A panic in the guard fails open.
+- Trusted paths and allowed IPs of the WAF policy also skip response inspection.
+
+**Events.** Same ring buffer, audit JSON lines (`zr-waf_*.log`) and API as request events: `Event.Kind == "response"` and
+`Event.Response{group, signature, name, sample, confidence, status, content_type, offset, header}`; `Rules` is `[]`.
+`action` is `blocked`, `detected` (logged, or would-block in detection-only) or `stripped`. Filters: `GET /api/waf/events?kind=response|request&group=...`.
+Counters: `GET /api/waf/stats` has `response`, `response_blocked`, `per_signature` (response events are also part
+of `total` / `blocked` / `per_hour`). The summary has `response`. `GET /api/waf/response/signatures` lists the signatures.
+A blocked response calls `BlockObserver` (notifications, like a WAF block) but is **not** fed to the auto-ban detectors:
+a leaking server is not a misbehaving client. Header banner events are rate limited to one per endpoint, header and
+value per hour (every response carries the banner); the header is still stripped every time.
+**Redaction.** Events never contain a full secret. Secrets keep at most a short prefix (token prefix such as `ghp_`) and two
+trailing characters with the middle replaced by the length (`ghp_...ab [40 chars]`); values shorter than 13 characters and
+private key bodies are hidden completely (`[88 chars hidden]`). For other groups the sample is the first 80
+characters of the match with quoted values (user data in `Duplicate entry 'x'`) replaced by `'...'`.
+
+**Signatures.** Every signature has one or more lowercase anchor literals (a match must contain one), a regex run
+only around the anchors, an optional validator, and a confidence. `block` acts only on high confidence hits.
+
+| ID | Group | Matches | Confidence |
+|---|---|---|---|
+| `ST-JAVA` | stacktrace | Three or more consecutive 'at pkg.Class.method(File.java:12)' frames (also Kotlin, Scala, Groovy, Native Method, Unknown Source). | high |
+| `ST-PY` | stacktrace | 'Traceback (most recent call last):' directly followed by a 'File "...", line N' frame. | high |
+| `ST-PHP` | stacktrace | 'Fatal error / Parse error / Warning / Notice / Deprecated: message in /path/file.php on line N' (plain or HTML form). | high |
+| `ST-PHP-TRACE` | stacktrace | 'Stack trace:' followed by '#0 /path/file.php(N)'. | high |
+| `ST-DOTNET-PAGE` | stacktrace | The yellow 'Server Error in \'/\' Application' page including its 'Stack Trace:' or 'Exception Details:' section. | high |
+| `ST-DOTNET` | stacktrace | Two or more '   at Namespace.Class.Method(args) in File.cs:line N' frames (needs a PDB). | high |
+| `ST-NODE` | stacktrace | Three or more consecutive '    at fn (/path/file.js:line:col)' frames with absolute paths, file:// or node: URLs. | high |
+| `ST-GO` | stacktrace | 'goroutine N [state]:' followed by a function line and a 'file.go:N' line. | high |
+| `ST-RAILS` | stacktrace | 'Action Controller: Exception caught' page title or a 'Rails.root: /path' line. | high |
+| `ST-DJANGO` | stacktrace | The 'You\'re seeing this error because you have DEBUG = True' notice, or the Django Version / Exception Type table. | high |
+| `ST-WERKZEUG` | stacktrace | 'The debugger caught an exception in your WSGI application'. | high |
+| `DB-MYSQL` | dberror | 'You have an error in your SQL syntax ... MySQL/MariaDB server version', PDO 'SQLSTATE[..]: ..: 1064 ..', 'Unknown column ... in field list', 'Duplicate entry ... for key', Connector/J exception classes, mysql_*() warnings. | high |
+| `DB-PGSQL` | dberror | 'ERROR:  syntax error at or near', 'relation "x" does not exist', 'duplicate key value violates unique constraint', PSQLException, PG::Error, psycopg2 errors, pg_query() failures. | high |
+| `DB-MSSQL` | dberror | 'Unclosed quotation mark after the character string', 'Incorrect syntax near', ODBC / OLE DB provider names, SqlException classes, 'Msg N, Level N, State N'. | high |
+| `DB-ORACLE` | dberror | 'ORA-NNNNN: message' (colon and message required, a bare error code in prose does not match), PLS-NNNNN, Oracle JDBC exception classes. | high |
+| `DB-SQLITE` | dberror | SQLite3::SQLException, sqlite3.OperationalError, 'SQLITE_ERROR: ', 'near "x": syntax error', System.Data.SQLite.SQLiteException. | high |
+| `DB-MONGO` | dberror | 'MongoServerError: ' / 'MongoError: ', com.mongodb exceptions, 'E11000 duplicate key error', PHP driver and pymongo exception classes, mongoose CastError. | high |
+| `SEC-PEM` | secrets | '-----BEGIN [RSA\|EC\|DSA\|OPENSSH\|ENCRYPTED\|PGP] PRIVATE KEY-----' followed by at least 40 base64 characters (an elided '...' example or a bare header does not match). Public keys and certificates are not matched. | high |
+| `SEC-AWS-SECRET` | secrets | A labelled 40 character secret: aws_secret_access_key / SecretAccessKey / secret_access_key = <40 chars base64>. The documented placeholder values (containing EXAMPLE) are ignored. | high |
+| `SEC-AWS-KEYID` | secrets | AKIA/ASIA/AGPA/AIDA/AROA/ANPA/ANVA + 16 base32 characters. Low confidence on its own (an ID is not a secret); high confidence when a 40 character secret-looking token follows or precedes within 160 bytes. AWS documentation placeholders (EXAMPLE) are ignored. | low or high (see text) |
+| `SEC-GITHUB` | secrets | ghp_/gho_/ghu_/ghs_/ghr_ + 36 base62 characters whose last 6 characters are the base62 CRC32 of the first 30 (high confidence); same shape with a wrong checksum is low confidence. github_pat_ fine-grained tokens (22 + 59 characters). | low or high (see text) |
+| `SEC-GITLAB` | secrets | glpat- + 20 to 50 URL-safe base64 characters, with enough variety (placeholders such as glpat-xxxxxxxxxxxxxxxxxxxx do not match). | high |
+| `SEC-SLACK` | secrets | xox[bpoase]-<9-13 digits>-<9-13 digits>[-<9-13 digits>]-<24-48 alphanumerics>, xapp- app tokens, hooks.slack.com/services/T../B../<24 chars> webhook URLs. | high |
+| `SEC-STRIPE` | secrets | sk_live_ / rk_live_ + 24 to 99 alphanumerics (high confidence, placeholders ignored). sk_test_ / rk_test_ keys are reported with low confidence. Publishable pk_ keys are not secrets and are not matched. | low or high (see text) |
+| `SEC-JSON-CRED` | secrets | Only in JSON bodies: a key such as password, passwd, secret, api_key, access_token, client_secret, private_key with a 8-128 character string value that looks real (no whitespace, not a placeholder such as changeme / xxxx / ${VAR}, mixed character classes, some entropy). Always low confidence: it is logged but never blocks. | low (log only) |
+| `SEC-DOTENV` | secrets | Only in text/plain bodies: a line start 'NAME_PASSWORD=value', 'SECRET_KEY=', 'API_KEY=', 'ACCESS_KEY=', 'PRIVATE_KEY=' with a plausible 8+ character value. Always low confidence. | low (log only) |
+| `DL-INDEXOF` | dirlisting | <title>Index of /...</title> or <h1>Index of /...</h1> together with a 'Parent Directory' link, a '../' link or the Apache sort links (?C=N;O=D). | high |
+| `DL-PYHTTP` | dirlisting | <title>Directory listing for /...</title> followed by a <ul> or <pre> of links. | high |
+| `DL-IIS` | dirlisting | The '[To Parent Directory]' link of the IIS listing. | high |
+| `HDR-SERVER` | headers | Server header carrying a version (nginx/1.18.0, Apache/2.4.41 (Ubuntu), Microsoft-IIS/10.0). A bare product name is not reported. | high |
+| `HDR-X-POWERED-BY` | headers | Any X-Powered-By header (PHP/8.1.2, Express, ASP.NET). | high |
+| `HDR-X-ASPNET-VERSION` | headers | Any X-AspNet-Version or X-AspNetMvc-Version header. | high |
+
+
+**Known limits (by design).** Signatures are precise rather than exhaustive: a stack trace in a language or framework not
+listed is not found, and a page that quotes a real database error verbatim (a tutorial showing the exact MySQL message)
+looks exactly like the leak. Documentation pages with full, real looking keys will trigger the secret signatures:
+the documented placeholders (`AKIA...EXAMPLE`, `xxxx` runs, `changeme`, `${VAR}`) do not. GitHub classic token
+checksums follow the published CRC32/base62 scheme and could not be verified against real tokens in this fork's CI: a token
+whose checksum does not match is reported with low confidence (logged, never blocked) instead of being dropped.
+`Server` banners are only reported when they carry a version. Unknown-length (chunked) responses are not inspected, which includes
+many dynamically generated error pages; this is the price of never holding a stream back.
+
+**Tests.** `waf/respinspect_test.go` (true positives and near-miss negatives per group, window and chunk-boundary logic,
+skipped response kinds, gzip/deflate, bomb and stored-block flood, block/log/strip, redaction, config merge, JSON
+compatibility, events and stats), `dpcore/respguard_test.go` (real upstream and proxy: block page, log hashes,
+beyond-window pass, large response streaming after the window, SSE, chunked, gRPC type, 206, upgrade tunnel, header strip),
+`dynamicproxy/waf_response_test.go` (policy / profile / endpoint merge through `ProxyHandler.ServeHTTP`).
+
+**Benchmarks** (`go test ./mod/dynamicproxy/waf -run xxx -bench 'Scan|Inspect|Baseline' -benchmem`): see the PR description for
+the numbers of the machine they were taken on.
+
 ## Customising CAPTCHA pages
 
 Each proxy endpoint with "Require CAPTCHA Challenge" enabled can restyle its bot-check pages from the endpoint editor

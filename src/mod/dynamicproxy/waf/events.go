@@ -45,6 +45,10 @@ type Event struct {
 	Mode          string    `json:"mode"`
 	Source        string    `json:"source,omitempty"` // global, profile:X, custom, endpoint
 	Rules         []RuleHit `json:"rules"`
+
+	// --- Response inspection (outbound leak detection), see respinspect.go ---
+	Kind     string       `json:"kind,omitempty"`     // "" = request event, "response" = response / leak event
+	Response *ResponseHit `json:"response,omitempty"` // set when Kind is "response"
 }
 
 // AuditSink receives one JSON line per event
@@ -59,6 +63,11 @@ type Stats struct {
 	PerRule     map[string]uint64 `json:"per_rule"`
 	PerEndpoint map[string]uint64 `json:"per_endpoint"`
 	PerHour     []HourStat        `json:"per_hour,omitempty"` // last 24 * 7 hours with events, oldest first
+
+	// --- Response inspection counters (also included in Total / Blocked) ---
+	Response        uint64            `json:"response,omitempty"`
+	ResponseBlocked uint64            `json:"response_blocked,omitempty"`
+	PerSignature    map[string]uint64 `json:"per_signature,omitempty"`
 }
 
 // HourStat is the event count of one hour
@@ -79,6 +88,10 @@ type eventStore struct {
 	perEndpt map[string]uint64
 	perHour  map[int64]*HourStat
 	sink     AuditSink
+
+	respTotal   uint64            // response inspection events
+	respBlocked uint64            // response events that replaced the response
+	perSig      map[string]uint64 // response events per signature id
 }
 
 func newEventStore() *eventStore {
@@ -129,6 +142,16 @@ func (s *eventStore) add(ev Event) {
 	}
 	for _, r := range ev.Rules {
 		s.perRule[r.ID]++
+	}
+	if ev.Kind == KindResponse && ev.Response != nil {
+		s.respTotal++
+		if ev.Action == "blocked" {
+			s.respBlocked++
+		}
+		if s.perSig == nil {
+			s.perSig = map[string]uint64{}
+		}
+		s.perSig[ev.Response.Signature]++
 	}
 	sink := s.sink
 	s.mu.Unlock()
@@ -182,5 +205,12 @@ func (s *eventStore) stats() Stats {
 		st.PerHour = append(st.PerHour, *h)
 	}
 	sort.Slice(st.PerHour, func(i, j int) bool { return st.PerHour[i].Hour < st.PerHour[j].Hour })
+	st.Response, st.ResponseBlocked = s.respTotal, s.respBlocked
+	if len(s.perSig) > 0 {
+		st.PerSignature = map[string]uint64{}
+		for k, v := range s.perSig {
+			st.PerSignature[k] = v
+		}
+	}
 	return st
 }

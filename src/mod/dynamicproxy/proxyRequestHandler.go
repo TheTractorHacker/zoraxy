@@ -242,6 +242,7 @@ func (h *ProxyHandler) hostRequest(w http.ResponseWriter, r *http.Request, targe
 			Version:                        target.parent.Option.HostVersion,
 			DevelopmentMode:                target.parent.Option.DevelopmentMode,
 			AltSvc:                         h.Parent.getAltSvcValue(),
+			ResponseGuard:                  h.Parent.responseGuard(r, target),
 		})
 	}
 	result := h.Parent.loadBalancer.ServeWithRetry(w, r, target.ActiveOrigins, selectedUpstream, selectOptions, serveUpstream)
@@ -411,6 +412,7 @@ func (h *ProxyHandler) vdirRequest(w http.ResponseWriter, r *http.Request, targe
 		Version:                        target.parent.parent.Option.HostVersion,
 		DevelopmentMode:                target.parent.parent.Option.DevelopmentMode,
 		AltSvc:                         h.Parent.getAltSvcValue(),
+		ResponseGuard:                  h.Parent.responseGuard(r, target.parent),
 	})
 
 	var dnsError *net.DNSError

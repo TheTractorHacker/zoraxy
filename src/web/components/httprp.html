@@ -73,6 +73,14 @@
         .ptBadge{ display:inline-block; font-size:0.75em; line-height:1; padding:0.38em 0.6em; margin:0 0.3em 0.3em 0; border-radius:2em; border:1px solid var(--divider_color); background:var(--theme_advance); white-space:nowrap; }
         .ptBadge .icon{ margin-right:0.3em !important; }
         .ptBadge.waf{ border-color:rgba(33,186,69,0.5); }
+        /* WAF response protection (outbound leak detection) of a single rule */
+        .wafRespEditor .wafRespRow{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:0.3em 1em; padding:0.6em 0; border-top:1px solid rgba(128,128,128,0.25); }
+        .wafRespEditor .wafRespRow:first-child{ border-top:0; }
+        .wafRespEditor .wafRespRow .txt{ flex:1 1 16em; min-width:0; }
+        .wafRespEditor .wafRespRow .act{ flex:0 1 14em; min-width:10em; }
+        .wafRespEditor .wafRespRow .act select{ width:100%; }
+        .wafRespEditor .wafRespWin{ display:flex; flex-wrap:wrap; align-items:center; gap:0.3em 1em; padding-top:0.6em; border-top:1px solid rgba(128,128,128,0.25); }
+        .wafRespEditor .wafRespWin input{ width:7em; }
         .ptBadge.auth{ border-color:rgba(75,117,255,0.5); }
         .ptTag{ display:inline-block; font-size:0.75em; font-weight:700; padding:0.35em 0.65em; margin:0 0.3em 0.3em 0; border-radius:0.3em; text-decoration:none; }
         .ptTag:hover{ opacity:0.8; text-decoration:underline; }
@@ -1047,6 +1055,16 @@
                                 </div>
                                 <button class="ui basic small green button wafSaveBtn"><i class="save icon"></i> Save WAF settings</button>
                             </div>
+                            </div>
+                        </div>
+                        <div class="ui segment wafRespEditor">
+                            <h4><i class="user secret icon"></i> Response protection</h4>
+                            <p style="opacity:0.7;">Looks for stack traces, database errors, secrets, directory listings and server banners in what this upstream sends back. Each group can follow the global setting (<i>Inherit</i>) or be overridden for this rule.
+                                <b>Block</b> replaces the response with a generic 502 page, but only when the leak is inside the first part of the body (the inspection window); <b>Log only</b> never changes the response. Streams, chunked responses of unknown length, partial content and non-text content are never held back or inspected. Block and Strip need the WAF of this rule in Block mode.</p>
+                            <div class="wafRespInfo" style="margin-bottom:0.6em;"></div>
+                            <div class="ui form wafRespForm">
+                                <div class="wafRespRows"></div>
+                                <button class="ui basic small green button wafRespSaveBtn" style="margin-top:0.8em;"><i class="save icon"></i> Save response protection</button>
                             </div>
                         </div>
                         <div class="ui segment">
@@ -2561,6 +2579,74 @@
 
         editor.find(".wafRefreshBtn").off("click").on("click", function(){ loadWAFEvents(editor, ep); });
         loadWAFEvents(editor, ep);
+        initWAFResponseEditor(editor, subd);
+    }
+
+    /* Response protection of one rule: per group override of the policy / profile (or the whole setting for a custom WAF) */
+    const WAF_RESP_GROUPS = [
+        {id: "stacktrace", name: "Stack traces and debug pages", desc: "Java, Python, PHP, .NET, Node.js and Go traces; Rails, Django and Flask debug pages."},
+        {id: "dberror", name: "Database error messages", desc: "MySQL / MariaDB, PostgreSQL, SQL Server, Oracle, SQLite and MongoDB errors."},
+        {id: "secrets", name: "Secrets and credentials", desc: "Private keys, AWS, GitHub, GitLab, Slack and Stripe tokens, credential values in JSON."},
+        {id: "dirlisting", name: "Directory listings", desc: "Apache / nginx / Python / IIS \"Index of /\" pages."},
+        {id: "headers", name: "Server banners in headers", desc: "Server (with version), X-Powered-By, X-AspNet-Version."}
+    ];
+
+    function initWAFResponseEditor(editor, subd){
+        let box = editor.find(".wafRespEditor");
+        let source = subd.WAFSource || (subd.WAF ? "custom" : "inherit");
+        let isCustom = source == "custom";
+        let cfg = isCustom ? ((subd.WAF || {}).Response || {}) : ((subd.WAFExtra || {}).Response || {});
+        let groups = cfg.Groups || {};
+        let rows = WAF_RESP_GROUPS.map(function(g){
+            let opts = [["", isCustom ? "Off" : "Inherit"], ["off", "Off"], ["log", "Log only"], g.id == "headers" ? ["strip", "Strip the header"] : ["block", "Block (replace the response)"]];
+            if (isCustom) opts.shift(); // a custom WAF has nothing to inherit from
+            let cur = groups[g.id] || (isCustom ? "off" : "");
+            return `<div class="wafRespRow"><div class="txt"><b>${wafEsc(g.name)}</b><br><small style="opacity:0.7;">${wafEsc(g.desc)}</small></div><div class="act">
+                <select class="ui dropdown wafRespSel" data-g="${g.id}" aria-label="${wafEsc(g.name)}">${opts.map(o => `<option value="${o[0]}"${o[0] == cur ? " selected" : ""}>${wafEsc(o[1])}</option>`).join("")}</select></div></div>`;
+        }).join("");
+        rows += `<div class="wafRespWin"><label><b>Inspection window (KiB)</b></label><input type="number" min="1" max="1024" class="wafRespWinIn" placeholder="${isCustom ? "64" : "inherit"}" value="${cfg.WindowKiB || ""}"><small style="opacity:0.7;">First part of the body that is read (64 default, 1024 max).</small></div>`;
+        box.find(".wafRespRows").html(rows);
+        let info = {
+            inherit: "Follows the global response protection; groups set here override it for this rule only.",
+            detection_only: "Follows the global response protection; groups set here override it. In detection-only mode block and strip are only logged as 'would block'.",
+            block: "Follows the global response protection; groups set here override it for this rule only.",
+            profile: "Follows the selected profile and the global setting; groups set here override both.",
+            custom: "Part of this rule's own WAF configuration (it does not inherit the global setting).",
+            off: "The WAF is off for this rule, so responses are not inspected."
+        }[source] || "";
+        box.find(".wafRespInfo").text(info);
+        box.find("select,input,.wafRespSaveBtn").prop("disabled", source == "off");
+        box.find(".wafRespSaveBtn").off("click").on("click", function(){
+            let g = {}, any = false;
+            box.find(".wafRespSel").each(function(){
+                let v = $(this).val();
+                if (v == "" && !isCustom) return;
+                g[$(this).attr("data-g")] = v; any = true;
+            });
+            let win = parseInt(box.find(".wafRespWinIn").val()) || 0;
+            if (win < 0 || win > 1024){ msgbox("The inspection window must be between 1 and 1024 KiB", false, 5000); return; }
+            let resp = (any || win) ? {Groups: g} : null;
+            if (resp && win) resp.WindowKiB = win;
+            let btn = $(this).addClass("loading");
+            let done = function(d){
+                btn.removeClass("loading");
+                if (d.error != undefined){ msgbox(d.error, false, 6000); }
+                else { msgbox("Response protection saved"); resyncProxyEditorConfig(); }
+            };
+            let fail = function(){ btn.removeClass("loading"); msgbox("Request failed", false, 4000); };
+            if (isCustom){
+                // custom WAF: the whole configuration is saved, keep what is stored and replace only the response part
+                let full = Object.assign({}, subd.WAF || {});
+                if (resp) full.Response = resp; else delete full.Response;
+                $.cjax({url: "/api/waf/set", method: "POST", data: {rootname: subd.RootOrMatchingDomain, config: JSON.stringify(full)}, success: done, error: fail});
+            } else {
+                let extra = Object.assign({}, subd.WAFExtra || {});
+                if (resp) extra.Response = resp; else delete extra.Response;
+                let data = {rootname: subd.RootOrMatchingDomain, source: source, extra: Object.keys(extra).length ? JSON.stringify(extra) : ""};
+                if (source == "profile") data.profile = subd.WAFProfile;
+                $.cjax({url: "/api/waf/endpoint/set", method: "POST", data: data, success: done, error: fail});
+            }
+        });
     }
 
     function loadWAFEvents(editor, ep){

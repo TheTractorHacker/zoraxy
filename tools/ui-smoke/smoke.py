@@ -1205,6 +1205,67 @@ def main():
         except Exception as ex:
             fail("waf", f"waf page flow failed: {' '.join(str(ex).split()[:30])}")
 
+        # ---- WAF page: response protection (outbound leak detection) ----
+        current["page"] = "waf-response"
+        try:
+            def resp_theme(want_dark):
+                if pg.evaluate("document.body.classList.contains('darkTheme')") != want_dark:
+                    pg.evaluate("toggleTheme()")
+                    pg.wait_for_timeout(300)
+            pg.evaluate("openTabById('waf')")
+            settle(pg, 700)
+            pg.click("#wafTabs .item[data-tab=waf-response]")
+            settle(pg, 900)
+            if pg.locator("#wafRespPolicyBox .wafRespSel").count() != 5:
+                fail("waf-response", "response protection tab does not show the five groups")
+            pg.select_option("#wafRespPolicyBox .wafRespSel[data-g=stacktrace]", "log")
+            pg.select_option("#wafRespPolicyBox .wafRespSel[data-g=headers]", "strip")
+            pg.fill("#wafRespPolicyBoxWin", "32")
+            pg.click("#wafRespSave")
+            pg.wait_for_timeout(1500)
+            pol = pg.evaluate("() => fetch('/api/waf/policy').then(r => r.json())")
+            rc = pol.get("Response") or {}
+            if (rc.get("Groups") or {}).get("stacktrace") != "log" or (rc.get("Groups") or {}).get("headers") != "strip" or rc.get("WindowKiB") != 32:
+                fail("waf-response", f"policy response settings were not saved: {rc}")
+            pg.click("#wafTabs .item[data-tab=waf-events]")
+            settle(pg, 500)
+            pg.click("#wafTabs .item[data-tab=waf-response]")
+            settle(pg, 700)
+            if pg.input_value("#wafRespPolicyBox .wafRespSel[data-g=stacktrace]") != "log" or pg.input_value("#wafRespPolicyBoxWin") != "32":
+                fail("waf-response", "saved response settings were not shown again")
+            pg.click("#wafRespSigTitle")
+            pg.wait_for_selector("#wafRespSigBody tr td code", timeout=5000)
+            if pg.locator("#wafRespSigBody tr").count() < 25:
+                fail("waf-response", "signature reference is too short")
+            if pg.locator("#wafevKind").count() != 1:
+                fail("waf-response", "events tab has no kind filter")
+            pg.screenshot(path=os.path.join(args.out, "waf-response-light.png"), full_page=True)
+            resp_theme(True)
+            pg.screenshot(path=os.path.join(args.out, "waf-response-dark.png"), full_page=True)
+            pg.set_viewport_size({"width": 390, "height": 800})
+            pg.wait_for_timeout(300)
+            check_horizontal(pg, "waf response mobile")
+            pg.screenshot(path=os.path.join(args.out, "waf-response-dark-390.png"), full_page=True)
+            resp_theme(False)
+            pg.screenshot(path=os.path.join(args.out, "waf-response-light-390.png"), full_page=True)
+            # the profile editor carries the same section, with an Inherit choice
+            pg.click("#wafTabs .item[data-tab=waf-profiles]")
+            settle(pg, 600)
+            pg.click("#wafPrNew")
+            settle(pg, 400)
+            if pg.locator("#wafprRespBox .wafRespSel").count() != 5 or pg.input_value("#wafprRespBox .wafRespSel[data-g=secrets]") != "":
+                fail("waf-response", "profile editor does not offer the response protection groups with Inherit")
+            pg.screenshot(path=os.path.join(args.out, "waf-profile-response-390.png"), full_page=True)
+            pg.set_viewport_size({"width": 1366, "height": 900})
+            pg.wait_for_timeout(300)
+            pg.screenshot(path=os.path.join(args.out, "waf-profile-response.png"), full_page=True)
+            # put the policy back
+            pg.evaluate("""() => fetch('/api/waf/policy').then(r => r.json()).then(p => { delete p.Response;
+                return new Promise(res => $.cjax({url: '/api/waf/policy', method: 'POST', data: {policy: JSON.stringify(p)}, success: res, error: res})) })""")
+        except Exception as ex:
+            fail("waf-response", f"response protection flow failed: {' '.join(str(ex).split()[:30])}")
+            pg.set_viewport_size({"width": 1366, "height": 900})
+
         # ---- SSO: OAuth2 provider manager and per-rule provider selection ----
         # Two fake OIDC providers (discovery only) are started here; two proxy rules are bound to them and
         # the sign-in redirect of each rule must lead to its own provider.
