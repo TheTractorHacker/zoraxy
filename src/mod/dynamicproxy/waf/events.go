@@ -28,6 +28,13 @@ type RuleHit struct {
 	Severity string   `json:"severity"`
 	Tags     []string `json:"tags,omitempty"`
 	Data     string   `json:"data,omitempty"` // Matched data, truncated
+
+	// Matched variable (tuning assistant): Variable is "COLLECTION:name" as Coraza reports it (name keeps its
+	// case, e.g. "REQUEST_COOKIES:ph_phc_x_posthog"), VarNorm is the canonical form used for grouping and
+	// exclusions (ARGS_GET/ARGS_POST folded into ARGS, name lower-cased). Both empty when the rule did not
+	// match a request variable (e.g. anomaly score rules).
+	Variable string `json:"variable,omitempty"`
+	VarNorm  string `json:"var_norm,omitempty"`
 }
 
 // Event is one WAF decision that matched at least one rule

@@ -87,6 +87,7 @@ func mutateWAFCentralLocked(fn func(p *waf.Policy, profiles *[]waf.Profile) erro
 	pol := old.Policy
 	pol.ExcludedRuleIDs = append([]string(nil), pol.ExcludedRuleIDs...)
 	pol.PathExclusions = append([]waf.PathExclusion(nil), pol.PathExclusions...)
+	pol.TargetExclusions = append([]waf.TargetExclusion(nil), pol.TargetExclusions...)
 	pol.TrustedPaths = append([]waf.TrustedPath(nil), pol.TrustedPaths...)
 	pol.AllowedIPs = append([]string(nil), pol.AllowedIPs...)
 	profiles := old.UserProfiles()

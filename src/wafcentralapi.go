@@ -60,7 +60,11 @@ func HandleWAFPolicy(w http.ResponseWriter, r *http.Request) {
 		utils.SendErrorResponse(w, "Invalid policy: "+err.Error())
 		return
 	}
+	keepTargets := !rawHasKey(raw, "TargetExclusions")
 	err = mutateWAFCentral(func(p *waf.Policy, _ *[]waf.Profile) error {
+		if keepTargets {
+			pol.TargetExclusions = p.TargetExclusions // callers that predate the tuning assistant do not send them
+		}
 		*p = pol
 		return nil
 	})
@@ -123,6 +127,9 @@ func HandleWAFProfileSave(w http.ResponseWriter, r *http.Request) {
 			return errProfileMissing
 		case idx >= 0:
 			pr.Name = (*profiles)[idx].Name // name is the identity, keep its case
+			if !rawHasKey(raw, "TargetExclusions") {
+				pr.TargetExclusions = (*profiles)[idx].TargetExclusions
+			}
 			(*profiles)[idx] = pr
 		default:
 			*profiles = append(*profiles, pr)
@@ -165,6 +172,7 @@ func HandleWAFProfileClone(w http.ResponseWriter, r *http.Request) {
 		src.BuiltIn = false
 		src.ExcludedRuleIDs = append([]string(nil), src.ExcludedRuleIDs...)
 		src.PathExclusions = append([]waf.PathExclusion(nil), src.PathExclusions...)
+		src.TargetExclusions = append([]waf.TargetExclusion(nil), src.TargetExclusions...)
 		*profiles = append(*profiles, src)
 		return nil
 	})

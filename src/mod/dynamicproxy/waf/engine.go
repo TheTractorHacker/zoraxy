@@ -107,6 +107,7 @@ func buildDirectives(n Config) (string, error) {
 		fmt.Fprintf(&b, "SecRule REQUEST_FILENAME \"%s %s\" \"id:%d,phase:1,pass,nolog,%s\"\n", op, pe.Path, id, strings.Join(ctls, ","))
 		id++
 	}
+	id = writeTargetExclusions(&b, n.TargetExclusions, id)
 
 	for _, f := range files {
 		fmt.Fprintf(&b, "Include %s\n", f)

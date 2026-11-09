@@ -48,6 +48,7 @@ func RegisterWAFAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/waf/stats", HandleWAFStats)
 	authRouter.HandleFunc("/api/waf/exclude", HandleWAFExclude)
 	RegisterWAFCentralAPIs(authRouter)
+	RegisterWAFTuningAPIs(authRouter)
 }
 
 func parseWAFConfig(r *http.Request) (*waf.Config, error) {
@@ -78,7 +79,12 @@ func HandleWAFSet(w http.ResponseWriter, r *http.Request) {
 		utils.SendErrorResponse(w, "Invalid config: "+err.Error())
 		return
 	}
+	rawCfg, _ := utils.PostPara(r, "config")
+	keepTargets := !rawHasKey(rawCfg, "TargetExclusions")
 	err = applyWAFEndpoint(ep, func(e *dynamicproxy.ProxyEndpoint, _ *waf.State) error {
+		if keepTargets && e.WAF != nil {
+			cfg.TargetExclusions = e.WAF.TargetExclusions // settings editors that predate the tuning assistant do not send them
+		}
 		e.WAF = cfg
 		e.WAFSource = waf.SourceCustom
 		e.WAFProfile = ""

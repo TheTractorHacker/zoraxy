@@ -58,6 +58,8 @@ type Config struct {
 	// ChallengeTTLMinutes is how long a solved challenge keeps the client in the pass band.
 	// Default 60, maximum 1440. Only used when ChallengeThreshold is set.
 	ChallengeTTLMinutes int `json:",omitempty"`
+	// --- WAF tuning assistant (variable scoped exclusions, see tuning.go) ---
+	TargetExclusions []TargetExclusion `json:",omitempty"` // Rules that must not inspect one variable (optionally on one path)
 }
 
 var (
@@ -96,6 +98,7 @@ func (c *Config) Normalize() Config {
 	}
 	n.ExcludedRuleIDs = append([]string(nil), n.ExcludedRuleIDs...)
 	n.PathExclusions = append([]PathExclusion(nil), n.PathExclusions...)
+	n.TargetExclusions = append([]TargetExclusion(nil), n.TargetExclusions...)
 	n.CustomRules = strings.TrimSpace(n.CustomRules)
 	return n
 }
@@ -137,6 +140,9 @@ func (c *Config) Validate() error {
 				return fmt.Errorf("invalid rule ID %q", id)
 			}
 		}
+	}
+	if err := validateTargetExclusions(n.TargetExclusions); err != nil {
+		return err
 	}
 	for i, line := range strings.Split(n.CustomRules, "\n") {
 		if forbiddenDirective.MatchString(line) {

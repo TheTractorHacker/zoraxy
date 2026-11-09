@@ -24,6 +24,7 @@ ap.add_argument("--url", default=os.environ.get("ZORAXY_URL", "http://127.0.0.1:
 ap.add_argument("--out", default=os.environ.get("SMOKE_OUT", os.path.expanduser("~/ui-smoke-shots")))
 ap.add_argument("--no-page-sweep", action="store_true", help="skip the per-tab screenshot sweep (faster; for focused runs on a busy machine)")
 ap.add_argument("--i18n-only", action="store_true", help="run only the multi-language scenario")
+ap.add_argument("--waf-tuning-only", action="store_true", help="run only the WAF Tuning tab scenario")
 ap.add_argument("--zrok-fake", default=os.environ.get("SMOKE_ZROK_FAKE", ""), help="path of a fake zrok script; enables the zrok flow (the instance needs -allow_external_tools)")
 ap.add_argument("--allow", action="append", default=[], help="regex of messages whose failure is tolerated")
 args = ap.parse_args()
@@ -611,6 +612,13 @@ def waf_graduated_ui(pg):
     profile editor fields; Events filter. Light, dark and 390px screenshots."""
     def shot(name):
         pg.screenshot(path=os.path.join(args.out, name), full_page=True)
+def waf_tuning_ui(pg):
+    """WAF > Tuning tab (suggestion cards, confirmation dialog, ignore), the Events drawer button for one variable and
+    the variable exclusions in the Exclusions list. The suggestions and events are served from fixtures (a fresh instance has
+    no traffic); the exclusion list round trip uses the real API."""
+    import json as _json
+    out = lambda n: os.path.join(args.out, n)
+    posted = []
 
     def theme(want_dark):
         if pg.evaluate("document.body.classList.contains('darkTheme')") != want_dark:
@@ -705,6 +713,178 @@ def waf_graduated_ui(pg):
         pg.set_viewport_size({"width": 1366, "height": 900})
         if isinstance(orig, dict) and "error" not in orig:
             api("/api/waf/policy", {"policy": json.dumps(orig)})
+    now = "2026-01-05T10:00:00Z"
+
+    def item(rule, msg, sev, ep, var, coll, sug, risk, note, attack=False, count=7, clients=3, data="", path="/", paths=None):
+        return {"key": f"{ep}|{rule}|{var}", "rule_id": rule, "message": msg, "severity": sev, "category": "x", "endpoint": ep, "variable": var,
+                "collection": coll, "count": count, "clients": clients, "would_block": count - 1, "first_seen": now, "last_seen": now,
+                "paths": paths or [path], "path_count": len(paths or [path]), "payload_shapes": 1,
+                "sample": {"time": now, "txid": "abc", "path": path, "variable": var, "data": data},
+                "suggestion": sug, "risk": risk, "risk_note": note, "looksLikeAttack": attack}
+
+    longpath = "/api/very/long/path/that/keeps/going/and/going/to/test/wrapping/on/narrow/screens/editor"
+    items = [
+        item(942290, "Finds basic MongoDB SQL injection attempt", "critical", "app.smoke.example.com", "REQUEST_COOKIES:ph_*_posthog", "REQUEST_COOKIES",
+             {"kind": "variable", "rule_ids": ["942290"], "target": "REQUEST_COOKIES:/^ph_.+_posthog$/", "summary": "Rule 942290 stops inspecting REQUEST_COOKIES:/^ph_.+_posthog$/ on every path"},
+             "low", "only this variable is excluded; the rule still inspects everything else", data='{"distinct_id":"anonymous_x.example.com","$sesid":[null,null,null]',
+             paths=["/", "/blog", "/shop"], count=48, clients=9),
+        item(942100, "SQL Injection Attack Detected via libinjection", "critical", "api.smoke.example.com", "ARGS:json.items.*.description", "ARGS",
+             {"kind": "variable", "rule_ids": ["942100"], "target": "ARGS:/^json\\.items\\.\\d+\\.description$/", "path": longpath, "exact": True,
+              "summary": "Rule 942100 stops inspecting ARGS:/^json\\.items\\.\\d+\\.description$/ on " + longpath},
+             "low", "only this variable is excluded; the rule still inspects everything else", data="Tom & Jerry's: select a 'name' from -- the menu", path=longpath, count=3, clients=1),
+        item(920420, "Request content type is not allowed by policy", "critical", "app.smoke.example.com", "REQUEST_HEADERS:content-type", "REQUEST_HEADERS",
+             {"kind": "variable", "rule_ids": ["920420"], "target": "REQUEST_HEADERS:content-type", "summary": "Rule 920420 stops inspecting REQUEST_HEADERS:content-type on every path"},
+             "medium", "only 2 hit(s): make sure it was your own traffic", data="application/x-weird", count=2, clients=2),
+        item(932100, "Remote Command Execution: Unix Command Injection", "critical", "app.smoke.example.com", "ARGS:cmd", "ARGS",
+             {"kind": "variable", "rule_ids": ["932100"], "target": "ARGS:cmd", "path": "/run", "exact": True, "summary": "Rule 932100 stops inspecting ARGS:cmd on /run"},
+             "high", "Probably a real attack. rule family: remote command execution (rarely a false positive)", attack=True, data="; cat /etc/passwd", path="/run", count=12, clients=5),
+    ]
+    rep = {"hours": 24, "events_scanned": 72, "items": items}
+
+    def tuning_route(route):
+        route.fulfill(status=200, content_type="application/json", body=_json.dumps(rep))
+
+    def apply_route(route):
+        posted.append(route.request.post_data or "")
+        route.fulfill(status=200, content_type="application/json", body='"OK"')
+
+    ev = {"time": now, "txid": "tx1", "endpoint": "app.smoke.example.com", "client_ip": "198.51.100.5", "method": "GET", "host": "app.smoke.example.com", "path": "/blog",
+          "uri": "/blog", "action": "detected", "would_block": True, "mode": "detection_only", "source": "global",
+          "rules": [{"id": 942290, "msg": "Finds basic MongoDB SQL injection attempt", "severity": "critical", "data": "{\"distinct_id\":\"x\"",
+                     "variable": "REQUEST_COOKIES:ph_phc_abc_posthog", "var_norm": "REQUEST_COOKIES:ph_phc_abc_posthog"},
+                    {"id": 949110, "msg": "Inbound Anomaly Score Exceeded", "severity": "critical"}]}
+
+    re_tuning, re_apply, re_events = re.compile(r"/api/waf/tuning\?"), re.compile(r"/api/waf/tuning/apply"), re.compile(r"/api/waf/events")
+    pg.route(re_tuning, tuning_route)
+    pg.route(re_apply, apply_route)
+    pg.route(re_events, lambda route: route.fulfill(status=200, content_type="application/json", body=_json.dumps([ev])))
+    try:
+        theme(False)
+        pg.set_viewport_size({"width": 1366, "height": 900})
+        pg.evaluate("openTabById('waf')")
+        settle(pg, 900)
+        pg.click("#wafTabs .item[data-tab=waf-tuning]")
+        pg.wait_for_selector("#wafTuneList .wafTuneCard", timeout=8000)
+        if pg.locator("#wafTuneList .wafTuneCard").count() != 4:
+            fail("waf-tuning", "expected 4 suggestion cards")
+        txt = pg.inner_text("#wafTuneList")
+        for want in ("942290", "REQUEST_COOKIES:ph_*_posthog", "Probably an attack", "Low risk", "Check first", "Apply to this proxy rule", "Apply globally", "Ignore"):
+            if want not in txt:
+                fail("waf-tuning", f"card text misses {want!r}")
+        pg.screenshot(path=out("waf-tuning-light.png"), full_page=True)
+
+        # confirmation dialog shows exactly what is excluded
+        pg.click("#wafTuneList .wafTuneCard:nth-child(1) .wafTuneApply[data-scope=global]")
+        pg.wait_for_selector("#wafTuneDlg .wafTuneEffect", timeout=4000)
+        dlg = pg.inner_text("#wafTuneDlg")
+        for want in ("942290", "REQUEST_COOKIES:/^ph_.+_posthog$/", "every proxy rule", "every path", "no longer inspect this variable"):
+            if want not in dlg:
+                fail("waf-tuning", f"confirmation misses {want!r}: {dlg[:200]!r}")
+        pg.screenshot(path=out("waf-tuning-confirm-light.png"))
+        theme(True)
+        pg.screenshot(path=out("waf-tuning-confirm-dark.png"))
+        pg.set_viewport_size({"width": 390, "height": 800})
+        pg.wait_for_timeout(300)
+        box = pg.evaluate("(() => { const r = document.querySelector('#wafTuneDlg').getBoundingClientRect(); return {l: r.left, r: r.right, w: innerWidth}; })()")
+        if box["l"] < -1 or box["r"] > box["w"] + 1:
+            fail("layout", f"tuning dialog does not fit a 390px screen: {box}")
+        pg.screenshot(path=out("waf-tuning-confirm-390-dark.png"))
+        theme(False)
+        pg.set_viewport_size({"width": 1366, "height": 900})
+        pg.click("#wafTuneCancel")
+        if posted:
+            fail("waf-tuning", "cancel must not apply anything")
+        pg.click("#wafTuneList .wafTuneCard:nth-child(1) .wafTuneApply[data-scope=global]")
+        pg.wait_for_selector("#wafTuneOk", timeout=4000)
+        pg.click("#wafTuneOk")
+        pg.wait_for_timeout(600)
+        if len(posted) != 1 or "scope=global" not in posted[0] or "REQUEST_COOKIES" not in posted[0] or "942290" not in posted[0]:
+            fail("waf-tuning", f"apply request wrong: {posted}")
+        if pg.is_visible("#wafTuneDlg"):
+            fail("waf-tuning", "dialog still open after applying")
+
+        # an attack-like suggestion warns before it applies; the endpoint scope names the proxy rule
+        pg.click("#wafTuneList .wafTuneCard:nth-child(4) .wafTuneApply[data-scope=endpoint]")
+        pg.wait_for_selector("#wafTuneDlg .wafTuneWarn", timeout=4000)
+        d2 = pg.inner_text("#wafTuneDlg")
+        if "app.smoke.example.com" not in d2 or "real attack" not in d2:
+            fail("waf-tuning", f"attack confirmation wrong: {d2[:200]!r}")
+        pg.click("#wafTuneCancel")
+
+        # ignore hides, "show ignored" brings it back
+        pg.click("#wafTuneList .wafTuneCard:nth-child(3) .wafTuneIgnore")
+        if pg.locator("#wafTuneList .wafTuneCard").count() != 3:
+            fail("waf-tuning", "ignored suggestion is still listed")
+        pg.click("label[for=wafTuneShowIgnored]")
+        if pg.locator("#wafTuneList .wafTuneCard").count() != 4:
+            fail("waf-tuning", "show ignored does not list it")
+        pg.click("#wafTuneList .wafTuneCard.ignored .wafTuneIgnore")
+        pg.click("label[for=wafTuneShowIgnored]")
+
+        # dark and phone layouts of the tab itself
+        theme(True)
+        pg.screenshot(path=out("waf-tuning-dark.png"), full_page=True)
+        pg.set_viewport_size({"width": 390, "height": 800})
+        pg.wait_for_timeout(400)
+        check_horizontal(pg, "waf tuning 390px")
+        wide = pg.evaluate("""() => [...document.querySelectorAll('#wafTuneList *')].filter(e => e.getBoundingClientRect().right > innerWidth + 1).map(e => e.className).slice(0, 3)""")
+        if wide:
+            fail("layout", f"tuning cards overflow a 390px screen: {wide}")
+        pg.screenshot(path=out("waf-tuning-390-dark.png"), full_page=True)
+        theme(False)
+        pg.screenshot(path=out("waf-tuning-390-light.png"), full_page=True)
+        pg.set_viewport_size({"width": 1366, "height": 900})
+
+        # Events drawer: exclude only this variable
+        posted.clear()
+        pg.click("#wafTabs .item[data-tab=waf-events]")
+        pg.wait_for_selector("#wafEventsBody tr.wafEvRow", timeout=8000)
+        pg.click("#wafEventsBody tr.wafEvRow")
+        pg.wait_for_selector("#wafDrawer .wafDxVar", timeout=4000)
+        pg.screenshot(path=out("waf-event-drawer-variable.png"))
+        pg.click("#wafDrawer .wafDxVar")
+        pg.wait_for_selector("#wafTuneDlg input[name=wafTuneScope]", timeout=4000)
+        pg.check("#wafTunePathOnly")
+        pg.screenshot(path=out("waf-tuning-event-confirm.png"))
+        pg.click("#wafTuneOk")
+        pg.wait_for_timeout(600)
+        if len(posted) != 1 or "variable=REQUEST_COOKIES" not in posted[0] or "scope=endpoint" not in posted[0] or "rootname=app.smoke.example.com" not in posted[0]:
+            fail("waf-tuning", f"event variable apply request wrong: {posted}")
+        pg.click("#wafDrawerClose")
+    except Exception as ex:
+        fail("waf-tuning", f"tuning flow failed: {' '.join(str(ex).split()[:30])}")
+        pg.screenshot(path=out("waf-tuning-failure.png"))
+    finally:
+        pg.unroute(re_tuning)
+        pg.unroute(re_apply)
+        pg.unroute(re_events)
+        theme(False)
+        pg.set_viewport_size({"width": 1366, "height": 900})
+
+    # variable exclusions in the global list: real API, add, show, remove
+    current["page"] = "waf-tuning-exclusions"
+    api = lambda path, data: pg.evaluate("""([p, d]) => new Promise(res => $.cjax({url: p, method: 'POST', data: d,
+        success: r => res(r), error: e => res({error: 'http ' + e.status + ' ' + (e.responseText || '').slice(0, 120)})}))""", [path, data])
+    try:
+        sug = _json.dumps({"kind": "variable", "rule_ids": ["942290"], "target": "REQUEST_COOKIES:/^ph_.+_posthog$/"})
+        r = api("/api/waf/tuning/apply", {"scope": "global", "suggestion": sug})
+        if r != "OK":
+            fail("waf-tuning", f"real apply failed: {r}")
+        pg.click("#wafTabs .item[data-tab=waf-exclusions]")
+        pg.wait_for_timeout(1200)
+        if "REQUEST_COOKIES:/^ph_.+_posthog$/" not in pg.inner_text("#wafxBody"):
+            fail("waf-tuning", "variable exclusion is not listed in the Exclusions tab")
+        pg.screenshot(path=out("waf-tuning-exclusions-light.png"), full_page=True)
+        pg.click("#wafxBody .wafxDelVar")
+        pg.wait_for_timeout(1200)
+        if "ph_" in pg.inner_text("#wafxBody"):
+            fail("waf-tuning", "removed variable exclusion is still listed")
+        hostile = _json.dumps({"kind": "variable", "rule_ids": ["1"], "target": 'ARGS:x" "id:1,pass'})
+        bad = api("/api/waf/tuning/apply", {"scope": "global", "suggestion": hostile})
+        if not (isinstance(bad, dict) and bad.get("error")):
+            fail("waf-tuning", f"hostile target accepted by the real API: {bad}")
+    except Exception as ex:
+        fail("waf-tuning", f"variable exclusion list flow failed: {' '.join(str(ex).split()[:30])}")
 
 
 def ech_zrok_ui(pg, ctx):
@@ -859,6 +1039,11 @@ def main():
 
         if args.i18n_only:
             i18n_checks(pg, ctx)
+            b.close()
+            return
+        if args.waf_tuning_only:
+            current["page"] = "waf-tuning"
+            waf_tuning_ui(pg)
             b.close()
             return
         tabs = pg.eval_on_selector_all("#mainmenu .item[tag]", "els => els.map(e => e.getAttribute('tag'))")
@@ -1307,6 +1492,8 @@ def main():
             waf_graduated_ui(pg)
         except Exception as ex:
             fail("waf", f"waf page flow failed: {' '.join(str(ex).split()[:30])}")
+        current["page"] = "waf-tuning"
+        waf_tuning_ui(pg)
 
         # ---- SSO: OAuth2 provider manager and per-rule provider selection ----
         # Two fake OIDC providers (discovery only) are started here; two proxy rules are bound to them and
