@@ -481,6 +481,12 @@
                             </div>
                             <small style="opacity:0.7;">Path appended to the upstream URL when the uptime monitor performs its check (e.g. <code>/identity</code> for Plex, <code>/healthz</code>). Leave empty to use <code>/</code>.</small>
                             <br>
+                            <b>Status codes that count as up <span style="opacity:0.6; font-weight:normal;">(optional)</span></b>
+                            <div class="ui small fluid input" style="margin-top: 0.4em;">
+                                <input type="text" class="UptimeHealthyStatus" placeholder="global setting" autocomplete="off">
+                            </div>
+                            <small style="opacity:0.7;">Codes like <code>401</code>, ranges like <code>200-399</code>, classes like <code>2xx</code> or <code>any</code>, comma separated. Leave empty to use the global setting on the Uptime Monitor page.</small>
+                            <br>
                             <div class="ui checkbox" style="margin-top: 0.4em;">
                                 <input type="checkbox" class="UseStickySession">
                                 <label>Use Sticky Session<br>
@@ -1419,6 +1425,7 @@
         let useStickySession =  $(editor).find(".UseStickySession")[0].checked;
         let DisableUptimeMonitor = !$(editor).find(".EnableUptimeMonitor")[0].checked;
         let uptimeMonitorURI = $(editor).find(".UptimeMonitorURI").val().trim();
+        let uptimeHealthyStatus = $(editor).find(".UptimeHealthyStatus").val().trim();
         let disableAutoFallback = false; //$(editor).find(".DisableAutoFallback")[0].checked;
         let authProviderType = $(editor).find(".authProviderPicker input[type='radio']:checked").val();
         let requireRateLimit = $(editor).find(".RequireRateLimit")[0].checked;
@@ -1464,6 +1471,7 @@
                 "ss":useStickySession,
                 "dutm": DisableUptimeMonitor,
                 "utmURI": uptimeMonitorURI,
+                "utmStatus": uptimeHealthyStatus,
                 "dAutoFallback": disableAutoFallback,
                 "bpgtls": bypassGlobalTLS,
                 "enableConnectSupport": enableConnectSupport,
@@ -1986,6 +1994,7 @@
             var isUptimeMonitorEnabled = $(this).is(":checked");
             editor.find(".DisableAutoFallback").prop("disabled", !isUptimeMonitorEnabled);
             editor.find(".UptimeMonitorURI").prop("disabled", !isUptimeMonitorEnabled);
+            editor.find(".UptimeHealthyStatus").prop("disabled", !isUptimeMonitorEnabled);
             if (!isUptimeMonitorEnabled) {
                 editor.find(".DisableAutoFallback").prop("checked", false);
             }
@@ -1996,6 +2005,13 @@
         editor.find(".UptimeMonitorURI").val(subd.UptimeMonitorURI || "");
         editor.find(".UptimeMonitorURI").prop("disabled", subd.DisableUptimeMonitor);
         editor.find(".UptimeMonitorURI").on("change", function() {
+            saveProxyInlineEdit(uuid);
+        });
+
+        editor.find(".UptimeHealthyStatus").off("change");
+        editor.find(".UptimeHealthyStatus").val(subd.UptimeHealthyStatus || "");
+        editor.find(".UptimeHealthyStatus").prop("disabled", subd.DisableUptimeMonitor);
+        editor.find(".UptimeHealthyStatus").on("change", function() {
             saveProxyInlineEdit(uuid);
         });
 

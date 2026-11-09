@@ -20,7 +20,7 @@
             <div class="column"><div class="ui segment">
                 <h3><i class="plug icon"></i> Join a fleet</h3>
                 <div class="ui form">
-                    <div class="field"><label>Hub admin URL</label><input type="text" id="flJoinUrl" placeholder="https://10.0.0.10:8000"></div>
+                    <div class="field"><label>Hub admin URL</label><input type="text" id="flJoinUrl" placeholder="https://10.0.0.10:8000"><small style="opacity:0.7;">Node outside the hub's network? Start the hub with <code>-fleet_port :8010</code> (serves only the Fleet node endpoints), publish it through a proxy rule with a real certificate and use that https address here.</small></div>
                     <div class="field"><label>Join token</label><input type="text" id="flJoinToken" autocomplete="off" placeholder="zj1.xxxxxxxx.xxxxxxxx..."></div>
                     <div id="flProbeBox" class="ui small info message" style="display:none;"></div>
                     <button class="ui basic button" id="flProbeBtn">1. Check hub certificate</button>

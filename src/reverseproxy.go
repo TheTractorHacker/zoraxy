@@ -429,6 +429,8 @@ func ReverseProxyInit() {
 		SystemWideLogger.Println("Dynamic Reverse Proxy service started")
 	}
 
+	loadUptimeSettings()
+
 	//Add all proxy services to uptime monitor
 	//Create a uptime monitor service
 	go func() {
@@ -523,6 +525,12 @@ func ReverseProxyHandleAddEndpoint(w http.ResponseWriter, r *http.Request) {
 	// Custom URI used by the uptime monitor health check (optional)
 	utmURI, _ := utils.PostPara(r, "utmURI")
 	utmURI = strings.TrimSpace(utmURI)
+	utmStatus, _ := utils.PostPara(r, "utmStatus")
+	utmStatus = strings.TrimSpace(utmStatus)
+	if _, err := uptime.ParseStatusSpec(utmStatus); err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
+	}
 
 	// Disable logging?
 	disableLog, _ := utils.PostBool(r, "disableLog")
@@ -736,6 +744,7 @@ func ReverseProxyHandleAddEndpoint(w http.ResponseWriter, r *http.Request) {
 			// Uptime Monitor
 			DisableUptimeMonitor: !enableUtm,
 			UptimeMonitorURI:     utmURI,
+			UptimeHealthyStatus:  utmStatus,
 			DisableAutoFallback:  false, // Default to false for new endpoints
 
 			// Logger
@@ -926,6 +935,15 @@ func ReverseProxyHandleEditEndpoint(w http.ResponseWriter, r *http.Request) {
 	disbleUtm := postBoolOr(r, "dutm", cur.DisableUptimeMonitor)
 
 	// Custom URI used by the uptime monitor health check (optional, an empty value clears it)
+	utmStatus := cur.UptimeHealthyStatus
+	if formHas(r, "utmStatus") {
+		utmStatus, _ = utils.PostPara(r, "utmStatus")
+		utmStatus = strings.TrimSpace(utmStatus)
+		if _, err := uptime.ParseStatusSpec(utmStatus); err != nil {
+			utils.SendErrorResponse(w, err.Error())
+			return
+		}
+	}
 	utmURI := cur.UptimeMonitorURI
 	if formHas(r, "utmURI") {
 		utmURI, _ = utils.PostPara(r, "utmURI")
@@ -1066,6 +1084,7 @@ func ReverseProxyHandleEditEndpoint(w http.ResponseWriter, r *http.Request) {
 	newProxyEndpoint.UseStickySession = useStickySession
 	newProxyEndpoint.DisableUptimeMonitor = disbleUtm
 	newProxyEndpoint.UptimeMonitorURI = utmURI
+	newProxyEndpoint.UptimeHealthyStatus = utmStatus
 	newProxyEndpoint.DisableAutoFallback = disableAutoFallback
 	newProxyEndpoint.DisableChunkedTransferEncoding = disableChunkedEncoding
 	newProxyEndpoint.ForceHTTP11 = forceHTTP11

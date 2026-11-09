@@ -80,3 +80,43 @@ func TestStatusMeansReachable(t *testing.T) {
 		}
 	}
 }
+
+func TestStatusSpec(t *testing.T) {
+	cases := []struct {
+		spec string
+		code int
+		want bool
+	}{
+		{"", 401, true}, {"", 503, false}, {"any", 404, true},
+		{"200-399", 401, false}, {"200-399", 302, true},
+		{"2xx,401", 401, true}, {"2xx,401", 404, false},
+		{"any,!", 200, true},
+	}
+	for _, c := range cases {
+		s, err := ParseStatusSpec(c.spec)
+		if c.spec == "any,!" {
+			if err == nil {
+				t.Fatal("garbage token must be rejected")
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("%q: %v", c.spec, err)
+		}
+		if got := s.Match(c.code); got != c.want {
+			t.Errorf("spec %q code %d = %v, want %v", c.spec, c.code, got, c.want)
+		}
+	}
+	for _, bad := range []string{"99", "600", "5-3", "abc", "2xxx", "6xx"} {
+		if _, err := ParseStatusSpec(bad); err == nil {
+			t.Errorf("%q should be invalid", bad)
+		}
+	}
+	if err := SetDefaultHealthyStatus("200-399"); err != nil {
+		t.Fatal(err)
+	}
+	defer SetDefaultHealthyStatus("")
+	if specFor(&Target{}).Match(401) || !specFor(&Target{HealthyStatus: "401"}).Match(401) {
+		t.Fatal("global spec applies unless the target has its own")
+	}
+}

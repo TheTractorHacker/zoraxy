@@ -364,6 +364,7 @@ type ProxyEndpoint struct {
 
 	//Uptime Monitor
 	DisableUptimeMonitor       bool   //Disable uptime monitor for this endpoint
+	UptimeHealthyStatus        string //Status codes that count as up for the uptime monitor, e.g. "200-399,401" or "2xx". Empty = global setting
 	UptimeMonitorURI           string //Optional URI path used by the uptime monitor health check (e.g. "/identity", "/healthz"). Empty = default "/"
 	DisableAutoFallback        bool   //Disable automatic fallback when uptime monitor detects an upstream is down (continue monitoring but don't auto-disable upstream)
 	DisableLogging             bool   //Disable logging of reverse proxy requests

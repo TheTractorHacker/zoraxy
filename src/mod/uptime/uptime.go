@@ -374,7 +374,7 @@ func (m *Monitor) getWebsiteStatusWithLatency(target *Target, timeout time.Durat
 
 	diff := end - start
 	m.Config.OnlineStateNotify(target.URL, true)
-	return statusMeansReachable(statusCode), diff, statusCode
+	return specFor(target).Match(statusCode), diff, statusCode
 
 }
 

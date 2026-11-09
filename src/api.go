@@ -262,6 +262,7 @@ func RegisterStatisticalAPIs(authRouter *auth.RouterDef) {
 	RegisterBlockedAPIs(authRouter)
 	/* UpTime Monitor */
 	authRouter.HandleFunc("/api/utm/list", HandleUptimeMonitorListing)
+	authRouter.HandleFunc("/api/utm/healthyStatus", HandleUptimeHealthyStatus)
 }
 
 // Register the APIs for Stream (TCP / UDP) Proxy management functions

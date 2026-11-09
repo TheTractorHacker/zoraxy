@@ -37,6 +37,7 @@ type Target struct {
 	ProxyType         ProxyType
 	SkipTlsValidation bool
 	HealthCheckURI    string //Optional URI path appended to URL for the health check. If empty, "/" is used.
+	HealthyStatus     string //Optional status code list that counts as up (see statusspec.go). Empty = global setting
 }
 
 type Config struct {

@@ -3,6 +3,26 @@
         <h2>Uptime Monitor</h2>
         <p>Check the online state of proxied targets</p>
     </div>
+    <div class="ui segment" id="utmStatusSetting">
+        <b>Status codes that count as up</b>
+        <div class="ui action fluid input" style="margin-top:0.5em; max-width:34em;">
+            <input type="text" id="utmHealthyStatus" placeholder="any" autocomplete="off">
+            <button class="ui button" id="utmHealthyStatusSave">Save</button>
+        </div>
+        <div style="margin-top:0.4em; opacity:0.75;">
+            Comma separated: codes (<code>401</code>), ranges (<code>200-399</code>), classes (<code>2xx</code>) or <code>any</code>.
+            Empty = <code>any</code>: every answer except 502, 503, 504 and 52x gateway errors counts as up, so login-protected or virtual-host apps are not shown offline.
+            Use <code>200-399</code> to require a success or redirect. A single proxy rule can override this in its editor.
+        </div>
+    </div>
+    <script>
+        $.get("./api/utm/healthyStatus", function(d){ if (d && d.status !== undefined) { $("#utmHealthyStatus").val(d.status); } });
+        $("#utmHealthyStatusSave").on("click", function(){
+            $.cjax({ url: "./api/utm/healthyStatus", method: "POST", data: { status: $("#utmHealthyStatus").val() }, success: function(d){
+                if (d && d.error) { msgbox(d.error, false, 6000); } else { msgbox("Saved. Targets are being re-checked."); setTimeout(function(){ if (typeof reloadUptimeList === "function") { reloadUptimeList(); } }, 2500); }
+            }});
+        });
+    </script>
     <div class="ui divider"></div>
     <div id="utmrender" class="ui basic segment">
         <div class="ui basic segment">
