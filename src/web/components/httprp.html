@@ -993,6 +993,11 @@
                                 <button class="ui basic small green button wafSourceSaveBtn"><i class="save icon"></i> Apply source</button>
                                 <small style="opacity:0.7;margin-left:0.6em;">Global policy, profiles, exclusions and coverage are managed on the <b>Security &gt; WAF</b> page.</small>
                             </div>
+                            <div class="wafVarEx" style="display:none; margin:0.8em 0;">
+                                <h5 style="margin-bottom:0.3em;"><i class="crosshairs icon"></i> Variable exclusions (from the WAF tuning assistant)</h5>
+                                <small style="opacity:0.7;display:block;margin-bottom:0.4em;">A rule that does not inspect one specific cookie, argument or header of this proxy rule. Add them from the <b>Tuning</b> tab of the WAF page.</small>
+                                <div style="overflow-x:auto;"><table class="ui compact very basic small unstackable table"><tbody class="wafVarExBody"></tbody></table></div>
+                            </div>
                             <div class="wafCustomOnly">
                             <p style="opacity:0.7;">Inspects requests with the OWASP Core Rule Set (via Coraza) before they reach the upstream. Start with <b>Detection only</b>, review the events below, add exclusions for false positives, then switch to <b>Block</b>.</p>
                             <div class="ui form">
@@ -2517,6 +2522,29 @@
         }).join("\n"));
         box.find(".wafCustomRules").val(cfg.CustomRules || "");
         box.find(".wafIgnoreCookies").prop("checked", !!cfg.IgnoreAnalyticsCookies);
+
+        /* Variable exclusions of the WAF tuning assistant: own config for custom WAFs, additive overrides otherwise */
+        (function(){
+            let src = srcSel.val();
+            let list = src == "custom" ? (cfg.TargetExclusions || []) : (src == "off" ? [] : ((subd.WAFExtra && subd.WAFExtra.TargetExclusions) || []));
+            let rows = [];
+            list.forEach(function(te){ (te.RuleIDs || []).forEach(function(id){ rows.push({id: id, te: te}); }); });
+            box.find(".wafVarEx").toggle(rows.length > 0);
+            box.find(".wafVarExBody").html(rows.map(function(r, i){
+                return `<tr><td><b>${wafEsc(r.id)}</b></td><td style="word-break:break-all;"><code>${wafEsc(r.te.Target)}</code>${r.te.Path ? " on <code>" + wafEsc((r.te.Exact ? "=" : "") + r.te.Path) + "</code>" : ""}</td>
+                    <td><button class="ui mini basic icon button wafVarExDel" data-i="${i}" title="Remove this variable exclusion" aria-label="Remove the exclusion of rule ${wafEsc(r.id)} for ${wafEsc(r.te.Target)}"><i class="trash alternate icon"></i></button></td></tr>`;
+            }).join(""));
+            box.find(".wafVarExDel").off("click").on("click", function(){
+                let r = rows[parseInt($(this).attr("data-i"))];
+                $.cjax({url: "/api/waf/tuning/remove", method: "POST",
+                    data: {scope: "endpoint", rootname: ep, target: r.te.Target, path: r.te.Path || "", exact: !!r.te.Exact, ruleid: r.id},
+                    success: function(d){
+                        if (d.error != undefined){ msgbox(d.error, false, 6000); }
+                        else { msgbox("Exclusion removed"); resyncProxyEditorConfig(); }
+                    },
+                    error: function(){ msgbox("Request failed", false, 4000); }});
+            });
+        })();
 
         box.find(".wafSaveBtn").off("click").on("click", function(){
             let pathEx = [];

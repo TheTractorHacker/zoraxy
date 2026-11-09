@@ -293,6 +293,60 @@ of policy, profiles and endpoint WAF settings.
 **Tests:** `waf/central_test.go`, `dynamicproxy/waf_central_test.go` (inheritance matrix through `ProxyHandler.ServeHTTP`
 and the non-TLS path, bypass tricks, profile propagation, concurrency), `src/wafcentral_test.go` (APIs, persistence, cluster).
 
+### WAF tuning assistant (variable scoped exclusions)
+
+Guided false-positive tuning that narrows an exclusion to the one request variable that tripped a rule, instead of
+switching the whole rule off. Code: `waf/tuning.go` (exclusion type, grammar, SecLang emission, matched variable),
+`waf/tuning_agg.go` (aggregation, suggestions, risk), `src/wafapi_tuning.go` (HTTP + persistence), UI in the **Tuning**
+tab of `waf.html` (plus the *Exclude only this variable* button of the Events drawer, the variable rows of the
+Exclusions tab and a read-only list in the endpoint editor of `httprp.html`).
+
+**Matched variable.** `RuleHit` has two new fields next to `Data`: `variable` (`REQUEST_COOKIES:ph_phc_x_posthog`, the
+collection and key as Coraza reports them) and `var_norm` (`ARGS_GET`/`ARGS_POST` folded into `ARGS`, key lower-cased).
+They come from the first matched variable of the rule that is not a `TX` / internal variable, and are empty for rules that
+did not match a request variable. Old audit lines without them still load.
+
+**`TargetExclusion{RuleIDs, Target, Path, Exact}`** exists on `Config`, `Policy`, `Profile` and `Overrides`
+(all `omitempty`, so old files and cache keys are unchanged). `Resolve` appends policy, profile and endpoint entries and merges
+entries with the same target and path; `Hash()` covers the field, so instances are only shared between identical settings.
+The engine emits `ctl:ruleRemoveTargetById=<id>;<TARGET>` (rule IDs and ranges, one `ctl` per ID) in a `SecAction`, or
+in a `SecRule REQUEST_FILENAME "@streq|@beginsWith <path>"` when `Path` is set, before the CRS files are included.
+Because the removal is per transaction and per rule, the same payload in another variable, or another rule on the same
+variable, is still inspected (tests: `waf/tuning_test.go`).
+
+**Target grammar** (`ValidateTarget`, checked by `Config.Validate`, so also on every save of a policy, profile or endpoint):
+`COLLECTION`, `COLLECTION:name` or `COLLECTION:/regex/`. Collections: `ARGS`, `ARGS_NAMES`, `ARGS_GET[_NAMES]`,
+`ARGS_POST[_NAMES]`, `REQUEST_COOKIES[_NAMES]`, `REQUEST_HEADERS[_NAMES]`, `FILES[_NAMES]`, `XML` (selectors allowed) and
+`REQUEST_URI[_RAW]`, `REQUEST_FILENAME`, `REQUEST_BASENAME`, `REQUEST_BODY`, `QUERY_STRING` (no selector). JSON bodies are
+exposed by Coraza as `ARGS:json.a.b.0`. A literal name may contain letters, digits and ``_ . - [ ] $ @ + ~ : !``; a regex is
+at most 120 characters, must compile (RE2, matched against the lower-cased name) and may not end in a backslash. Printable ASCII
+only; commas, semicolons, quotes, `%{` and control characters are refused everywhere (so a regex cannot use `{1,3}`).
+Paths follow the `PathExclusion` rules plus no commas or semicolons. At most 500 entries.
+
+**API** (admin auth + CSRF, same registration as the other `/api/waf` endpoints; there is no read-only `/api/v1` twin because
+the existing events/summary endpoints have none either):
+
+- `GET /api/waf/tuning?hours=24&endpoint=` groups the buffered events (the last 1000 across all proxy rules, memory only) by
+  rule, proxy rule and normalised variable. Rotating names collapse (`ph_*_posthog` and the other analytics cookie families,
+  array indexes `json.items.*.name`, UUIDs and long hex tokens). Each item has `count`, `clients`, `would_block`,
+  `first_seen`/`last_seen`, up to 5 `paths`, one truncated `sample` (nothing the event does not already store), the
+  `suggestion` and `risk` (`low`/`medium`/`high`) with `risk_note` and `looksLikeAttack`.
+- Suggestions: `kind=variable` (always when a variable is known and excludable; path scoped, exact, only when every hit was on
+  one path and the variable is not a cookie or header), `path-rule` (variable not excludable on its own, one path) or `rule`
+  (nothing narrower is known; always high risk). `looksLikeAttack` is set for critical/error rules of the traversal, RFI,
+  command execution, PHP, generic-attack and Java families, scanner detections, and for 3+ clients sending 3+ structurally
+  different payloads (the "shape" ignores ids and numbers, so analytics cookies do not trip it).
+- `POST /api/waf/tuning/apply` `scope` (`global`, `endpoint` + `rootname`, or the endpoint name), `suggestion` (the JSON of an
+  item) and optional `variable` (`COLLECTION:name` of an event, converted to an exact-name target). It goes through the same
+  helpers as the quick exclusion: global policy; for an endpoint, its own `WAF` for `custom`, its `WAFExtra` overrides for
+  every other source, refused when the WAF is off.
+- `POST /api/waf/tuning/remove` `scope`, `rootname`, `target`, `path`, `exact`, optional `ruleid`.
+- `POST /api/waf/set`, `/api/waf/policy` and `/api/waf/profile/save` keep the existing `TargetExclusions` when the posted
+  JSON has no such key (the older editors never send it); send an empty list to clear.
+
+Limits: the aggregation sees only what is in the in-memory ring buffer; a suggestion is a starting point, not proof that a
+request was legitimate. "Ignore" is remembered per browser (localStorage).
+
 ## Customising CAPTCHA pages
 
 Each proxy endpoint with "Require CAPTCHA Challenge" enabled can restyle its bot-check pages from the endpoint editor

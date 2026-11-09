@@ -228,12 +228,15 @@ func collectHits(tx types.Transaction) []RuleHit {
 				break
 			}
 		}
+		variable, varNorm := matchedVariable(mr)
 		hits = append(hits, RuleHit{
 			ID:       rule.ID(),
 			Message:  truncate(mr.Message(), 200),
 			Severity: rule.Severity().String(),
 			Tags:     rule.Tags(),
 			Data:     data,
+			Variable: variable,
+			VarNorm:  varNorm,
 		})
 	}
 	return hits

@@ -62,6 +62,9 @@ type Policy struct {
 	TrustedPaths           []TrustedPath   // Requests that skip the WAF
 	AllowedIPs             []string        // IPs / CIDRs that skip the WAF
 	IgnoreAnalyticsCookies bool            `json:",omitempty"` // Do not inspect the values of analytics cookies (PostHog, Google Analytics, ...), see Config
+
+	// --- WAF tuning assistant (see tuning.go) ---
+	TargetExclusions []TargetExclusion `json:",omitempty"` // Variable scoped exclusions, everywhere
 }
 
 // Profile is a reusable named bundle of WAF settings
@@ -76,6 +79,9 @@ type Profile struct {
 	PathExclusions         []PathExclusion
 	CustomRules            string
 	IgnoreAnalyticsCookies bool `json:",omitempty"` // Additive: on if the policy or the profile turns it on
+
+	// --- WAF tuning assistant (see tuning.go) ---
+	TargetExclusions []TargetExclusion `json:",omitempty"`
 }
 
 // Overrides are the per endpoint additions applied on top of the global
@@ -86,6 +92,9 @@ type Overrides struct {
 	ExcludedRuleIDs  []string
 	PathExclusions   []PathExclusion
 	CustomRules      string
+
+	// --- WAF tuning assistant (see tuning.go) ---
+	TargetExclusions []TargetExclusion `json:",omitempty"`
 }
 
 // Setting is the WAF choice of one endpoint
@@ -193,6 +202,7 @@ func (p *Policy) validate() error {
 	}
 	c := Config{Mode: p.DefaultMode, ParanoiaLevel: p.ParanoiaLevel, InboundThreshold: p.InboundThreshold,
 		MaxBodyBytes: p.MaxBodyBytes, ExcludedRuleIDs: p.ExcludedRuleIDs, PathExclusions: p.PathExclusions, CustomRules: p.CustomRules}
+	c.TargetExclusions = p.TargetExclusions
 	if c.Mode == ModeOff {
 		c.Mode = ModeDetectionOnly
 	}
@@ -212,6 +222,7 @@ func (pr *Profile) validate() error {
 	}
 	c := Config{Mode: pr.Mode, ParanoiaLevel: pr.ParanoiaLevel, InboundThreshold: pr.InboundThreshold,
 		ExcludedRuleIDs: pr.ExcludedRuleIDs, PathExclusions: pr.PathExclusions, CustomRules: pr.CustomRules}
+	c.TargetExclusions = pr.TargetExclusions
 	return c.Validate()
 }
 
@@ -280,6 +291,7 @@ func (s *State) ValidateSetting(set Setting) error {
 		}
 		c := Config{Mode: ModeBlock, ParanoiaLevel: set.Extra.ParanoiaLevel, InboundThreshold: set.Extra.InboundThreshold,
 			ExcludedRuleIDs: set.Extra.ExcludedRuleIDs, PathExclusions: set.Extra.PathExclusions, CustomRules: set.Extra.CustomRules}
+		c.TargetExclusions = set.Extra.TargetExclusions
 		if err := c.Validate(); err != nil {
 			return err
 		}
@@ -340,6 +352,7 @@ func (s *State) Resolve(set Setting) Resolved {
 	cfg := Config{Mode: mode, ParanoiaLevel: p.ParanoiaLevel, InboundThreshold: p.InboundThreshold, MaxBodyBytes: p.MaxBodyBytes}
 	cfg.ExcludedRuleIDs = append(cfg.ExcludedRuleIDs, p.ExcludedRuleIDs...)
 	cfg.PathExclusions = append(cfg.PathExclusions, p.PathExclusions...)
+	cfg.TargetExclusions = append(cfg.TargetExclusions, p.TargetExclusions...)
 	cfg.IgnoreAnalyticsCookies = p.IgnoreAnalyticsCookies
 	rules := []string{p.CustomRules}
 	if prof != nil {
@@ -351,6 +364,7 @@ func (s *State) Resolve(set Setting) Resolved {
 		}
 		cfg.ExcludedRuleIDs = append(cfg.ExcludedRuleIDs, prof.ExcludedRuleIDs...)
 		cfg.PathExclusions = append(cfg.PathExclusions, prof.PathExclusions...)
+		cfg.TargetExclusions = append(cfg.TargetExclusions, prof.TargetExclusions...)
 		cfg.IgnoreAnalyticsCookies = cfg.IgnoreAnalyticsCookies || prof.IgnoreAnalyticsCookies
 		rules = append(rules, prof.CustomRules)
 	}
@@ -367,6 +381,7 @@ func (s *State) Resolve(set Setting) Resolved {
 		}
 		cfg.ExcludedRuleIDs = append(cfg.ExcludedRuleIDs, x.ExcludedRuleIDs...)
 		cfg.PathExclusions = append(cfg.PathExclusions, x.PathExclusions...)
+		cfg.TargetExclusions = append(cfg.TargetExclusions, x.TargetExclusions...)
 		rules = append(rules, x.CustomRules)
 	}
 	var joined []string
@@ -377,6 +392,7 @@ func (s *State) Resolve(set Setting) Resolved {
 	}
 	cfg.CustomRules = strings.Join(joined, "\n")
 	cfg.ExcludedRuleIDs = dedupe(cfg.ExcludedRuleIDs)
+	cfg.TargetExclusions = dedupeTargetExclusions(cfg.TargetExclusions)
 	res.Config = &cfg
 	return res
 }

@@ -110,6 +110,47 @@
     body.darkTheme #wafPage .ui.basic.buttons .button:not(.active) { color: #e6e6e6 !important; }
     #wafPage .ui.basic.buttons .button.active { background: #1e6fb8 !important; color: #fff !important; }
     #wafPage .ui.label { white-space: nowrap; }
+    /* tuning assistant */
+    #wafPage .wafTuneBar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .6em 1em; margin-bottom: .8em; }
+    #wafPage .wafTuneBar .field { margin: 0 !important; }
+    #wafPage .wafTuneList { display: grid; gap: .8em; }
+    #wafPage .wafTuneCard { border: 2px solid rgba(128,128,128,.35); border-top-width: 4px; border-radius: 8px; padding: .8em 1em; min-width: 0; background: rgba(128,128,128,.04); }
+    #wafPage .wafTuneCard.risk-low { border-top-color: #21ba45; }
+    #wafPage .wafTuneCard.risk-medium { border-top-color: #f2711c; }
+    #wafPage .wafTuneCard.risk-high { border-top-color: #db2828; }
+    #wafPage .wafTuneCard { overflow-wrap: anywhere; }
+    #wafPage .wafTuneCard.ignored { opacity: .6; }
+    #wafPage .wafTuneHead { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3em .6em; }
+    #wafPage .wafTuneHead .ttl { flex: 1 1 14em; min-width: 0; word-break: break-word; }
+    #wafPage .wafRisk { display: inline-block; padding: 0 .55em; border-radius: 999px; font-size: .8em; font-weight: 700; line-height: 1.8; white-space: nowrap; }
+    #wafPage .wafRisk.r-low { background: #21ba4533; color: #1a7a32; }
+    #wafPage .wafRisk.r-medium { background: #f2711c33; color: #a14a0a; }
+    #wafPage .wafRisk.r-high { background: #db282833; color: #b01e1e; }
+    body.darkTheme #wafPage .wafRisk.r-low { color: #6fe08a; }
+    body.darkTheme #wafPage .wafRisk.r-medium { color: #ffa86b; }
+    body.darkTheme #wafPage .wafRisk.r-high { color: #ff8a8a; }
+    #wafPage .wafTuneMeta { display: flex; flex-wrap: wrap; gap: .2em 1.2em; margin: .45em 0; opacity: .88; font-size: .92em; }
+    #wafPage .wafTuneMeta > span { min-width: 0; }
+    #wafPage .wafCode { font-family: monospace; font-size: .92em; word-break: break-all; background: rgba(128,128,128,.17); padding: 0 .35em; border-radius: 3px; }
+    #wafPage .wafTuneSample { margin: .35em 0; font-size: .92em; }
+    #wafPage .wafTuneSample pre { white-space: pre-wrap; word-break: break-all; background: rgba(128,128,128,.14); padding: .4em .6em; border-radius: 4px; margin: .2em 0 0; max-height: 6em; overflow: auto; }
+    #wafPage .wafTuneSug { margin: .5em 0 .2em; line-height: 1.5; }
+    #wafPage .wafTuneNote { margin: .2em 0; font-size: .92em; opacity: .9; }
+    #wafPage .wafTuneAct { display: flex; flex-wrap: wrap; gap: .4em; margin-top: .6em; }
+    #wafPage .wafTuneAct .button { margin: 0 !important; }
+    #wafTuneDlgBg { position: fixed; inset: 0; z-index: 1100; background: rgba(0,0,0,.55); display: none; align-items: center; justify-content: center; padding: 1em; }
+    #wafTuneDlg { width: min(580px, 100%); max-height: calc(100vh - 2em); overflow-y: auto; padding: 1.2em 1.4em; border-radius: 8px; background: #fff; color: #222; box-shadow: 0 8px 32px rgba(0,0,0,.4); }
+    body.darkTheme #wafTuneDlg { background: #1b1c1d; color: #ddd; }
+    #wafTuneDlg h3 { margin-top: 0; }
+    #wafTuneDlg dl { display: grid; grid-template-columns: 7.5em 1fr; gap: .35em .8em; margin: .6em 0 1em; }
+    #wafTuneDlg dt { opacity: .7; }
+    #wafTuneDlg dd { margin: 0; word-break: break-word; min-width: 0; }
+    #wafTuneDlg .wafCode { font-family: monospace; word-break: break-all; background: rgba(128,128,128,.17); padding: 0 .35em; border-radius: 3px; }
+    #wafTuneDlg .wafTuneWarn { border-left: 4px solid #db2828; background: rgba(219,40,40,.1); padding: .5em .8em; margin: .6em 0; border-radius: 3px; }
+    #wafTuneDlg .wafTuneEffect { border-left: 4px solid #2185d0; background: rgba(33,133,208,.1); padding: .5em .8em; margin: .6em 0; border-radius: 3px; }
+    #wafTuneDlg .wafTuneChoice { display: block; margin: .25em 0; }
+    #wafTuneDlg .wafTuneBtns { display: flex; flex-wrap: wrap; gap: .5em; justify-content: flex-end; }
+    @media (max-width: 480px) { #wafTuneDlg dl { grid-template-columns: 1fr; gap: 0; } #wafTuneDlg dt { margin-top: .4em; } }
 </style>
 <div class="standardContainer" id="wafPage">
     <div class="ui basic segment">
@@ -142,6 +183,7 @@
     <div class="ui top attached tabular menu" id="wafTabs" style="overflow-x:auto; overflow-y:hidden; flex-wrap:nowrap;">
         <a class="item active" data-tab="waf-overview"><i class="tachometer alternate icon"></i> Overview</a>
         <a class="item" data-tab="waf-events"><i class="bell icon"></i> Events</a>
+        <a class="item" data-tab="waf-tuning"><i class="magic icon"></i> Tuning</a>
         <a class="item" data-tab="waf-coverage"><i class="sitemap icon"></i> Coverage</a>
         <a class="item" data-tab="waf-policy"><i class="sliders horizontal icon"></i> Policy</a>
         <a class="item" data-tab="waf-profiles"><i class="clone icon"></i> Profiles</a>
@@ -204,6 +246,21 @@
             </table>
         </div>
         <button class="ui basic small button" id="wafEvMore" style="display:none">Show more</button>
+    </div>
+
+    <!-- Tuning assistant -->
+    <div class="ui bottom attached tab segment" data-tab="waf-tuning">
+        <p>False positives, grouped by rule, proxy rule and the exact request variable that matched, with the narrowest exclusion that fixes each one. A variable exclusion
+            stops one rule from inspecting <b>one</b> cookie, argument or header; the rule keeps protecting everything else. Nothing is changed until you confirm.</p>
+        <div class="wafTuneBar ui form">
+            <div class="field"><label for="wafTuneEndpoint">Proxy rule</label><select class="ui dropdown" id="wafTuneEndpoint"><option value="">All</option></select></div>
+            <div class="field"><label for="wafTuneHours">Time</label>
+                <select class="ui dropdown" id="wafTuneHours"><option value="1">Last hour</option><option value="24" selected>Last 24 hours</option><option value="168">Last 7 days</option></select></div>
+            <div class="field"><div class="ui checkbox"><input type="checkbox" id="wafTuneShowIgnored"><label for="wafTuneShowIgnored">Show ignored</label></div></div>
+            <div class="field"><button class="ui basic icon button" id="wafTuneRefresh" title="Refresh" aria-label="Refresh suggestions"><i class="sync alternate icon"></i></button></div>
+        </div>
+        <div class="wafMuted" id="wafTuneInfo"></div>
+        <div class="wafTuneList" id="wafTuneList" style="margin-top:.6em"></div>
     </div>
 
     <!-- Coverage -->
@@ -372,6 +429,8 @@
 
     <!-- detail drawer -->
     <div id="wafDrawer" role="dialog" aria-label="WAF event details"></div>
+    <!-- tuning confirmation -->
+    <div id="wafTuneDlgBg"><div id="wafTuneDlg" role="dialog" aria-modal="true" aria-labelledby="wafTuneDlgTitle"></div></div>
 </div>
 
 <script>
@@ -748,7 +807,8 @@
             if (r.data) h += '<div class="wafMuted" style="margin-top:.4em">What matched (variable and value):</div><pre>' + esc(clean(r.data, 400)) + '</pre>';
             h += '<div style="margin-top:.4em"><button class="ui mini basic button wafDx" data-scope="global" data-id="' + esc(r.id) + '"><i class="eraser icon"></i> Exclude everywhere</button> ' +
                 '<button class="ui mini basic button wafDx" data-scope="endpoint" data-id="' + esc(r.id) + '">for this proxy rule</button> ' +
-                '<button class="ui mini basic button wafDx" data-scope="path" data-id="' + esc(r.id) + '">for this path</button></div></div>';
+                '<button class="ui mini basic button wafDx" data-scope="path" data-id="' + esc(r.id) + '">for this path</button></div>' +
+                (r.variable ? '<div style="margin-top:.4em"><button class="ui mini basic button wafDxVar" data-id="' + esc(r.id) + '" data-hit="' + esc(hits.indexOf(r)) + '" title="Rule ' + esc(r.id) + ' keeps inspecting everything except ' + esc(r.var_norm || r.variable) + '"><i class="crosshairs icon"></i> Exclude only this variable</button> <span class="wafMuted">' + esc(r.variable) + '</span></div>' : '') + '</div>';
         });
         h += '<h4>Quick actions</h4><div class="ui small buttons" style="flex-wrap:wrap">' +
             '<button class="ui basic button" id="wafDFilterIP"><i class="filter icon"></i> All events from this IP</button>' +
@@ -807,11 +867,19 @@
         var rows = [];
         (p.ExcludedRuleIDs || []).forEach(function(id, i){ rows.push({id: id, path: "", exact: false, kind: "ids", i: i}); });
         (p.PathExclusions || []).forEach(function(pe, i){ (pe.RuleIDs || []).forEach(function(id){ rows.push({id: id, path: pe.Path, exact: pe.Exact, kind: "path", i: i}); }); });
+        (p.TargetExclusions || []).forEach(function(te){ (te.RuleIDs || []).forEach(function(id){ rows.push({id: id, path: te.Path || "", exact: te.Exact, kind: "var", target: te.Target}); }); });
         var html = "";
         rows.forEach(function(r){
             var ref = S.ruleMap[r.id];
             var desc = ref ? ref.msg : (/-/.test(r.id) ? "Rule range" : "");
             var scope = r.path ? "Path <code>" + esc((r.exact ? "=" : "") + r.path) + "</code>" : "Everywhere";
+            if (r.kind == "var"){
+                scope = "Only variable <code>" + esc(r.target) + "</code>" + (r.path ? " on <code>" + esc((r.exact ? "=" : "") + r.path) + "</code>" : "");
+                if (q && (r.id + " " + desc + " " + r.path + " " + r.target).toLowerCase().indexOf(q) < 0) return;
+                html += '<tr><td><b>' + esc(r.id) + '</b></td><td>' + esc(desc) + '</td><td>' + scope + '</td><td><button class="ui mini basic icon button wafxDelVar" data-id="' + esc(r.id) + '" data-target="' + esc(r.target) + '" data-path="' + esc(r.path) + '" data-exact="' + (r.exact ? 1 : 0) +
+                    '" title="Remove this variable exclusion" aria-label="Remove the exclusion of rule ' + esc(r.id) + ' for ' + esc(r.target) + '"><i class="trash alternate icon"></i></button></td></tr>';
+                return;
+            }
             if (q && (r.id + " " + desc + " " + r.path).toLowerCase().indexOf(q) < 0) return;
             html += '<tr><td><b>' + esc(r.id) + '</b></td><td>' + esc(desc) + '</td><td>' + scope + '</td><td><button class="ui mini basic icon button wafxDel" data-id="' + esc(r.id) + '" data-path="' + esc(r.path) + '" data-exact="' + (r.exact ? 1 : 0) +
                 '" title="Remove this exclusion" aria-label="Remove exclusion of rule ' + esc(r.id) + '"><i class="trash alternate icon"></i></button></td></tr>';
@@ -1000,6 +1068,160 @@
         post("/api/waf/endpoint/set", data, function(){ msgbox("WAF source updated for " + ep); loadCoverage(); loadOverview(); }, loadCoverage);
     });
 
+
+    /* ---------- tuning assistant ---------- */
+    var T = {items: [], info: null};
+    function tuneIgnored(){ try { return JSON.parse(localStorage.getItem("wafTuneIgnored") || "{}") || {}; } catch (e){ return {}; } }
+    function tuneSetIgnored(o){ try { localStorage.setItem("wafTuneIgnored", JSON.stringify(o)); } catch (e){} }
+    function loadTuneEndpoints(cb){
+        $.getJSON("/api/waf/coverage", function(cov){
+            if (fail(cov)) return;
+            var sel = $("#wafTuneEndpoint"), cur = sel.val();
+            sel.empty().append('<option value="">All</option>');
+            (cov || []).forEach(function(c){ sel.append($("<option>").val(c.Endpoint).text(c.Endpoint)); });
+            sel.val(cur || "");
+            if (cb) cb();
+        });
+    }
+    function loadTuning(){
+        var q = {hours: $("#wafTuneHours").val()};
+        if ($("#wafTuneEndpoint").val()) q.endpoint = $("#wafTuneEndpoint").val();
+        loadRules(function(){
+            $.getJSON("/api/waf/tuning?" + $.param(q), function(rep){
+                if (fail(rep)) return;
+                T.items = rep.items || [];
+                T.info = rep;
+                renderTuning();
+            });
+        });
+    }
+    function tuneWhere(s){
+        if (s.kind == "variable") return s.path ? "only on " + (s.exact ? "" : "paths starting with ") + s.path : "on every path";
+        return s.path ? "on " + s.path : "";
+    }
+    function riskLabel(it){ return {low: "Low risk", medium: "Check first", high: it.looksLikeAttack ? "Probably an attack" : "High risk"}[it.risk] || it.risk; }
+    function renderTuning(){
+        var ign = tuneIgnored(), showIgn = $("#wafTuneShowIgnored").prop("checked"), html = "", hidden = 0;
+        T.items.forEach(function(it, i){
+            var isIgn = !!ign[it.key];
+            if (isIgn && !showIgn){ hidden++; return; }
+            var s = it.suggestion || {}, ref = S.ruleMap[it.rule_id];
+            var meta = '<span><i class="server icon"></i> ' + esc(it.endpoint) + '</span>' +
+                '<span><b>' + it.count + '</b> hit' + (it.count == 1 ? "" : "s") + '</span><span><b>' + it.clients + '</b> client' + (it.clients == 1 ? "" : "s") + '</span>' +
+                '<span><b>' + it.would_block + '</b> would block</span>' +
+                '<span title="' + esc(new Date(it.first_seen).toLocaleString() + " to " + new Date(it.last_seen).toLocaleString()) + '">last ' + esc(new Date(it.last_seen).toLocaleString()) + '</span>' +
+                '<span>' + it.path_count + ' path' + (it.path_count == 1 ? "" : "s") + (it.paths && it.paths.length ? ': <span class="wafCode">' + esc(it.paths.slice(0, 3).join("  ")) + '</span>' : "") + '</span>';
+            var smp = it.sample || {};
+            html += '<div class="wafTuneCard risk-' + esc(it.risk) + (isIgn ? " ignored" : "") + '" data-i="' + i + '">' +
+                '<div class="wafTuneHead"><span class="ttl">' + sevBadge(it.severity) + ' <b>' + esc(it.rule_id) + '</b> ' + esc((ref && ref.msg) || it.message) + '</span>' +
+                '<span class="wafRisk r-' + esc(it.risk) + '">' + esc(riskLabel(it)) + '</span></div>' +
+                '<div class="wafTuneMeta"><span>Variable: ' + (it.variable ? '<span class="wafCode">' + esc(it.variable) + '</span>' : '<span class="wafMuted">not recorded</span>') + '</span>' + meta + '</div>' +
+                (smp.data ? '<div class="wafTuneSample"><span class="wafMuted">Example' + (smp.path ? ' on <span class="wafCode">' + esc(clean(smp.path, 120)) + '</span>' : "") + ':</span><pre>' + esc(clean(smp.data, 200)) + '</pre></div>' : '') +
+                '<div class="wafTuneSug"><i class="magic icon"></i> <b>Suggested:</b> ' + esc(s.summary || "") + '</div>' +
+                (it.risk_note ? '<div class="wafTuneNote tuneNote-' + esc(it.risk) + '">' + esc(it.risk_note) + '</div>' : '') +
+                '<div class="wafTuneAct">' +
+                '<button class="ui mini primary button wafTuneApply" data-scope="endpoint" data-i="' + i + '">Apply to this proxy rule</button>' +
+                '<button class="ui mini basic button wafTuneApply" data-scope="global" data-i="' + i + '">Apply globally</button>' +
+                '<button class="ui mini basic button wafTuneIgnore" data-i="' + i + '">' + (isIgn ? "Stop ignoring" : "Ignore") + '</button>' +
+                '</div></div>';
+        });
+        var info = (T.info ? T.info.events_scanned + " event" + (T.info.events_scanned == 1 ? "" : "s") + " analysed (events are held in memory: the last 1000 across all proxy rules, cleared on restart)." : "") +
+            (hidden ? " " + hidden + " ignored suggestion" + (hidden == 1 ? "" : "s") + " hidden." : "");
+        $("#wafTuneInfo").text(info);
+        $("#wafTuneList").html(html || '<div class="wafMuted" style="text-align:center;padding:2em"><i class="shield alternate icon"></i> No suggestions. ' +
+            (effectiveGlobalMode() == "off" ? "The global policy is off, so nothing is inspected." : "Requests the WAF flags will show up here.") + '</div>');
+    }
+    PAGE.on("click", ".wafTuneIgnore", function(){
+        var it = T.items[parseInt($(this).attr("data-i"))], o = tuneIgnored();
+        if (!it) return;
+        if (o[it.key]) delete o[it.key]; else o[it.key] = 1;
+        tuneSetIgnored(o);
+        renderTuning();
+    });
+    PAGE.on("click", ".wafTuneApply", function(){
+        var it = T.items[parseInt($(this).attr("data-i"))], scope = $(this).attr("data-scope");
+        if (!it) return;
+        var s = it.suggestion || {}, ref = S.ruleMap[it.rule_id];
+        var rows = [["Rule", '<b>' + esc(it.rule_id) + '</b> ' + esc((ref && ref.msg) || it.message)]];
+        var effect;
+        if (s.kind == "variable"){
+            rows.push(["Variable", '<span class="wafCode">' + esc(s.target) + '</span>']);
+            rows.push(["Paths", esc(s.path ? (s.exact ? "only " : "starting with ") + s.path : "every path")]);
+            effect = "Rule " + it.rule_id + " will no longer inspect this variable. It keeps inspecting every other cookie, argument, header and body field, and all other rules keep inspecting this one.";
+        } else if (s.kind == "path-rule"){
+            rows.push(["Paths", esc("only " + s.path)]);
+            effect = "Rule " + it.rule_id + " will be switched off for every request on " + s.path + ". This variable cannot be excluded on its own.";
+        } else {
+            rows.push(["Paths", "every path"]);
+            effect = "Rule " + it.rule_id + " will be switched off completely for the chosen scope.";
+        }
+        rows.push(["Applies to", scope == "global" ? "every proxy rule that uses the central WAF" : "proxy rule <b>" + esc(it.endpoint) + "</b> only"]);
+        openTuneDlg({title: scope == "global" ? "Apply this exclusion globally?" : "Apply this exclusion to " + it.endpoint + "?", rows: rows, effect: effect,
+            warn: it.looksLikeAttack ? "This looks like a real attack (" + (it.risk_note || "").replace(/^Probably a real attack\.\s*/, "") + "). Only continue if you recognise this traffic as your own." : "",
+            okLabel: "Apply exclusion",
+            onOk: function(done){
+                post("/api/waf/tuning/apply", {scope: scope == "global" ? "global" : "endpoint", rootname: it.endpoint, suggestion: JSON.stringify({kind: s.kind, rule_ids: s.rule_ids, target: s.target || "", path: s.path || "", exact: !!s.exact})},
+                    function(){ msgbox("Exclusion applied (" + (scope == "global" ? "global" : it.endpoint) + ")"); done(true); loadPolicy(); loadTuning(); }, function(){ done(false); });
+            }});
+    });
+    $("#wafTuneEndpoint, #wafTuneHours").on("change", loadTuning);
+    $("#wafTuneShowIgnored").on("change", renderTuning);
+    $("#wafTuneRefresh").on("click", loadTuning);
+
+    /* confirmation dialog: shows exactly what will be excluded. o = {title, rows, effect, warn, choices, pathOpt, okLabel, onOk(done)} */
+    var tuneDlgOpener = null;
+    function openTuneDlg(o){
+        var h = '<h3 id="wafTuneDlgTitle">' + esc(o.title) + '</h3><dl>' + o.rows.map(function(r){ return '<dt>' + esc(r[0]) + '</dt><dd>' + r[1] + '</dd>'; }).join("") + '</dl>';
+        if (o.choices){
+            h += '<div class="ui form" style="margin-bottom:.6em"><b>Applies to</b>' + o.choices.map(function(c, i){
+                return '<label class="wafTuneChoice"><input type="radio" name="wafTuneScope" value="' + esc(c.v) + '"' + (i == 0 ? " checked" : "") + '> ' + esc(c.label) + '</label>'; }).join("") + '</div>';
+        }
+        if (o.pathOpt){ h += '<label class="wafTuneChoice"><input type="checkbox" id="wafTunePathOnly"> Only on <span class="wafCode">' + esc(o.pathOpt) + '</span> (exact path)</label>'; }
+        if (o.effect) h += '<div class="wafTuneEffect">' + esc(o.effect) + '</div>';
+        if (o.warn) h += '<div class="wafTuneWarn"><i class="exclamation triangle icon"></i> ' + esc(o.warn) + '</div>';
+        h += '<div class="wafTuneBtns"><button class="ui basic button" id="wafTuneCancel">Cancel</button><button class="ui primary button" id="wafTuneOk">' + esc(o.okLabel || "Apply") + '</button></div>';
+        tuneDlgOpener = document.activeElement;
+        $("#wafTuneDlg").html(h).data("o", o);
+        $("#wafTuneDlgBg").css("display", "flex");
+        $("#wafTuneCancel").focus();
+    }
+    function closeTuneDlg(){
+        $("#wafTuneDlgBg").hide(); $("#wafTuneDlg").removeData("o").empty();
+        if (tuneDlgOpener && tuneDlgOpener.focus){ try { tuneDlgOpener.focus(); } catch (e){} }
+    }
+    PAGE.on("click", "#wafTuneCancel", closeTuneDlg);
+    PAGE.on("click", "#wafTuneDlgBg", function(e){ if (e.target === this) closeTuneDlg(); });
+    $(document).on("keydown.wafTuneDlg", function(e){ if (e.key == "Escape" && $("#wafTuneDlgBg").is(":visible")) closeTuneDlg(); });
+    PAGE.on("click", "#wafTuneOk", function(){
+        var o = $("#wafTuneDlg").data("o"), btn = $(this);
+        if (!o) return;
+        var ctx = {scope: ($("input[name=wafTuneScope]:checked").val() || ""), pathOnly: $("#wafTunePathOnly").prop("checked")};
+        btn.addClass("loading").prop("disabled", true);
+        o.onOk(function(ok){ btn.removeClass("loading").prop("disabled", false); if (ok) closeTuneDlg(); }, ctx);
+    });
+
+    // Events drawer: exclude one rule for one variable only
+    PAGE.on("click", ".wafDxVar", function(){
+        var ev = $("#wafDrawer").data("ev"), hit = ev && visibleHits(ev)[parseInt($(this).attr("data-hit"))];
+        if (!ev || !hit) return;
+        var ref = S.ruleMap[hit.id];
+        openTuneDlg({title: "Exclude only this variable?", okLabel: "Apply exclusion",
+            rows: [["Rule", '<b>' + esc(hit.id) + '</b> ' + esc(ruleDesc(hit))], ["Variable", '<span class="wafCode">' + esc(hit.var_norm || hit.variable) + '</span>'], ["Seen on", '<span class="wafCode">' + esc(clean(ev.path, 160)) + '</span>']],
+            effect: "Rule " + hit.id + " will no longer inspect this variable. It keeps inspecting everything else, and all other rules keep inspecting this variable.",
+            choices: [{v: "endpoint", label: "Proxy rule " + ev.endpoint + " only"}, {v: "global", label: "Every proxy rule that uses the central WAF"}],
+            pathOpt: ev.path,
+            onOk: function(done, ctx){
+                var sug = {kind: "variable", rule_ids: [String(hit.id)], target: "", path: ctx.pathOnly ? ev.path : "", exact: !!ctx.pathOnly};
+                post("/api/waf/tuning/apply", {scope: ctx.scope || "endpoint", rootname: ev.endpoint, suggestion: JSON.stringify(sug), variable: hit.variable},
+                    function(){ msgbox("Rule " + hit.id + " no longer inspects " + (hit.var_norm || hit.variable)); done(true); loadPolicy(); }, function(){ done(false); });
+            }});
+    });
+    PAGE.on("click", ".wafxDelVar", function(){
+        var b = $(this);
+        post("/api/waf/tuning/remove", {scope: "global", target: b.attr("data-target"), path: b.attr("data-path"), exact: b.attr("data-exact") == "1", ruleid: b.attr("data-id")},
+            function(){ msgbox("Exclusion removed"); loadPolicy(); });
+    });
+
     /* ---------- tabs ---------- */
     $("#wafTabs .item").tab({
         onVisible: function(tab){
@@ -1009,6 +1231,7 @@
             else if (tab == "waf-exclusions"){ loadRules(renderExclusions); loadPolicy(); }
             else if (tab == "waf-profiles"){ loadProfiles(); }
             else if (tab == "waf-events"){ loadEndpointFilter(loadEvents); }
+            else if (tab == "waf-tuning"){ loadTuneEndpoints(loadTuning); }
             else if (tab == "waf-rules"){ loadRules(renderRules); }
             else if (tab == "waf-coverage"){ loadCoverage(); }
         }
