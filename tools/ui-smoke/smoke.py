@@ -26,6 +26,7 @@ ap.add_argument("--no-page-sweep", action="store_true", help="skip the per-tab s
 ap.add_argument("--i18n-only", action="store_true", help="run only the multi-language scenario")
 ap.add_argument("--posture-only", action="store_true", help="run only the Security overview scenario")
 ap.add_argument("--ai-only", action="store_true", help="run only the AI assistant page scenario")
+ap.add_argument("--site-editor-only", action="store_true", help="run only the site editor scenario (Easy/Advanced, Save bar, presets, control inventory)")
 ap.add_argument("--waf-tuning-only", action="store_true", help="run only the WAF Tuning tab scenario")
 ap.add_argument("--zrok-fake", default=os.environ.get("SMOKE_ZROK_FAKE", ""), help="path of a fake zrok script; enables the zrok flow (the instance needs -allow_external_tools)")
 ap.add_argument("--allow", action="append", default=[], help="regex of messages whose failure is tolerated")
@@ -70,6 +71,14 @@ def fail(kind, msg):
     if s not in failures:
         failures.append(s)
         print("  FAIL " + s)
+
+
+def editor_section(pg, name):
+    """Open a section of the proxy rule editor in Advanced mode (the old tabs became five sections, see docs/ux/site-editor.md)."""
+    sec = {"waf": "security", "security": "security", "ssl": "tls", "downstream": "general", "upstream": "general", "vdirs": "routing",
+           "websocket": "routing", "headers": "routing", "alias": "general", "tags": "general", "accessrule": "security"}.get(name, name)
+    pg.evaluate("HrpEditor.setMode('advanced')")
+    pg.click(f"#httprpEditModal .hrpedit_menu_item[cfgpage={sec}]")
 
 
 def settle(pg, ms=700):
@@ -1819,6 +1828,422 @@ def posture_ui(pg, ctx):
         jpost("/api/security/posture/undo", {"action": "uptime.enable"})
 
 
+def site_editor_ui(pg, ctx):
+    """Phase 4: the proxy rule editor with five sections, Easy / Advanced, one Save bar, and app presets.
+    Checks: every control of the old 11-tab editor still exists exactly once and is reachable (siteeditor_inventory.json), the
+    Easy / Advanced switch and its memory, the note for non-default settings, the Save bar (collect, discard, save, live switch,
+    refusal to close with unsaved edits, no false prompt), presets (preview, apply, idempotent, new rule dialog), hostile
+    host names and tags, keyboard / focus / aria, and light, dark and 390px screenshots."""
+    out = lambda n: os.path.join(args.out, n)
+    api = lambda path, data: pg.evaluate(API, [path, data, "POST"])
+    get = lambda path: pg.evaluate("p => fetch(p).then(r => r.json())", path)
+    detail = lambda h: get("/api/proxy/detail?type=host&epname=" + h)
+    host = "se-app.smoke.invalid"
+    evil = "se<img src=x onerror=window.__xss=1>.smoke.invalid"
+    evil_tag = "<img src=x onerror=window.__xss=2>"
+    posts = []
+    pg.on("request", lambda r: posts.append((r.method, r.url, r.post_data or "")) if r.method == "POST" else None)
+    pg.set_viewport_size({"width": 1366, "height": 900})
+    pg.evaluate("localStorage.removeItem('zoraxy_site_editor_mode')")
+    pg.reload(wait_until="networkidle")
+    pg.wait_for_timeout(600)
+    for h in (host, evil):
+        api("/api/proxy/del", {"ep": h})
+    r = api("/api/proxy/add", {"type": "host", "rootname": host, "ep": "127.0.0.1:9", "tls": "false", "tlsval": "false", "bypassGlobalTLS": "false"})
+    if isinstance(r, dict) and r.get("error"):
+        fail("site-editor", "could not create the test rule: " + str(r))
+
+    def editor_open(h, wait=900):
+        pg.evaluate("openTabById('httprp')")
+        pg.evaluate("listProxyEndpoints()")
+        settle(pg, 700)
+        pg.evaluate("h => { const b = [...document.querySelectorAll('#httpProxyList .editBtn')].find(e => e.closest('tr').dataset.ep === h); b.click(); }", h)
+        pg.wait_for_selector("#httprpEditModal", state="visible", timeout=6000)
+        pg.wait_for_timeout(wait)
+
+    def editor_close():
+        pg.evaluate("closeHttpRuleEditor()")
+        pg.wait_for_selector("#httprpEditModal", state="hidden", timeout=5000)
+
+    def wait_saved(label):
+        """The save bar reports success (it hides again after about two seconds, so poll quickly)."""
+        mark = len(posts)
+        try:
+            pg.wait_for_function("() => { const b = document.querySelector('#httprpEditModal .zx-savebar'); return b && !b.hidden && b.classList.contains('is-success'); }", timeout=15000, polling=50)
+        except Exception:
+            bar = pg.evaluate("(() => { const b = document.querySelector('#httprpEditModal .zx-savebar'); return b ? b.className + ' | ' + b.innerText : 'no bar'; })()")
+            fail("site-editor", f"{label}: the save bar never reported success ({bar!r}; POSTs {[p[1].split('/api/')[-1] for p in posts[-6:]]})")
+            raise
+
+    def shot(name):
+        pg.screenshot(path=out(name))
+
+    def theme(dark):
+        if pg.evaluate("document.body.classList.contains('darkTheme')") != dark:
+            pg.evaluate("toggleTheme()")
+        pg.wait_for_timeout(300)
+
+    def modal_overflow(label):
+        ov = pg.evaluate("""() => { const m = document.querySelector('#httprpEditModal .hrp-main'); const r = document.querySelector('#httprpEditModal').getBoundingClientRect();
+            return [m.scrollWidth - m.clientWidth, Math.round(r.right - innerWidth), Math.round(-r.left)] }""")
+        if ov[0] > 2 or ov[1] > 1 or ov[2] > 1:
+            fail("site-editor", f"{label}: the editor overflows (main {ov[0]}px, right {ov[1]}px, left {ov[2]}px)")
+
+    try:
+        # ---------------------------------------------------------------- 1. control inventory
+        current["page"] = "site-editor/inventory"
+        inv = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "siteeditor_inventory.json"), encoding="utf-8"))
+        editor_open(host)
+        retired = (".wafSourceSaveBtn", ".wafChallengeSaveBtn", ".wafSaveBtn")  # replaced by the Save bar, kept in the DOM
+        bad = pg.evaluate("""(inv) => inv.filter(e => document.querySelectorAll('#httprpEditModal ' + e.selector).length !== 1).map(e => e.selector)""", inv)
+        if bad:
+            fail("site-editor", f"{len(bad)} control(s) of the old editor are missing or duplicated: {bad[:6]}")
+        if len(inv) < 100:
+            fail("site-editor", f"the control inventory has only {len(inv)} entries")
+        pg.evaluate("HrpEditor.setMode('advanced')")
+        for sec in ("general", "routing", "security", "tls", "advanced"):
+            pg.click(f"#httprpEditModal .hrpedit_menu_item[cfgpage={sec}]")
+            pg.wait_for_timeout(120)
+            unreachable = pg.evaluate("""([inv, sec, retired]) => inv.filter(e => e.section === sec && !retired.some(r => e.selector.includes(r.slice(1)))).filter(e => {
+                const el = document.querySelector('#httprpEditModal ' + e.selector); const card = el && el.closest('[data-hrp-card]');
+                return !card || card.offsetParent === null || el.closest('[data-hrp-sec]').getAttribute('data-hrp-sec') !== sec; }).map(e => e.selector)""", [inv, sec, list(retired)])
+            if unreachable:
+                fail("site-editor", f"section {sec}: controls whose card is not shown: {unreachable[:6]}")
+        # the legacy names still work
+        for legacy, sec in (("waf", "security"), ("ssl", "tls"), ("alias", "general"), ("vdirs", "routing")):
+            pg.evaluate("n => HrpEditor.show(n)", legacy)
+            if pg.evaluate("document.querySelector('#httprpEditModal .hrp-sec.is-active').dataset.hrpSec") != sec:
+                fail("site-editor", f"legacy tab name {legacy} does not open section {sec}")
+        if not pg.evaluate("typeof saveProxyInlineEdit === 'function' && typeof closeHttpRuleEditor === 'function' && typeof window.resetEditorDirty === 'function'"):
+            fail("site-editor", "saveProxyInlineEdit / closeHttpRuleEditor / resetEditorDirty must stay available")
+
+        # ---------------------------------------------------------------- 2. aria, keyboard, focus
+        current["page"] = "site-editor/a11y"
+        aria = pg.evaluate("""() => { const nav = document.querySelector('#hrpNav'); const tabs = [...nav.querySelectorAll('[role=tab]')];
+            return {role: nav.getAttribute('role'), n: tabs.length, selected: tabs.filter(t => t.getAttribute('aria-selected') === 'true').length,
+                    panels: tabs.every(t => { const p = document.getElementById(t.getAttribute('aria-controls')); return p && p.getAttribute('role') === 'tabpanel' && p.getAttribute('aria-labelledby') === t.id; }),
+                    dialog: document.querySelector('#httprpEditModal').getAttribute('role') + ' ' + document.querySelector('#httprpEditModal').getAttribute('aria-modal') } }""")
+        if aria["role"] != "tablist" or aria["n"] != 5 or aria["selected"] != 1 or not aria["panels"] or aria["dialog"] != "dialog true":
+            fail("site-editor", f"section navigation aria is wrong: {aria}")
+        pg.click("#httprpEditModal .hrpedit_menu_item[cfgpage=general]")
+        pg.keyboard.press("ArrowDown")
+        if pg.evaluate("document.querySelector('#httprpEditModal .hrp-sec.is-active').dataset.hrpSec") != "routing" or \
+                pg.evaluate("document.activeElement.getAttribute('cfgpage')") != "routing":
+            fail("site-editor", "ArrowDown in the section navigation must move focus and selection to the next section")
+        pg.keyboard.press("End")
+        if pg.evaluate("document.activeElement.getAttribute('cfgpage')") != "advanced":
+            fail("site-editor", "End must go to the last section")
+        editor_close()
+        editor_open(host, 500)
+        if pg.evaluate("document.activeElement && document.activeElement.id") != "hrpTitle":
+            fail("site-editor", "focus must move into the dialog (its title) when it opens")
+        pg.evaluate("HrpEditor.setMode('easy')")
+        for _ in range(70):
+            pg.keyboard.press("Tab")
+            if not pg.evaluate("document.querySelector('#httprpEditModal').contains(document.activeElement)"):
+                fail("site-editor", "Tab left the dialog (focus must stay inside while it is open)")
+                break
+        pg.keyboard.press("Escape")
+        pg.wait_for_selector("#httprpEditModal", state="hidden", timeout=5000)
+        try:
+            pg.wait_for_function("!!(document.activeElement && document.activeElement.closest('#httprpPage'))", timeout=3000)
+        except Exception:
+            fail("site-editor", "focus must return to the proxy list after the dialog closes")
+
+        # ---------------------------------------------------------------- 3. Easy / Advanced and the non default note
+        current["page"] = "site-editor/modes"
+        pg.evaluate("localStorage.removeItem('zoraxy_site_editor_mode')")
+        pg.reload(wait_until="networkidle")
+        editor_open(host)
+        if pg.evaluate("document.querySelector('#httprpEditModal').dataset.mode") != "easy":
+            fail("site-editor", "the editor must open in Easy mode by default")
+        shown = pg.evaluate("[...document.querySelectorAll('#httprpEditModal .hrp-card')].filter(c => c.offsetParent !== null).map(c => c.dataset.hrpCard)")
+        for need in ("host", "upstream", "websocket", "protection", "accesseasy", "certeasy"):
+            if need not in shown:
+                fail("site-editor", f"Easy mode lacks the {need} card (shows {shown})")
+        for hidden_ in ("compat", "forwarding", "headers", "ratelimit", "captcha", "waf", "certs"):
+            if hidden_ in shown:
+                fail("site-editor", f"Easy mode must not show the {hidden_} card of a rule with default settings")
+        if pg.is_visible("#hrpAdvNote"):
+            fail("site-editor", "the advanced-settings note must be hidden for a rule with only default settings")
+        if not pg.is_visible("#hrpShowAdv"):
+            fail("site-editor", "Easy mode needs the 'Show advanced settings' link")
+        shot("site-editor-easy-light.png")
+        modal_overflow("easy")
+        pg.click("#hrpShowAdv")
+        if pg.evaluate("document.querySelector('#httprpEditModal').dataset.mode") != "advanced" or pg.evaluate("localStorage.getItem('zoraxy_site_editor_mode')") != "advanced":
+            fail("site-editor", "'Show advanced settings' must switch to Advanced and remember it")
+        pg.reload(wait_until="networkidle")
+        editor_open(host)
+        if pg.evaluate("document.querySelector('#httprpEditModal').dataset.mode") != "advanced":
+            fail("site-editor", "the chosen mode must be remembered per browser")
+        if pg.locator("#httprpEditModal .hrp-sec.is-active .hrp-card:visible").count() < 3:
+            fail("site-editor", "Advanced mode must show the cards of the open section")
+        pg.click("#hrpMode [data-value=easy]")
+        editor_close()
+        # a rule with advanced settings: Easy shows their cards and lists them
+        api("/api/proxy/edit", {"type": "host", "rootname": host, "rate": "true", "ratenum": 30, "rateburst": 40, "forceHTTP11": "true", "blockCommonExploits": "true", "tags": "alpha,beta"})
+        editor_open(host)
+        pg.evaluate("HrpEditor.setMode('easy')")
+        if not pg.is_visible("#hrpAdvNote"):
+            fail("site-editor", "a rule with advanced settings must show the 'This rule has advanced settings' note in Easy mode")
+        note = pg.inner_text("#hrpAdvNote")
+        for w in ("Rate limit", "Compatibility", "Exploit", "Tags (2)"):
+            if w not in note:
+                fail("site-editor", f"the advanced-settings note does not list '{w}': {note!r}")
+        shown = pg.evaluate("[...document.querySelectorAll('#httprpEditModal .hrp-card')].filter(c => c.offsetParent !== null).map(c => c.dataset.hrpCard)")
+        for need in ("ratelimit", "compat", "exploits", "tags"):
+            if need not in shown:
+                fail("site-editor", f"a non-default setting must never be hidden: the {need} card is not shown in Easy mode")
+        shot("site-editor-easy-nondefault-light.png")
+        pg.click("#hrpAdvNoteList button >> nth=0")
+        if pg.evaluate("document.querySelector('#httprpEditModal').dataset.mode") != "advanced":
+            fail("site-editor", "'Open in Advanced' of the note must switch to Advanced")
+        editor_close()
+        api("/api/proxy/edit", {"type": "host", "rootname": host, "rate": "false", "ratenum": 100, "forceHTTP11": "false", "blockCommonExploits": "false", "tags": ""})
+
+        # ---------------------------------------------------------------- 4. the Save bar
+        current["page"] = "site-editor/savebar"
+        editor_open(host, 1200)
+        pg.evaluate("HrpEditor.setMode('easy')")
+        if pg.evaluate("HrpEditor.isDirty()") or pg.is_visible("#httprpEditModal .zx-savebar"):
+            fail("site-editor", "a freshly opened editor must be clean (no false unsaved changes)")
+        n0 = len([p for p in posts if "/api/proxy/edit" in p[1]])
+        pg.click("#httprpEditModal .EnableWebSocket + label")
+        pg.wait_for_selector("#httprpEditModal .zx-savebar:visible", timeout=3000)
+        if len([p for p in posts if "/api/proxy/edit" in p[1]]) != n0:
+            fail("site-editor", "an edit must not be saved before the Save button is used")
+        if "1 unsaved change" not in pg.inner_text("#httprpEditModal .zx-savebar"):
+            fail("site-editor", "the save bar must count the changed fields: " + pg.inner_text("#httprpEditModal .zx-savebar"))
+        shot("site-editor-savebar-light.png")
+        # closing with unsaved edits asks first
+        pg.click("#httprpEditModalWrapper .httpProxyEditClosePC")
+        pg.wait_for_timeout(400)
+        if not pg.is_visible("#confirmBox") or not pg.is_visible("#httprpEditModal"):
+            fail("site-editor", "the editor must refuse to close with unsaved changes")
+        else:
+            pg.click("#confirmBox .ui.red.button")  # keep editing
+            pg.wait_for_timeout(300)
+        # discard puts the field back and removes the bar
+        pg.click("#httprpEditModal [data-zx-discard]")
+        pg.wait_for_selector("#httprpEditModal .zx-savebar", state="hidden", timeout=3000)
+        if not pg.is_checked("#httprpEditModal .EnableWebSocket"):
+            fail("site-editor", "Discard must restore the WebSocket switch")
+        # edit, change Protection in Easy mode, save once
+        pg.click("#httprpEditModal .EnableWebSocket + label")
+        pg.select_option("#hrpProt", "block")
+        pg.wait_for_function("document.querySelector('#httprpEditModal .zx-savebar__count').textContent.startsWith('2 ')", timeout=3000)
+        pg.click("#httprpEditModal [data-zx-save]")
+        wait_saved("protection and WebSocket")
+        d = detail(host)
+        if d.get("DisableWebSocket") is not True:
+            fail("site-editor", "the WebSocket switch was not saved")
+        if d.get("WAFSource") != "block":
+            fail("site-editor", f"Protection 'Block' must set the WAF source of the rule to block, got {d.get('WAFSource')!r}")
+        if not any("/api/waf/endpoint/set" in p[1] and "source=block" in p[2] for p in posts):
+            fail("site-editor", "Protection must use the existing WAF source API")
+        pg.wait_for_timeout(2600)
+        if pg.is_visible("#httprpEditModal .zx-savebar"):
+            fail("site-editor", "the save bar must disappear after saving")
+        # the live switch saves at once (and says so)
+        pg.evaluate("HrpEditor.setMode('advanced')")
+        pg.click("#httprpEditModal .hrpedit_menu_item[cfgpage=advanced]")
+        n1 = len([p for p in posts if "/api/proxy/edit" in p[1]])
+        pg.click("#httprpEditModal .DisableLogging + label")
+        pg.wait_for_timeout(900)
+        if len([p for p in posts if "/api/proxy/edit" in p[1]]) <= n1 or detail(host).get("DisableLogging") is not True:
+            fail("site-editor", "the live logging switch must save at once")
+        if pg.is_visible("#httprpEditModal .zx-savebar"):
+            fail("site-editor", "a live switch must not leave the save bar open")
+        pg.click("#httprpEditModal .DisableLogging + label")
+        pg.wait_for_timeout(900)
+        # TLS options and the certificate pick go through the same bar
+        pg.click("#httprpEditModal .hrpedit_menu_item[cfgpage=tls]")
+        pg.click("#httprpEditModal .Tls_EnableLegacyCertificateMatching + label")
+        pg.wait_for_selector("#httprpEditModal .zx-savebar:visible", timeout=3000)
+        pg.click("#httprpEditModal [data-zx-save]")
+        wait_saved("TLS option")
+        if ((detail(host).get("TlsOptions") or {}).get("DisableLegacyCertificateMatching")) is not True:
+            fail("site-editor", "the TLS option was not saved through the bar")
+        pg.click("#httprpEditModal .Tls_EnableLegacyCertificateMatching + label")
+        pg.click("#httprpEditModal [data-zx-save]")
+        wait_saved("TLS option reset")
+        # no false prompt: browse around, then close
+        pg.click("#httprpEditModal .hrpedit_menu_item[cfgpage=security]")
+        pg.wait_for_timeout(800)
+        pg.click("#httprpEditModalWrapper .httpProxyEditClosePC")
+        pg.wait_for_selector("#httprpEditModal", state="hidden", timeout=5000)
+        if pg.is_visible("#confirmBox"):
+            fail("site-editor", "a clean editor must close without the unsaved-changes prompt")
+            pg.evaluate("$('#confirmBox').hide()")
+        api("/api/proxy/edit", {"type": "host", "rootname": host, "disableWebSocket": "false"})
+        api("/api/waf/endpoint/set", {"rootname": host, "source": "inherit"})
+
+        # ---------------------------------------------------------------- 5. app presets in the editor
+        current["page"] = "site-editor/presets"
+        editor_open(host)
+        pg.click("#hrpPresetBtn")
+        pg.wait_for_selector("#hrpPresetModal .zxp-card", timeout=5000)
+        cards = pg.locator("#hrpPresetModal .zxp-card").count()
+        if cards < 12:
+            fail("site-editor", f"the preset dialog lists only {cards} presets (expected at least 12)")
+        pg.click("#hrpPresetModal .zxp-card:has-text('Grafana')")
+        pg.wait_for_selector("#hrpPresetDetail table", timeout=5000)
+        det = pg.inner_text("#hrpPresetDetail")
+        for w in ("Uptime monitor URI", "/api/health", "WAF source", "detection_only", "Tags", "grafana", "A starting point, review it"):
+            if w not in det:
+                fail("site-editor", f"the preset preview lacks '{w}': {det[:300]!r}")
+        before = detail(host)
+        if any(p[1].endswith("/api/proxy/bulk") for p in posts[-3:]):
+            fail("site-editor", "previewing a preset must not apply it")
+        shot("site-editor-preset-light.png")
+        theme(True)
+        shot("site-editor-preset-dark.png")
+        theme(False)
+        pg.click("#hrpPresetApply")
+        pg.wait_for_selector("#hrpPresetModal", state="hidden", timeout=6000)
+        pg.wait_for_timeout(800)
+        after = detail(host)
+        if after.get("UptimeMonitorURI") != "/api/health" or "grafana" not in (after.get("Tags") or []) or after.get("WAFSource") != "detection_only":
+            fail("site-editor", f"the preset was not applied: {after.get('UptimeMonitorURI')} {after.get('Tags')} {after.get('WAFSource')}")
+        if after.get("ActiveOrigins") != before.get("ActiveOrigins") or after.get("RootOrMatchingDomain") != before.get("RootOrMatchingDomain") \
+                or after.get("AuthenticationProvider") != before.get("AuthenticationProvider"):
+            fail("site-editor", "a preset must never touch upstreams, domains or authentication")
+        # applying again changes nothing; a rule is never weakened (block stays block)
+        api("/api/waf/endpoint/set", {"rootname": host, "source": "block"})
+        pg.evaluate("resyncProxyEditorConfig()")
+        pg.wait_for_timeout(900)
+        pg.click("#hrpPresetBtn")
+        pg.wait_for_selector("#hrpPresetModal .zxp-card", timeout=5000)
+        pg.click("#hrpPresetModal .zxp-card:has-text('Grafana')")
+        pg.wait_for_selector("#hrpPresetDetail", timeout=4000)
+        pg.wait_for_timeout(800)
+        if "Nothing would change" not in pg.inner_text("#hrpPresetDetail") or pg.is_enabled("#hrpPresetApply"):
+            fail("site-editor", "a preset that is already applied (and must not weaken a stronger WAF source) must show 'Nothing would change': " + pg.inner_text("#hrpPresetDetail")[:200])
+        pg.click("#hrpPresetModal .zxp-card:has-text('Strict admin panel')")
+        pg.wait_for_selector("#hrpPresetDetail table", timeout=5000)
+        if "does not turn on authentication" not in pg.inner_text("#hrpPresetDetail") and "no authentication provider" not in pg.inner_text("#hrpPresetDetail"):
+            fail("site-editor", "the admin preset must say it does not set authentication")
+        pg.click("#hrpPresetCancel")
+        pg.wait_for_selector("#hrpPresetModal", state="hidden", timeout=4000)
+        # with unsaved edits the preset must wait
+        pg.evaluate("HrpEditor.setMode('easy')")
+        pg.click("#httprpEditModal .EnableWebSocket + label")
+        pg.click("#hrpPresetBtn")
+        pg.wait_for_selector("#hrpPresetModal .zxp-card", timeout=5000)
+        pg.click("#hrpPresetModal .zxp-card:has-text('WordPress')")
+        pg.wait_for_selector("#hrpPresetDetail table", timeout=5000)
+        if pg.is_enabled("#hrpPresetApply") or "unsaved changes" not in pg.inner_text("#hrpPresetDetail"):
+            fail("site-editor", "Apply preset must be blocked while the editor has unsaved changes")
+        pg.click("#hrpPresetCancel")
+        pg.wait_for_selector("#hrpPresetModal", state="hidden", timeout=4000)
+        pg.click("#httprpEditModal [data-zx-discard]")
+        editor_close()
+
+        # new rule dialog: "Start from an app preset"
+        pg.evaluate("openNewRuleDialog()")
+        pg.wait_for_selector("#newRuleModal", state="visible", timeout=5000)
+        if pg.evaluate("document.getElementById('nrPresetField').open"):
+            fail("site-editor", "the app preset section of the New proxy rule dialog must start collapsed (the dialog must not grow)")
+        pg.click("#nrPresetLabel")  # the summary opens the section
+        pg.wait_for_selector("#nrPresetGrid .nrTpl", timeout=5000)
+        dlg = pg.evaluate("(() => { const m = document.querySelector('#newRuleModal').getBoundingClientRect(); return [m.top, m.bottom, innerHeight]; })()")
+        if dlg[0] < -1 or dlg[1] > dlg[2] + 1:
+            fail("site-editor", f"the New proxy rule dialog does not fit the window ({dlg})")
+        if pg.locator("#nrPresetGrid .nrTpl").count() < 12 or "app preset" not in pg.inner_text("#nrPresetField").lower():
+            fail("site-editor", "the New proxy rule dialog must offer 'Start from an app preset'")
+        pg.fill("#nrDomain", "se-new.smoke.invalid")
+        pg.fill("#nrUpstream", "127.0.0.1:9")
+        pg.click("#nrPresetGrid .nrTpl:has-text('WordPress')")
+        pg.wait_for_selector("#nrPresetDetail table", timeout=5000)
+        if "wordpress" not in pg.inner_text("#nrPresetDetail").lower():
+            fail("site-editor", "the New proxy rule dialog must preview what the preset sets")
+        shot("site-editor-newrule-preset-light.png")
+        pg.set_viewport_size({"width": 390, "height": 800})
+        pg.wait_for_timeout(300)
+        shot("site-editor-newrule-preset-mobile.png")
+        check_horizontal(pg, "new rule dialog with presets (390px)")
+        pg.set_viewport_size({"width": 1366, "height": 900})
+        pg.click("#nrCreate")
+        pg.wait_for_selector("#newRuleModal", state="hidden", timeout=8000)
+        pg.wait_for_timeout(800)
+        created = detail("se-new.smoke.invalid")
+        if "wordpress" not in (created.get("Tags") or []) or created.get("WAFSource") != "detection_only":
+            fail("site-editor", f"the rule created from the WordPress preset lacks its settings: {created.get('Tags')} {created.get('WAFSource')}")
+        api("/api/proxy/del", {"ep": "se-new.smoke.invalid"})
+
+        # ---------------------------------------------------------------- 6. hostile names
+        current["page"] = "site-editor/xss"
+        r = api("/api/proxy/add", {"type": "host", "rootname": evil, "ep": "127.0.0.1:9", "tls": "false", "tlsval": "false", "bypassGlobalTLS": "false"})
+        if isinstance(r, dict) and r.get("error"):
+            print("  note: the server refused the hostile host name, XSS check limited to static review:", r.get("error"))
+        else:
+            api("/api/proxy/edit", {"type": "host", "rootname": evil, "tags": evil_tag})
+            pg.evaluate("window.__xss = undefined")
+            editor_open(evil, 1500)
+            for mode in ("easy", "advanced"):
+                pg.evaluate("m => HrpEditor.setMode(m)", mode)
+                for sec in ("general", "routing", "security", "tls", "advanced"):
+                    pg.evaluate("s => HrpEditor.show(s)", sec)
+                    pg.wait_for_timeout(120)
+            pg.click("#hrpPresetBtn")
+            pg.wait_for_selector("#hrpPresetModal .zxp-card", timeout=5000)
+            pg.wait_for_timeout(500)
+            if pg.evaluate("window.__xss") is not None:
+                fail("site-editor", "XSS: markup in a host name or tag was executed")
+            if pg.locator("#httprpEditModal img, #hrpPresetModal img").count():
+                fail("site-editor", "XSS: markup in a host name was rendered as an element")
+            if "<img" not in pg.inner_text("#hrpTitleHost"):
+                fail("site-editor", "the hostile host name must be shown literally in the dialog title")
+            if "<img" not in pg.inner_text("#hrpPresetFor"):
+                fail("site-editor", "the hostile host name must be shown literally in the preset dialog")
+            pg.click("#hrpPresetCancel")
+            pg.wait_for_selector("#hrpPresetModal", state="hidden", timeout=4000)
+            editor_close()
+            api("/api/proxy/del", {"ep": evil})
+
+        # ---------------------------------------------------------------- 7. light, dark, 390px
+        current["page"] = "site-editor/shots"
+        editor_open(host)
+        for dark in (False, True):
+            theme(dark)
+            tag = "dark" if dark else "light"
+            pg.evaluate("HrpEditor.setMode('easy')")
+            shot(f"site-editor-easy-{tag}.png")
+            pg.evaluate("HrpEditor.setMode('advanced')")
+            for sec in ("general", "security", "tls", "advanced"):
+                pg.evaluate("s => HrpEditor.show(s)", sec)
+                pg.wait_for_timeout(250)
+                shot(f"site-editor-{sec}-{tag}.png")
+                modal_overflow(f"{sec} {tag}")
+        theme(False)
+        pg.set_viewport_size({"width": 390, "height": 800})
+        pg.wait_for_timeout(500)
+        for mode in ("easy", "advanced"):
+            pg.evaluate("m => HrpEditor.setMode(m)", mode)
+            for sec in (("general", "security") if mode == "advanced" else ("general",)):
+                pg.evaluate("s => HrpEditor.show(s)", sec)
+                pg.wait_for_timeout(250)
+                shot(f"site-editor-{mode}-{sec}-mobile.png")
+                modal_overflow(f"{mode} {sec} 390px")
+        if pg.evaluate("document.querySelector('#httprpEditModal .httpProxyEditCloseMobile').offsetParent === null"):
+            fail("site-editor", "the close button must be visible on a phone")
+        pg.set_viewport_size({"width": 1366, "height": 900})
+        editor_close()
+    except Exception as ex:
+        fail("site-editor", f"scenario failed: {' '.join(str(ex).split()[:40])}")
+        pg.screenshot(path=out("site-editor-failure.png"))
+    finally:
+        for h in (host, evil, "se-new.smoke.invalid"):
+            api("/api/proxy/del", {"ep": h})
+        pg.evaluate("localStorage.removeItem('zoraxy_site_editor_mode')")
+        try:
+            pg.evaluate("window.resetEditorDirty && window.resetEditorDirty()")
+            pg.evaluate("$('#confirmBox').hide()")
+        except Exception:
+            pass
+
+
 def main():
     with sync_playwright() as p:
         b = p.chromium.launch()
@@ -1848,6 +2273,11 @@ def main():
         if args.posture_only:
             current["page"] = "posture"
             posture_ui(pg, ctx)
+            b.close()
+            return
+        if args.site_editor_only:
+            current["page"] = "site-editor"
+            site_editor_ui(pg, ctx)
             b.close()
             return
         if args.waf_tuning_only:
@@ -2048,7 +2478,7 @@ def main():
             pg.click("#httpProxyList .editBtn")
             pg.wait_for_selector("#httprpEditModal", state="visible", timeout=5000)
             settle(pg, 600)
-            pg.click("#httprpEditModal .hrpedit_menu_item[cfgpage=waf]")
+            editor_section(pg, "waf")
             settle(pg, 900)
             for sel, what in (("#httprpEditModal .wafRespEditor", "response protection"), ("#httprpEditModal .wafApiEditor", "API protection")):
                 if not pg.locator(sel).first.is_visible():
@@ -2077,7 +2507,8 @@ def main():
             pg.click("#httpProxyList .editBtn")
             pg.wait_for_selector("#httprpEditModal", state="visible", timeout=5000)
             settle(pg, 800)
-            inp = pg.locator("#httprpEditModalWrapper input[type=text]:visible").first
+            pg.evaluate("HrpEditor.setMode('advanced')")
+            inp = pg.locator("#httprpEditModal .UptimeMonitorURI")
             inp.press("x")  # real keystroke = user edit
             pg.click("#httprpEditModalWrapper .httpProxyEditClosePC")
             pg.wait_for_timeout(400)
@@ -2449,7 +2880,7 @@ def main():
             pg.click(f"#httpProxyList tr.ptRow[data-ep='{api_host}'] .editBtn")
             pg.wait_for_selector("#httprpEditModal", state="visible", timeout=5000)
             settle(pg, 600)
-            pg.click("#httprpEditModal .hrpedit_menu_item[cfgpage=waf]")
+            editor_section(pg, "waf")
             pg.wait_for_selector("#httprpEditModal .wafApiMount .wfa", timeout=5000)
             settle(pg, 600)
             pg.select_option("#httprpEditModal .wafApiMount .wfaMode", "block")
@@ -2566,18 +2997,19 @@ def main():
             pg.evaluate("h => { const b = [...document.querySelectorAll('#httpProxyList .editBtn')].find(e => e.getAttribute('rootname') === h || e.closest('tr').innerText.includes(h)); b.click(); }", hostB)
             pg.wait_for_selector("#httprpEditModal", state="visible", timeout=5000)
             settle(pg, 800)
-            pg.click(".hrpedit_menu_item[cfgpage='security']")
+            editor_section(pg, "security")
             pg.click(".authProviderPicker input[value='3']", force=True)
             pg.wait_for_selector(".oauth2RuleSettings", state="visible", timeout=5000)
             settle(pg, 600)
             opts = pg.eval_on_selector_all(".oauth2ProviderSelect option", "els => els.map(e => e.value)")
             if "idpa" not in opts or "idpb" not in opts:
                 fail("rule-provider", f"provider dropdown lacks the configured providers: {opts}")
-            pg.select_option(".oauth2ProviderSelect", "idpb")  # change event = inline save, the editor re-renders afterwards
-            settle(pg, 1200)
+            pg.select_option(".oauth2ProviderSelect", "idpb")  # collected by the Save bar of the editor
             pg.fill(".oauth2RuleGroups", "staff")
-            pg.press(".oauth2RuleGroups", "Tab")  # blur = change event = inline save
-            settle(pg, 900)
+            pg.press(".oauth2RuleGroups", "Tab")
+            pg.click("#httprpEditModal [data-zx-save]")  # one explicit Save for the whole editor
+            pg.wait_for_selector("#httprpEditModal .zx-savebar.is-success", timeout=8000)
+            settle(pg, 600)
             pg.screenshot(path=os.path.join(args.out, "rule-oauth2-provider.png"))
             pg.evaluate("closeHttpRuleEditor()")
             detail = pg.evaluate("h => fetch('/api/proxy/detail?type=host&epname=' + encodeURIComponent(h)).then(r => r.json())", hostB)
@@ -2725,6 +3157,9 @@ def main():
         posture_ui(pg, ctx)
 
         history_ui(pg, ctx)
+
+        current["page"] = "site-editor"
+        site_editor_ui(pg, ctx)
 
         ai_assistant_ui(pg, ctx)
 

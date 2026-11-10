@@ -137,7 +137,7 @@
                     tags = tags.filter(tag => !existingTags.has(tag));
                     $('#existingTagsMenu').empty();
                     tags.forEach(tag => {
-                        $('#existingTagsMenu').append(`<div class="item" data-value="${tag}">${tag}</div>`);
+                        $('#existingTagsMenu').append($('<div class="item"></div>').attr('data-value', tag).text(tag)); //tags are user data
                     });
                     $('#existingTagsDropdown').dropdown();
 
@@ -150,7 +150,7 @@
             }
             
             function tagAlreadyExistsInTable(tag) {
-                return $(`#tagsTableBody .tagEntry[value="${tag}"]`).length > 0;
+                return $('#tagsTableBody .tagEntry').filter(function(){ return $(this).attr('value') === tag; }).length > 0;
             }
 
             function addSelectedTags() {
@@ -202,20 +202,19 @@
 
             //Add a tag row to the table
             function addTagRow(tag) {
-                const row = `<tr class="tagEntry" value="${tag}">
-                    <td><div class="ui circular label tag-color" style="background-color: ${getTagColorByName(tag)};"></div> ${tag}</td>    
-                    <td>
-                        <button title="Delete Tag" class="ui circular mini basic button" onclick="removeTag('${tag}')">
-                            <i class="red trash icon"></i> Delete
-                        </button>
-                    </td>
-                </tr>`;
+                //tags are user data: build the row with DOM calls, never with string templates
+                const row = $('<tr class="tagEntry"></tr>').attr('value', tag);
+                const first = $('<td></td>').append($('<div class="ui circular label tag-color"></div>').css('background-color', getTagColorByName(tag)))
+                    .append(document.createTextNode(' ' + tag));
+                const del = $('<button class="ui circular mini basic button"><i class="red trash icon"></i> Delete</button>').attr('title', 'Delete Tag')
+                    .on('click', function(){ removeTag(tag); });
+                row.append(first).append($('<td></td>').append(del));
                 $("#tagsTableBody").append(row);
                 removeNoTagNotice();
             }
 
             function removeTag(tag) {
-                $(`#tagsTableBody .tagEntry[value="${tag}"]`).remove();
+                $('#tagsTableBody .tagEntry').filter(function(){ return $(this).attr('value') === tag; }).remove();
                 populateTagsDropdown();
                 saveTags();
 

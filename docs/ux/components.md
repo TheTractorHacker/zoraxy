@@ -14,6 +14,8 @@ The kit is plain CSS plus one small helper (`ZxUI`) on top of jQuery and Fomanti
 
 **Living page.** Start Zoraxy with `-dev` and open `/ui/kit.html` (System > UI kit in the menu). Without `-dev` the page is not served (404) and the menu entry is hidden. The page also shows the live contrast ratios of the tokens.
 
+**Used by:** the proxy rule editor ([site-editor.md](site-editor.md): five sections, Easy / Advanced, one Save bar, app presets).
+
 Everything is namespaced `zx-` and additive: it never styles a bare element or a Fomantic `.ui` class, and the legacy CSS variables of `darktheme.css` (`--theme_bg`, `--text_color`, ...) keep working. Pages migrate one at a time.
 
 ## 1. Design tokens

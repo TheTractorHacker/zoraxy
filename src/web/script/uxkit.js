@@ -233,26 +233,33 @@
     var editorDirty = false;
     var editorGuardPass = false;
 
-    window.resetEditorDirty = function () { editorDirty = false; };
+    window.resetEditorDirty = function () { editorDirty = false; if (window.HrpEditor && window.HrpEditor.bar) { window.HrpEditor.bar.reset(); } };
+    // The site editor (script/siteeditor.js) tracks its own fields with a Save bar. Edits to those fields are the bar's
+    // business; this flag only keeps covering the sub forms that save themselves ([data-hrp-selfsave]) and the old behaviour
+    // when the editor script is not there.
+    function barDirty() { return !!(window.HrpEditor && window.HrpEditor.bar && window.HrpEditor.bar.isDirty()); }
+    function guardDirty() { return editorDirty || barDirty(); }
 
     function initEditorGuard() {
         // any user edit inside the editor marks it dirty
         $(document).on("input change", "#httprpEditModal input, #httprpEditModal textarea, #httprpEditModal select", function (e) {
             if (e.originalEvent === undefined || e.originalEvent.isTrusted === false) { return; } //programmatic change while populating
             if ($(this).closest(".ui.dropdown, .search").length && e.type === "input") { /* typing in a dropdown search */ return; }
+            if (window.HrpEditor && window.HrpEditor.bar && !$(this).closest("[data-hrp-selfsave]").length) { return; } //tracked by the Save bar
             editorDirty = true;
         });
         // a successful save through the API clears the flag
         $(document).ajaxSuccess(function (ev, xhr, settings) {
             if (!editorDirty || !settings || (settings.type || settings.method || "GET").toUpperCase() === "GET") { return; }
-            if (String(settings.url || "").indexOf("/api/proxy/") !== 0) { return; }
+            var u = String(settings.url || "");
+            if (u.indexOf("/api/proxy/") !== 0 && u.indexOf("/api/waf/") !== 0) { return; }
             var data = xhr && xhr.responseJSON;
             if (data && data.error !== undefined) { return; }
             editorDirty = false;
         });
         // intercept the ways of closing the editor (capture phase, runs before inline handlers)
         document.addEventListener("click", function (e) {
-            if (!editorDirty || editorGuardPass) { return; }
+            if (!guardDirty() || editorGuardPass) { return; }
             var closer = $(e.target).closest("#httprpEditDarkenLayer, .httpProxyEditClosePC, .httpProxyEditCloseMobile");
             if (closer.length === 0) { return; }
             e.stopImmediatePropagation();
@@ -262,6 +269,7 @@
                 if (choice === true) {
                     editorDirty = false;
                     editorGuardPass = true;
+                    if (barDirty()) { window.HrpEditor.bar.reset(); } //closing discards: the next open starts clean
                     closer[0].click();
                     editorGuardPass = false;
                 }
@@ -273,10 +281,10 @@
         });
         // let the component kit (script/zxui.js) know about this guard: one registry of everything holding unsaved work
         if (window.ZxUI && ZxUI.unsaved) {
-            ZxUI.unsaved.register({ id: "proxy-editor", isDirty: function () { return editorDirty && $("#httprpEditModalWrapper").is(":visible"); } });
+            ZxUI.unsaved.register({ id: "proxy-editor-selfsave", isDirty: function () { return editorDirty && $("#httprpEditModalWrapper").is(":visible"); } });
         }
         window.addEventListener("beforeunload", function (e) {
-            if (editorDirty && $("#httprpEditModalWrapper").is(":visible")) {
+            if (guardDirty() && $("#httprpEditModalWrapper").is(":visible")) {
                 e.preventDefault();
                 e.returnValue = "";
             }

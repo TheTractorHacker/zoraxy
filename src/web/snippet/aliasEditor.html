@@ -154,15 +154,17 @@
             function renderAliasList(){
                 $("#inlineEditTable").html("");
                 aliasList.forEach(aliasDomain => {
-                    let domainLink = `<a href="//${aliasDomain}" target="_blank">${aliasDomain}</a>`
+                    //alias names are user data: DOM calls only
+                    let cell = $("<td></td>");
                     if (aliasDomain.includes("*")){
                         //This is a wildcard hostname
-                        domainLink = aliasDomain;
+                        cell.text(aliasDomain);
+                    }else{
+                        cell.append($("<a target=\"_blank\" rel=\"noopener noreferrer\"></a>").attr("href", "//" + aliasDomain).text(aliasDomain));
                     }
-                    $("#inlineEditTable").append(`<tr>
-                        <td>${domainLink}</td>
-                        <td><button class="ui basic mini circular icon button" onclick="removeAliasDomain('${aliasDomain}');"><i class="red trash icon"></i></button></td>
-                    </tr>`);
+                    let del = $('<button class="ui basic mini circular icon button" aria-label="Remove alias"><i class="red trash icon"></i></button>')
+                        .on("click", function(){ removeAliasDomain(aliasDomain); });
+                    $("#inlineEditTable").append($("<tr></tr>").append(cell).append($("<td></td>").append(del)));
                 });
 
                 if (aliasList.length == 0){
