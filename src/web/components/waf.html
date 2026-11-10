@@ -190,13 +190,26 @@
     <div class="ui basic segment">
         <div class="wafHero">
             <div style="flex:1 1 30em; min-width:0">
+                <div class="zx-page-header__crumbs" data-zx-crumbs></div>
                 <h2><i class="shield alternate icon"></i> Web Application Firewall</h2>
                 <p class="wafLead">The WAF (Coraza with the OWASP Core Rule Set) inspects every request for SQL injection, cross-site scripting, path traversal and similar
                     attacks <b>before</b> it reaches your service. One global policy covers every proxy rule that follows it; single rules can use a profile or
                     their own settings. Nothing changes until you turn it on.</p>
             </div>
-            <div id="wafStatus" style="text-align:right"></div>
+            <div style="text-align:right">
+                <button type="button" class="zx-btn zx-btn--secondary" data-zx-history="WAF"><i class="history icon" aria-hidden="true"></i> History</button>
+                <div id="wafStatus" style="text-align:right; margin-top:.5em"></div>
+            </div>
         </div>
+        <aside class="zx-related" aria-label="Related pages">
+            <span class="zx-related__title">Related</span>
+            <ul>
+                <li><a href="#secoverview" data-nav-open="secoverview">Security Overview</a> <span>is the WAF on for your sites?</span></li>
+                <li><a href="#access" data-nav-open="access">Access Rules</a> <span>block by address or country</span></li>
+                <li><a href="#seccenter" data-nav-open="seccenter">Security Center</a> <span>Auto-ban counts WAF blocks as abuse</span></li>
+                <li><a href="#httprp" data-nav-open="httprp">HTTP Proxy</a> <span>the WAF tab of a single site</span></li>
+            </ul>
+        </aside>
     </div>
 
     <!-- first run -->
@@ -340,7 +353,9 @@
             <div class="wafCards" id="wafModeCards2" role="radiogroup" aria-label="Global WAF mode"></div>
             <div class="three fields" style="margin-top:1.2em">
                 <div class="field">
-                    <label for="wafpParanoia">Paranoia level</label>
+                    <div class="zx-field__label-row"><label for="wafpParanoia">Paranoia level</label>
+                        <button type="button" class="zx-whatis" aria-expanded="false" aria-controls="wafParanoiaWhat" aria-label="What is the paranoia level?">?</button></div>
+                    <div class="zx-popover" id="wafParanoiaWhat" role="note" hidden>How many of the Core Rule Set's rules are active. Level 1 has the fewest false positives; each higher level adds stricter rules that catch more attacks but also block more legitimate requests, so expect to add exclusions at 3 and 4.</div>
                     <select class="ui dropdown" id="wafpParanoia">
                         <option value="1">1 - Basic protection, fewest false positives (recommended)</option>
                         <option value="2">2 - More rules, occasional false positives</option>
@@ -349,7 +364,9 @@
                     </select>
                 </div>
                 <div class="field">
-                    <label for="wafpThreshold">Anomaly score threshold</label>
+                    <div class="zx-field__label-row"><label for="wafpThreshold">Anomaly score threshold</label>
+                        <button type="button" class="zx-whatis" aria-expanded="false" aria-controls="wafAnomalyWhat" aria-label="What is the anomaly score?">?</button></div>
+                    <div class="zx-popover" id="wafAnomalyWhat" role="note" hidden>Rules do not block on their own. Each rule that matches adds points to the request's anomaly score, and the request is blocked once the total reaches this threshold. A lower number blocks sooner.</div>
                     <input type="number" id="wafpThreshold" min="1" value="5">
                     <div class="wafMuted">Each matching rule adds points (critical 5, error 4, warning 3, notice 2). A request is blocked when the total reaches this number. Lower = stricter.</div>
                 </div>

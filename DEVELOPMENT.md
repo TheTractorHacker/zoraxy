@@ -2489,3 +2489,10 @@ What is charged when a call does not end with a parsed answer (`settleKind` in `
 ### Testing
 
 `cd src && go test ./mod/aiassist/ .` (mock provider, loopback only). Browser: `tools/ui-smoke` has the step `ai_assistant_ui` (mock provider served by the script on a loopback port; disabled state, hostile model text, setup, test connection, preview-before-first-use, suggestions, plain English to rule, Explain block, light/dark/390 px screenshots).
+
+## UX consistency pass (`ux-consistency`)
+
+User-visible summary in `docs/ux/changes.md`; patterns in `docs/ux/components.md` section 7; terminology in `docs/ux/terminology.md`.
+* AI audit: `aiassist_glue.go` passes `aiPosture` (reads the cached `posture.Engine.Overview(false)`, never previews or applies a fix) as `Deps.Posture`; `aiassist_posture_test.go` covers the mapping with a fake.
+* History hook: `ZxHistory.view` / `ZxHistory.savedToast`, `ZxUI.toast({action})`, `ZxUI.saveBar({historyObject})`.
+* Smoke: `tools/ui-smoke/consistency_smoke.py` (`--consistency-only`) covers Certificates sections, Related boxes, the Auto-ban save bar, the View history toast action, a hostile host name and the deep links of renamed pages.

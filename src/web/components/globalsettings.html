@@ -123,7 +123,7 @@
     <div id="gsloopbackWarning" class="zx-callout zx-callout--warn" role="note" style="display:none;">
         <span class="zx-callout__icon" aria-hidden="true"><i class="warning icon"></i></span>
         <div class="zx-callout__body"><span class="zx-callout__title">Loopback Routing Warning</span>
-        This management interface is a loopback proxied service. <br>Some ingress settings are disabled to prevent accidentally cutting off access to this management interface.</div>
+        This management interface is a loopback proxied service. <br>Some listener settings are disabled to prevent accidentally cutting off access to this management interface.</div>
     </div>
     <div class="zx-card"><div class="zx-card__body">
     <label class="zx-field__label" for="incomingPort" data-zx-label="Listening port">Inbound / Proxy Listening Port</label>
@@ -833,7 +833,7 @@
                     let domainsHTML = "";
                     if (listener.domains && listener.domains.length > 0){
                         domainsHTML = listener.domains.map(domain =>
-                            `<span class="ui tiny label">${domain}</span>`
+                            `<span class="ui tiny label">${ZxUI.esc(domain)}</span>`
                         ).join(" ");
                     } else {
                         domainsHTML = '<i style="opacity: 0.5;">No domains</i>';
@@ -841,7 +841,7 @@
 
                     $("#secondaryListenersTable").append(`<tr>
                         <td style="white-space: nowrap;">
-                            <i class="angle double right blue icon"></i> <b>${listener.address}</b>
+                            <i class="angle double right blue icon"></i> <b>${ZxUI.esc(listener.address)}</b>
                         </td>
                         <td>${domainsHTML}</td>
                     </tr>`);

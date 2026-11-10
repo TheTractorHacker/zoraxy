@@ -434,7 +434,7 @@
     #status .certChips{ display: flex; flex-wrap: wrap; gap: 0.9em; margin-top: 0.6em; padding-top: 0.6em; border-top: 1px solid var(--divider_color); font-size: 0.88em; color: var(--text_color_secondary); }
     #status .resourceGrid{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.4em; margin-top: 0.6em; }
     #status .resourceGrid .resourceBarRow{ margin-bottom: 0.2em; }
-    @media screen and (max-width: 1100px){ #status .healthGrid{ grid-template-columns: 1fr; } }
+    @media screen and (max-width: 1100px){ #status .healthGrid{ grid-template-columns: minmax(0, 1fr); } }
     @media screen and (max-width: 768px){
         #status .diagramCard #trafficFlowDiagramWrapper{ min-height: 380px; }
         #status .trafficChartWrapper{ height: 170px; }
@@ -484,6 +484,15 @@
     <div id="rploopbackWarning" class="ui segment" style="display:none;">
         <b><i class="yellow warning icon"></i> Loopback Routing Warning</b><br>
         <small>This management interface is a loopback proxied service. <br>If you want to shutdown the reverse proxy server, please remove the proxy rule for the management interface and refresh.</small>
+    </div>
+</div>
+
+<!-- Get started (ux-consistency): a short checklist driven by what exists; hides itself when everything is done -->
+<div class="standardContainer nobottom" id="getStartedPanel" hidden>
+    <div class="zx-card" style="margin-bottom:0">
+        <div class="zx-card__head"><h3 class="zx-card__title" id="getStartedTitle">Get started</h3>
+            <a href="#qstart" data-nav-open="qstart" class="zx-sub" id="getStartedQuick">Quick Start walkthrough</a></div>
+        <div class="zx-card__body"><ul class="zx-steps" id="getStartedList"></ul></div>
     </div>
 </div>
 
@@ -1662,9 +1671,37 @@
             setKpi("kpiPosture", cls);
         }).fail(function(){ $("#glancePosture").text("n/a"); setKpi("kpiPosture", ""); });
     }
+    /* Get started card: what exists decides which steps are shown; the card hides itself when nothing is left */
+    var getStartedAt = 0;
+    function loadGetStarted(){
+        if (Date.now() - getStartedAt < 30000) return;
+        getStartedAt = Date.now();
+        $.when($.getJSON("/api/proxy/list?type=host"), $.getJSON("/api/cert/list"), $.getJSON("/api/security/posture")).done(function(rules, certs, post){
+            var hasRule = (rules[0] && rules[0].length > 0), hasCert = (certs[0] && certs[0].length > 0), checks = {};
+            ((post[0] && post[0].checks) || []).forEach(function(c){ checks[c.id] = c.status; });
+            var steps = [
+                {done: hasRule, text: "Create your first proxy rule", hint: "Point a domain at the service that should answer it.", btn: "Create a rule", go: function(){ if (typeof openNewRuleDialog === "function") openNewRuleDialog(); else openTabById("httprp"); }},
+                {done: hasCert, text: "Add a certificate", hint: "HTTPS sites need one; request a free one with ACME or upload your own.", btn: "Certificates", go: function(){ openTabById("cert"); }}
+            ];
+            if (checks["waf.active"]) steps.push({done: checks["waf.active"] === "ok", text: "Turn on the WAF", hint: "It is off until you enable it. Start in detection-only mode so nothing breaks.", btn: "Security Overview", go: function(){ openTabById("secoverview"); }});
+            if (checks["ops.backup"]) steps.push({done: checks["ops.backup"] === "ok", text: "Make a backup", hint: "Keep a copy of your configuration you can restore.", btn: "Utilities", go: function(){ openTabById("utils"); }});
+            if (checks["ops.notifications"]) steps.push({done: checks["ops.notifications"] === "ok", text: "Get notified when something goes wrong", hint: "Add an email, webhook or other channel.", btn: "Notifications", go: function(){ window.open("snippet/notifications.html", "_blank", "noopener"); }});
+            var open = steps.filter(function(x){ return !x.done; });
+            var ul = $("#getStartedList").empty();
+            steps.forEach(function(x, i){
+                var li = $('<li></li>').append(
+                    $('<span class="zx-badge"></span>').addClass(x.done ? "zx-badge--ok" : "zx-badge--warn").text(x.done ? "Done" : "To do"),
+                    $('<span class="zx-steps__text"></span>').append($("<strong></strong>").text(x.text), $('<span class="zx-sub"></span>').text(x.hint)));
+                if (!x.done){ li.append($('<button type="button" class="zx-btn zx-btn--secondary zx-btn--sm"></button>').text(x.btn).on("click", x.go)); }
+                ul.append(li);
+            });
+            $("#getStartedPanel").prop("hidden", open.length == 0);
+        });
+    }
     function loadGlance(){
         if (!onScreen()) return;
         loadPostureTile();
+        loadGetStarted();
         $.getJSON("/api/stats/glance", function(d){ if (!d.error) renderGlance(d); })
             .fail(function(){ $("#glancePanel .kpiCard").removeClass("skel"); });
     }

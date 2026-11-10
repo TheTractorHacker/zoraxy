@@ -1,15 +1,32 @@
 
 <div class="standardContainer">
-    <div class="ui basic segment">
-        <h2>Trusted Proxy</h2>
-        <p>Configure trusted upstream proxy IP addresses or CIDR ranges. <br>
-            When a request arrives from a trusted proxy, Zoraxy will read the real client IP from forwarded headers (e.g. <code>X-Forwarded-For</code> or <code>X-Real-IP</code>) instead of the connection address. Only add proxies you control.</p>
-    </div>
+    <header class="zx-page-header">
+        <div class="zx-page-header__main">
+            <div class="zx-page-header__crumbs" data-zx-crumbs></div>
+            <h2 class="zx-page-header__title">Trusted Proxies</h2>
+            <p class="zx-page-header__sub">Tell Zoraxy which proxies in front of it (a CDN or another reverse proxy) it may believe about the visitor's real address.</p>
+        </div>
+        <div class="zx-page-header__actions">
+            <button type="button" class="zx-btn zx-btn--secondary" data-zx-history="Trusted proxies"><i class="history icon" aria-hidden="true"></i> History</button>
+        </div>
+    </header>
+    <aside class="zx-related" aria-label="Related pages">
+        <span class="zx-related__title">Related</span>
+        <ul>
+            <li><a href="#access" data-nav-open="access">Access Rules</a> <span>address rules and bans use the real client address</span></li>
+            <li><a href="#seccenter" data-nav-open="seccenter">Security Center</a> <span>trusted proxies are never auto-banned</span></li>
+            <li><a href="#globalsettings" data-nav-open="globalsettings">Listeners</a> <span>client IP header and PROXY protocol options</span></li>
+            <li><a href="#secoverview" data-nav-open="secoverview">Security Overview</a> <span>checks that a CDN is not spoofable</span></li>
+        </ul>
+    </aside>
+    <div class="zx-field__label-row"><strong>What is trusted proxy gating?</strong>
+        <button type="button" class="zx-whatis" aria-expanded="false" aria-controls="tpWhat" aria-label="What is trusted proxy gating?">?</button></div>
+    <div class="zx-popover" id="tpWhat" role="note" hidden>Headers such as <code>X-Forwarded-For</code> can be forged by anyone. With gating on, Zoraxy only reads the real client IP from them when the connection comes from an address on this list; otherwise the header is ignored. Only add proxies you control or that are run by a service you trust, for example the published address ranges of your CDN.</div>
     <div class="ui divider"></div>
     <div class="ui basic segment">
         <!-- Trusted proxy table -->
         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5em;">
-            <h3 style="margin:0;">Trusted Proxy List</h3>
+            <h3 style="margin:0;">Trusted proxy list</h3>
             <button id="toggleTextEditBtn" class="ui basic small button" onclick="window.toggleTrustedProxyTextEdit();">
                 <i class="edit icon"></i> Edit as Text
             </button>
@@ -56,12 +73,12 @@
         <div class="ui form">
             <div class="two fields">
                 <div class="field">
-                    <label>IP Address / CIDR</label>
+                    <label for="trustedProxyIpInput">IP Address / CIDR</label>
                     <input type="text" id="trustedProxyIpInput" placeholder="e.g. 103.21.244.0/22 or 192.168.1.1">
                     <small>Supports single IP addresses and CIDR notation (e.g. 192.168.1.0/24 or 192.168.1.1)</small>
                 </div>
                 <div class="field">
-                    <label>Description</label>
+                    <label for="trustedProxyDescInput">Description</label>
                     <input type="text" id="trustedProxyDescInput" placeholder="e.g. Cloudflare">
                 </div>
             </div>
@@ -80,22 +97,27 @@
         return proxies.map(function(p){ return p.IP + ', ' + (p.Desc || ''); }).join('\n');
     }
 
+    function esc(s){ return ZxUI.esc(s); }
+
     function initTrustedProxyTable(){
         $.get('/api/trustedproxy/list', function(data) {
             $('#trustedProxyTable').html("");
             if (!data || data.length === 0) {
                 $('#trustedProxyTable').append(`
                 <tr>
-                    <td colspan="3"><i class="yellow warning icon"></i>No trusted proxies configured</td>
+                    <td colspan="3"><div class="zx-empty"><div class="zx-empty__title">No trusted proxies configured</div>
+                    <p class="zx-empty__text">Zoraxy ignores forwarded address headers from every source. If your sites are behind a CDN or another proxy, add its address ranges below.</p>
+                    <button type="button" class="zx-btn zx-btn--primary" onclick="$('#trustedProxyIpInput').focus();">Add a trusted proxy</button></div></td>
                 </tr>
                 `);
             } else {
                 $.each(data, function(index, proxy) {
-                    let ip = proxy.IP;
-                    let desc = proxy.Desc || '';
-                    let icon = ip.includes('/') ? "shield alternate green icon" : "shield alternate blue icon";
+                    let ipRaw = proxy.IP;
+                    let ip = esc(proxy.IP);
+                    let desc = esc(proxy.Desc || '');
+                    let icon = ipRaw.includes('/') ? "shield alternate green icon" : "shield alternate blue icon";
                     $('#trustedProxyTable').append(`
-                        <tr class="trustedProxyItem" data-ip="${encodeURIComponent(ip)}">
+                        <tr class="trustedProxyItem" data-ip="${encodeURIComponent(ipRaw)}">
                             <td class="proxy-ip-cell">
                                 <i class="${icon} proxy-icon"></i>
                                 <span class="proxy-ip-display">${ip}</span>

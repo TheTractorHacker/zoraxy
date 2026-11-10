@@ -430,7 +430,7 @@ var tourSteps = {
         }),
         tourStepFactory({
             title: "⚙️ More Options",
-            desc: `Tags, access rule, rate limit, uptime monitor and a few security switches live here. Need basic auth, custom headers or WebSocket tuning? Use <b>Open the full form</b> (Advanced Rule Form) or edit the rule after creating it.`,
+            desc: `Tags, access rule, rate limit, uptime monitor and a few security switches live here. Need basic auth, custom headers or WebSocket tuning? Use <b>Open the full form</b> (Raw rule form) or edit the rule after creating it.`,
             before: function(){ tourOpenNewRuleDialog(); $("#nrMore").prop("open", true); },
             element: "#nrMore",
             pos: "bottomright"

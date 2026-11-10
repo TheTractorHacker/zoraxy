@@ -61,7 +61,7 @@
         { label: N_("CAPTCHA challenge"), page: "captcha", at: "#cpGlobalBtn", kw: "turnstile recaptcha global default" },
         { label: N_("Forward authentication"), page: "sso", text: "Forward Auth", kw: "authentik authelia sso" },
         // Certificates
-        { label: N_("Upload a certificate"), page: "cert", at: "#certdomain", kw: "pem key import ssl" },
+        { label: N_("Upload a certificate"), page: "cert", pre: "#certAddOpenBtn", at: "#certdomain", kw: "pem key import ssl" },
         { label: N_("Auto renew certificates"), page: "acme", at: "#enableCertAutoRenew", kw: "acme lets encrypt renewal" },
         { label: N_("ACME email"), page: "acme", at: "#prefACMEEmail", kw: "lets encrypt contact" },
         { label: N_("Preferred certificate authority"), page: "acme", at: "#defaultCA", kw: "ca lets encrypt zerossl buypass" },

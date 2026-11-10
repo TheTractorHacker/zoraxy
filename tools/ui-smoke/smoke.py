@@ -27,6 +27,7 @@ ap.add_argument("--i18n-only", action="store_true", help="run only the multi-lan
 ap.add_argument("--posture-only", action="store_true", help="run only the Security overview scenario")
 ap.add_argument("--ai-only", action="store_true", help="run only the AI assistant page scenario")
 ap.add_argument("--waf-tuning-only", action="store_true", help="run only the WAF Tuning tab scenario")
+ap.add_argument("--consistency-only", action="store_true", help="run only the consistency-pass scenario (certificates, Related boxes, save bar, history toast, hostile host, renamed pages)")
 ap.add_argument("--zrok-fake", default=os.environ.get("SMOKE_ZROK_FAKE", ""), help="path of a fake zrok script; enables the zrok flow (the instance needs -allow_external_tools)")
 ap.add_argument("--allow", action="append", default=[], help="regex of messages whose failure is tolerated")
 args = ap.parse_args()
@@ -1819,6 +1820,9 @@ def posture_ui(pg, ctx):
         jpost("/api/security/posture/undo", {"action": "uptime.enable"})
 
 
+exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "consistency_smoke.py")).read(), "consistency_smoke.py", "exec"))  # defines consistency_ui
+
+
 def main():
     with sync_playwright() as p:
         b = p.chromium.launch()
@@ -1837,6 +1841,10 @@ def main():
         if pg.evaluate("location.hash") != want:
             fail("quickstart", f"landed on {pg.evaluate('location.hash')}, expected {want} (quickstart state {qs})")
 
+        if args.consistency_only:
+            consistency_ui(pg, ctx)
+            b.close()
+            return
         if args.i18n_only:
             i18n_checks(pg, ctx)
             b.close()
@@ -1855,6 +1863,7 @@ def main():
             waf_tuning_ui(pg)
             b.close()
             return
+        consistency_ui(pg, ctx)
         tabs = pg.eval_on_selector_all("#mainmenu .item[tag]", "els => els.map(e => e.getAttribute('tag'))")
         tabs = list(dict.fromkeys(tabs))
         if args.no_page_sweep:

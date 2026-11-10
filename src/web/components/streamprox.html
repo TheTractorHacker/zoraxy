@@ -148,7 +148,7 @@
                         } else if (rule.WhitelistEnabled && !rule.BlacklistEnabled) {
                             icon = `<i class="ui green filter icon"></i>`;
                         }
-                        $("#streamProxyAccessRuleList").append(`<div class="item" data-value="${rule.ID}">${icon} ${rule.Name}</div>`);
+                        $("#streamProxyAccessRuleList").append(`<div class="item" data-value="${ZxUI.esc(rule.ID)}">${icon} ${ZxUI.esc(rule.Name)}</div>`);
                     });
                     $("#streamProxyAccessRuleDropdown").dropdown();
                     if (callback != undefined) { callback(); }
@@ -289,9 +289,9 @@
 
                     var thisConfig = encodeURIComponent(JSON.stringify(config));
 
-                    var row = $(`<tr class="streamproxConfig ${runningClass}" uuid="${config.UUID}" config="${thisConfig}">`);
+                    var row = $(`<tr class="streamproxConfig ${runningClass}" uuid="${ZxUI.esc(config.UUID)}" config="${thisConfig}">`);
                     row.append($('<td>').html(`
-                        ${config.Name}
+                        ${ZxUI.esc(config.Name)}
                         <div class="statusText">${runningLogo}</div>`));
                     row.append($('<td>').text(config.ListeningAddress));
                     row.append($('<td>').text(config.ProxyTargetAddr));

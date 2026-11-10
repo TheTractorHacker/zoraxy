@@ -27,7 +27,7 @@
     <div class="ui stackable grid">
         <div class="ten wide column">
             <div class="ui basic segment" style="border-radius: 1em; padding: 1em !important;">
-                <h2>Advanced Rule Form</h2>
+                <h2>Raw rule form</h2>
                 <p>The full form with every option. For the quick flow (domain, upstream, template) use
                     <a href="#" onclick="openNewRuleDialog(); return false;"><i class="plus icon"></i>New proxy rule</a>.</p>
                 <div class="ui form">
@@ -588,7 +588,7 @@
             var password = credential.password.replace(/./g, '*'); // Replace each character with '*'
 
             var row = '<tr>' +
-                '<td>' + username + '</td>' +
+                '<td>' + ZxUI.esc(username) + '</td>' +
                 '<td>' + password + '</td>' +
                 '<td><button class="ui basic button" onclick="removeCredential(' + i + ');"><i class="red remove icon"></i> Remove</button></td>' +
                 '</tr>';
@@ -654,7 +654,7 @@
                         //This is a whitelist filter
                         icon = `<i class="ui green filter icon"></i>`;
                     }
-                    $("#newProxyRuleAccessList").append(`<div class="item" data-value="${rule.ID}">${icon} ${rule.Name}</div>`);
+                    $("#newProxyRuleAccessList").append(`<div class="item" data-value="${ZxUI.esc(rule.ID)}">${icon} ${ZxUI.esc(rule.Name)}</div>`);
                 });
                 $("#newProxyRuleAccessFilter").parent().dropdown();
                 if (callback != undefined){

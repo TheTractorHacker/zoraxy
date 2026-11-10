@@ -1,10 +1,11 @@
 <h3>Automatic abuse banning</h3>
+<p class="zx-sub" style="margin-bottom:1em">Changes in this form are applied with the Save bar. <a href="#" data-zx-history="Auto-ban">View history</a></p>
 <p>Counts abusive events per client IP (trusted-proxy aware) and bans repeat offenders for a limited, escalating time.
     Loopback, private ranges, trusted proxies, this server and the allow-list below are never banned unless you
     explicitly allow banning private ranges. Disabled by default.</p>
 
 <div class="ui form" id="abuseForm">
-    <div class="ui toggle checkbox"><input type="checkbox" id="abEnabled"><label>Enable automatic banning</label></div>
+    <div class="ui toggle checkbox"><input type="checkbox" id="abEnabled"><label for="abEnabled">Enable automatic banning</label></div>
     <div class="ui divider"></div>
     <h4>Detectors</h4>
     <div style="overflow-x:auto">
@@ -15,21 +16,20 @@
     </div>
     <h4>Ban</h4>
     <div class="four fields">
-        <div class="field"><label>Ban duration (s)</label><input type="number" id="abBan" min="1"></div>
-        <div class="field"><label>Escalation factor</label><input type="number" id="abEsc" min="1" max="10" step="0.5"></div>
-        <div class="field"><label>Max ban (s)</label><input type="number" id="abMax" min="1"></div>
-        <div class="field"><label>IPv6 prefix tracked</label><input type="number" id="abV6" min="32" max="128"></div>
+        <div class="field"><label for="abBan">Ban duration (s)</label><input type="number" id="abBan" min="1"></div>
+        <div class="field"><label for="abEsc">Escalation factor</label><input type="number" id="abEsc" min="1" max="10" step="0.5"></div>
+        <div class="field"><label for="abMax">Max ban (s)</label><input type="number" id="abMax" min="1"></div>
+        <div class="field"><label for="abV6">IPv6 prefix tracked</label><input type="number" id="abV6" min="32" max="128"></div>
     </div>
-    <div class="field"><label>Allow-list (never banned), one IP or CIDR per line</label><textarea id="abAllow" rows="3"></textarea></div>
-    <div class="field"><label>Proxy rules excluded from detection (hostname per line)</label><textarea id="abExclude" rows="2"></textarea></div>
+    <div class="field"><label for="abAllow">Allow-list (never banned), one IP or CIDR per line</label><textarea id="abAllow" rows="3"></textarea></div>
+    <div class="field"><label for="abExclude">Proxy rules excluded from detection (hostname per line)</label><textarea id="abExclude" rows="2"></textarea></div>
     <div class="inline field"><div class="ui checkbox"><input type="checkbox" id="abDrop"><label>Close the connection of banned clients without a response (default: 403 page)</label></div></div>
     <div class="inline field"><div class="ui checkbox"><input type="checkbox" id="abPerEp"><label>Count and ban per proxy rule instead of globally</label></div></div>
     <div class="inline field"><div class="ui checkbox"><input type="checkbox" id="abPriv"><label>Allow banning loopback / private ranges (dangerous: may lock out your LAN)</label></div></div>
-    <button class="ui basic green button" id="abSave"><i class="save icon"></i> Save</button>
 </div>
 
 <div class="ui divider"></div>
-<h4>Active bans <button class="ui mini basic icon button" id="abRefresh" title="Refresh"><i class="refresh icon"></i></button></h4>
+<h4>Active bans <button class="ui mini basic icon button" id="abRefresh" title="Refresh" aria-label="Refresh the list of active bans"><i class="refresh icon"></i></button></h4>
 <div style="overflow-x:auto">
     <table class="ui unstackable celled table">
         <thead><tr><th>IP / prefix</th><th>Scope</th><th>Reason</th><th>Since</th><th>Expires</th><th></th></tr></thead>
@@ -38,9 +38,9 @@
 </div>
 <div class="ui form">
     <div class="four fields">
-        <div class="field"><input type="text" id="abNewIp" placeholder="IP address"></div>
-        <div class="field"><input type="number" id="abNewSecs" placeholder="seconds (empty = permanent)"></div>
-        <div class="field"><input type="text" id="abNewReason" placeholder="reason"></div>
+        <div class="field"><input type="text" id="abNewIp" placeholder="IP address" aria-label="IP address to ban"></div>
+        <div class="field"><input type="number" id="abNewSecs" placeholder="seconds (empty = permanent)" aria-label="Ban duration in seconds, empty for permanent"></div>
+        <div class="field"><input type="text" id="abNewReason" placeholder="reason" aria-label="Reason"></div>
         <div class="field"><button class="ui basic red button" id="abAdd"><i class="ban icon"></i> Ban</button></div>
     </div>
 </div>
@@ -84,6 +84,7 @@
             });
             $("#abDetectors").html(rows);
             $("#abTokenState").html(c.RemoteTokenSet ? "A token is set." : "No token set (remote API disabled).");
+            if (window.zxSecBar) { window.zxSecBar.reset(); }
         });
     }
     function loadBans() {
@@ -96,17 +97,21 @@
             $("#abBans").html(h || '<tr><td colspan="6">No active bans.</td></tr>');
         });
     }
-    $("#abSave").on("click", function () {
+    function saveAbuse() {
         var c = { Enabled: $("#abEnabled").prop("checked"), Detectors: {}, BanSeconds: +$("#abBan").val(), EscalationFactor: +$("#abEsc").val(),
             MaxBanSeconds: +$("#abMax").val(), IPv6Prefix: +$("#abV6").val(), AllowList: lines($("#abAllow").val()), ExcludeEndpoints: lines($("#abExclude").val()),
             DropConnection: $("#abDrop").prop("checked"), PerEndpoint: $("#abPerEp").prop("checked"), BanPrivate: $("#abPriv").prop("checked") };
         $("#abDetectors tr").each(function () {
             c.Detectors[$(this).attr("data-k")] = { Enabled: $(this).find(".dEn").prop("checked"), Threshold: +$(this).find(".dTh").val(), WindowSec: +$(this).find(".dWin").val() };
         });
-        $.cjax({ type: "POST", url: "/api/abuse/setConfig", data: { config: JSON.stringify(c) }, success: function (d) {
-            if (d && d.error) { toast(d.error, false); } else { toast("Saved", true); loadConfig(); }
-        } });
-    });
+        return $.cjax({ type: "POST", url: "/api/abuse/setConfig", data: { config: JSON.stringify(c) } }).then(function (d) {
+            if (!(d && d.error)) { loadConfig(); }
+            return d;
+        });
+    }
+    // Save bar (explicit form + save): one Save for the whole form, same API call as the old Save button.
+    if (window.zxSecBar) { window.zxSecBar.destroy(); }
+    window.zxSecBar = ZxUI.saveBar({ form: "#abuseForm", id: "auto-ban", historyObject: "Auto-ban", onSave: saveAbuse });
     $("#abBans").on("click", ".abUnban", function () {
         $.cjax({ type: "POST", url: "/api/abuse/unban", data: { ip: $(this).attr("data-ip"), scope: $(this).attr("data-scope") }, success: function (d) {
             if (d && d.error) { toast(d.error, false); } loadBans();

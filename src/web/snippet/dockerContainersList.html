@@ -4,7 +4,10 @@
     <!-- Notes: This should be open in its original path -->
     <meta charset="utf-8" />
     <link rel="stylesheet" href="../script/semantic/semantic.min.css" />
-        <script src="../script/i18n.js"></script>
+        <script>
+function zxEsc(s){ return String(s === undefined || s === null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]; }); }
+</script>
+<script src="../script/i18n.js"></script>
     <script src="../script/jquery-3.6.0.min.js"></script>
     <script src="../script/semantic/semantic.min.js"></script>
   </head>
@@ -322,9 +325,9 @@
               <div class="item">
                 <div class="content" style="display: flex; justify-content: space-between;">
                   <div>
-                    <div class="header">${entry.name}</div>
+                    <div class="header">${zxEsc(entry.name)}</div>
                     <div class="description">
-                      <p>${entry.ip}:${entry.port}</p>
+                      <p>${zxEsc(entry.ip)}:${zxEsc(entry.port)}</p>
                     </div>
                   </div>
                   <button class="ui button add-button" data-key="${key}">
@@ -348,7 +351,7 @@
               <div class="item">
                 <div class="content" style="display: flex; justify-content: space-between;">
                   <div>
-                    <div class="header">${entry.name}</div>
+                    <div class="header">${zxEsc(entry.name)}</div>
                     <div class="description">
                       <p>${entry.ip}</p>
                     </div>
@@ -375,7 +378,7 @@
           .forEach(([key, entry]) => {
             html += `
               <div class="item">
-                <div class="header">${entry.name}</div>
+                <div class="header">${zxEsc(entry.name)}</div>
                 ${
                   entry.ips.length === 0 ||
                   entry.ips.every((ip) => ip === "") ||
@@ -410,9 +413,9 @@
             html += `
               <div class="item">
                 <div class="content">
-                  <div class="header">${entry.name}</div>
+                  <div class="header">${zxEsc(entry.name)}</div>
                   <div class="description">
-                    <p>${entry.ip}:${entry.port}</p>
+                    <p>${zxEsc(entry.ip)}:${zxEsc(entry.port)}</p>
                   </div>
                 </div>
               </div>

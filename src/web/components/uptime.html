@@ -304,8 +304,8 @@
         $("#utmrender").append(`<div class="ui basic segment statusbar">
             <div class="domain">
                 <div>
-                    <h3 class="ui header" style="margin-bottom: 0.2em;">${name}</h3>
-                    <a href="${url}" target="_blank">${url}</a>
+                    <h3 class="ui header" style="margin-bottom: 0.2em;">${ZxUI.esc(name)}</h3>
+                    <a href="${ZxUI.esc(/^https?:\/\//i.test(url) ? url : "#")}" target="_blank" rel="noopener">${ZxUI.esc(url)}</a>
                 </div>
                 <div style="position: absolute; bottom: 0; right: 0.2em; margin-bottom: -0.6em;">
                     <div class="ui basic label protocol">

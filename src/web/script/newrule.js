@@ -3,7 +3,7 @@
 
     The "New proxy rule" dialog: essentials first (domain, upstream with a live connection test, HTTPS
     auto-detection, template), everything else under "More options". Calls the same /api/proxy/add as the
-    full form (components/rules.html, reachable as "Advanced Rule Form"), so nothing changes on the server.
+    full form (components/rules.html, reachable as "Raw rule form"), so nothing changes on the server.
 
     openNewRuleDialog(opts)   opts.keep = true keeps template and options (used by "Add another")
                               opts.domain / opts.upstream pre-fill the fields

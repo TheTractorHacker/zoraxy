@@ -2,12 +2,14 @@ package main
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"imuslab.com/zoraxy/mod/aiassist"
 	"imuslab.com/zoraxy/mod/auth"
 	"imuslab.com/zoraxy/mod/blocklog"
 	"imuslab.com/zoraxy/mod/dynamicproxy/waf"
+	"imuslab.com/zoraxy/mod/posture"
 )
 
 /*
@@ -31,7 +33,8 @@ func RegisterAIAPIs(authRouter *auth.RouterDef) {
 			},
 			Events:  aiEvents{},
 			Traffic: aiTraffic{},
-			// Posture: connected when the posture module exists (the audit feature stays hidden until then)
+			// The audit feature appears once the assistant is enabled; it only reads posture results.
+			Posture: aiPosture{overview: func() posture.Overview { return getPostureEngine().Overview(false) }},
 		})
 	}
 	aiService.RegisterHandlers(authRouter)
@@ -98,4 +101,38 @@ func (aiTraffic) Traffic(since time.Time, hours int) aiassist.RawTraffic {
 		t.WAFRules[label] = c.Count
 	}
 	return t
+}
+
+// aiPosture feeds the AI configuration audit from the security posture checks. It only reads the
+// cached check results; it never previews or applies a fix.
+type aiPosture struct {
+	overview func() posture.Overview
+}
+
+// Items implements aiassist.PostureSource. Checks that do not apply are skipped; checks whose
+// state could not be determined are reported as warnings so they are never read as passing.
+func (p aiPosture) Items() []aiassist.PostureItem {
+	if p.overview == nil {
+		return nil
+	}
+	var out []aiassist.PostureItem
+	for _, c := range p.overview().Checks {
+		status := ""
+		switch c.Status {
+		case posture.StatusOK:
+			status = "pass"
+		case posture.StatusWarn, posture.StatusUnknown:
+			status = "warn"
+		case posture.StatusFail:
+			status = "fail"
+		default:
+			continue
+		}
+		detail := c.Why
+		if len(c.Evidence) > 0 {
+			detail = strings.Join(c.Evidence, "; ")
+		}
+		out = append(out, aiassist.PostureItem{ID: c.ID, Title: c.Title, Status: status, Severity: c.Severity, Detail: detail})
+	}
+	return out
 }

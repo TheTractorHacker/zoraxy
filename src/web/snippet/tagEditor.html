@@ -4,7 +4,11 @@
         <meta charset="utf-8">
         <meta name="zoraxy.csrf.Token" content="{{.csrfToken}}">
         <link rel="stylesheet" href="../script/semantic/semantic.min.css">
-        <script src="../script/jquery-3.6.0.min.js"></script>
+        <script>
+/* HTML-escape for anything that came from the configuration (host names, aliases, upstreams, tags, rule names) */
+function zxEsc(s){ return String(s === undefined || s === null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]; }); }
+</script>
+<script src="../script/jquery-3.6.0.min.js"></script>
         <script src="../script/semantic/semantic.min.js"></script>
         <script src="../script/utils.js"></script>
         <style>
@@ -137,7 +141,7 @@
                     tags = tags.filter(tag => !existingTags.has(tag));
                     $('#existingTagsMenu').empty();
                     tags.forEach(tag => {
-                        $('#existingTagsMenu').append(`<div class="item" data-value="${tag}">${tag}</div>`);
+                        $('#existingTagsMenu').append(`<div class="item" data-value="${zxEsc(tag)}">${zxEsc(tag)}</div>`);
                     });
                     $('#existingTagsDropdown').dropdown();
 
@@ -150,7 +154,7 @@
             }
             
             function tagAlreadyExistsInTable(tag) {
-                return $(`#tagsTableBody .tagEntry[value="${tag}"]`).length > 0;
+                return $("#tagsTableBody .tagEntry").filter(function(){ return $(this).attr("value") === tag; }).length > 0;
             }
 
             function addSelectedTags() {
@@ -202,10 +206,10 @@
 
             //Add a tag row to the table
             function addTagRow(tag) {
-                const row = `<tr class="tagEntry" value="${tag}">
-                    <td><div class="ui circular label tag-color" style="background-color: ${getTagColorByName(tag)};"></div> ${tag}</td>    
+                const row = `<tr class="tagEntry" value="${zxEsc(tag)}">
+                    <td><div class="ui circular label tag-color" style="background-color: ${getTagColorByName(tag)};"></div> ${zxEsc(tag)}</td>    
                     <td>
-                        <button title="Delete Tag" class="ui circular mini basic button" onclick="removeTag('${tag}')">
+                        <button type="button" title="Delete Tag" class="ui circular mini basic button" data-tag="${zxEsc(tag)}" onclick="removeTag(this.dataset.tag)">
                             <i class="red trash icon"></i> Delete
                         </button>
                     </td>
@@ -215,7 +219,7 @@
             }
 
             function removeTag(tag) {
-                $(`#tagsTableBody .tagEntry[value="${tag}"]`).remove();
+                $("#tagsTableBody .tagEntry").filter(function(){ return $(this).attr("value") === tag; }).remove();
                 populateTagsDropdown();
                 saveTags();
 

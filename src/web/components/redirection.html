@@ -235,8 +235,8 @@
                         <label></label>
                     </div>
                   </td>
-                  <td><a href="${hrefURL}" target="_blank">${entry.RedirectURL}</a></td>
-                  <td>${entry.TargetURL}</td>
+                  <td><a href="${ZxUI.esc(/^(https?:)?\/\//i.test(hrefURL) ? hrefURL : "#")}" target="_blank" rel="noopener">${ZxUI.esc(entry.RedirectURL)}</a></td>
+                  <td>${ZxUI.esc(entry.TargetURL)}</td>
                   <td>${entry.ForwardChildpath?"<i class='ui green checkmark icon'></i>":"<i class='ui red remove icon'></i>"}</td>
                   <td>${entry.RequireExactMatch?"<i class='ui green checkmark icon'></i>":"<i class='ui red remove icon'></i>"}</td>
                   <td>${deviceTypeLabel}</td>

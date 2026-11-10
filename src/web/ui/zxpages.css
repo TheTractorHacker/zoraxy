@@ -1,0 +1,60 @@
+/*
+    zxpages.css - small page-level patterns shared by the consistency pass (see docs/ux/components.md, section 7).
+    Additive and namespaced zx-; only design tokens from zxui.css, no colours of its own.
+*/
+
+/* "Related" box: links to the other pages that deal with the same concept */
+.zx-related {
+    background: var(--zx-surface-2); border: 1px solid var(--zx-border); border-radius: var(--zx-radius-lg);
+    padding: var(--zx-space-3) var(--zx-space-4); margin: var(--zx-space-4) 0; color: var(--zx-text);
+}
+.zx-related__title { display: block; font-size: var(--zx-fs-sm); font-weight: 700; color: var(--zx-text-muted); margin-bottom: var(--zx-space-1); text-transform: none; }
+.zx-related ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--zx-space-1) var(--zx-space-4); }
+.zx-related li { margin: 0; min-width: 0; }
+.zx-related a { color: var(--zx-link); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.zx-related a:focus-visible { outline: none; box-shadow: var(--zx-focus-ring); border-radius: var(--zx-radius-sm); }
+.zx-related li span { color: var(--zx-text-muted); font-size: var(--zx-fs-sm); }
+
+/* tab strip that links sibling pages (Certificates | Automatic certificates) */
+.zx-pagetabs { display: flex; gap: var(--zx-space-1); border-bottom: 1px solid var(--zx-border); margin: 0 0 var(--zx-space-4); overflow-x: auto; }
+.zx-pagetabs a {
+    padding: var(--zx-space-2) var(--zx-space-3); color: var(--zx-text-muted); font-weight: 600; text-decoration: none; cursor: pointer;
+    border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; font-size: var(--zx-fs-md);
+}
+.zx-pagetabs a:hover { color: var(--zx-text); }
+.zx-pagetabs a[aria-current="page"] { color: var(--zx-primary-soft-text); border-bottom-color: var(--zx-primary); }
+.zx-pagetabs a:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--zx-focus); border-radius: var(--zx-radius-sm); }
+@media (max-width: 748px), (pointer: coarse) { .zx-pagetabs a { min-height: var(--zx-touch); display: inline-flex; align-items: center; } }
+
+/* row of stat tiles */
+.zx-statrow { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--zx-space-3); margin: var(--zx-space-4) 0; }
+
+/* list of small items inside a callout or card (host names, certificates) */
+.zx-itemlist { list-style: none; margin: var(--zx-space-1) 0 0; padding: 0; }
+.zx-itemlist li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--zx-space-2); padding: 3px 0; overflow-wrap: anywhere; min-width: 0; }
+.zx-itemlist code { overflow-wrap: anywhere; }
+
+/* collapsible card: header is a real button */
+.zx-collapse__toggle {
+    display: flex; width: 100%; align-items: center; gap: var(--zx-space-2); text-align: left; cursor: pointer;
+    background: transparent; border: 0; padding: 0; color: inherit; font: inherit; min-height: var(--zx-control-h);
+}
+.zx-collapse__toggle:focus-visible { outline: none; box-shadow: var(--zx-focus-ring); border-radius: var(--zx-radius-sm); }
+.zx-collapse__toggle .zx-card__title { margin: 0; flex: 1 1 auto; }
+.zx-collapse__toggle i.icon { transition: transform .15s; margin: 0; }
+.zx-collapse__toggle[aria-expanded="true"] i.icon { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .zx-collapse__toggle i.icon { transition: none; } }
+
+/* small chip row */
+.zx-chips { display: inline-flex; flex-wrap: wrap; gap: var(--zx-space-1); align-items: center; }
+.zx-sub { color: var(--zx-text-muted); font-size: var(--zx-fs-sm); display: block; overflow-wrap: anywhere; }
+
+/* page-header action row with a History shortcut */
+.zx-page-header__actions .zx-btn { white-space: nowrap; }
+
+/* "Get started" checklist */
+.zx-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--zx-space-2); }
+.zx-steps li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--zx-space-2); min-width: 0; }
+.zx-steps .zx-steps__text { flex: 1 1 14em; min-width: 0; }
+
+.zx-callout[hidden], .zx-card[hidden], .zx-empty[hidden], .zx-related[hidden], .zx-statrow[hidden] { display: none !important; }
