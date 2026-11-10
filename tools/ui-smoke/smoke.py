@@ -2368,9 +2368,9 @@ def _network_system_body(pg, ctx, args, after, shot, dialogs, api, toast_text, w
     pg.wait_for_timeout(300)
 
     # duplicate identical toasts are replaced, not stacked
-    pg.evaluate("ZxUI.toast('Saved', {type: 'success'}); ZxUI.toast('Saved', {type: 'success'}); ZxUI.toast('Saved', {type: 'success'})")
-    if pg.locator(".zx-toast").count() != 1:
-        fail("toast", f"three identical toasts must show once, found {pg.locator('.zx-toast').count()}")
+    pg.evaluate("for (let i = 0; i < 3; i++) { ZxUI.toast('Dedup check', {type: 'success'}); }")
+    if pg.locator(".zx-toast:has-text('Dedup check')").count() != 1:
+        fail("toast", f"three identical toasts must show once, found {pg.locator('.zx-toast:has-text(\"Dedup check\")').count()}")
 
     # timeouts: absurd values and decimals refused (the numeric field keeps what was typed)
     if not pg.is_visible("#readHeaderTimeoutInput"):
@@ -2602,10 +2602,9 @@ def _network_system_body(pg, ctx, args, after, shot, dialogs, api, toast_text, w
         fail("layout", f"ECH cards/pill are flush to the panel edge: {box}")
     if pg.locator("#echPrereq .echChip.bad:has-text('Public name missing')").count():
         fail("ech", "'Public name missing' must not be an error while ECH is disabled")
-    pg.fill("#echPublicName", "")
-    pg.evaluate("$('#echEnabled').checkbox('set checked')")
+    pg.fill("#echMaxName", "999")   # refused by the server with the raw lower case message "max name length must be 1-255"
     pg.click("#echSave")
-    pg.wait_for_function("document.getElementById('echNoticeText').offsetParent !== null && /public name/i.test(document.getElementById('echNoticeText').innerText)", timeout=8000)
+    pg.wait_for_function("document.getElementById('echNoticeText').offsetParent !== null && /max name length/i.test(document.getElementById('echNoticeText').innerText)", timeout=8000)
     notice = pg.inner_text("#echNoticeText").strip()
     if not notice or not notice[0].isupper():
         fail("ech", f"the inline notice must start with a capital letter, got {notice!r}")
@@ -2613,7 +2612,6 @@ def _network_system_body(pg, ctx, args, after, shot, dialogs, api, toast_text, w
     if not isinstance(r["body"], dict) or "punycode" not in str(r["body"]):
         fail("ech", f"a non-ASCII public name must hint at punycode: {r}")
     shot("ech-inline-notice-lowercase-vs-capitalised-toast")
-    pg.evaluate("$('#echEnabled').checkbox('set unchecked')")
     go("ech", 400)
 
     # ================= Utilities =================
