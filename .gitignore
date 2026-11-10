@@ -62,3 +62,4 @@ src/zoraxy.exe~
 
 # Release build output (tools/build_release.sh)
 /dist/
+__pycache__/
