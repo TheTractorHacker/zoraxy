@@ -45,7 +45,9 @@ def overview_ui(pg, ctx):
     if glance1.get("CertsTotal", 0) != glance0.get("CertsTotal", 0) + 1:
         fail("certs", f"the Status certificate tile must see a new certificate at once (cache): {glance0.get('CertsTotal')} -> {glance1.get('CertsTotal')}")
     for h in seeded[:2] + seeded[2:]:
-        post("/api/proxy/add", {"type": "host", "rootname": h, "ep": "127.0.0.1:9", "tls": "false", "tlsval": "false", "bypassGlobalTLS": "false"})
+        r = post("/api/proxy/add", {"type": "host", "rootname": h, "ep": "127.0.0.1:9", "tls": "false", "tlsval": "false", "bypassGlobalTLS": "false"})
+        if isinstance(r, dict) and r.get("error"):
+            print("seed add failed", h, r)
     pv = jpost("/api/security/posture/preview", {"actions": ["hsts.enable", "waf.baseline", "autoban.enable"]})
     notes = " ".join(sum([p.get("notes") or [] for p in pv.get("previews", [])], []))
     if "could not be read" in notes:
@@ -132,6 +134,9 @@ def overview_ui(pg, ctx):
             fail("status", f"a finished step still shows its instruction: {s['text']!r}")
     # the traffic map: every node inside the frame, none under the zoom bar or the legend
     current["page"] = "overview/trafficmap"
+    # the diagram was loaded before the hosts above were added: reload it so the check does not depend on its refresh timer
+    pg.evaluate("() => { const f = document.getElementById('trafficFlowDiagram'); try { f.contentWindow.location.reload(); } catch (e) { f.src = f.getAttribute('src'); } }")
+    pg.wait_for_timeout(1500)
     try:
         pg.wait_for_function("(() => { const f = document.getElementById('trafficFlowDiagram'); try { return f && f.contentDocument.querySelectorAll('.proxy-node').length >= 8; } catch (e) { return false; } })()", timeout=20000)
     except Exception:
