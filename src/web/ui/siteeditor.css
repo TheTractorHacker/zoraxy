@@ -1,0 +1,146 @@
+/*
+    siteeditor.css - proxy rule editor (components/httprp.html, script/siteeditor.js) and app presets.
+    Built on the tokens of zxui.css; see docs/ux/site-editor.md.
+*/
+
+#httprpEditModalWrapper { display: none; } /* shown by initHttpProxyRuleEditorModal */
+#httprpEditDarkenLayer { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); z-index: 7; backdrop-filter: blur(3px); }
+
+#httprpEditModal {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: min(1040px, 94vw); height: min(88vh, 880px);
+    display: flex; flex-direction: column; overflow: hidden; padding: 0;
+    background: var(--zx-bg); color: var(--zx-text);
+    border: 1px solid var(--zx-border); border-radius: var(--zx-radius-lg); box-shadow: var(--zx-shadow-3);
+    z-index: 8;
+}
+
+#httprpEditModal [hidden], #hrpPresetModal [hidden], #httprpEditModal [data-hrp-retired] { display: none !important; }
+
+/* ---- header ---- */
+#httprpEditModal .hrp-head {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--zx-space-2) var(--zx-space-3);
+    padding: var(--zx-space-3) var(--zx-space-4); border-bottom: 1px solid var(--zx-border); background: var(--zx-surface);
+}
+#httprpEditModal .hrp-head__main { flex: 1 1 14rem; min-width: 0; }
+#httprpEditModal .hrp-title { margin: 0; font-size: var(--zx-fs-xl); line-height: 1.3; font-weight: 700; color: var(--zx-text); overflow-wrap: anywhere; }
+#httprpEditModal .hrp-title:focus { outline: none; }
+#httprpEditModal .hrp-title:focus-visible { box-shadow: var(--zx-focus-ring); border-radius: var(--zx-radius-sm); }
+#httprpEditModal .hrp-title__host { font-weight: 400; color: var(--zx-text-muted); font-family: var(--zx-font-mono); font-size: var(--zx-fs-md); margin-left: var(--zx-space-1); }
+#httprpEditModal .hrp-head__tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--zx-space-2); }
+
+/* ---- body: section navigation + scrolling main ---- */
+#httprpEditModal .hrp-body { flex: 1 1 auto; min-height: 0; display: flex; }
+#httprpEditModal .hrp-nav {
+    flex: 0 0 11.5rem; display: flex; flex-direction: column; gap: 2px; padding: var(--zx-space-3);
+    border-right: 1px solid var(--zx-border); background: var(--zx-surface-2); overflow-y: auto;
+}
+#httprpEditModal .hrp-nav__item {
+    display: flex; align-items: center; gap: var(--zx-space-2); width: 100%; min-height: 40px; padding: 0 var(--zx-space-3);
+    border: 0; border-radius: var(--zx-radius-md); background: transparent; color: var(--zx-text); font: inherit; text-align: left; cursor: pointer;
+}
+#httprpEditModal .hrp-nav__item i.icon { margin: 0; color: var(--zx-text-muted); width: 1.25em; }
+#httprpEditModal .hrp-nav__item:hover { background: var(--zx-surface-3); }
+#httprpEditModal .hrp-nav__item[aria-selected="true"] { background: var(--zx-primary-soft); color: var(--zx-primary-soft-text); font-weight: 700; }
+#httprpEditModal .hrp-nav__item[aria-selected="true"] i.icon { color: inherit; }
+#httprpEditModal .hrp-nav__item:focus-visible { outline: none; box-shadow: var(--zx-focus-ring); }
+#httprpEditModal .hrp-main { flex: 1 1 auto; min-width: 0; overflow-y: auto; overflow-x: hidden; padding: var(--zx-space-4); position: relative; scroll-padding-bottom: 5rem; }
+
+#httprpEditModal .hrp-sec { display: none; }
+#httprpEditModal .hrp-sec.is-active { display: block; }
+#httprpEditModal .hrp-sec:focus { outline: none; }
+#httprpEditModal .hrp-sec__head { margin-bottom: var(--zx-space-3); }
+#httprpEditModal .hrp-sec__title { margin: 0; font-size: var(--zx-fs-xl); font-weight: 700; color: var(--zx-text); }
+#httprpEditModal .hrp-sec__desc { margin: var(--zx-space-1) 0 0; color: var(--zx-text-muted); font-size: var(--zx-fs-sm); }
+
+/* ---- Easy: no navigation, the easy cards of every section in one column, plus cards holding non default settings ---- */
+#httprpEditModal[data-mode="easy"] .hrp-nav { display: none; }
+#httprpEditModal[data-mode="easy"] .hrp-sec { display: block; }
+#httprpEditModal[data-mode="easy"] .hrp-sec__head { display: none; }
+#httprpEditModal[data-mode="easy"] .hrp-card:not([data-easy]):not(.is-forced) { display: none; }
+#httprpEditModal[data-mode="advanced"] .hrp-card[data-hrp-easyonly] { display: none; }
+#httprpEditModal[data-mode="advanced"] .hrp-more { display: none; }
+#httprpEditModal .hrp-more { margin: var(--zx-space-4) 0 var(--zx-space-5); }
+#httprpEditModal[data-mode="easy"] .hrp-main { max-width: 100%; }
+
+#httprpEditModal .hrp-advnote { margin-bottom: var(--zx-space-4); }
+#httprpEditModal .hrp-advnote__list { margin: var(--zx-space-1) 0 0; padding-left: 1.2em; }
+#httprpEditModal .hrp-linkbtn { border: 0; background: none; padding: 0; margin-left: var(--zx-space-1); color: var(--zx-link); font: inherit; text-decoration: underline; cursor: pointer; }
+#httprpEditModal .hrp-linkbtn:focus-visible { outline: none; box-shadow: var(--zx-focus-ring); border-radius: var(--zx-radius-sm); }
+
+/* ---- cards ---- */
+#httprpEditModal .hrp-card .zx-card__body { overflow-wrap: anywhere; }
+#httprpEditModal .hrp-card .ui.segment { box-shadow: none; border: 0; padding: 0; margin: 0 0 var(--zx-space-4); background: transparent; }
+#httprpEditModal .hrp-card .ui.checkbox { margin: var(--zx-space-1) 0 var(--zx-space-2); display: block; }
+#httprpEditModal .hrp-card .ui.checkbox:not(.disabled) label,
+#httprpEditModal .hrp-card .ui.checkbox:not(.disabled) input:checked ~ label,
+#httprpEditModal .hrp-card .ui.checkbox:not(.disabled) input:focus ~ label { color: var(--zx-text) !important; opacity: 1; }
+#httprpEditModal .hrp-card .ui.checkbox label small { color: var(--zx-text-muted) !important; }
+#httprpEditModal .hrp-card .wrapper_frame { width: 100%; border: 1px solid var(--zx-border); border-radius: var(--zx-radius-md); background: var(--zx-surface); display: block; }
+#httprpEditModal .hrp-card br + br { display: none; }
+#httprpEditModal .hrp-btnrow { display: flex; flex-wrap: wrap; gap: var(--zx-space-2); }
+#httprpEditModal .hrp-btnrow .ui.button { margin: 0; }
+#httprpEditModal .hrp-tablewrap { overflow-x: auto; margin-bottom: var(--zx-space-3); }
+#httprpEditModal .hrp-hostline { display: flex; flex-direction: row-reverse; align-items: center; justify-content: space-between; gap: var(--zx-space-3); margin: 0 0 var(--zx-space-2); font-size: var(--zx-fs-lg); font-weight: 700; }
+#httprpEditModal .hrp-hostline .downstream_primary_hostname { min-width: 0; overflow-wrap: anywhere; }
+#httprpEditModal .downstream_alias_hostname { margin-top: var(--zx-space-2); }
+#httprpEditModal .hrp-select, #httprpEditModal select.oauth2ProviderSelect, #httprpEditModal select.friendlyEndpointSelect {
+    width: 100%; min-height: var(--zx-control-h); padding: 0 var(--zx-space-3); border: 1px solid var(--zx-border-strong); border-radius: var(--zx-radius-md);
+    background: var(--zx-surface); color: var(--zx-text); font: inherit;
+}
+#httprpEditModal .hrp-select:focus-visible { outline: none; box-shadow: var(--zx-focus-ring); }
+#httprpEditModal .hrp-certstatus { display: flex; flex-direction: column; gap: var(--zx-space-2); align-items: flex-start; }
+#httprpEditModal .hrp-certstatus__text { color: var(--zx-text); }
+#httprpEditModal .hrp-main .ui.message { color: inherit; }
+
+/* ---- side editors (path rules, upstreams, ...) open over the whole dialog ---- */
+#httprpEditModal .editor_side_wrapper { position: absolute; top: 0; right: 0; height: 100%; width: 100%; background: var(--zx-bg); z-index: 3; }
+#httprpEditModal .editor_side_wrapper .wrapper_frame { width: 100%; height: calc(100% - 52px); border: 0; border-top: 1px solid var(--zx-border); }
+#httprpEditModal .editor_back_button { display: inline-block; border: none; background: transparent; box-shadow: none; color: var(--zx-text); font-size: 2.2em; cursor: pointer; padding: 0 var(--zx-space-3); line-height: 1; }
+#httprpEditModal .editor_back_button:hover { opacity: 0.6; }
+#httprpEditModal .editor_back_button:focus-visible { outline: none; box-shadow: var(--zx-focus-ring); border-radius: var(--zx-radius-sm); }
+
+/* close buttons: text on wide screens, icon on narrow ones */
+#httprpEditModal .httpProxyEditCloseMobile { display: none !important; }
+@media (max-width: 768px) {
+    #httprpEditDarkenLayer { z-index: 11; }
+    #httprpEditModal { z-index: 12; top: 0; left: 0; transform: none; width: 100vw; height: 100vh; height: 100dvh; max-width: none; border-radius: 0; border: 0; }
+    #httprpEditModal .httpProxyEditClosePC { display: none !important; }
+    #httprpEditModal .httpProxyEditCloseMobile { display: inline-flex !important; position: static; }
+    #httprpEditModal .hrp-head { padding: var(--zx-space-2) var(--zx-space-4); padding-top: calc(var(--zx-space-2) + env(safe-area-inset-top, 0px)); }
+    #httprpEditModal .hrp-body { flex-direction: column; }
+    #httprpEditModal .hrp-nav { flex: 0 0 auto; flex-direction: row; overflow-x: auto; overflow-y: hidden; border-right: 0; border-bottom: 1px solid var(--zx-border); padding: var(--zx-space-2) var(--zx-space-4); }
+    #httprpEditModal .hrp-nav__item { width: auto; flex: 0 0 auto; min-height: var(--zx-touch); white-space: nowrap; }
+    #httprpEditModal .hrp-main { padding: var(--zx-space-3) var(--zx-space-4); }
+    #httprpEditModal .hrp-main .ui.two.fields, #httprpEditModal .hrp-main .ui.three.fields { flex-direction: column; }
+    #httprpEditModal .hrp-main .ui.form .fields > .field { width: 100% !important; }
+}
+@media (prefers-reduced-motion: reduce) { #httprpEditModal * { transition: none !important; animation: none !important; } }
+
+/* ---- app presets ---- */
+.zxp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr)); gap: var(--zx-space-2); margin: var(--zx-space-3) 0; }
+.zxp-card {
+    position: relative; display: block; padding: var(--zx-space-3); border: 1px solid var(--zx-border-strong); border-radius: var(--zx-radius-md);
+    background: var(--zx-surface); color: var(--zx-text); cursor: pointer; min-width: 0; overflow-wrap: anywhere;
+}
+.zxp-card:hover { border-color: var(--zx-primary); }
+.zxp-card input { position: absolute; opacity: 0; pointer-events: none; }
+.zxp-card b { display: block; }
+.zxp-card small { display: block; margin-top: 2px; color: var(--zx-text-muted); line-height: 1.3; }
+.zxp-card:has(input:checked) { border-color: var(--zx-primary); background: var(--zx-primary-soft); box-shadow: 0 0 0 1px var(--zx-primary) inset; }
+.zxp-card:has(input:checked) b, .zxp-card:has(input:checked) small { color: var(--zx-primary-soft-text); }
+.zxp-card:has(input:focus-visible) { box-shadow: var(--zx-focus-ring); }
+.zxp-detail { margin-top: var(--zx-space-3); }
+.zxp-note { margin: 0 0 var(--zx-space-2); color: var(--zx-text); }
+.zxp-detail .zx-callout { margin: var(--zx-space-2) 0; }
+#hrpPresetModal .content, #newRuleModal .zxp-detail { color: var(--zx-text); background: var(--zx-bg); }
+#hrpPresetModal.ui.modal { background: var(--zx-bg); color: var(--zx-text); }
+#hrpPresetModal .actions { background: var(--zx-surface-2); text-align: right; }
+#hrpPresetModal .hrp-dlg-title { margin: 0 0 var(--zx-space-1); color: var(--zx-text); }
+#hrpPresetModal .zx-table th, #newRuleModal .zxp-detail .zx-table th { text-align: left; }
+.hrp-tablewrap { overflow-x: auto; }
+@media (max-width: 480px) { .zxp-grid { grid-template-columns: 1fr; } }
+
+/* the New proxy rule dialog never grows taller than the window: its content scrolls (it has an app preset section now) */
+#newRuleModal.ui.modal > .content { max-height: calc(100vh - 9rem); max-height: calc(100dvh - 9rem); overflow-y: auto; }
+#newRuleModal details.nrMore .nrTplGrid { margin-top: 0.4em; }

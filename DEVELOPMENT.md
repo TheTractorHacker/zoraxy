@@ -2489,3 +2489,46 @@ What is charged when a call does not end with a parsed answer (`settleKind` in `
 ### Testing
 
 `cd src && go test ./mod/aiassist/ .` (mock provider, loopback only). Browser: `tools/ui-smoke` has the step `ai_assistant_ui` (mock provider served by the script on a loopback port; disabled state, hostile model text, setup, test connection, preview-before-first-use, suggestions, plain English to rule, Explain block, light/dark/390 px screenshots).
+
+## Site editor and app presets (ux-site-editor)
+
+The proxy rule editor has five sections, an Easy / Advanced switch and one Save bar; see `docs/ux/site-editor.md` for the
+layout, the old tab to new section table, the save model and what is verified.
+
+### Adding an app preset
+
+Presets are data: append one object to `src/mod/dynamicproxy/ruletemplate_presets.json`. It is an ordinary rule template
+(`RuleTemplate` in `ruletemplate.go`), so only what the template engine supports can be set (WebSocket, headers, rate limit,
+WAF source, uptime path, tags, exploit blocking, HSTS, request id); it can never touch upstreams, domains or authentication.
+
+```json
+{
+ "Name": "My app",
+ "Description": "WebSocket on, WAF detection only, uptime monitor on /health",
+ "Note": "A starting point, review it before use. <what the user must still configure in the app>",
+ "Tags": ["myapp"],
+ "DisableWebSocket": false,
+ "WAFSource": "detection_only",
+ "UptimeMonitor": true,
+ "UptimeMonitorURI": "/health"
+}
+```
+
+* `Name` is 1-64 characters from `A-Za-z0-9 _.-` (no `/` or parentheses), unique across the built-ins and not already a custom template.
+* `Category`, `Builtin` and `NoDowngrade` are forced on load, you do not need to write them. `NoDowngrade` means the preset never lowers
+  the WAF source, rate limit, exploit blocking or HSTS the rule already has and never overwrites a header or uptime path the
+  operator set. Set `"RequiresAuth": true` when the preset only makes sense for a rule with a login.
+* Only put in a setting you are sure the app needs, and say so in `Note` (it starts with "A starting point, review it"). Do not add
+  WAF exclusions you cannot justify (the engine has none; presets use detection only), and never turn security off.
+* Run `cd src && go test ./mod/dynamicproxy -run 'Preset|NoDowngrade'`: it validates every preset, applies it to a fresh rule and to a
+  rule with existing settings, checks idempotence and that nothing is weakened and that upstreams / domains / auth are untouched.
+  Add the name to the list in `TestAppPresetsCatalogue`, and bump the minimum in the smoke scenario (`site_editor_ui`) if you add one.
+* The preset appears in the New proxy rule dialog ("Start from an app preset") and in the editor ("Apply preset") with no UI change.
+
+### Site editor control inventory
+
+`tools/ui-smoke/siteeditor_inventory.json` lists every control of the old 11-tab editor with the new section and card; the smoke
+scenario `site_editor_ui` (`--site-editor-only`) fails when one disappears or is duplicated. When you add a control, add a card
+with `data-hrp-card` (and `data-hrp-nd` when it has a default) and, if it is a form field of the rule, nothing else: the Save bar
+tracks it. A field that saves itself must be marked `data-zx-ignore` (and `data-hrp-selfsave` so the unsaved-changes guard still
+covers it).

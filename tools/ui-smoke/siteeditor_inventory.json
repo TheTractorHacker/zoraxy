@@ -1,0 +1,1136 @@
+[
+ {
+  "selector": "button.httpProxyEditClosePC",
+  "tag": "button",
+  "oldTab": "menu",
+  "label": "",
+  "count": 1,
+  "section": "",
+  "card": ""
+ },
+ {
+  "selector": "button.httpProxyEditCloseMobile",
+  "tag": "button",
+  "oldTab": "menu",
+  "label": "",
+  "count": 1,
+  "section": "",
+  "card": ""
+ },
+ {
+  "selector": "button.downstream_primary_hostname_edit_btn",
+  "tag": "button",
+  "oldTab": "downstream",
+  "label": "",
+  "count": 1,
+  "section": "general",
+  "card": "host"
+ },
+ {
+  "selector": ".downstream_primary_hostname_edit_input input",
+  "tag": "input",
+  "oldTab": "downstream",
+  "label": "new.example.com",
+  "count": 1,
+  "section": "general",
+  "card": "host"
+ },
+ {
+  "selector": "button.saveDownstreamHostnameBtn",
+  "tag": "button",
+  "oldTab": "downstream",
+  "label": "",
+  "count": 1,
+  "section": "general",
+  "card": "host"
+ },
+ {
+  "selector": "button.cancelDownstreamHostnameBtn",
+  "tag": "button",
+  "oldTab": "downstream",
+  "label": "",
+  "count": 1,
+  "section": "general",
+  "card": "host"
+ },
+ {
+  "selector": "input.BypassGlobalTLS",
+  "tag": "input",
+  "oldTab": "downstream",
+  "label": "",
+  "count": 1,
+  "section": "tls",
+  "card": "plainhttp"
+ },
+ {
+  "selector": "input.EnableConnectSupport",
+  "tag": "input",
+  "oldTab": "downstream",
+  "label": "Allow plain HTTP access Allow inbound connections without TLS/SSL",
+  "count": 1,
+  "section": "advanced",
+  "card": "forwarding"
+ },
+ {
+  "selector": "input.EnableUpgradeForwarding",
+  "tag": "input",
+  "oldTab": "downstream",
+  "label": "Enable HTTP CONNECT tunneling Allow CONNECT method only to this route's configur",
+  "count": 1,
+  "section": "advanced",
+  "card": "forwarding"
+ },
+ {
+  "selector": "input.DisableLogging",
+  "tag": "input",
+  "oldTab": "downstream",
+  "label": "Enable protocol upgrade forwarding Forward non-WebSocket Upgrade requests (e.g. ",
+  "count": 1,
+  "section": "advanced",
+  "card": "logging"
+ },
+ {
+  "selector": "input.DisableStatisticCollection",
+  "tag": "input",
+  "oldTab": "downstream",
+  "label": "Disable Requests Logging Disable logging for all incoming requests for this host",
+  "count": 1,
+  "section": "advanced",
+  "card": "logging"
+ },
+ {
+  "selector": "input.new_listening_port_input",
+  "tag": "input",
+  "oldTab": "downstream",
+  "label": ":8080 or 192.168.1.1:8080",
+  "count": 1,
+  "section": "routing",
+  "card": "ports"
+ },
+ {
+  "selector": "button.addListeningPortBtn",
+  "tag": "button",
+  "oldTab": "downstream",
+  "label": "",
+  "count": 1,
+  "section": "routing",
+  "card": "ports"
+ },
+ {
+  "selector": "button.editUpstreamButton",
+  "tag": "button",
+  "oldTab": "upstream",
+  "label": "",
+  "count": 1,
+  "section": "general",
+  "card": "upstream"
+ },
+ {
+  "selector": "input.EnableUptimeMonitor",
+  "tag": "input",
+  "oldTab": "upstream",
+  "label": "Disable Statistic Collection Disable collecting statistics for this hostname but",
+  "count": 1,
+  "section": "general",
+  "card": "health"
+ },
+ {
+  "selector": "input.UptimeMonitorURI",
+  "tag": "input",
+  "oldTab": "upstream",
+  "label": "/",
+  "count": 1,
+  "section": "general",
+  "card": "health"
+ },
+ {
+  "selector": "input.UptimeHealthyStatus",
+  "tag": "input",
+  "oldTab": "upstream",
+  "label": "global setting",
+  "count": 1,
+  "section": "advanced",
+  "card": "uptimeopts"
+ },
+ {
+  "selector": "input.UseStickySession",
+  "tag": "input",
+  "oldTab": "upstream",
+  "label": "Monitor Uptime Enable active uptime monitor and auto disable upstreams that are ",
+  "count": 1,
+  "section": "general",
+  "card": "lb"
+ },
+ {
+  "selector": "input.DisableChunkedTransferEncoding",
+  "tag": "input",
+  "oldTab": "upstream",
+  "label": "Use Sticky Session Enable stick session on load balancing",
+  "count": 1,
+  "section": "advanced",
+  "card": "compat"
+ },
+ {
+  "selector": "input.ForceHTTP11",
+  "tag": "input",
+  "oldTab": "upstream",
+  "label": "Disable Chunked Transfer Encoding Enable this option if your upstream uses a leg",
+  "count": 1,
+  "section": "advanced",
+  "card": "compat"
+ },
+ {
+  "selector": "input.SanitiseClientIPHeaders",
+  "tag": "input",
+  "oldTab": "upstream",
+  "label": "Force HTTP/1.1 Force the proxy to use HTTP/1.1 for upstream connections, disabli",
+  "count": 1,
+  "section": "advanced",
+  "card": "compat"
+ },
+ {
+  "selector": "input.EnableWebSocket",
+  "tag": "input",
+  "oldTab": "websocket",
+  "label": "Sanitise client IP headers Drop X-Forwarded-For, X-Real-IP, Forwarded, CF-Connec",
+  "count": 1,
+  "section": "routing",
+  "card": "websocket"
+ },
+ {
+  "selector": "input.WebsocketTimeout",
+  "tag": "input",
+  "oldTab": "websocket",
+  "label": "Enable WebSocket Allow WebSocket upgrade requests to be proxied to this endpoint",
+  "count": 1,
+  "section": "routing",
+  "card": "wsopts"
+ },
+ {
+  "selector": "input.EnableTimeoutRefreshOnActivity",
+  "tag": "input",
+  "oldTab": "websocket",
+  "label": "seconds",
+  "count": 1,
+  "section": "routing",
+  "card": "wsopts"
+ },
+ {
+  "selector": "button.editVdirBtn",
+  "tag": "button",
+  "oldTab": "vdirs",
+  "label": "",
+  "count": 1,
+  "section": "routing",
+  "card": "vdirs"
+ },
+ {
+  "selector": "[rpcfg=\"alias\"] iframe.wrapper_frame",
+  "tag": "iframe",
+  "oldTab": "alias",
+  "label": "",
+  "count": 1,
+  "section": "general",
+  "card": "alias"
+ },
+ {
+  "selector": "input.Tls_EnableSNI",
+  "tag": "input",
+  "oldTab": "ssl",
+  "label": "Refresh timeout on activity Reset the WebSocket deadline each time a message is ",
+  "count": 1,
+  "section": "tls",
+  "card": "certs"
+ },
+ {
+  "selector": "input.Tls_EnableLegacyCertificateMatching",
+  "tag": "input",
+  "oldTab": "ssl",
+  "label": "Enable SNI Resolve Server Name Indication (SNI) and automatically select a certi",
+  "count": 1,
+  "section": "tls",
+  "card": "certs"
+ },
+ {
+  "selector": "input.Tls_EnableAutoHTTPS",
+  "tag": "input",
+  "oldTab": "ssl",
+  "label": "Enable Legacy Certificate Matching Use filename for hostname matching, faster bu",
+  "count": 1,
+  "section": "tls",
+  "card": "certs"
+ },
+ {
+  "selector": "button.getCertificateBtn",
+  "tag": "button",
+  "oldTab": "ssl",
+  "label": "",
+  "count": 1,
+  "section": "tls",
+  "card": "certs"
+ },
+ {
+  "selector": "button.getSelfSignCertBtn",
+  "tag": "button",
+  "oldTab": "ssl",
+  "label": "",
+  "count": 1,
+  "section": "tls",
+  "card": "certs"
+ },
+ {
+  "selector": "[rpcfg=\"headers\"] iframe.wrapper_frame",
+  "tag": "iframe",
+  "oldTab": "headers",
+  "label": "",
+  "count": 1,
+  "section": "routing",
+  "card": "headers"
+ },
+ {
+  "selector": "[rpcfg=\"accessrule\"] iframe.wrapper_frame",
+  "tag": "iframe",
+  "oldTab": "accessrule",
+  "label": "",
+  "count": 1,
+  "section": "security",
+  "card": "accessrule"
+ },
+ {
+  "selector": "input[name=\"authProviderType\"][value=\"0\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Authentication Provider",
+  "count": 1,
+  "section": "security",
+  "card": "auth"
+ },
+ {
+  "selector": "input[name=\"authProviderType\"][value=\"1\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "None (Anyone can access)",
+  "count": 1,
+  "section": "security",
+  "card": "auth"
+ },
+ {
+  "selector": "input[name=\"authProviderType\"][value=\"2\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Basic Auth",
+  "count": 1,
+  "section": "security",
+  "card": "auth"
+ },
+ {
+  "selector": "input[name=\"authProviderType\"][value=\"3\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Forward Auth",
+  "count": 1,
+  "section": "security",
+  "card": "auth"
+ },
+ {
+  "selector": "input[name=\"authProviderType\"][value=\"4\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "OAuth2",
+  "count": 1,
+  "section": "security",
+  "card": "auth"
+ },
+ {
+  "selector": "select.oauth2ProviderSelect",
+  "tag": "select",
+  "oldTab": "security",
+  "label": "OAuth2 / OIDC provider",
+  "count": 1,
+  "section": "security",
+  "card": "auth"
+ },
+ {
+  "selector": "input.oauth2RuleGroups",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "admins,family",
+  "count": 1,
+  "section": "security",
+  "card": "auth"
+ },
+ {
+  "selector": "input.oauth2RuleClaims",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "roles=admin; department=it",
+  "count": 1,
+  "section": "security",
+  "card": "auth"
+ },
+ {
+  "selector": "input.oauth2RuleEmails",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "alice@example.com",
+  "count": 1,
+  "section": "security",
+  "card": "auth"
+ },
+ {
+  "selector": "input.oauth2RuleEmailDomains",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "example.com",
+  "count": 1,
+  "section": "security",
+  "card": "auth"
+ },
+ {
+  "selector": "button.editBasicAuthCredentialsBtn",
+  "tag": "button",
+  "oldTab": "security",
+  "label": "",
+  "count": 1,
+  "section": "security",
+  "card": "auth"
+ },
+ {
+  "selector": "button.editZorxAuthExceptionsBtn",
+  "tag": "button",
+  "oldTab": "security",
+  "label": "",
+  "count": 1,
+  "section": "security",
+  "card": "auth"
+ },
+ {
+  "selector": "button.editSsoExceptionsBtn",
+  "tag": "button",
+  "oldTab": "security",
+  "label": "",
+  "count": 1,
+  "section": "security",
+  "card": "auth"
+ },
+ {
+  "selector": "button.editPathRulesBtn",
+  "tag": "button",
+  "oldTab": "security",
+  "label": "",
+  "count": 1,
+  "section": "routing",
+  "card": "pathrules"
+ },
+ {
+  "selector": "button.editNetworkingBtn",
+  "tag": "button",
+  "oldTab": "security",
+  "label": "",
+  "count": 1,
+  "section": "tls",
+  "card": "clientcerts"
+ },
+ {
+  "selector": "button.editOpsBtn",
+  "tag": "button",
+  "oldTab": "security",
+  "label": "",
+  "count": 1,
+  "section": "routing",
+  "card": "pathrules"
+ },
+ {
+  "selector": "button.editScriptBtn",
+  "tag": "button",
+  "oldTab": "security",
+  "label": "",
+  "count": 1,
+  "section": "advanced",
+  "card": "scripts"
+ },
+ {
+  "selector": "button.editSablierBtn",
+  "tag": "button",
+  "oldTab": "security",
+  "label": "",
+  "count": 1,
+  "section": "advanced",
+  "card": "scripts"
+ },
+ {
+  "selector": "input.BlockCommonExploits",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Exploits Prevention",
+  "count": 1,
+  "section": "security",
+  "card": "exploits"
+ },
+ {
+  "selector": "input.BlockAICrawlers",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Block Common Exploits Detect and block common exploit payloads (SQLi, XSS, path ",
+  "count": 1,
+  "section": "security",
+  "card": "exploits"
+ },
+ {
+  "selector": "input[name=\"mitigationAction\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Mitigation Action",
+  "count": 1,
+  "section": "security",
+  "card": "exploits"
+ },
+ {
+  "selector": "input.RequireRateLimit",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Mitigation Action",
+  "count": 1,
+  "section": "security",
+  "card": "ratelimit"
+ },
+ {
+  "selector": "input.RateLimit",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Require Rate Limit Check this to enable rate limit on this inbound hostname",
+  "count": 1,
+  "section": "security",
+  "card": "ratelimit"
+ },
+ {
+  "selector": "input.RateLimitBurst",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "req / sec / IP",
+  "count": 1,
+  "section": "security",
+  "card": "ratelimit"
+ },
+ {
+  "selector": "input.RequireCaptcha",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "burst (0 = same as rate)",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[name=\"captchaProvider\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "CAPTCHA Provider",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input.CaptchaSiteKey",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Site Key / Public Key",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input.CaptchaSecretKey",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Secret Key / Private Key",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input.CaptchaSessionDuration",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "CAPTCHA Provider",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "textarea.CaptchaPathPrefixes",
+  "tag": "textarea",
+  "oldTab": "security",
+  "label": "/form\n/api",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "button.editCaptchaExceptionsBtn",
+  "tag": "button",
+  "oldTab": "security",
+  "label": "",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "button.openCaptchaPageBtn",
+  "tag": "button",
+  "oldTab": "security",
+  "label": "",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "select.friendlyEndpointSelect",
+  "tag": "select",
+  "oldTab": "security",
+  "label": "Friendly Captcha endpoint",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[name=\"recaptchaVersion\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "reCAPTCHA Version",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input.RecaptchaScore",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Minimum Score (0.0 - 1.0)",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"captchaTitle\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Just a moment...",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"captchaHeading\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "(the host name)",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"captchaMessage\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Verify you are human by completing the action below.",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"captchaNotice\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "{domain} needs to review the security of your connection before proceeding.",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"captchaVerifyingText\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Verifying...",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"captchaSuccessText\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Verification successful! Redirecting...",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"captchaFailedText\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Verification failed. Please try again.",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"captchaErrorText\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "An error occurred. Please try again.",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"captchaRetryText\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Try again",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"captchaLogo\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "https://example.com/logo.png or upload below",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input.cpLogoFile",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Logo",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input.cpAccent",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Accent colour",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"captchaAccent\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Accent colour",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input.cpBackground",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Background colour",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"captchaBackground\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Background colour",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "select[data-cp=\"captchaTheme\"]",
+  "tag": "select",
+  "oldTab": "security",
+  "label": "Theme",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"captchaFooterText\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Performance & security by",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"captchaFooterLinkText\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Zoraxy",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"captchaFooterLinkURL\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "https://zoraxy.aroz.org",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"captchaHideFooter\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Footer link URL",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"captchaBlockedTitle\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Access blocked",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"captchaBlockedHeading\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Access blocked",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"captchaBlockedMessage\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "Your request was blocked by the security rules of this site.",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "select[data-cp=\"turnstileMode\"]",
+  "tag": "select",
+  "oldTab": "security",
+  "label": "Widget mode",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "select[data-cp=\"turnstileAppearance\"]",
+  "tag": "select",
+  "oldTab": "security",
+  "label": "Appearance",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "select[data-cp=\"turnstileTheme\"]",
+  "tag": "select",
+  "oldTab": "security",
+  "label": "Widget theme",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "select[data-cp=\"turnstileSize\"]",
+  "tag": "select",
+  "oldTab": "security",
+  "label": "Widget size",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"turnstileAction\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "login",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"turnstileCData\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "my-endpoint",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"captchaRecaptchaInvisible\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "cData (optional)",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"captchaRecaptchaAction\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "access",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "input[data-cp=\"captchaVerifyHostname\"]",
+  "tag": "input",
+  "oldTab": "security",
+  "label": "v3 action name",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "textarea[data-cp=\"captchaCustomTemplate\"]",
+  "tag": "textarea",
+  "oldTab": "security",
+  "label": "Leave empty to use the built-in page. See DEVELOPMENT.md, Customising CAPTCHA pa",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "button.cpPreview[data-page=\"challenge\"]",
+  "tag": "button",
+  "oldTab": "security",
+  "label": "",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "button.cpPreview[data-page=\"failed\"]",
+  "tag": "button",
+  "oldTab": "security",
+  "label": "",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": "button.cpPreview[data-page=\"blocked\"]",
+  "tag": "button",
+  "oldTab": "security",
+  "label": "",
+  "count": 1,
+  "section": "security",
+  "card": "captcha"
+ },
+ {
+  "selector": ".wafSource",
+  "tag": "select",
+  "oldTab": "waf",
+  "label": "WAF source",
+  "count": 1,
+  "section": "security",
+  "card": "waf"
+ },
+ {
+  "selector": ".wafProfileSel",
+  "tag": "select",
+  "oldTab": "waf",
+  "label": "Profile",
+  "count": 1,
+  "section": "security",
+  "card": "waf"
+ },
+ {
+  "selector": "input.wafXChallenge",
+  "tag": "input",
+  "oldTab": "waf",
+  "label": "Challenge threshold (0 = inherit)",
+  "count": 1,
+  "section": "security",
+  "card": "waf"
+ },
+ {
+  "selector": "input.wafXChallengeTTL",
+  "tag": "input",
+  "oldTab": "waf",
+  "label": "Challenge validity in minutes (0 = inherit)",
+  "count": 1,
+  "section": "security",
+  "card": "waf"
+ },
+ {
+  "selector": "button.wafChallengeSaveBtn",
+  "tag": "button",
+  "oldTab": "waf",
+  "label": "",
+  "count": 1,
+  "section": "security",
+  "card": "waf"
+ },
+ {
+  "selector": "button.wafSourceSaveBtn",
+  "tag": "button",
+  "oldTab": "waf",
+  "label": "",
+  "count": 1,
+  "section": "security",
+  "card": "waf"
+ },
+ {
+  "selector": ".wafMode",
+  "tag": "select",
+  "oldTab": "waf",
+  "label": "Mode",
+  "count": 1,
+  "section": "security",
+  "card": "waf"
+ },
+ {
+  "selector": ".wafParanoia",
+  "tag": "select",
+  "oldTab": "waf",
+  "label": "Paranoia level",
+  "count": 1,
+  "section": "security",
+  "card": "waf"
+ },
+ {
+  "selector": "input.wafThreshold",
+  "tag": "input",
+  "oldTab": "waf",
+  "label": "Anomaly score threshold",
+  "count": 1,
+  "section": "security",
+  "card": "waf"
+ },
+ {
+  "selector": "input.wafBodyLimit",
+  "tag": "input",
+  "oldTab": "waf",
+  "label": "Body inspection limit (KiB)",
+  "count": 1,
+  "section": "security",
+  "card": "waf"
+ },
+ {
+  "selector": "input.wafChallenge",
+  "tag": "input",
+  "oldTab": "waf",
+  "label": "Challenge threshold (0 = off)",
+  "count": 1,
+  "section": "security",
+  "card": "waf"
+ },
+ {
+  "selector": "input.wafChallengeTTL",
+  "tag": "input",
+  "oldTab": "waf",
+  "label": "Challenge validity (minutes)",
+  "count": 1,
+  "section": "security",
+  "card": "waf"
+ },
+ {
+  "selector": "input.wafExcludedIds",
+  "tag": "input",
+  "oldTab": "waf",
+  "label": "942100, 949000-949999",
+  "count": 1,
+  "section": "security",
+  "card": "waf"
+ },
+ {
+  "selector": "textarea.wafPathExclusions",
+  "tag": "textarea",
+  "oldTab": "waf",
+  "label": "/api/search 942100,942200\n=/login 920420",
+  "count": 1,
+  "section": "security",
+  "card": "waf"
+ },
+ {
+  "selector": "input.wafIgnoreCookies",
+  "tag": "input",
+  "oldTab": "waf",
+  "label": "Path scoped exclusions",
+  "count": 1,
+  "section": "security",
+  "card": "waf"
+ },
+ {
+  "selector": "textarea.wafCustomRules",
+  "tag": "textarea",
+  "oldTab": "waf",
+  "label": "SecRule REQUEST_HEADERS:X-Evil \"@streq yes\" \"id:1000001,phase:1,deny,status:403,",
+  "count": 1,
+  "section": "security",
+  "card": "waf"
+ },
+ {
+  "selector": "button.wafSaveBtn",
+  "tag": "button",
+  "oldTab": "waf",
+  "label": "",
+  "count": 1,
+  "section": "security",
+  "card": "waf"
+ },
+ {
+  "selector": "button.wafRespSaveBtn",
+  "tag": "button",
+  "oldTab": "waf",
+  "label": "",
+  "count": 1,
+  "section": "security",
+  "card": "wafresp"
+ },
+ {
+  "selector": "button.wafRefreshBtn",
+  "tag": "button",
+  "oldTab": "waf",
+  "label": "Refresh",
+  "count": 1,
+  "section": "security",
+  "card": "wafevents"
+ },
+ {
+  "selector": "[rpcfg=\"tags\"] iframe.wrapper_frame",
+  "tag": "iframe",
+  "oldTab": "tags",
+  "label": "",
+  "count": 1,
+  "section": "general",
+  "card": "tags"
+ },
+ {
+  "selector": "a.editor_back_button",
+  "tag": "a",
+  "oldTab": "sidewrapper",
+  "label": "",
+  "count": 1,
+  "section": "",
+  "card": ""
+ },
+ {
+  "selector": ".editor_side_wrapper iframe.wrapper_frame",
+  "tag": "iframe",
+  "oldTab": "sidewrapper",
+  "label": "",
+  "count": 1,
+  "section": "",
+  "card": ""
+ }
+]

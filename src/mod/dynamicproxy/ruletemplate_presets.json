@@ -1,0 +1,235 @@
+[
+ {
+  "Name": "WordPress",
+  "Category": "app",
+  "Description": "WAF in detection mode, uptime monitor on the home page, nosniff header",
+  "Note": "A starting point, review it before use. Large uploads and plugins can trigger WAF detections; they are only logged until you switch to Block. In WordPress set both addresses to https://your-domain.",
+  "NoDowngrade": true,
+  "UptimeMonitor": true,
+  "Tags": [
+   "wordpress",
+   "web"
+  ],
+  "WAFSource": "detection_only",
+  "UptimeMonitorURI": "/",
+  "Headers": [
+   {
+    "Direction": 1,
+    "Key": "X-Content-Type-Options",
+    "Value": "nosniff"
+   }
+  ]
+ },
+ {
+  "Name": "Nextcloud",
+  "Category": "app",
+  "Description": "WebSocket on, WAF in detection mode, uptime monitor on /status.php",
+  "Note": "A starting point, review it before use. WebDAV and large uploads pass through unchanged. In Nextcloud add this proxy to trusted_proxies and the domain to trusted_domains in config.php, and set overwriteprotocol to https.",
+  "NoDowngrade": true,
+  "UptimeMonitor": true,
+  "Tags": [
+   "nextcloud",
+   "files"
+  ],
+  "DisableWebSocket": false,
+  "WAFSource": "detection_only",
+  "UptimeMonitorURI": "/status.php",
+  "Headers": [
+   {
+    "Direction": 1,
+    "Key": "X-Content-Type-Options",
+    "Value": "nosniff"
+   }
+  ]
+ },
+ {
+  "Name": "Home Assistant",
+  "Category": "app",
+  "Description": "WebSocket on (required for the live UI), WAF in detection mode, uptime monitor",
+  "Note": "A starting point, review it before use. Home Assistant refuses proxied requests until http: in configuration.yaml has use_x_forwarded_for: true and this proxy listed under trusted_proxies.",
+  "NoDowngrade": true,
+  "UptimeMonitor": true,
+  "Tags": [
+   "homeassistant",
+   "iot"
+  ],
+  "DisableWebSocket": false,
+  "WAFSource": "detection_only",
+  "UptimeMonitorURI": "/"
+ },
+ {
+  "Name": "Jellyfin",
+  "Category": "app",
+  "Description": "WebSocket on, uptime monitor on /health, no WAF or rate limit changes",
+  "Note": "A starting point, review it before use. Streaming makes many range requests, so no rate limit is set. Add this proxy under Known proxies in the Jellyfin network settings so client addresses are correct.",
+  "NoDowngrade": true,
+  "UptimeMonitor": true,
+  "Tags": [
+   "jellyfin",
+   "media"
+  ],
+  "DisableWebSocket": false,
+  "UptimeMonitorURI": "/health"
+ },
+ {
+  "Name": "Plex",
+  "Category": "app",
+  "Description": "WebSocket on, uptime monitor on /identity, no WAF or rate limit changes",
+  "Note": "A starting point, review it before use. Streaming makes many range requests, so no rate limit is set. In Plex add the public address under Network, Custom server access URLs.",
+  "NoDowngrade": true,
+  "UptimeMonitor": true,
+  "Tags": [
+   "plex",
+   "media"
+  ],
+  "DisableWebSocket": false,
+  "UptimeMonitorURI": "/identity"
+ },
+ {
+  "Name": "Grafana",
+  "Category": "app",
+  "Description": "WebSocket on (Grafana Live), WAF in detection mode, uptime monitor on /api/health",
+  "Note": "A starting point, review it before use. In grafana.ini set root_url to the public https address. Grafana Live checks the Origin header, so add the address to live.allowed_origins if live panels fail.",
+  "NoDowngrade": true,
+  "UptimeMonitor": true,
+  "Tags": [
+   "grafana",
+   "monitoring"
+  ],
+  "DisableWebSocket": false,
+  "WAFSource": "detection_only",
+  "UptimeMonitorURI": "/api/health",
+  "Headers": [
+   {
+    "Direction": 1,
+    "Key": "X-Content-Type-Options",
+    "Value": "nosniff"
+   }
+  ]
+ },
+ {
+  "Name": "Vaultwarden",
+  "Category": "app",
+  "Description": "WebSocket on (sync notifications), WAF in detection mode, uptime monitor on /alive",
+  "Note": "A starting point, review it before use. Set DOMAIN to the public https address in Vaultwarden. Restrict /admin with an access rule or a path rule if you enable the admin page.",
+  "NoDowngrade": true,
+  "UptimeMonitor": true,
+  "Tags": [
+   "vaultwarden",
+   "passwords"
+  ],
+  "DisableWebSocket": false,
+  "WAFSource": "detection_only",
+  "UptimeMonitorURI": "/alive",
+  "Headers": [
+   {
+    "Direction": 1,
+    "Key": "X-Content-Type-Options",
+    "Value": "nosniff"
+   }
+  ]
+ },
+ {
+  "Name": "Gitea or GitLab",
+  "Category": "app",
+  "Description": "WebSocket on, WAF in detection mode, uptime monitor on the home page",
+  "Note": "A starting point, review it before use. Git pushes over HTTPS send large bodies, which the WAF does not inspect past its limit. Set ROOT_URL (Gitea) or external_url (GitLab) to the public https address.",
+  "NoDowngrade": true,
+  "UptimeMonitor": true,
+  "Tags": [
+   "git",
+   "devtools"
+  ],
+  "DisableWebSocket": false,
+  "WAFSource": "detection_only",
+  "UptimeMonitorURI": "/",
+  "Headers": [
+   {
+    "Direction": 1,
+    "Key": "X-Content-Type-Options",
+    "Value": "nosniff"
+   }
+  ]
+ },
+ {
+  "Name": "Portainer",
+  "Category": "app",
+  "Description": "WebSocket on (container console), WAF in detection mode, uptime monitor on /api/system/status",
+  "Note": "A starting point, review it before use. Portainer controls your containers: also pick an access rule and an authentication provider. If it only serves HTTPS with its own certificate, turn on TLS for the upstream in the upstream settings.",
+  "NoDowngrade": true,
+  "UptimeMonitor": true,
+  "Tags": [
+   "portainer",
+   "admin"
+  ],
+  "DisableWebSocket": false,
+  "WAFSource": "detection_only",
+  "UptimeMonitorURI": "/api/system/status",
+  "Headers": [
+   {
+    "Direction": 1,
+    "Key": "X-Content-Type-Options",
+    "Value": "nosniff"
+   }
+  ]
+ },
+ {
+  "Name": "JSON API",
+  "Category": "app",
+  "Description": "Rate limit 100 req/s per IP (burst 200), request id header, WAF in detection mode, WebSocket off",
+  "Note": "A starting point, review it before use. Tune the rate limit to the real traffic of your clients. Set the health check path to an endpoint of your API.",
+  "NoDowngrade": true,
+  "UptimeMonitor": true,
+  "Tags": [
+   "api"
+  ],
+  "RateLimit": 100,
+  "RateLimitBurst": 200,
+  "ExposeRequestID": true,
+  "WAFSource": "detection_only",
+  "UptimeMonitorURI": "/",
+  "Headers": [
+   {
+    "Direction": 1,
+    "Key": "X-Content-Type-Options",
+    "Value": "nosniff"
+   }
+  ],
+  "DisableWebSocket": true
+ },
+ {
+  "Name": "Static website",
+  "Category": "app",
+  "Description": "Browser hardening headers, exploit blocking, light rate limit, WebSocket off",
+  "Note": "A starting point, review it before use. Fits a site that only serves files. If the site uses WebSockets or is embedded in frames of other sites, adjust the result.",
+  "NoDowngrade": true,
+  "UptimeMonitor": true,
+  "Tags": [
+   "static",
+   "web"
+  ],
+  "SecurityHeaders": true,
+  "BlockExploits": true,
+  "RateLimit": 50,
+  "RateLimitBurst": 100,
+  "DisableWebSocket": true
+ },
+ {
+  "Name": "Strict admin panel",
+  "Category": "app",
+  "Description": "Rate limit 10 req/s per IP (burst 20), WAF in block mode, exploit blocking, browser hardening headers",
+  "Note": "A starting point, review it before use. This preset does not turn on authentication by itself: choose an authentication provider and an access rule for the rule. The WAF can block legitimate admin actions, so watch the WAF log.",
+  "NoDowngrade": true,
+  "UptimeMonitor": true,
+  "Tags": [
+   "admin",
+   "strict"
+  ],
+  "RateLimit": 10,
+  "RateLimitBurst": 20,
+  "BlockExploits": true,
+  "SecurityHeaders": true,
+  "WAFSource": "block",
+  "RequiresAuth": true
+ }
+]

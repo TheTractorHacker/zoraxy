@@ -82,6 +82,10 @@
         '<div class="ui checkbox" id="nrSkipBox" style="display:none;"><input type="checkbox" id="nrSkipVerify"><label for="nrSkipVerify">Ignore certificate errors (self-signed)</label></div>' +
         '</div></div>' +
         '<div class="field"><label>Template <a href="#" id="nrManageTpl" class="nrHint" style="float:right;font-weight:400;">Manage templates</a></label><div class="nrTplGrid" id="nrTplGrid" role="radiogroup" aria-label="Template"></div></div>' +
+        '<details class="nrMore" id="nrPresetField" style="display:none;"><summary id="nrPresetLabel">Start from an app preset <span class="nrAuto" id="nrPresetPick" style="display:none;"></span></summary>' +
+        '<span class="nrHint" style="margin:0 0 0.5em;">Ready-made settings for popular apps. Pick one to see exactly what it sets; you can review and change everything afterwards.</span>' +
+        '<div class="nrTplGrid" id="nrPresetGrid" role="radiogroup" aria-labelledby="nrPresetLabel"></div>' +
+        '<div class="zxp-detail" id="nrPresetDetail" aria-live="polite"></div></details>' +
         '<details class="nrMore" id="nrMore"><summary>More options</summary>' +
         '<div class="field"><label for="nrTags">Tags</label><input type="text" id="nrTags" placeholder="e.g. media, internal" list="nrTagList"><datalist id="nrTagList"></datalist></div>' +
         '<div class="field"><label for="nrAccess">Access rule</label><select id="nrAccess"><option value="default">Default (allow all)</option></select></div>' +
@@ -126,6 +130,8 @@
         $f("nrUpstream").on("blur", function () { cleanUpstream(); validateUpstream(true); scheduleTest(0); });
         $f("nrUpstream").on("paste", function () { var el = this; setTimeout(function () { cleanUpstream(); validateUpstream(false); scheduleTest(200); }, 0); });
         $f("nrTest").on("click", function () { runTest(true); });
+        $m.on("change", "input[name=nrTpl]", showPresetDetail);
+        $f("nrPresetField").on("toggle", function () { $m.modal("refresh"); }); //re-centre when the preset section opens
         $f("nrTlsOn").on("change", function () { st.tlsTouched = true; $f("nrAuto").hide(); syncTlsUi(); });
         $f("nrSkipVerify").on("change", function () { st.skipTouched = true; });
         $f("nrAdvanced").on("click", function (e) { e.preventDefault(); openAdvanced(); });
@@ -146,14 +152,38 @@
         function paint(list) {
             var cur = $m.find("input[name=nrTpl]:checked").val() || "";
             var h = '<label class="nrTpl"><input type="radio" name="nrTpl" value=""' + (cur === "" ? " checked" : "") + '><b>Basic</b><small>Plain proxy with Zoraxy defaults.</small></label>';
+            var ph = "";
             (list || []).forEach(function (t) {
-                h += '<label class="nrTpl"><input type="radio" name="nrTpl" value="' + esc(t.Name) + '"' + (cur === t.Name ? " checked" : "") + '><b>' + esc(t.Name) + '</b><small>' + esc(t.Description || "") + '</small></label>';
+                var one = '<label class="nrTpl"><input type="radio" name="nrTpl" value="' + esc(t.Name) + '"' + (cur === t.Name ? " checked" : "") + '><b>' + esc(t.Name) + '</b><small>' + esc(t.Description || "") + '</small></label>';
+                if (t.Category === "app") { ph += one; } else { h += one; }
             });
             $f("nrTplGrid").html(h);
+            $f("nrPresetGrid").html(ph);
+            $f("nrPresetField").toggle(ph !== "");
+            showPresetDetail();
         }
         if (st.templates) { paint(st.templates); return; }
         paint([]);
         $.get("/api/proxy/templates/list", function (list) { st.templates = list || []; paint(st.templates); });
+    }
+    // "what does this preset set": the same preview the template editor uses, for a new rule with the defaults
+    function showPresetDetail() {
+        var name = $m.find("input[name=nrTpl]:checked").val() || "";
+        var tpl = (st.templates || []).filter(function (x) { return x.Name === name && x.Category === "app"; })[0];
+        var $d = $f("nrPresetDetail").empty();
+        $f("nrPresetPick").text(tpl ? tpl.Name : "").toggle(!!tpl);
+        st.presetSeq = (st.presetSeq || 0) + 1;
+        var mine = st.presetSeq;
+        if (!tpl || !window.ZxPresets) { return; }
+        $d.append($("<p class=\"nrHint\">").text("Checking what the preset sets..."));
+        ZxPresets.preview(tpl, "", function (changes, err) {
+            if (mine !== st.presetSeq) { return; }
+            $d.empty();
+            if (err) { $d.append($("<div class=\"ui negative message\">").text(err)); return; }
+            $d.append($("<p class=\"zxp-note\">").text(tpl.Note || ""));
+            if (tpl.RequiresAuth) { $d.append($("<p class=\"nrHint\">").text("This preset expects a login: choose an authentication provider in the site editor after creating the rule.")); }
+            ZxPresets.renderChanges($d, changes);
+        });
     }
     function loadExisting() {
         var fill = function (list) {
@@ -412,6 +442,8 @@
         if (!keep) {
             $f("nrForm")[0].reset();
             $m.find("input[name=nrTpl]").first().prop("checked", true);
+            showPresetDetail();
+            $("#nrPresetField").prop("open", false);
             $f("nrAccess").val("default");
             $f("nrAgain").prop("checked", false);
             $f("nrTags").val("");

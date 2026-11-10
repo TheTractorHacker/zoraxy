@@ -134,136 +134,6 @@
             table.ptTable tr.ptEmptyRow td{ display:block; }
         }
 
-        /* ---------- proxy rule editor ---------- */
-        /* Custom, non overlaying modal for proxy rule editing */
-        #httprpEditModal{
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 68vw;
-            height: 75vh;
-            background-color: var(--theme_bg_primary);
-            padding: 1.4em;
-            border-radius: .6em;
-            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2), 0px 8px 16px rgba(0, 0, 0, 0.2);
-            z-index: 8;
-            max-width: 840px;
-        }
-
-        #httprpEditModal .rpconfig_content{
-            height: 100%;
-            overflow-y: auto;
-            overflow-x: hidden;
-            padding-right: 0.5em;
-        }
-
-        #httprpEditModal .editor_side_wrapper{
-            position: absolute;
-            top: 0;
-            right: 0;
-            height:100%;
-            width: 100%;
-            background-color: var(--theme_bg_primary);
-        }
-
-        #httprpEditModal .wrapper_frame{
-            width: 100%;
-            border: 1px solid var(--divider_color);
-            border-radius: 0.5em;
-            height: calc(99%);
-        }
-
-        #httprpEditModal .editor_side_wrapper .wrapper_frame{
-            height: calc(100% - 30px);
-        }
-
-        #httprpEditModal .editor_back_button {
-            border: none;
-            background-color: transparent;
-            box-shadow: none;
-            color: var(--text_color);
-            font-size: 2.2em;
-            cursor: pointer;
-            padding-top: 20px;
-        }
-
-        #httprpEditModal .editor_back_button:hover{
-            opacity: 0.5;
-        }
-
-        @media screen and (max-width: 1024px) {
-            #httprpEditModal {
-                width: 85vw;
-            }
-        }
-
-        @media screen and (max-width: 768px) {
-            #httprpEditModal {
-                height: 80vh;
-                border-radius: 0;
-                overflow-y: scroll;
-                overflow-x: hidden;
-                width: 100%;
-            }
-
-            /* Override the ui grid */
-            #httprpEditModalSideMenu{
-                width: 16% !important;
-            }
-
-            #httprpEditModalContentWindow{
-                height: 100% !important;
-                width: 84% !important;
-            }
-
-            #httprpEditModal{
-                padding-left: 0;
-                padding-right: 0;
-            }
-
-            .editorSideMenuText{
-                display:none;
-            }
-
-            .hrpedit_menu_item{
-                height: 2.4em;
-            }
-            
-            .httpProxyEditClosePC{
-                display:none !important;
-            }
-            .httpProxyEditCloseMobile{
-                display:block !important;
-                position: absolute;
-                left: 1.25em !important;
-                bottom: 1em;
-            }
-        }
-
-        @media screen and (min-width: 769px) {
-            .httpProxyEditClosePC{
-                display:block !important;
-            }
-            .httpProxyEditCloseMobile{
-                display:none !important;
-            }
-        }
-
-        #httprpEditDarkenLayer {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            z-index: 7;
-            backdrop-filter: blur(3px);
-        }
-
-        #httprpEditModalWrapper {
-            display: none; /* Hidden by default */
-        }
     </style>
     <div class="ptHead">
         <div>
@@ -346,61 +216,52 @@
     </div>
 </div>
 
-<!-- Modal for editing a HTTP Proxy Rule -->
+<!-- Modal for editing a HTTP Proxy Rule. Layout: docs/ux/site-editor.md. Logic: script/siteeditor.js -->
 <div id="httprpEditModalWrapper">
-    <div id="httprpEditModal" editing-host="">
-        <div class="ui grid" style="height:100%;">
-            <div id="httprpEditModalSideMenu" class="four wide column">
-                <div class="ui secondary fluid vertical menu">
-                    <a class="active item hrpedit_menu_item" cfgpage="downstream">
-                        <i class="home icon"></i> <span class="editorSideMenuText">Host</span>
-                    </a>
-                    <a class="item hrpedit_menu_item" cfgpage="upstream">
-                        <i class="server icon"></i> <span class="editorSideMenuText">Destinations</span>
-                    </a>
-                    <a class="item hrpedit_menu_item" cfgpage="vdirs">
-                        <i class="angle folder icon"></i> <span class="editorSideMenuText">Virtual Directory</span>
-                    </a>
-                     <a class="item hrpedit_menu_item" cfgpage="websocket">
-                        <i class="exchange icon"></i> <span class="editorSideMenuText">WebSocket</span>
-                    </a>
-                    <a class="item hrpedit_menu_item" cfgpage="alias">
-                        <i class="at icon"></i> <span class="editorSideMenuText">Alias</span>
-                    </a>
-                    <a class="item hrpedit_menu_item" cfgpage="ssl">
-                        <i class="lock icon"></i> <span class="editorSideMenuText">TLS / SSL</span>
-                    </a>
-                    <a class="item hrpedit_menu_item" cfgpage="headers">
-                        <i class="heading icon"></i> <span class="editorSideMenuText">Headers</span>
-                    </a>
-                    <a class="item hrpedit_menu_item" cfgpage="accessrule">
-                        <i class="star icon"></i> <span class="editorSideMenuText">Access Rules</span>
-                    </a>
-                    <a class="item hrpedit_menu_item" cfgpage="security">
-                        <i class="key icon"></i> <span class="editorSideMenuText">Security</span>
-                    </a>
-                    <a class="item hrpedit_menu_item" cfgpage="waf">
-                        <i class="shield alternate icon"></i> <span class="editorSideMenuText">WAF</span>
-                    </a>
-                    <a class="item hrpedit_menu_item" cfgpage="tags">
-                        <i class="tags icon"></i> <span class="editorSideMenuText">Tags</span>
-                    </a>
-                </div>
-
-                <button class="ui basic fluid button httpProxyEditClosePC" onclick="closeHttpRuleEditor();">Close</button>
-                <button class="ui basic icon circular button httpProxyEditCloseMobile"  onclick="closeHttpRuleEditor();"><i class="ui times icon"></i></button>
+    <div id="httprpEditModal" editing-host="" role="dialog" aria-modal="true" aria-labelledby="hrpTitle" data-mode="easy">
+        <header class="hrp-head">
+            <div class="hrp-head__main">
+                <h2 id="hrpTitle" class="hrp-title" tabindex="-1">Edit site <span class="hrp-title__host" id="hrpTitleHost"></span></h2>
             </div>
-            <div id="httprpEditModalContentWindow" class="twelve wide column" style="height: 100%">
-                <div style="height:100%;">
-                    <!-- Host -->
-                    <div class="rpconfig_content" rpcfg="downstream">
-                        <div class="ui segment">
-                            <h3>
+            <div class="hrp-head__tools">
+                <div class="zx-segmented" id="hrpMode" aria-label="Editor mode">
+                    <button type="button" class="zx-segmented__item" data-value="easy" aria-checked="true">Easy</button>
+                    <button type="button" class="zx-segmented__item" data-value="advanced" aria-checked="false">Advanced</button>
+                </div>
+                <button type="button" class="zx-btn zx-btn--secondary zx-btn--sm" id="hrpPresetBtn"><i class="magic icon"></i> Apply preset</button>
+                <button type="button" class="zx-btn zx-btn--secondary zx-btn--sm httpProxyEditClosePC" onclick="closeHttpRuleEditor();">Close</button>
+                <button type="button" class="zx-btn zx-btn--secondary zx-btn--icon httpProxyEditCloseMobile" aria-label="Close" onclick="closeHttpRuleEditor();"><i class="times icon"></i></button>
+            </div>
+        </header>
+        <div class="hrp-body">
+            <div class="hrp-nav" id="hrpNav" role="tablist" aria-label="Site settings sections" aria-orientation="vertical">
+                <button type="button" role="tab" class="hrp-nav__item hrpedit_menu_item active" cfgpage="general" id="hrpTab-general" aria-controls="hrpSec-general" aria-selected="true"><i class="home icon"></i><span class="editorSideMenuText">General</span></button>
+                <button type="button" role="tab" class="hrp-nav__item hrpedit_menu_item" cfgpage="routing" id="hrpTab-routing" aria-controls="hrpSec-routing" aria-selected="false" tabindex="-1"><i class="exchange icon"></i><span class="editorSideMenuText">Routing</span></button>
+                <button type="button" role="tab" class="hrp-nav__item hrpedit_menu_item" cfgpage="security" id="hrpTab-security" aria-controls="hrpSec-security" aria-selected="false" tabindex="-1"><i class="shield alternate icon"></i><span class="editorSideMenuText">Security</span></button>
+                <button type="button" role="tab" class="hrp-nav__item hrpedit_menu_item" cfgpage="tls" id="hrpTab-tls" aria-controls="hrpSec-tls" aria-selected="false" tabindex="-1"><i class="lock icon"></i><span class="editorSideMenuText">TLS</span></button>
+                <button type="button" role="tab" class="hrp-nav__item hrpedit_menu_item" cfgpage="advanced" id="hrpTab-advanced" aria-controls="hrpSec-advanced" aria-selected="false" tabindex="-1"><i class="cogs icon"></i><span class="editorSideMenuText">Advanced</span></button>
+            </div>
+            <div class="hrp-main" id="httprpEditModalContentWindow">
+                <div class="zx-callout zx-callout--info hrp-advnote" id="hrpAdvNote" role="note" hidden>
+                    <span class="zx-callout__icon"><i class="info circle icon"></i></span>
+                    <div class="zx-callout__body"><span class="zx-callout__title">This rule has advanced settings</span>
+                        <span id="hrpAdvNoteText"></span>
+                        <ul id="hrpAdvNoteList" class="hrp-advnote__list"></ul>
+                    </div>
+                </div>
+                <div class="hrp-sections">
+<div class="hrp-sec" id="hrpSec-general" data-hrp-sec="general" role="tabpanel" aria-labelledby="hrpTab-general" tabindex="-1">
+<div class="hrp-sec__head"><h3 class="hrp-sec__title">General</h3><p class="hrp-sec__desc">The site and where it points.</p></div>
+<section class="zx-card hrp-card" data-hrp-card="host" rpcfg="downstream" data-easy aria-labelledby="hrpc-host">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-host">Hostname</h3></div>
+<p class="zx-card__desc">The address visitors type. Rename it here; aliases are other names for the same site.</p>
+<div class="zx-card__body">
+                            <div class="hrp-hostline">
                                 <button class="ui right floated small icon circular basic button downstream_primary_hostname_edit_btn">
                                     <i class="ui edit icon"></i>
                                 </button>
                                 <span class="downstream_primary_hostname"></span>
-                            </h3>
+                            </div>
                             <div class="ui action small fluid input downstream_primary_hostname_edit_input" style="margin-bottom: 0.4em;">
                                 <input type="text" placeholder="new.example.com">
                                 <button class="ui green basic icon button saveDownstreamHostnameBtn">
@@ -413,73 +274,33 @@
                             <div class="downstream_alias_hostname">
 
                             </div>
-                            <div class="ui divider"></div>
-                            <div class="downstream_action_list">
-                                <div class="ui checkbox" style="margin-top: 0.4em;">
-                                    <input type="checkbox" class="BypassGlobalTLS">
-                                    <label>Allow plain HTTP access<br>
-                                        <small>Allow inbound connections without TLS/SSL</small></label>
-                                </div>
-                                <br>
-                                <div class="ui basic segment hostAdvancedSettingsWrapper" style="margin: 0.4em 0 0 0; padding: 0;">
-                                    <div class="ui hostDownstreamAdvancedSettings accordion">
-                                        <div class="title" style="color: inherit; padding: 0.4em 0;">
-                                            <i class="dropdown icon"></i>
-                                            Advanced Settings
-                                        </div>
-                                        <div class="content">
-                                            <div class="ui checkbox" style="margin-top: 0.4em;">
-                                                <input type="checkbox" class="EnableConnectSupport">
-                                                <label>Enable HTTP CONNECT tunneling<br>
-                                                    <small>Allow CONNECT method only to this route's configured upstream. Leave disabled unless you specifically need forward-proxy tunneling.</small></label>
-                                            </div>
-                                            <br>
-                                            <div class="ui checkbox" style="margin-top: 0.4em;">
-                                                <input type="checkbox" class="EnableUpgradeForwarding">
-                                                <label>Enable protocol upgrade forwarding<br>
-                                                    <small>Forward non-WebSocket Upgrade requests (e.g. Tailscale / Headscale TS2021) to the upstream as a raw tunnel. WebSocket is handled separately in the WebSocket tab.</small></label>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="ui divider"></div>
-                                <div class="ui checkbox" style="margin-top: 0.4em;">
-                                    <input type="checkbox" class="DisableLogging">
-                                    <label>Disable Requests Logging<br>
-                                        <small>Disable logging for all incoming requests for this hostname</small></label>
-                                </div>
-                                <br>
-                                <div class="ui checkbox" style="margin-top: 0.4em;">
-                                    <input type="checkbox" class="DisableStatisticCollection">
-                                    <label>Disable Statistic Collection<br>
-                                        <small>Disable collecting statistics for this hostname but keep request logging</small></label>
-                                </div>
-                                <br>
-                            </div>
-                            <div class="ui divider"></div>
-                            <b>Alternative Listening Ports</b>
-                            <p style="margin-top: 0.4em;"><small>Define additional ports this proxy rule should listen on (e.g., :8080, 192.168.1.1:8080)</small></p>
-                            <div class="listening_ports_list" style="margin-top:0.4em;">
-                                <!-- Listening ports will be populated here -->
-                            </div>
-                            <div class="ui action small fluid input" style="margin-top: 0.4em;">
-                                <input type="text" class="new_listening_port_input" placeholder=":8080 or 192.168.1.1:8080">
-                                <button class="ui green basic icon button addListeningPortBtn">
-                                    <i class="ui plus icon"></i>
-                                </button>
-                            </div>
-                           
-                        </div>
-                    </div>
-                    <!-- Destinations -->
-                    <div class="rpconfig_content" rpcfg="upstream">
-                        <div class="ui segment">
-                            <b>Enabled Upstreams</b>
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="upstream" rpcfg="upstream" data-easy aria-labelledby="hrpc-upstream">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-upstream">Destinations</h3></div>
+<p class="zx-card__desc">The servers this site forwards to. Add several to share the load.</p>
+<div class="zx-card__body">
                             <div class="upstream_list" style="margin-top: 0.4em;">
 
                             </div>
                             <button class="ui basic compact button editUpstreamButton" style="margin-left: 0.4em; margin-top: 1em;"><i class="grey server icon"></i> Edit Upstreams</button>
-                            <div class="ui divider"></div>
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="lb" rpcfg="upstream" data-hrp-nd="lb" aria-labelledby="hrpc-lb">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-lb">Load balancing</h3></div>
+<p class="zx-card__desc">Applies when there is more than one destination.</p>
+<div class="zx-card__body">
+                            <div class="ui checkbox" style="margin-top: 0.4em;">
+                                <input type="checkbox" class="UseStickySession">
+                                <label>Use Sticky Session<br>
+                                    <small>Enable stick session on load balancing</small></label>
+                            </div>
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="health" rpcfg="upstream" data-hrp-nd="health" aria-labelledby="hrpc-health">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-health">Health check</h3></div>
+<p class="zx-card__desc">Zoraxy checks the destinations and stops sending visitors to one that is down.</p>
+<div class="zx-card__body">
                             <div class="ui checkbox" style="margin-top: 0.4em;">
                                 <input type="checkbox" class="EnableUptimeMonitor">
                                 <label>Monitor Uptime<br>
@@ -491,45 +312,29 @@
                                 <input type="text" class="UptimeMonitorURI" placeholder="/" autocomplete="off">
                             </div>
                             <small style="opacity:0.7;">Path appended to the upstream URL when the uptime monitor performs its check (e.g. <code>/identity</code> for Plex, <code>/healthz</code>). Leave empty to use <code>/</code>.</small>
-                            <br>
-                            <b>Status codes that count as up <span style="opacity:0.6; font-weight:normal;">(optional)</span></b>
-                            <div class="ui small fluid input" style="margin-top: 0.4em;">
-                                <input type="text" class="UptimeHealthyStatus" placeholder="global setting" autocomplete="off">
-                            </div>
-                            <small style="opacity:0.7;">Codes like <code>401</code>, ranges like <code>200-399</code>, classes like <code>2xx</code> or <code>any</code>, comma separated. Leave empty to use the global setting on the Uptime Monitor page.</small>
-                            <br>
-                            <div class="ui checkbox" style="margin-top: 0.4em;">
-                                <input type="checkbox" class="UseStickySession">
-                                <label>Use Sticky Session<br>
-                                    <small>Enable stick session on load balancing</small></label>
-                            </div>
-                            
-                            <!-- Compatibility Settings -->
-                            <div class="ui divider"></div>
-                            <h4 style="margin-top: 0px;">Compatibility</h4>
-                            <div class="ui checkbox" style="margin-top: 0.4em;">
-                                <input type="checkbox" class="DisableChunkedTransferEncoding">
-                                <label>Disable Chunked Transfer Encoding<br>
-                                    <small>Enable this option if your upstream uses a legacy HTTP server implementation (e.g. Proxmox / opencloud)</small></label>
-                            </div>
-                            <br>
-                            <div class="ui checkbox" style="margin-top: 0.4em;">
-                                <input type="checkbox" class="ForceHTTP11">
-                                <label>Force HTTP/1.1<br>
-                                    <small>Force the proxy to use HTTP/1.1 for upstream connections, disabling HTTP/2. This does not turn off connection reuse; use "Disable connection reuse" in the upstream settings for that.</small></label>
-                            </div>
-                            <br>
-                            <div class="ui checkbox" style="margin-top: 0.4em;">
-                                <input type="checkbox" class="SanitiseClientIPHeaders">
-                                <label>Sanitise client IP headers<br>
-                                    <small>Drop X-Forwarded-For, X-Real-IP, Forwarded, CF-Connecting-IP, True-Client-IP... sent by clients that are not in the Trusted Proxy list, so the upstream only sees your real client address and visitors cannot spoof it. Leave off if this host sits behind a CDN or proxy that is not listed as a trusted proxy.</small></label>
-                            </div>
-                            
-                        </div>
-                    </div>
-                    <!-- WebSocket-->
-                    <div class="rpconfig_content" rpcfg="websocket">
-                        <div class="ui segment">
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="alias" rpcfg="alias" data-hrp-nd="alias" aria-labelledby="hrpc-alias">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-alias">Aliases</h3></div>
+<p class="zx-card__desc">Extra host names that open this same site. This editor saves by itself.</p>
+<div class="zx-card__body">
+<iframe src="" class="wrapper_frame" style="height:22em" title="Aliases"></iframe>
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="tags" rpcfg="tags" data-hrp-nd="tags" aria-labelledby="hrpc-tags">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-tags">Tags</h3></div>
+<p class="zx-card__desc">Labels to group and filter sites. This editor saves by itself.</p>
+<div class="zx-card__body">
+<iframe src="" class="wrapper_frame" style="height:18em" title="Tags"></iframe>
+</div>
+</section>
+</div>
+<div class="hrp-sec" id="hrpSec-routing" data-hrp-sec="routing" role="tabpanel" aria-labelledby="hrpTab-routing" tabindex="-1">
+<div class="hrp-sec__head"><h3 class="hrp-sec__title">Routing</h3><p class="hrp-sec__desc">How requests are sent on.</p></div>
+<section class="zx-card hrp-card" data-hrp-card="websocket" rpcfg="websocket" data-easy aria-labelledby="hrpc-websocket">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-websocket">WebSocket</h3></div>
+<p class="zx-card__desc">Live connections (chat, dashboards, remote desktops) are forwarded automatically. Turn this off only to refuse them.</p>
+<div class="zx-card__body">
                             <div class="ui visible message">
                                 <p><i class="exchange icon"></i> WebSocket connections are detected and forwarded automatically in Zoraxy, but you can optionally disable it.</p>
                             </div>
@@ -538,7 +343,12 @@
                                 <label>Enable WebSocket<br>
                                     <small>Allow WebSocket upgrade requests to be proxied to this endpoint</small></label>
                             </div>
-                            <br><br>
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="wsopts" rpcfg="websocket" data-hrp-nd="wsopts" aria-labelledby="hrpc-wsopts">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-wsopts">WebSocket timing</h3></div>
+<p class="zx-card__desc">How long an idle live connection may stay open.</p>
+<div class="zx-card__body">
                             <b>Connection Timeout</b>
                             <div class="ui small right labeled fluid input" style="margin-top: 0.8em;">
                                 <input type="number" class="WebsocketTimeout" value="0" min="0">
@@ -551,12 +361,12 @@
                                 <label>Refresh timeout on activity<br>
                                     <small>Reset the WebSocket deadline each time a message is received (idle timeout instead of max lifetime)</small></label>
                             </div>
-                        </div>
-                    </div>
-                    <!-- Virtual Directories-->
-                    <div class="rpconfig_content" rpcfg="vdirs">
-                        <div class="ui segment">
-                            <b>List of Virtual Directories</b>
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="vdirs" rpcfg="vdirs" data-hrp-nd="vdirs" aria-labelledby="hrpc-vdirs">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-vdirs">Path routes (virtual directories)</h3></div>
+<p class="zx-card__desc">Send part of the site (for example /api) to a different server.</p>
+<div class="zx-card__body">
                             <div class="vdir_list" style="margin-top:0.4em;">
 
                             </div>
@@ -564,73 +374,83 @@
                             <button class="ui basic tiny button editVdirBtn" style="margin-left: 0.4em; margin-top: 0.4em;">
                                 <i class="ui yellow folder icon"></i> Edit Virtual Directories
                             </button>
-                        </div>
-                    </div>
-                    <!-- Alias -->
-                    <div class="rpconfig_content" rpcfg="alias">
-                        <iframe src="" class="wrapper_frame">
-
-                        </iframe>
-                    </div>
-                    <!-- TLS / SSL -->
-                    <div class="rpconfig_content" rpcfg="ssl">
-                        <div class="ui segment">
-                            <p>The table below shows which certificate will be served by Zoraxy when a client request the following hostnames.</p>
-                            <div class="ui blue message sni_grey_out_info" style="margin-bottom: 1em; display:none;">
-                                <i class="info circle icon"></i>
-                                Certificate dropdowns are greyed out because SNI is enabled
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="headers" rpcfg="headers" data-hrp-nd="headers" aria-labelledby="hrpc-headers">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-headers">Header rewrite rules</h3></div>
+<p class="zx-card__desc">Add, change or remove request and response headers. This editor saves by itself.</p>
+<div class="zx-card__body">
+<iframe src="" class="wrapper_frame" style="height:34em" title="Header rewrite rules"></iframe>
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="pathrules" data-hrp-nd="ops" aria-labelledby="hrpc-pathrules">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-pathrules">Path rules, error pages and responses</h3></div>
+<p class="zx-card__desc">Rules that apply to part of the site, custom error pages, fixed responses, CORS and bandwidth limits.</p>
+<div class="zx-card__body">
+<div class="hrp-btnrow">
+                            <button class="ui basic compact small button editPathRulesBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="ui teal road icon"></i> Path Rules</button>
+                            <button class="ui basic compact small button editOpsBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="ui orange magic icon"></i> Error Pages, Static Responses, CORS &amp; Bandwidth</button>
+</div>
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="ports" data-hrp-nd="ports" aria-labelledby="hrpc-ports">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-ports">Extra listening ports</h3></div>
+<p class="zx-card__desc">Also answer on these ports, for example :8080 or 192.168.1.1:8080. Added and removed at once.</p>
+<div class="zx-card__body">
+                            <p style="margin-top: 0.4em;"><small>Define additional ports this proxy rule should listen on (e.g., :8080, 192.168.1.1:8080)</small></p>
+                            <div class="listening_ports_list" style="margin-top:0.4em;">
+                                <!-- Listening ports will be populated here -->
                             </div>
-                            <table class="ui celled small compact table sortable Tls_resolve_list">
-                                <thead>
-                                    <tr>
-                                        <th>Hostname</th>
-                                        <th class="no-sort">Resolve to Certificate</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <!-- Rows will be dynamically populated -->
-                                </tbody>
-                            </table>
-                            <div class="ui checkbox" style="margin-top: 0.4em;">
-                                <input type="checkbox" class="Tls_EnableSNI">
-                                <label>Enable SNI<br>
-                                    <small>Resolve Server Name Indication (SNI) and automatically select a certificate</small>
-                                </label>
+                            <div class="ui action small fluid input" style="margin-top: 0.4em;">
+                                <input type="text" class="new_listening_port_input" placeholder=":8080 or 192.168.1.1:8080">
+                                <button class="ui green basic icon button addListeningPortBtn">
+                                    <i class="ui plus icon"></i>
+                                </button>
                             </div>
-                            <div class="ui checkbox" style="margin-top: 0.4em;">
-                                <input type="checkbox" class="Tls_EnableLegacyCertificateMatching">
-                                <label>Enable Legacy Certificate Matching<br>
-                                    <small>Use filename for hostname matching, faster but less accurate</small>
-                                </label>
-                            </div>
-                            <div class="ui disabled checkbox" style="margin-top: 0.4em;">
-                                <input type="checkbox" class="Tls_EnableAutoHTTPS">
-                                <label>Enable Auto HTTPS (WIP)<br>
-                                    <small>Automatically request a certificate for the domain</small>
-                                </label>
-                            </div>
-                            
-                            <br>
-                            <div class="ui divider"></div>
-                            <button class="ui basic small button getCertificateBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="green lock icon"></i> Get Certificate</button>
-                            <button class="ui basic small button getSelfSignCertBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="yellow lock icon"></i> Generate Self-Signed Certificate</button>
-                        </div>
-                    </div>
-                    <!-- Custom Headers -->
-                    <div class="rpconfig_content" rpcfg="headers">
-                        <iframe src="" class="wrapper_frame">
-
-                        </iframe>
-                    </div>
-                    <!-- Access Rule -->
-                    <div class="rpconfig_content" rpcfg="accessrule">
-                        <iframe src="" class="wrapper_frame">
-
-                        </iframe>
-                    </div>
-                    <!-- Security -->
-                    <div class="rpconfig_content" rpcfg="security">
-                        <div class="ui segment">
+                           
+</div>
+</section>
+</div>
+<div class="hrp-sec" id="hrpSec-security" data-hrp-sec="security" role="tabpanel" aria-labelledby="hrpTab-security" tabindex="-1">
+<div class="hrp-sec__head"><h3 class="hrp-sec__title">Security</h3><p class="hrp-sec__desc">Who gets in and what is blocked.</p></div>
+<section class="zx-card hrp-card" data-hrp-card="protection" data-easy data-hrp-easyonly aria-labelledby="hrpc-protection">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-protection">Protection</h3></div>
+<p class="zx-card__desc">A firewall that looks at each request before it reaches your app.</p>
+<div class="zx-card__body">
+<div class="zx-field">
+<label class="zx-field__label" for="hrpProt">Web application firewall</label>
+<select id="hrpProt" class="hrp-select" data-zx-ignore>
+<option value="off">Off</option>
+<option value="detection_only">Detect only</option>
+<option value="block">Block</option>
+<option value="inherit">Follow the global policy</option>
+</select>
+<p class="zx-help" id="hrpProtHelp" role="status"></p>
+</div>
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="accesseasy" data-easy data-hrp-easyonly aria-labelledby="hrpc-accesseasy">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-accesseasy">Access rule</h3></div>
+<p class="zx-card__desc">Who may reach this site: everyone, or only the addresses and countries of an access rule.</p>
+<div class="zx-card__body">
+<div class="zx-field">
+<label class="zx-field__label" for="hrpAccess">Access rule</label>
+<select id="hrpAccess" class="hrp-select" data-hrp-save="access"></select>
+<p class="zx-help">Manage the rules on the Access Rules page.</p>
+</div>
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="accessrule" rpcfg="accessrule" data-hrp-nd="access" aria-labelledby="hrpc-accessrule">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-accessrule">Access rule</h3></div>
+<p class="zx-card__desc">Pick which access rule (allow list, block list, countries) applies to this site. Picking saves at once.</p>
+<div class="zx-card__body">
+<iframe src="" class="wrapper_frame" style="height:24em" title="Access rule"></iframe>
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="auth" rpcfg="security" data-hrp-nd="auth" aria-labelledby="hrpc-auth">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-auth">Authentication</h3></div>
+<p class="zx-card__desc">Ask visitors to log in before they reach the site.</p>
+<div class="zx-card__body">
                             <div class="grouped fields authProviderPicker">
                                 <!-- Auth Providers -->
                                 <label><b>Authentication Provider</b></label>
@@ -691,50 +511,12 @@
                             <button class="ui basic compact small button editBasicAuthCredentialsBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="ui blue user circle icon"></i> Basic Auth Credentials</button>
                             <button class="ui basic compact small button editZorxAuthExceptionsBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="ui purple shield alternate icon"></i> ZorxAuth Exceptions</button>
                             <button class="ui basic compact small button editSsoExceptionsBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="ui orange shield alternate icon"></i> Forward Auth / OAuth2 Exceptions</button>
-                            <div class="ui divider"></div>
-                            <!-- Networking: path rules, mTLS, allowed peers, secondary port TLS (snippet/pathRulesEditor.html, snippet/networkingEditor.html) -->
-                            <label><b>Networking</b></label>
-                            <br>
-                            <button class="ui basic compact small button editPathRulesBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="ui teal road icon"></i> Path Rules</button>
-                            <button class="ui basic compact small button editNetworkingBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="teal address card icon"></i> Client Certificates, Peers &amp; Secondary TLS</button>
-                            <button class="ui basic compact small button editOpsBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="ui orange magic icon"></i> Error Pages, Static Responses, CORS &amp; Bandwidth</button>
-                            <!-- platform-features: Lua script + Sablier buttons (snippet/scriptEditor.html, snippet/sablierEditor.html) -->
-                            <button class="ui basic compact small button editScriptBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="ui purple code icon"></i> Lua Script</button>
-                            <button class="ui basic compact small button editSablierBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="ui blue power off icon"></i> Sablier (scale to zero)</button>
-                            <div class="ui divider"></div>
-                            <!-- Block Common Exploits -->
-                            <label><b>Exploits Prevention</b></label>
-                            <br>
-                            <div class="ui checkbox" style="margin-top: 0.4em;">
-                                <input type="checkbox" class="BlockCommonExploits">
-                                <label>Block Common Exploits<br>
-                                    <small>Detect and block common exploit payloads (SQLi, XSS, path traversal, etc.)</small>
-                                </label>
-                            </div>
-                            <br>
-                            <div class="ui checkbox" style="margin-top: 0.4em;">
-                                <input type="checkbox" class="BlockAICrawlers">
-                                <label>Block AI and Crawlers (Experimental)<br>
-                                    <small>Block known crawlers and large-scale automated agents</small>
-                                </label>
-                            </div>
-                            <br>
-                            <label>Mitigation Action</label>
-                            <div class="ui fluid selection dropdown mitigationActionDropdown" style="margin-top: 0.4em;">
-                                <input type="hidden" value="0" name="mitigationAction">
-                                <i class="dropdown icon"></i>
-                                <div class="default text">Choose action when exploit / crawler detected</div>
-                                <div class="menu">
-                                    <div class="item" data-value="0">404 Not Found</div>
-                                    <div class="item" data-value="1">403 Forbidden</div>
-                                    <div class="item" data-value="2">400 Bad Request</div>
-                                    <div class="item" data-value="3">Drop Connection</div>
-                                    <div class="item" data-value="4">CAPTCHA challenge (blocked page if CAPTCHA is not enabled)</div>
-                                </div>
-                            </div>
-                             <small style="opacity:0.7;">Select how the system should respond when malicious or automated traffic is detected.</small>
-                            <div class="ui divider"></div>
-                            <!-- Rate Limits-->
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="ratelimit" rpcfg="security" data-hrp-nd="ratelimit" aria-labelledby="hrpc-ratelimit">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-ratelimit">Rate limit</h3></div>
+<p class="zx-card__desc">Slow down visitors that send too many requests.</p>
+<div class="zx-card__body">
                             <div class="ui checkbox" style="margin-top: 0.4em;">
                                 <input type="checkbox" class="RequireRateLimit">
                                 <label>Require Rate Limit<br>
@@ -752,8 +534,12 @@
                                     burst (0 = same as rate)
                                 </label>
                             </div>
-                            <div class="ui divider"></div>
-                            <!-- CAPTCHA Gating -->
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="captcha" rpcfg="security" data-hrp-nd="captcha" aria-labelledby="hrpc-captcha">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-captcha">CAPTCHA challenge</h3></div>
+<p class="zx-card__desc">Make visitors prove they are human.</p>
+<div class="zx-card__body">
                             <div class="ui checkbox" style="margin-top: 0.4em;">
                                 <input type="checkbox" class="RequireCaptcha">
                                 <label>Require CAPTCHA Challenge<br>
@@ -972,13 +758,48 @@
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                    <!-- Tags -->
-                    <!-- WAF (Coraza + OWASP Core Rule Set) -->
-                    <div class="rpconfig_content" rpcfg="waf" style="display:none;">
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="exploits" rpcfg="security" data-hrp-nd="exploits" aria-labelledby="hrpc-exploits">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-exploits">Exploit and crawler blocking</h3></div>
+<p class="zx-card__desc">Stop common attack patterns and known bots.</p>
+<div class="zx-card__body">
+                            <div class="ui checkbox" style="margin-top: 0.4em;">
+                                <input type="checkbox" class="BlockCommonExploits">
+                                <label>Block Common Exploits<br>
+                                    <small>Detect and block common exploit payloads (SQLi, XSS, path traversal, etc.)</small>
+                                </label>
+                            </div>
+                            <br>
+                            <div class="ui checkbox" style="margin-top: 0.4em;">
+                                <input type="checkbox" class="BlockAICrawlers">
+                                <label>Block AI and Crawlers (Experimental)<br>
+                                    <small>Block known crawlers and large-scale automated agents</small>
+                                </label>
+                            </div>
+                            <br>
+                            <label>Mitigation Action</label>
+                            <div class="ui fluid selection dropdown mitigationActionDropdown" style="margin-top: 0.4em;">
+                                <input type="hidden" value="0" name="mitigationAction">
+                                <i class="dropdown icon"></i>
+                                <div class="default text">Choose action when exploit / crawler detected</div>
+                                <div class="menu">
+                                    <div class="item" data-value="0">404 Not Found</div>
+                                    <div class="item" data-value="1">403 Forbidden</div>
+                                    <div class="item" data-value="2">400 Bad Request</div>
+                                    <div class="item" data-value="3">Drop Connection</div>
+                                    <div class="item" data-value="4">CAPTCHA challenge (blocked page if CAPTCHA is not enabled)</div>
+                                </div>
+                            </div>
+                             <small style="opacity:0.7;">Select how the system should respond when malicious or automated traffic is detected.</small>
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="waf" rpcfg="waf" data-hrp-nd="waf" aria-labelledby="hrpc-waf">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-waf">Web application firewall (this site)</h3></div>
+<p class="zx-card__desc">Where this site takes its firewall settings from, with the challenge band and exclusions.</p>
+<div class="zx-card__body">
                         <div class="ui segment wafEditor">
-                            <h4><i class="shield alternate icon"></i> Web Application Firewall</h4>
+                            
                             <div class="ui form wafSourceForm" style="margin-bottom:1em;">
                                 <div class="two fields">
                                     <div class="field">
@@ -1086,8 +907,14 @@
                             </div>
                             </div>
                         </div>
-                        <div class="ui segment wafRespEditor">
-                            <h4><i class="user secret icon"></i> Response protection</h4>
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="wafresp" data-hrp-nd="wafresp" aria-labelledby="hrpc-wafresp">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-wafresp">Response protection</h3></div>
+<p class="zx-card__desc">Looks for leaked errors and secrets in what the server sends back. Saved with its own button.</p>
+<div class="zx-card__body">
+                        <div class="ui segment wafRespEditor" data-zx-ignore data-hrp-selfsave>
+                            
                             <p style="opacity:0.7;">Looks for stack traces, database errors, secrets, directory listings and server banners in what this upstream sends back. Each group can follow the global setting (<i>Inherit</i>) or be overridden for this rule.
                                 <b>Block</b> replaces the response with a generic 502 page, but only when the leak is inside the first part of the body (the inspection window); <b>Log only</b> never changes the response. Streams, chunked responses of unknown length, partial content and non-text content are never held back or inspected. Block and Strip need the WAF of this rule in Block mode.</p>
                             <div class="wafRespInfo" style="margin-bottom:0.6em;"></div>
@@ -1096,15 +923,26 @@
                                 <button class="ui basic small green button wafRespSaveBtn" style="margin-top:0.8em;"><i class="save icon"></i> Save response protection</button>
                             </div>
                         </div>
-                        <!-- API protection (limits, allow-list, OpenAPI): script/wafapi.js -->
-                        <div class="ui segment wafApiEditor">
-                            <h4><i class="plug icon"></i> API protection</h4>
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="wafapi" data-hrp-nd="wafapi" aria-labelledby="hrpc-wafapi">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-wafapi">API protection</h3></div>
+<p class="zx-card__desc">Limits and allow-lists for JSON, XML and form requests. Saved with its own button.</p>
+<div class="zx-card__body">
+                        <div class="ui segment wafApiEditor" data-zx-ignore data-hrp-selfsave>
+                            
                             <p style="opacity:0.7;">Structural limits for JSON, XML and form bodies, a method / content type allow-list per path and optional OpenAPI 3 validation. Independent of the WAF source above; violations appear in the events below and on the WAF page.</p>
                             <div class="wafApiMount"></div>
                         </div>
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="wafevents" aria-labelledby="hrpc-wafevents">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-wafevents">Recent firewall events</h3></div>
+<p class="zx-card__desc">What the firewall noticed on this site lately.</p>
+<div class="zx-card__body">
                         <div class="ui segment">
                             <button class="ui right floated basic mini icon button wafRefreshBtn" title="Refresh"><i class="sync icon"></i></button>
-                            <h4><i class="list icon"></i> Recent WAF events</h4>
+                            
                             <small style="opacity:0.7;">Held in memory (last 1000, cleared on restart). The full audit trail is in the <code>zr-waf_*.log</code> files in the log folder.</small>
                             <div style="overflow-x:auto; max-height: 420px; overflow-y:auto; margin-top:0.6em;">
                                 <table class="ui compact very basic small table">
@@ -1113,23 +951,177 @@
                                 </table>
                             </div>
                         </div>
-                    </div>
-                    <div class="rpconfig_content" rpcfg="tags">
-                        <iframe src="" class="wrapper_frame">
-
-                        </iframe>
-                    </div>
+</div>
+</section>
+</div>
+<div class="hrp-sec" id="hrpSec-tls" data-hrp-sec="tls" role="tabpanel" aria-labelledby="hrpTab-tls" tabindex="-1">
+<div class="hrp-sec__head"><h3 class="hrp-sec__title">TLS</h3><p class="hrp-sec__desc">Certificates and encryption.</p></div>
+<section class="zx-card hrp-card" data-hrp-card="certeasy" data-easy data-hrp-easyonly aria-labelledby="hrpc-certeasy">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-certeasy">HTTPS certificate</h3></div>
+<p class="zx-card__desc">The certificate visitors receive for this hostname.</p>
+<div class="zx-card__body">
+<div id="hrpCertStatus" class="hrp-certstatus" role="status" aria-live="polite">Checking the certificate...</div>
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="certs" rpcfg="ssl" data-hrp-nd="tls" aria-labelledby="hrpc-certs">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-certs">Certificate for each hostname</h3></div>
+<p class="zx-card__desc">Which certificate Zoraxy serves when a visitor asks for each of these names.</p>
+<div class="zx-card__body">
+                            <p>The table below shows which certificate will be served by Zoraxy when a client request the following hostnames.</p>
+                            <div class="ui blue message sni_grey_out_info" style="margin-bottom: 1em; display:none;">
+                                <i class="info circle icon"></i>
+                                Certificate dropdowns are greyed out because SNI is enabled
+                            </div>
+                            <div class="hrp-tablewrap" tabindex="0" role="region" aria-label="Certificates by hostname"><table class="ui celled small compact table sortable Tls_resolve_list">
+                                <thead>
+                                    <tr>
+                                        <th>Hostname</th>
+                                        <th class="no-sort">Resolve to Certificate</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Rows will be dynamically populated -->
+                                </tbody>
+                            </table></div>
+<div data-hrp-save="tlsopts">
+                            <div class="ui checkbox" style="margin-top: 0.4em;">
+                                <input type="checkbox" class="Tls_EnableSNI">
+                                <label>Enable SNI<br>
+                                    <small>Resolve Server Name Indication (SNI) and automatically select a certificate</small>
+                                </label>
+                            </div>
+                            <div class="ui checkbox" style="margin-top: 0.4em;">
+                                <input type="checkbox" class="Tls_EnableLegacyCertificateMatching">
+                                <label>Enable Legacy Certificate Matching<br>
+                                    <small>Use filename for hostname matching, faster but less accurate</small>
+                                </label>
+                            </div>
+                            <div class="ui disabled checkbox" style="margin-top: 0.4em;">
+                                <input type="checkbox" class="Tls_EnableAutoHTTPS">
+                                <label>Enable Auto HTTPS (WIP)<br>
+                                    <small>Automatically request a certificate for the domain</small>
+                                </label>
+                            </div>
+</div>
+<div class="hrp-btnrow">
+                            <button class="ui basic small button getCertificateBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="green lock icon"></i> Get Certificate</button>
+                            <button class="ui basic small button getSelfSignCertBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="yellow lock icon"></i> Generate Self-Signed Certificate</button>
+</div>
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="plainhttp" rpcfg="downstream" data-hrp-nd="plainhttp" aria-labelledby="hrpc-plainhttp">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-plainhttp">Plain HTTP</h3></div>
+<p class="zx-card__desc">Normally visitors are sent to HTTPS.</p>
+<div class="zx-card__body">
+                                <div class="ui checkbox" style="margin-top: 0.4em;">
+                                    <input type="checkbox" class="BypassGlobalTLS">
+                                    <label>Allow plain HTTP access<br>
+                                        <small>Allow inbound connections without TLS/SSL</small></label>
+                                </div>
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="clientcerts" data-hrp-nd="net" aria-labelledby="hrpc-clientcerts">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-clientcerts">Client certificates, peers and secondary TLS</h3></div>
+<p class="zx-card__desc">Require visitors to present a certificate, limit which addresses may connect, secure the extra ports.</p>
+<div class="zx-card__body">
+<div class="hrp-btnrow">
+                            <button class="ui basic compact small button editNetworkingBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="teal address card icon"></i> Client Certificates, Peers &amp; Secondary TLS</button>
+</div>
+</div>
+</section>
+</div>
+<div class="hrp-sec" id="hrpSec-advanced" data-hrp-sec="advanced" role="tabpanel" aria-labelledby="hrpTab-advanced" tabindex="-1">
+<div class="hrp-sec__head"><h3 class="hrp-sec__title">Advanced</h3><p class="hrp-sec__desc">Compatibility options and rarely used switches.</p></div>
+<section class="zx-card hrp-card" data-hrp-card="compat" rpcfg="upstream" data-hrp-nd="compat" aria-labelledby="hrpc-compat">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-compat">Compatibility</h3></div>
+<p class="zx-card__desc">Workarounds for old or unusual servers.</p>
+<div class="zx-card__body">
+                            <div class="ui checkbox" style="margin-top: 0.4em;">
+                                <input type="checkbox" class="DisableChunkedTransferEncoding">
+                                <label>Disable Chunked Transfer Encoding<br>
+                                    <small>Enable this option if your upstream uses a legacy HTTP server implementation (e.g. Proxmox / opencloud)</small></label>
+                            </div>
+                            <br>
+                            <div class="ui checkbox" style="margin-top: 0.4em;">
+                                <input type="checkbox" class="ForceHTTP11">
+                                <label>Force HTTP/1.1<br>
+                                    <small>Force the proxy to use HTTP/1.1 for upstream connections, disabling HTTP/2. This does not turn off connection reuse; use "Disable connection reuse" in the upstream settings for that.</small></label>
+                            </div>
+                            <br>
+                            <div class="ui checkbox" style="margin-top: 0.4em;">
+                                <input type="checkbox" class="SanitiseClientIPHeaders">
+                                <label>Sanitise client IP headers<br>
+                                    <small>Drop X-Forwarded-For, X-Real-IP, Forwarded, CF-Connecting-IP, True-Client-IP... sent by clients that are not in the Trusted Proxy list, so the upstream only sees your real client address and visitors cannot spoof it. Leave off if this host sits behind a CDN or proxy that is not listed as a trusted proxy.</small></label>
+                            </div>
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="forwarding" rpcfg="downstream" data-hrp-nd="forwarding" aria-labelledby="hrpc-forwarding">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-forwarding">Tunnels and protocol upgrades</h3></div>
+<p class="zx-card__desc">Only turn these on when an app needs them.</p>
+<div class="zx-card__body">
+                                            <div class="ui checkbox" style="margin-top: 0.4em;">
+                                                <input type="checkbox" class="EnableConnectSupport">
+                                                <label>Enable HTTP CONNECT tunneling<br>
+                                                    <small>Allow CONNECT method only to this route's configured upstream. Leave disabled unless you specifically need forward-proxy tunneling.</small></label>
+                                            </div>
+                                            <div class="ui checkbox" style="margin-top: 0.4em;">
+                                                <input type="checkbox" class="EnableUpgradeForwarding">
+                                                <label>Enable protocol upgrade forwarding<br>
+                                                    <small>Forward non-WebSocket Upgrade requests (e.g. Tailscale / Headscale TS2021) to the upstream as a raw tunnel. WebSocket is handled separately in the WebSocket tab.</small></label>
+                                            </div>
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="uptimeopts" rpcfg="upstream" data-hrp-nd="uptimeopts" aria-labelledby="hrpc-uptimeopts">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-uptimeopts">Uptime monitor options</h3></div>
+<p class="zx-card__desc">What counts as a healthy answer.</p>
+<div class="zx-card__body">
+                            <b>Status codes that count as up <span style="opacity:0.6; font-weight:normal;">(optional)</span></b>
+                            <div class="ui small fluid input" style="margin-top: 0.4em;">
+                                <input type="text" class="UptimeHealthyStatus" placeholder="global setting" autocomplete="off">
+                            </div>
+                            <small style="opacity:0.7;">Codes like <code>401</code>, ranges like <code>200-399</code>, classes like <code>2xx</code> or <code>any</code>, comma separated. Leave empty to use the global setting on the Uptime Monitor page.</small>
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="logging" rpcfg="downstream" data-hrp-nd="logging" aria-labelledby="hrpc-logging">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-logging">Logging and statistics</h3></div>
+<p class="zx-card__desc">These two switches take effect at once.</p>
+<div class="zx-card__body">
+                                <div class="ui checkbox" style="margin-top: 0.4em;">
+                                    <input type="checkbox" class="DisableLogging">
+                                    <label>Disable Requests Logging<br>
+                                        <small>Disable logging for all incoming requests for this hostname</small></label>
+                                </div>
+                                <br>
+                                <div class="ui checkbox" style="margin-top: 0.4em;">
+                                    <input type="checkbox" class="DisableStatisticCollection">
+                                    <label>Disable Statistic Collection<br>
+                                        <small>Disable collecting statistics for this hostname but keep request logging</small></label>
+                                </div>
+</div>
+</section>
+<section class="zx-card hrp-card" data-hrp-card="scripts" data-hrp-nd="scripts" aria-labelledby="hrpc-scripts">
+<div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-scripts">Scripts and scale to zero</h3></div>
+<p class="zx-card__desc">Run a Lua script for requests, or wake the app up on demand.</p>
+<div class="zx-card__body">
+<div class="hrp-btnrow">
+                            <button class="ui basic compact small button editScriptBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="ui purple code icon"></i> Lua Script</button>
+                            <button class="ui basic compact small button editSablierBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="ui blue power off icon"></i> Sablier (scale to zero)</button>
+</div>
+</div>
+</section>
+</div>
                 </div>
-                <!-- Editor Side Wrapper -->
-                <div class="editor_side_wrapper" style="display:none;">
-                    <a class="editor_back_button">
-                        <i class="chevron circle left icon" style="margin-top: 22px;"></i>
-                    </a>
-                    <iframe src="snippet/placeholder.html" class="wrapper_frame">
-
-                    </iframe>
-                </div>
+                <p class="hrp-more" id="hrpMore"><button type="button" class="zx-btn zx-btn--ghost" id="hrpShowAdv"><i class="sliders horizontal icon"></i> Show advanced settings</button></p>
             </div>
+        </div>
+        <!-- Editor Side Wrapper -->
+        <div class="editor_side_wrapper" style="display:none;">
+            <a class="editor_back_button" role="button" tabindex="0" aria-label="Back to the site settings">
+                <i class="chevron circle left icon" style="margin-top: 22px;"></i>
+            </a>
+            <iframe src="snippet/placeholder.html" class="wrapper_frame" title="Details">
+
+            </iframe>
         </div>
     </div>
     <div id="httprpEditDarkenLayer"></div>
@@ -1138,6 +1130,9 @@
 
 <script>
     var httpProxyList = []; //Proxy list of the current node
+
+    // Host names, aliases, upstream addresses, paths and ports are user data: always escape them
+    function hrpEsc(t){ return String(t == null ? "" : t).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]; }); }
 
     $('#httprpEditModal .tabular.menu .item').tab();
     $('.hostDownstreamAdvancedSettings.accordion').accordion();
@@ -1163,7 +1158,7 @@
 
                 let upstreamLink = `${upstream.RequireTLS?"https://":"http://"}${upstream.OriginIpOrDomain}`;
 
-                upstreams += `<a href="${upstreamLink}" target="_blank">${upstream.OriginIpOrDomain} ${tlsIcon}</a><br>`;
+                upstreams += `<a href="${hrpEsc(upstreamLink)}" target="_blank" rel="noopener noreferrer">${hrpEsc(upstream.OriginIpOrDomain)} ${tlsIcon}</a><br>`;
             })
         }
         return upstreams;
@@ -1172,7 +1167,7 @@
     function renderVirtualDirectoryList(subd){
         let vdList = `<div class="ui list">`;
         subd.VirtualDirectories.forEach(vdir => {
-            vdList += `<div class="item">${vdir.MatchingPath} <i class="green angle double right icon"></i> ${vdir.Domain}</div>`;
+            vdList += `<div class="item">${hrpEsc(vdir.MatchingPath)} <i class="green angle double right icon"></i> ${hrpEsc(vdir.Domain)}</div>`;
         });
         vdList += `</div>`
         if (subd.VirtualDirectories.length == 0){
@@ -1191,7 +1186,7 @@
         $("#httpProxyList").find(".editBtn").removeClass("disabled");
     }
 
-    function saveTlsConfigs(uuid){
+    function saveTlsConfigs(uuid, opts){
         let enableSNI = $("#httprpEditModal .Tls_EnableSNI")[0].checked;
         let enableLegacyCertificateMatching = $("#httprpEditModal .Tls_EnableLegacyCertificateMatching")[0].checked;
         let enableAutoHTTPS = $("#httprpEditModal .Tls_EnableAutoHTTPS")[0].checked;
@@ -1200,7 +1195,7 @@
             "DisableLegacyCertificateMatching": !enableLegacyCertificateMatching,
             "EnableAutoHTTPS": enableAutoHTTPS,
         }
-        $.cjax({
+        return $.cjax({
             url: "/api/proxy/setTlsConfig",
             method: "POST",
             data: {
@@ -1210,7 +1205,7 @@
             success: function(data){
                 if (data.error !== undefined){
                     msgbox(data.error, false, 3000);
-                }else{
+                }else if (!(opts && opts.silent)){
                     msgbox("TLS Config updated");
                 }
                 updateTlsResolveList(uuid);
@@ -1238,15 +1233,15 @@
                 // Add primary domain entry
                 resolveList.append(`
                     <tr>
-                        <td>${primaryDomain}</td>
-                        <td class="certificateDropdown" domain="${primaryDomain}">${certMap[primaryDomain] || "Fallback Certificate"}</td>
+                        <td>${hrpEsc(primaryDomain)}</td>
+                        <td class="certificateDropdown" domain="${hrpEsc(primaryDomain)}">${hrpEsc(certMap[primaryDomain] || "Fallback Certificate")}</td>
                     </tr>
                 `);
                 aliasDomains.forEach(alias => {
                     resolveList.append(`
                         <tr>
-                            <td>${alias}</td>
-                            <td class="certificateDropdown" domain="${alias}">${certMap[alias] || "Fallback Certificate"}</td>
+                            <td>${hrpEsc(alias)}</td>
+                            <td class="certificateDropdown" domain="${hrpEsc(alias)}">${hrpEsc(certMap[alias] || "Fallback Certificate")}</td>
                         </tr>
                     `);
                 });
@@ -1263,29 +1258,19 @@
                         }
                     });
 
+                    editor.find(".certificateDropdown").each(function(){
+                        // one tracked field per hostname (the dropdowns all use the name "certificate")
+                        $(this).find("input[name='certificate']").attr("name", "cert:" + $(this).attr("domain"));
+                    });
                     editor.find(".certificateDropdown .ui.dropdown").dropdown({
                         onChange: function(value, text, $selectedItem) {
                             console.log("Selected certificate for domain:", $(this).parent().attr("domain"), "Value:", value);
                             let domain = $(this).parent().attr("domain");
                             let newCertificateName = value;
-                            // populating the dropdown fires onChange too; only save a real change
+                            // populating the dropdown fires onChange too; the pick itself is saved with the
+                            // Save bar (HrpEditor.saveCerts reads data-domain and the hidden input)
                             if (!value || certMap[domain] === value) { return; }
-                            certMap[domain] = value;
-                            $.cjax({
-                                url: "/api/cert/setPreferredCertificate",
-                                method: "POST",
-                                data: {
-                                    "domain": domain,
-                                    "certname": newCertificateName
-                                },
-                                success: function(data) {
-                                    if (data.error !== undefined) {
-                                        msgbox(data.error, false, 3000);
-                                    } else {
-                                        msgbox("Preferred Certificate updated");
-                                    }
-                                }
-                            });
+                            if (window.HrpEditor) { HrpEditor.edited(this); }
                         }
                     });
                     
@@ -1295,6 +1280,7 @@
                     }else{
                         editor.find(".sni_grey_out_info").hide();
                     }
+                    if (window.HrpEditor) { HrpEditor.settled(); }
                 });
             }
         });
@@ -1432,7 +1418,7 @@
             updateCaptchaProviderSections(editor);
         });
         editor.find(".captchaCustomise [data-cp]").off("change.cp").on("change.cp", function(){
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
         editor.find(".cpAccent").off("input.cp").on("input.cp", function(){
             editor.find("[data-cp='captchaAccent']").val($(this).val()).trigger("change");
@@ -1444,7 +1430,7 @@
             editor.find("[data-cp='captchaAccent'], [data-cp='captchaBackground']").val("");
             editor.find(".cpAccent").val("#2c7cb0");
             editor.find(".cpBackground").val("#ffffff");
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
         editor.find(".cpLogo").off("input.cp").on("input.cp", function(){ updateCaptchaLogoInfo(editor); });
         editor.find(".cpLogoClear").off("click.cp").on("click.cp", function(){
@@ -1477,7 +1463,14 @@
         });
     }
 
-    function saveProxyInlineEdit(uuid){
+    // A setting changed. Edits are collected by the Save bar (script/siteeditor.js); only the inherently live
+    // switches (data-hrp-live) save at once. Without the editor script the old behaviour (save now) stays.
+    function hrpEdited(uuid, el){
+        if (window.HrpEditor) { HrpEditor.edited(el); } else { saveProxyInlineEdit(uuid); }
+    }
+
+    // Saves the whole rule form. Returns the request so the Save bar can wait for it.
+    function saveProxyInlineEdit(uuid, opts){
         let editor = $("#httprpEditModal");
         
         let epttype = "host";
@@ -1567,9 +1560,7 @@
                 "tags": tags,
             };
         Object.assign(cfgPayload, captchaPageFields);
-        console.log("updating proxy config:", cfgPayload);
-
-        $.cjax({
+        return $.cjax({
             url: "/api/proxy/edit",
             method: "POST",
             data: cfgPayload,
@@ -1577,11 +1568,11 @@
                 if (data.error !== undefined){
                     msgbox(data.error, false, 6000);
                 }else{
-                    msgbox("Proxy endpoint updated");
+                    if (!(opts && opts.silent)) { msgbox("Proxy endpoint updated"); }
                     listProxyEndpoints();
                 }
             }
-        })
+        });
     }
 
     //Generic functions for delete rp endpoints 
@@ -1714,8 +1705,8 @@
                     <i class="angle double right blue icon"></i>
                     <div class="content">
                         <div class="description">
-                            ${port}
-                            <button class="ui mini red basic icon button removeListeningPortBtn" style="float: right; margin-left: 0.5em;" data-port="${port}">
+                            ${hrpEsc(port)}
+                            <button class="ui mini red basic icon button removeListeningPortBtn" style="float: right; margin-left: 0.5em;" data-port="${hrpEsc(port)}" aria-label="Remove port">
                                 <i class="trash icon"></i>
                             </button>
                         </div>
@@ -1799,10 +1790,12 @@
     });
 
     function closeHttpRuleEditor(){
+        if (window.HrpEditor) { HrpEditor.closing(); }
         // Fixing a bug in semantic ui that when an element fade in/out on top of checkbox
         // the checkbox suddently flash on top of the fading element
         $(".ui.toggle.tiny.fitted.checkbox").css("z-index", 0);
         $("#httprpEditModalWrapper").fadeOut("fast", function(){
+            if (window.HrpEditor) { HrpEditor.closed(); }
             $(".ui.toggle.tiny.fitted.checkbox").css("z-index", "auto");
             $("body").css("overflow", "auto");
             exitProxyInlineEdit();
@@ -1837,7 +1830,7 @@
                 let dropdown = $('<div class="ui fluid selection dropdown"></div>');
                 let menu = $('<div class="menu"></div>');
                 (data || []).forEach(cert => {
-                    menu.append(`<div class="item" data-value="${cert}">${cert}</div>`);
+                    menu.append(`<div class="item" data-value="${hrpEsc(cert)}">${hrpEsc(cert)}</div>`);
                 });
                 // Add a hidden input to store the selected certificate
                 dropdown.append('<input type="hidden" name="certificate">');
@@ -1859,11 +1852,8 @@
         //Hide all previously opened editor side-frame wrapper
         hideEditorSideWrapper();
 
-        //Show the first rpconfig
-        $("#httprpEditModal .rpconfig_content").hide();
-        $("#httprpEditModal .rpconfig_content[rpcfg='downstream']").show();
-        $("#httprpEditModal .hrpedit_menu_item.active").removeClass("active");
-        $("#httprpEditModal .hrpedit_menu_item[cfgpage='downstream']").addClass("active");
+        //Open on the first section (script/siteeditor.js)
+        if (window.HrpEditor) { HrpEditor.show("general"); }
         $("body").css("overflow", "hidden");
         // Fixing a bug in semantic ui that when an element fade in/out on top of checkbox
         // the checkbox suddently flash on top of the fading element
@@ -1872,12 +1862,14 @@
         try { if (window.parent && window.parent.resetEditorDirty) { window.parent.resetEditorDirty(); } if (window.resetEditorDirty) { window.resetEditorDirty(); } } catch (e) {}
         $("#httprpEditModalWrapper").fadeIn("fast", function(){
             $(".ui.toggle.tiny.fitted.checkbox").css("z-index", "auto");
+            if (window.HrpEditor) { HrpEditor.opened(subd); }
         });
     }
 
     // This function populate the bind all the events required for the proxy editor
     // pass a copy of the data structure of subd to prevent modification to the original one
     function populateAndBindEventsToHTTPProxyEditor(subd){
+        if (window.HrpEditor) { HrpEditor.populating(subd); } //keeps unsaved edits when the form is filled again
         //Assign the editing host to DOM element
         let uuid = subd.RootOrMatchingDomain; //Each matching hostname as uuid
         $("#httprpEditModal").attr("editing-host", encodeURIComponent(uuid));
@@ -1887,51 +1879,51 @@
         
         //Check if the domain is wildcard domain, if yes do not render as a link
         if (subd.RootOrMatchingDomain.indexOf("*") > -1){
-            editor.find(".downstream_primary_hostname").html(subd.RootOrMatchingDomain);
+            editor.find(".downstream_primary_hostname").text(subd.RootOrMatchingDomain);
         }else{
-            editor.find(".downstream_primary_hostname").html(`<a href="//${subd.RootOrMatchingDomain}" target="_blank">${subd.RootOrMatchingDomain}</a>`);
+            editor.find(".downstream_primary_hostname").empty().append($("<a>").attr({"href": "//" + subd.RootOrMatchingDomain, "target": "_blank", "rel": "noopener noreferrer"}).text(subd.RootOrMatchingDomain));
         }
         editor.find(".BypassGlobalTLS").off('change');
         editor.find(".BypassGlobalTLS").prop("checked", subd.BypassGlobalTLS);
         editor.find(".BypassGlobalTLS").on("change", function() {
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
 
         editor.find(".EnableConnectSupport").off('change');
         editor.find(".EnableConnectSupport").prop("checked", subd.EnableConnectSupport || false);
         editor.find(".EnableConnectSupport").on("change", function() {
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
 
         editor.find(".EnableUpgradeForwarding").off('change');
         editor.find(".EnableUpgradeForwarding").prop("checked", subd.EnableUpgradeForwarding || false);
         editor.find(".EnableUpgradeForwarding").on("change", function() {
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
 
         editor.find(".DisableLogging").off('change');
         editor.find(".DisableLogging").prop("checked", subd.DisableLogging);
         editor.find(".DisableLogging").on("change", function() {
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
 
         editor.find(".DisableStatisticCollection").off('change');
         editor.find(".DisableStatisticCollection").prop("checked", subd.DisableStatisticCollection);
         editor.find(".DisableStatisticCollection").on("change", function() {
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
 
         // Exploit Detection
         editor.find(".BlockCommonExploits").off('change');
         editor.find(".BlockCommonExploits").prop("checked", subd.BlockCommonExploits || false);
         editor.find(".BlockCommonExploits").on("change", function() {
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
 
         editor.find(".BlockAICrawlers").off('change');
         editor.find(".BlockAICrawlers").prop("checked", subd.BlockAICrawlers || false);
         editor.find(".BlockAICrawlers").on("change", function() {
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
 
         editor.find(".mitigationActionDropdown").off('change');
@@ -1939,7 +1931,7 @@
         setTimeout(function(){
               editor.find(".mitigationActionDropdown").dropdown({
                 onChange: function(value) {
-                    saveProxyInlineEdit(uuid);
+                    hrpEdited(uuid, this);
                 }
             });
         }, 100);
@@ -1995,10 +1987,10 @@
         (subd.MatchingDomainAlias || []).forEach(alias => {
             if (alias.indexOf("*") > -1){
                 //Wildcard alias
-                aliasHTML += `<span class="ui tiny label">${alias}</span> `;
+                aliasHTML += `<span class="ui tiny label">${hrpEsc(alias)}</span> `;
             }else{
                 //Normal alias
-                aliasHTML += `<span class="ui tiny label"><a href="//${alias}" target="_blank">${alias}</a></span> `;
+                aliasHTML += `<span class="ui tiny label"><a href="//${hrpEsc(alias)}" target="_blank" rel="noopener noreferrer">${hrpEsc(alias)}</a></span> `;
             }
             
         });
@@ -2057,58 +2049,58 @@
             if (!isUptimeMonitorEnabled) {
                 editor.find(".DisableAutoFallback").prop("checked", false);
             }
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
 
         editor.find(".UptimeMonitorURI").off("change");
         editor.find(".UptimeMonitorURI").val(subd.UptimeMonitorURI || "");
         editor.find(".UptimeMonitorURI").prop("disabled", subd.DisableUptimeMonitor);
         editor.find(".UptimeMonitorURI").on("change", function() {
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
 
         editor.find(".UptimeHealthyStatus").off("change");
         editor.find(".UptimeHealthyStatus").val(subd.UptimeHealthyStatus || "");
         editor.find(".UptimeHealthyStatus").prop("disabled", subd.DisableUptimeMonitor);
         editor.find(".UptimeHealthyStatus").on("change", function() {
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
 
         editor.find(".DisableAutoFallback").off("change");
         editor.find(".DisableAutoFallback").prop("checked", subd.DisableAutoFallback);
         editor.find(".DisableAutoFallback").prop("disabled", subd.DisableUptimeMonitor);
         editor.find(".DisableAutoFallback").on("change", function() {
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
 
         editor.find(".UseStickySession").off("change");
         editor.find(".UseStickySession").prop("checked", subd.UseStickySession);
         editor.find(".UseStickySession").on("change", function() {
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
 
         editor.find(".DisableChunkedTransferEncoding").off("change");
         editor.find(".DisableChunkedTransferEncoding").prop("checked", subd.DisableChunkedTransferEncoding);
         editor.find(".DisableChunkedTransferEncoding").on("change", function() {
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
 
         editor.find(".ForceHTTP11").off("change");
         editor.find(".ForceHTTP11").prop("checked", subd.ForceHTTP11);
         editor.find(".ForceHTTP11").on("change", function() {
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
 
         editor.find(".SanitiseClientIPHeaders").off("change");
         editor.find(".SanitiseClientIPHeaders").prop("checked", subd.SanitiseClientIPHeaders);
         editor.find(".SanitiseClientIPHeaders").on("change", function() {
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
 
         editor.find(".EnableWebSocket").off("change");
         editor.find(".EnableWebSocket").prop("checked", !subd.DisableWebSocket);
         editor.find(".EnableWebSocket").on("change", function() {
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
 
         editor.find(".WebsocketTimeout").off("change");
@@ -2118,13 +2110,13 @@
             if (isNaN(v) || v < 0) {
                 $(this).val(0);
             }
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
 
         editor.find(".EnableTimeoutRefreshOnActivity").off("change");
         editor.find(".EnableTimeoutRefreshOnActivity").prop("checked", subd.EnableTimeoutRefreshOnActivity);
         editor.find(".EnableTimeoutRefreshOnActivity").on("change", function() {
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
 
         /* ------------ Vdirs ------------ */
@@ -2142,7 +2134,7 @@
                 ep: uuid
             }));
             let frameURL = "snippet/aliasEditor.html?t=" + Date.now() + "#" + payload;
-            editor.find(".rpconfig_content[rpcfg='alias'] .wrapper_frame").attr('src', frameURL);
+            editor.find("[data-hrp-card='alias'] .wrapper_frame").attr('src', frameURL);
         })();
 
         /* ------------ Headers ------------ */ 
@@ -2152,7 +2144,7 @@
                 ep: uuid
             }));
             let frameURL = "snippet/customHeaders.html?t=" + Date.now() + "#" + payload;
-            editor.find(".rpconfig_content[rpcfg='headers'] .wrapper_frame").attr('src', frameURL);
+            editor.find("[data-hrp-card='headers'] .wrapper_frame").attr('src', frameURL);
         })();
 
         /* ------------ Access Rule ------------ */
@@ -2162,7 +2154,7 @@
                 ep: uuid
             }));
             let frameURL = "snippet/hostAccessEditor.html?t=" + Date.now() + "#" + payload;
-            editor.find(".rpconfig_content[rpcfg='accessrule'] .wrapper_frame").attr('src', frameURL);
+            editor.find("[data-hrp-card='accessrule'] .wrapper_frame").attr('src', frameURL);
         })();
 
         /* ------------ Security ------------ */
@@ -2188,7 +2180,7 @@
 
         editor.find(".authProviderPicker input[type='radio']").off("change").on("change", function() {
             editor.find(".oauth2RuleSettings").toggle($(this).val() == "3" && $(this).is(":checked"));
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
 
         // OAuth2 provider selection and per rule allow-lists
@@ -2213,7 +2205,7 @@
             editor.find(".oauth2RuleEmailDomains").val(ap.OAuth2AllowedEmailDomains || "");
             editor.find(".oauth2RuleSettings").toggle(ap.AuthMethod == 0x3);
             editor.find(".oauth2ProviderSelect, .oauth2RuleGroups, .oauth2RuleClaims, .oauth2RuleEmails, .oauth2RuleEmailDomains").off("change").on("change", function(){
-                saveProxyInlineEdit(uuid);
+                hrpEdited(uuid, this);
             });
         })();
 
@@ -2278,7 +2270,7 @@
                 return;
             }
             subd.RateLimit = parsed;
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         }
 
         editor.find(".RequireRateLimit").on("change", function() {
@@ -2292,7 +2284,7 @@
                 subd.RateLimit = 100; // Set default rate limit to 100 if uninitialized
                 editor.find(".RateLimit").val(100);
             }
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
         editor.find(".RateLimit").val(subd.RateLimit).on("change", rateLimitChangeEvent);
 
@@ -2306,7 +2298,7 @@
                 return;
             }
             subd.RateLimitBurst = parsed;
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
         if (subd.RequireRateLimit) {
             editor.find(".RateLimitBurst").parent().removeClass("disabled");
@@ -2373,7 +2365,7 @@
                 } else { // Cloudflare Turnstile
                     editor.find(".googleRecaptchaSettings").hide();
                 }
-                saveProxyInlineEdit(uuid);
+                hrpEdited(uuid, this);
             }
         });
 
@@ -2385,7 +2377,7 @@
                 } else {
                     editor.find(".recaptchaV3Settings").hide();
                 }
-                saveProxyInlineEdit(uuid);
+                hrpEdited(uuid, this);
             }
         });
 
@@ -2400,15 +2392,15 @@
             } else {
                 editor.find(".captchaSettings").hide();
             }
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
 
         // Bind CAPTCHA input change events
         editor.find(".CaptchaSiteKey").off("change").on("change", function() {
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
         editor.find(".CaptchaSecretKey").off("change").on("change", function() {
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
         function showCaptchaSessionHuman() {
             let sec = parseInt(editor.find(".CaptchaSessionDuration").val(), 10);
@@ -2425,13 +2417,13 @@
         editor.find(".CaptchaSessionDuration").off("input").on("input", showCaptchaSessionHuman);
         editor.find(".CaptchaSessionDuration").off("change").on("change", function() {
             showCaptchaSessionHuman();
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
         editor.find(".CaptchaPathPrefixes").off("change").on("change", function() {
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
         editor.find(".RecaptchaScore").off("change").on("change", function() {
-            saveProxyInlineEdit(uuid);
+            hrpEdited(uuid, this);
         });
 
         /* ------------ TLS ------------ */
@@ -2448,13 +2440,13 @@
         }
       
         editor.find(".Tls_EnableSNI").off("change").on("change", function() {
-            saveTlsConfigs(uuid);
+            hrpEdited(uuid, this);
         });
         editor.find(".Tls_EnableLegacyCertificateMatching").off("change").on("change", function() {
-            saveTlsConfigs(uuid);
+            hrpEdited(uuid, this);
         });
         editor.find(".Tls_EnableAutoHTTPS").off("change").on("change", function() {
-            saveTlsConfigs(uuid);
+            hrpEdited(uuid, this);
         });
 
         /* Quick access to get certificate for the current host */
@@ -2503,7 +2495,7 @@
                 ep: uuid
             }));
             let frameURL = "snippet/tagEditor.html?t=" + Date.now() + "#" + payload;
-            editor.find(".rpconfig_content[rpcfg='tags'] .wrapper_frame").attr('src', frameURL);
+            editor.find("[data-hrp-card='tags'] .wrapper_frame").attr('src', frameURL);
         })();
 
 
@@ -2511,7 +2503,7 @@
         initWAFEditor(editor, subd);
         initWAFApiEditor(editor, subd);
 
-        console.log(subd);
+        if (window.HrpEditor) { HrpEditor.populated(subd); }
     }
 
     /* WAF editor: settings + recent events with one-click exclusions */
@@ -2526,7 +2518,7 @@
         let curSource = subd.WAFSource || (subd.WAF ? "custom" : "inherit");
         let srcSel = box.find(".wafSource"), profSel = box.find(".wafProfileSel");
         function refreshSourceUI(){
-            let v = srcSel.val();
+            let v = hrpSel.val(srcSel);
             box.find(".wafProfileField").toggle(v == "profile");
             box.find(".wafCustomOnly").toggle(v == "custom");
             box.find(".wafSourceSaveBtn").toggle(v != "custom");
@@ -2540,28 +2532,31 @@
                 custom: "This rule keeps its own complete WAF configuration, independent of the global policy."
             }[v] || "");
         }
-        srcSel.val(curSource);
+        hrpSel.set(srcSel, curSource);
         $.get("/api/waf/profiles", function(list){
-            profSel.empty();
-            (list || []).forEach(function(p){ profSel.append($("<option>").val(p.Name).text(p.Name + (p.BuiltIn ? " (built-in)" : ""))); });
-            if (subd.WAFProfile) profSel.val(subd.WAFProfile);
+            hrpSel.options(profSel, (list || []).map(function(p){ return {value: p.Name, text: p.Name + (p.BuiltIn ? " (built-in)" : "")}; }));
+            if (subd.WAFProfile) hrpSel.set(profSel, subd.WAFProfile);
         });
         srcSel.off("change").on("change", refreshSourceUI);
         refreshSourceUI();
-        box.find(".wafSourceSaveBtn").off("click").on("click", function(){
-            let btn = $(this).addClass("loading");
-            let data = {rootname: subd.RootOrMatchingDomain, source: srcSel.val()};
-            if (data.source == "profile") data.profile = profSel.val();
-            $.cjax({
+        // Save the source (and the challenge override of the central sources). Returns the request; the Save bar
+        // calls it through editor.data("wafSaveSource"), the retired "Apply" buttons still do the same.
+        function saveWafSource(btn, silent){
+            if (btn) btn.addClass("loading");
+            let data = {rootname: subd.RootOrMatchingDomain, source: hrpSel.val(srcSel)};
+            if (data.source == "profile") data.profile = hrpSel.val(profSel);
+            return $.cjax({
                 url: "/api/waf/endpoint/set", method: "POST", data: data,
                 success: function(r){
-                    btn.removeClass("loading");
+                    if (btn) btn.removeClass("loading");
                     if (r.error != undefined){ msgbox(r.error, false, 6000); }
-                    else { msgbox("WAF source updated"); }
+                    else { subd.WAFSource = data.source; subd.WAFProfile = data.profile || ""; if (!silent) msgbox("WAF source updated"); }
                 },
-                error: function(){ btn.removeClass("loading"); msgbox("Request failed", false, 4000); }
+                error: function(){ if (btn) btn.removeClass("loading"); msgbox("Request failed", false, 4000); }
             });
-        });
+        }
+        editor.data("wafSaveSource", function(){ return saveWafSource(null, true); });
+        box.find(".wafSourceSaveBtn").off("click").on("click", function(){ saveWafSource($(this), false); });
         /* Graduated response (challenge band): override for the central sources, own fields for custom */
         let capCfg = subd.CaptchaConfig || {};
         let hasProvider = !!(capCfg.SecretKey && (capCfg.SiteKey || capCfg.Provider == 2));
@@ -2579,26 +2574,28 @@
         box.find(".wafChallengeTTL").val(cfg.ChallengeTTLMinutes || 60);
         box.find(".wafXChallenge, .wafChallenge").off("input.wafch").on("input.wafch", refreshChallengeWarn);
         refreshChallengeWarn();
-        box.find(".wafChallengeSaveBtn").off("click").on("click", function(){
-            let btn = $(this).addClass("loading");
+        function saveWafChallenge(btn, silent){
+            if (btn) btn.addClass("loading");
             let extra = Object.assign({}, subd.WAFExtra || {}, {
                 ChallengeThreshold: parseInt(box.find(".wafXChallenge").val()) || 0,
                 ChallengeTTLMinutes: parseInt(box.find(".wafXChallengeTTL").val()) || 0
             });
-            let data = {rootname: subd.RootOrMatchingDomain, source: srcSel.val(), extra: JSON.stringify(extra)};
-            if (data.source == "profile") data.profile = profSel.val();
-            $.cjax({
+            let data = {rootname: subd.RootOrMatchingDomain, source: hrpSel.val(srcSel), extra: JSON.stringify(extra)};
+            if (data.source == "profile") data.profile = hrpSel.val(profSel);
+            return $.cjax({
                 url: "/api/waf/endpoint/set", method: "POST", data: data,
                 success: function(r){
-                    btn.removeClass("loading");
+                    if (btn) btn.removeClass("loading");
                     if (r.error != undefined){ msgbox(r.error, false, 6000); }
-                    else { subd.WAFExtra = extra; msgbox("Challenge override saved"); }
+                    else { subd.WAFExtra = extra; subd.WAFSource = data.source; subd.WAFProfile = data.profile || ""; if (!silent) msgbox("Challenge override saved"); }
                 },
-                error: function(){ btn.removeClass("loading"); msgbox("Request failed", false, 4000); }
+                error: function(){ if (btn) btn.removeClass("loading"); msgbox("Request failed", false, 4000); }
             });
-        });
-        box.find(".wafMode").val(cfg.Mode || "off");
-        box.find(".wafParanoia").val(String(cfg.ParanoiaLevel || 1));
+        }
+        editor.data("wafSaveChallenge", function(){ return saveWafChallenge(null, true); });
+        box.find(".wafChallengeSaveBtn").off("click").on("click", function(){ saveWafChallenge($(this), false); });
+        hrpSel.set(box.find(".wafMode"), cfg.Mode || "off");
+        hrpSel.set(box.find(".wafParanoia"), String(cfg.ParanoiaLevel || 1));
         box.find(".wafThreshold").val(cfg.InboundThreshold || 5);
         box.find(".wafBodyLimit").val(Math.round((cfg.MaxBodyBytes || 131072) / 1024));
         box.find(".wafExcludedIds").val((cfg.ExcludedRuleIDs || []).join(", "));
@@ -2610,7 +2607,7 @@
 
         /* Variable exclusions of the WAF tuning assistant: own config for custom WAFs, additive overrides otherwise */
         (function(){
-            let src = srcSel.val();
+            let src = hrpSel.val(srcSel);
             let list = src == "custom" ? (cfg.TargetExclusions || []) : (src == "off" ? [] : ((subd.WAFExtra && subd.WAFExtra.TargetExclusions) || []));
             let rows = [];
             list.forEach(function(te){ (te.RuleIDs || []).forEach(function(id){ rows.push({id: id, te: te}); }); });
@@ -2631,7 +2628,8 @@
             });
         })();
 
-        box.find(".wafSaveBtn").off("click").on("click", function(){
+        // Returns the request, or null after showing the reason when a line is invalid
+        function saveWafCustom(btn, silent){
             let pathEx = [];
             let bad = null;
             box.find(".wafPathExclusions").val().split("\n").forEach(function(line){
@@ -2643,10 +2641,10 @@
                 pathEx.push({Path: exact ? parts[0].substring(1) : parts[0], Exact: exact,
                     RuleIDs: parts.slice(1).join("").split(",").filter(x => x != "")});
             });
-            if (bad){ msgbox("Invalid path exclusion line: " + bad, false, 4000); return; }
+            if (bad){ msgbox("Invalid path exclusion line: " + bad, false, 4000); return null; }
             let payload = {
-                Mode: box.find(".wafMode").val(),
-                ParanoiaLevel: parseInt(box.find(".wafParanoia").val()),
+                Mode: hrpSel.val(box.find(".wafMode")),
+                ParanoiaLevel: parseInt(hrpSel.val(box.find(".wafParanoia"))),
                 InboundThreshold: parseInt(box.find(".wafThreshold").val()) || 5,
                 MaxBodyBytes: (parseInt(box.find(".wafBodyLimit").val()) || 128) * 1024,
                 ExcludedRuleIDs: box.find(".wafExcludedIds").val().split(/[\s,]+/).filter(x => x != ""),
@@ -2656,23 +2654,25 @@
                 ChallengeThreshold: parseInt(box.find(".wafChallenge").val()) || 0,
                 ChallengeTTLMinutes: parseInt(box.find(".wafChallengeTTL").val()) || 0
             };
-            let btn = $(this).addClass("loading");
-            $.cjax({
+            if (btn) btn.addClass("loading");
+            return $.cjax({
                 url: "/api/waf/set",
                 method: "POST",
                 data: {rootname: ep, config: JSON.stringify(payload)},
                 success: function(data){
-                    btn.removeClass("loading");
+                    if (btn) btn.removeClass("loading");
                     if (data.error != undefined){
                         msgbox(data.error, false, 6000);
                     }else{
-                        msgbox("WAF settings saved");
+                        if (!silent) msgbox("WAF settings saved");
                         loadWAFEvents(editor, ep);
                     }
                 },
-                error: function(){ btn.removeClass("loading"); msgbox("Request failed", false, 4000); }
+                error: function(){ if (btn) btn.removeClass("loading"); msgbox("Request failed", false, 4000); }
             });
-        });
+        }
+        editor.data("wafSaveCustom", function(){ return saveWafCustom(null, true); });
+        box.find(".wafSaveBtn").off("click").on("click", function(){ saveWafCustom($(this), false); });
 
         editor.find(".wafRefreshBtn").off("click").on("click", function(){ loadWAFEvents(editor, ep); });
         loadWAFEvents(editor, ep);
@@ -2817,16 +2817,7 @@
         });
     }
 
-    //bind events to hrpedit_menu_item
-    $(".hrpedit_menu_item").on("click", function() {
-        $(".hrpedit_menu_item.active").removeClass("active");
-        $(this).addClass("active");
-        let cfgPageId = $(this).attr("cfgpage");
-        $("#httprpEditModal .rpconfig_content").hide();
-        $(`#httprpEditModal .rpconfig_content[rpcfg='${cfgPageId}']`).show();
-        $("#httprpEditModal .wrapper_frame").contents().scrollTop(0);
-        hideEditorSideWrapper(); //Always close the side wrapper on tab change
-    });
+    // Section navigation (.hrpedit_menu_item, cfgpage) is bound by script/siteeditor.js
 
     $("#httprpEditModal .editor_back_button").on("click", function(event) {
         // Prevent click event from propagating to the modal background

@@ -460,6 +460,9 @@ func (s *State) Resolve(set Setting) Resolved {
 	return res
 }
 
+// InheritMode is the effective mode of endpoints that inherit the central policy.
+func (s *State) InheritMode() string { return s.inheritMode() }
+
 func (s *State) inheritMode() string {
 	if !s.Policy.Enabled {
 		return ModeOff

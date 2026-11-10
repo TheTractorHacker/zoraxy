@@ -95,6 +95,8 @@
                 }
             }
 
+            function esc(t){ return String(t == null ? "" : t).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+
             function initAccessRuleList(callback = undefined){
                 $("#accessRuleList").html("<small>Loading</small>");
                 $.get("/api/access/list", function(data){
@@ -115,15 +117,15 @@
                                 icon = `<i class="ui yellow filter icon"></i>`;
                             }
 
-                            $("#accessRuleList").append(`<div class="ui basic segment accessRule" ruleid="${rule.ID}" onclick="selectThisRule(this);">
+                            $("#accessRuleList").append(`<div class="ui basic segment accessRule" ruleid="${esc(rule.ID)}" onclick="selectThisRule(this);">
                                 <h5 class="ui header">
                                     ${icon}
                                     <div class="content">
-                                        ${rule.Name}
-                                        <div class="sub header">${rule.ID}</div>
+                                        ${esc(rule.Name)}
+                                        <div class="sub header">${esc(rule.ID)}</div>
                                     </div>
                                 </h5>
-                                <p>${rule.Desc}</p>
+                                <p>${esc(rule.Desc)}</p>
                                 ${rule.BlacklistEnabled?`<small><i class="ui red filter icon"></i> Blacklist Enabled</small>`:""}
                                 ${rule.WhitelistEnabled?`<small><i class="ui green filter icon"></i> Whitelist Enabled</small>`:""}
                                 <div class="selected"><i class="ui large green check icon"></i></div>
@@ -154,7 +156,7 @@
                                 currentAccessFilter = "default";
                             }
 
-                            $(`.accessRule[ruleid=${currentAccessFilter}]`).addClass("active");
+                            $(".accessRule").filter(function(){ return $(this).attr("ruleid") === currentAccessFilter; }).addClass("active");
                         }
                     }
                 })

@@ -39,6 +39,12 @@ type RuleTemplate struct {
 	DisableWebSocket *bool                       `json:",omitempty"`
 	WebsocketTimeout *int64                      `json:",omitempty"`
 	ExposeRequestID  *bool                       `json:",omitempty"`
+
+	// App preset metadata (see ruletemplate_presets.go). Category "app" templates are shown as presets.
+	Category     string `json:",omitempty"`
+	Note         string `json:",omitempty"` //Short plain-language note shown with the preset ("a starting point, review it")
+	NoDowngrade  bool   `json:",omitempty"` //Never weaken what the rule already has: WAF, rate limit, exploit blocking, HSTS, own headers
+	RequiresAuth bool   `json:",omitempty"` //The preset assumes the rule has an authentication provider; the UI warns when it has none
 }
 
 // RuleChange is one line of the diff between a rule and the rule after a template
@@ -65,7 +71,7 @@ func sptr(v string) *string { return &v }
 
 // BuiltinRuleTemplates are shipped with Zoraxy and cannot be edited
 func BuiltinRuleTemplates() []*RuleTemplate {
-	return []*RuleTemplate{
+	return append([]*RuleTemplate{
 		{Name: "Secure web app", Builtin: true, Description: "HSTS (1 year), browser hardening headers, exploit blocking, uptime monitor, WAF in detection mode",
 			HSTSMaxAge: i64(31536000), SecurityHeaders: true, BlockExploits: bptr(true), UptimeMonitor: bptr(true),
 			WAFSource: sptr("detection_only"), Tags: []string{"web"}},
@@ -77,7 +83,7 @@ func BuiltinRuleTemplates() []*RuleTemplate {
 		{Name: "Static site", Builtin: true, Description: "HSTS, browser hardening headers, exploit blocking, light rate limit",
 			HSTSMaxAge: i64(31536000), SecurityHeaders: true, BlockExploits: bptr(true), RateLimit: i64(50), RateLimitBurst: i64(100),
 			Tags: []string{"static"}},
-	}
+	}, AppPresets()...)
 }
 
 // Validate checks a template
@@ -85,8 +91,11 @@ func (t *RuleTemplate) Validate() error {
 	if t == nil || !templateNameRe.MatchString(t.Name) {
 		return errors.New("template name must be 1-64 characters: letters, digits, space, _ . -")
 	}
-	if len(t.Description) > 500 {
+	if len(t.Description) > 500 || len(t.Note) > 500 {
 		return errors.New("description too long")
+	}
+	if t.Category != "" && t.Category != "app" {
+		return errors.New("unknown template category")
 	}
 	if t.HSTSMaxAge != nil && (*t.HSTSMaxAge < 0 || *t.HSTSMaxAge > 63072000) {
 		return errors.New("HSTS max age must be between 0 and 63072000 seconds")
@@ -132,6 +141,13 @@ func yesNo(b bool) string {
 // ApplyRuleTemplate applies t to ep (mutating it) and returns the list of changes. Callers that only want
 // a preview pass a CopyEndpoint of the rule.
 func ApplyRuleTemplate(ep *ProxyEndpoint, t *RuleTemplate) ([]RuleChange, error) {
+	return ApplyRuleTemplateIn(ep, t, "")
+}
+
+// ApplyRuleTemplateIn is ApplyRuleTemplate with the effective mode of the central WAF policy for inheriting
+// rules (off, detection_only or block; "" when unknown). A no-downgrade template never replaces an inherited
+// block with a weaker source.
+func ApplyRuleTemplateIn(ep *ProxyEndpoint, t *RuleTemplate, inheritedWAF string) ([]RuleChange, error) {
 	if err := t.Validate(); err != nil {
 		return nil, err
 	}
@@ -146,7 +162,7 @@ func ApplyRuleTemplate(ep *ProxyEndpoint, t *RuleTemplate) ([]RuleChange, error)
 	}
 	hr := ep.HeaderRewriteRules
 
-	if t.HSTSMaxAge != nil {
+	if t.HSTSMaxAge != nil && !(t.NoDowngrade && *t.HSTSMaxAge < hr.HSTSMaxAge) {
 		add("HSTS max age", fmt.Sprint(hr.HSTSMaxAge), fmt.Sprint(*t.HSTSMaxAge))
 		hr.HSTSMaxAge = *t.HSTSMaxAge
 	}
@@ -159,6 +175,9 @@ func ApplyRuleTemplate(ep *ProxyEndpoint, t *RuleTemplate) ([]RuleChange, error)
 		for _, cur := range hr.UserDefinedHeaders {
 			if cur.Direction == h.Direction && strings.EqualFold(cur.Key, h.Key) {
 				found = true
+				if t.NoDowngrade { //a preset never overwrites a header the operator already set
+					break
+				}
 				if cur.Value != h.Value || cur.IsRemove != h.IsRemove {
 					add("Header "+cur.Key, cur.Value, h.Value)
 					cur.Value, cur.IsRemove = h.Value, h.IsRemove
@@ -176,11 +195,11 @@ func ApplyRuleTemplate(ep *ProxyEndpoint, t *RuleTemplate) ([]RuleChange, error)
 		add("Uptime monitor", yesNo(!ep.DisableUptimeMonitor), yesNo(*t.UptimeMonitor))
 		ep.DisableUptimeMonitor = !*t.UptimeMonitor
 	}
-	if t.UptimeMonitorURI != nil {
+	if t.UptimeMonitorURI != nil && !(t.NoDowngrade && ep.UptimeMonitorURI != "") {
 		add("Uptime monitor URI", ep.UptimeMonitorURI, *t.UptimeMonitorURI)
 		ep.UptimeMonitorURI = *t.UptimeMonitorURI
 	}
-	if t.WAFSource != nil {
+	if t.WAFSource != nil && !(t.NoDowngrade && wafRank(ep, inheritedWAF) >= wafRankOf(*t.WAFSource)) {
 		old := ep.WAFSource
 		if old == "" {
 			old = "(default)"
@@ -196,16 +215,20 @@ func ApplyRuleTemplate(ep *ProxyEndpoint, t *RuleTemplate) ([]RuleChange, error)
 			ep.WAFProfile = *t.WAFProfile
 		}
 	}
-	if t.RateLimit != nil {
+	rateApplied := t.RateLimit != nil
+	if t.RateLimit != nil && t.NoDowngrade && (*t.RateLimit <= 0 || (ep.RequireRateLimit && ep.RateLimit > 0 && ep.RateLimit <= *t.RateLimit)) {
+		rateApplied = false //an equal or stricter limit is already there
+	}
+	if rateApplied {
 		add("Rate limit (req/s)", rateString(ep), fmt.Sprint(*t.RateLimit))
 		ep.RequireRateLimit = *t.RateLimit > 0
 		ep.RateLimit = *t.RateLimit
 	}
-	if t.RateLimitBurst != nil {
+	if t.RateLimitBurst != nil && (!t.NoDowngrade || rateApplied) {
 		add("Rate limit burst", fmt.Sprint(ep.RateLimitBurst), fmt.Sprint(*t.RateLimitBurst))
 		ep.RateLimitBurst = *t.RateLimitBurst
 	}
-	if t.BlockExploits != nil {
+	if t.BlockExploits != nil && !(t.NoDowngrade && !*t.BlockExploits) {
 		add("Block common exploits", yesNo(ep.BlockCommonExploits), yesNo(*t.BlockExploits))
 		ep.BlockCommonExploits = *t.BlockExploits
 	}
@@ -244,6 +267,31 @@ func ApplyRuleTemplate(ep *ProxyEndpoint, t *RuleTemplate) ([]RuleChange, error)
 		}
 	}
 	return ch, nil
+}
+
+// wafRankOf orders the WAF sources by how much they protect. An unknown or custom setup ranks highest so a
+// no-downgrade template never replaces it.
+func wafRankOf(source string) int {
+	switch source {
+	case "off":
+		return 0
+	case "", "inherit":
+		return 1
+	case "detection_only":
+		return 2
+	default: //block, profile, custom
+		return 3
+	}
+}
+
+func wafRank(ep *ProxyEndpoint, inheritedWAF string) int {
+	if ep.WAFSource == "" && ep.WAF != nil {
+		return 3
+	}
+	if (ep.WAFSource == "" || ep.WAFSource == "inherit") && inheritedWAF == "block" {
+		return 3 //the rule follows a central policy that blocks
+	}
+	return wafRankOf(ep.WAFSource)
 }
 
 func rateString(ep *ProxyEndpoint) string {

@@ -70,3 +70,28 @@ Traceroute / Ping
 Traffic Management
 Base version {0} (build date unknown: not installed by the updater yet)
 Roll back: There is no previous binary to roll back to.
+# App preset descriptions and notes (src/mod/dynamicproxy/ruletemplate_presets.json, served by /api/proxy/templates/list)
+WAF in detection mode, uptime monitor on the home page, nosniff header
+A starting point, review it before use. Large uploads and plugins can trigger WAF detections; they are only logged until you switch to Block. In WordPress set both addresses to https://your-domain.
+WebSocket on, WAF in detection mode, uptime monitor on /status.php
+A starting point, review it before use. WebDAV and large uploads pass through unchanged. In Nextcloud add this proxy to trusted_proxies and the domain to trusted_domains in config.php, and set overwriteprotocol to https.
+WebSocket on (required for the live UI), WAF in detection mode, uptime monitor
+A starting point, review it before use. Home Assistant refuses proxied requests until http: in configuration.yaml has use_x_forwarded_for: true and this proxy listed under trusted_proxies.
+WebSocket on, uptime monitor on /health, no WAF or rate limit changes
+A starting point, review it before use. Streaming makes many range requests, so no rate limit is set. Add this proxy under Known proxies in the Jellyfin network settings so client addresses are correct.
+WebSocket on, uptime monitor on /identity, no WAF or rate limit changes
+A starting point, review it before use. Streaming makes many range requests, so no rate limit is set. In Plex add the public address under Network, Custom server access URLs.
+WebSocket on (Grafana Live), WAF in detection mode, uptime monitor on /api/health
+A starting point, review it before use. In grafana.ini set root_url to the public https address. Grafana Live checks the Origin header, so add the address to live.allowed_origins if live panels fail.
+WebSocket on (sync notifications), WAF in detection mode, uptime monitor on /alive
+A starting point, review it before use. Set DOMAIN to the public https address in Vaultwarden. Restrict /admin with an access rule or a path rule if you enable the admin page.
+WebSocket on, WAF in detection mode, uptime monitor on the home page
+A starting point, review it before use. Git pushes over HTTPS send large bodies, which the WAF does not inspect past its limit. Set ROOT_URL (Gitea) or external_url (GitLab) to the public https address.
+WebSocket on (container console), WAF in detection mode, uptime monitor on /api/system/status
+A starting point, review it before use. Portainer controls your containers: also pick an access rule and an authentication provider. If it only serves HTTPS with its own certificate, turn on TLS for the upstream in the upstream settings.
+Rate limit 100 req/s per IP (burst 200), request id header, WAF in detection mode, WebSocket off
+A starting point, review it before use. Tune the rate limit to the real traffic of your clients. Set the health check path to an endpoint of your API.
+Browser hardening headers, exploit blocking, light rate limit, WebSocket off
+A starting point, review it before use. Fits a site that only serves files. If the site uses WebSockets or is embedded in frames of other sites, adjust the result.
+Rate limit 10 req/s per IP (burst 20), WAF in block mode, exploit blocking, browser hardening headers
+A starting point, review it before use. This preset does not turn on authentication by itself: choose an authentication provider and an access rule for the rule. The WAF can block legitimate admin actions, so watch the WAF log.

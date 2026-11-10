@@ -348,7 +348,7 @@ func (router *Router) bulkOne(name string, req *BulkRequest, hooks BulkHooks) ([
 			return changes, errors.New("the certificate covers none of this rule's hostnames")
 		}
 	case BulkApplyTemplate:
-		changes, err = ApplyRuleTemplate(updated, p.Template)
+		changes, err = ApplyRuleTemplateIn(updated, p.Template, router.WAFState().InheritMode())
 		if err != nil {
 			return nil, err
 		}
