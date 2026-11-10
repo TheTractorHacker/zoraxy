@@ -470,7 +470,7 @@ var tourSteps = {
         }),
         tourStepFactory({
             title: "➡️ Change Listening Port",
-            desc: `HTTPS listen on port 443 instead of 80. If your Zoraxy is currently listening to ports other than 443, change it to 443 in incoming port option and click "Apply"`,
+            desc: `HTTPS listen on port 443 instead of 80. If your Zoraxy is currently listening to ports other than 443, change it to 443 in the listening port option and click "Save changes"`,
             tab: "globalsettings",
             element: "#globalsettings div[tourstep='incomingPort']",
             scrollto: "#globalsettings div[tourstep='incomingPort']",

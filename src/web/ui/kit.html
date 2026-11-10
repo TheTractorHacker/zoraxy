@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en" data-i18n-skip>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="zoraxy.csrf.Token" content="{{.csrfToken}}">
+    <title>UI kit | Zoraxy</title>
+    <link rel="icon" type="image/png" href="../favicon.png" />
+    <link rel="stylesheet" href="../script/semantic/semantic.min.css">
+    <link rel="stylesheet" href="zxui.css">
+    <link rel="stylesheet" href="nav.css">
+    <style>
+        body { margin: 0; background: var(--zx-bg); color: var(--zx-text); font-size: 14px; line-height: 1.45; }
+        .kit-top { position: sticky; top: 0; z-index: 30; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 16px; background: var(--zx-surface); border-bottom: 1px solid var(--zx-border); }
+        .kit-top h1 { margin: 0; font-size: 18px; flex: 1 1 auto; }
+        .kit-wrap { display: grid; grid-template-columns: 14rem minmax(0, 1fr); gap: 24px; max-width: 1400px; margin: 0 auto; padding: 16px; }
+        .kit-toc { position: sticky; top: 64px; align-self: start; max-height: calc(100vh - 80px); overflow: auto; }
+        .kit-toc a { display: block; padding: 6px 8px; color: var(--zx-text-muted); text-decoration: none; border-radius: 6px; }
+        .kit-toc a:hover { background: var(--zx-surface-2); color: var(--zx-text); }
+        .kit-main { min-width: 0; }
+        .kit-main h2 { font-size: 22px; margin: 40px 0 6px; }
+        .kit-main h2:first-child { margin-top: 0; }
+        .kit-desc { color: var(--zx-text-muted); margin: 0 0 12px; max-width: 60rem; }
+        .kit-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+        .kit-pane { border: 1px solid var(--zx-border); border-radius: 12px; padding: 16px; min-width: 0; position: relative; }
+        .kit-pane > .kit-label { position: absolute; top: 4px; right: 8px; font-size: 11px; color: var(--zx-text-faint); text-transform: uppercase; letter-spacing: .06em; }
+        .kit-pane .zx-savebar-slot { position: static; padding-bottom: 0; }
+        .kit-code { margin-top: 8px; border: 1px solid var(--zx-border); border-radius: 8px; background: var(--zx-surface); }
+        .kit-code summary { cursor: pointer; padding: 8px 12px; color: var(--zx-text-muted); font-weight: 600; }
+        .kit-code pre { margin: 0; padding: 12px; overflow: auto; max-height: 22rem; border-top: 1px solid var(--zx-border); font: 12px/1.5 var(--zx-font-mono); color: var(--zx-text); }
+        .kit-code { position: relative; }
+        .kit-code .kit-copy { position: absolute; top: 6px; right: 8px; }
+        .kit-sw { display: inline-block; width: 36px; height: 20px; border-radius: 4px; border: 1px solid var(--zx-border-strong); vertical-align: middle; }
+        table.kit-tbl { border-collapse: collapse; width: 100%; font-size: 13px; }
+        table.kit-tbl th, table.kit-tbl td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--zx-border); vertical-align: middle; }
+        table.kit-tbl th { color: var(--zx-text-muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+        .kit-tblwrap { overflow-x: auto; border: 1px solid var(--zx-border); border-radius: 8px; background: var(--zx-surface); }
+        .kit-pass { color: var(--zx-ok-text); font-weight: 700; }
+        .kit-fail { color: var(--zx-danger-text); font-weight: 700; }
+        .kit-spacing { display: inline-block; height: 12px; background: var(--zx-primary); border-radius: 2px; vertical-align: middle; }
+        @media (max-width: 900px) {
+            .kit-wrap { grid-template-columns: minmax(0, 1fr); padding: 12px; }
+            .kit-toc { position: static; max-height: none; display: flex; flex-wrap: wrap; gap: 4px; }
+            .kit-pair { grid-template-columns: minmax(0, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <script src="../script/jquery-3.6.0.min.js"></script>
+    <script src="../script/darktheme.js"></script>
+    <script src="../script/zxui.js"></script>
+    <div class="kit-top">
+        <h1>Zoraxy UI kit <span class="zx-badge zx-badge--info">dev only</span></h1>
+        <button type="button" class="zx-btn zx-btn--secondary zx-btn--sm" id="kitTheme" aria-label="Switch the page between light and dark"><i class="adjust icon"></i> Page theme</button>
+        <a class="zx-btn zx-btn--ghost zx-btn--sm" href="../index.html#settings">Back to admin UI</a>
+    </div>
+    <div class="kit-wrap">
+        <nav class="kit-toc" aria-label="Kit sections" id="kitToc"></nav>
+        <main class="kit-main" id="kitMain">
+            <h2 id="intro">Overview</h2>
+            <p class="kit-desc">Design tokens and components for the admin UI, built on CSS custom properties (<code>ui/zxui.css</code>) and a small helper (<code>script/zxui.js</code>, <code>window.ZxUI</code>). Every example is shown in the light and the dark scheme at the same time, with the exact markup to copy. Written documentation, rules and accessibility checklist: <code>docs/ux/components.md</code>.</p>
+            <div class="zx-callout zx-callout--info" role="note"><span class="zx-callout__icon" aria-hidden="true"><i class="info circle icon"></i></span><div class="zx-callout__body">This page is only served when Zoraxy runs with <code>-dev</code>. It is not part of the production menu.</div></div>
+            <div id="kitSections"></div>
+        </main>
+    </div>
+    <script src="kit.js"></script>
+</body>
+</html>

@@ -271,6 +271,10 @@
         $(document).on("click", "#httpProxyList .editBtn, #httpProxyList [onclick*='editEndpoint']", function () {
             editorDirty = false;
         });
+        // let the component kit (script/zxui.js) know about this guard: one registry of everything holding unsaved work
+        if (window.ZxUI && ZxUI.unsaved) {
+            ZxUI.unsaved.register({ id: "proxy-editor", isDirty: function () { return editorDirty && $("#httprpEditModalWrapper").is(":visible"); } });
+        }
         window.addEventListener("beforeunload", function (e) {
             if (editorDirty && $("#httprpEditModalWrapper").is(":visible")) {
                 e.preventDefault();

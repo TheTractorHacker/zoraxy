@@ -1,0 +1,127 @@
+/*
+    Navigation: side menu groups (rendered by script/nav.js), breadcrumb strip, header search button,
+    command palette (script/palette.js).  Uses the --zx-* tokens of zxui.css.
+    The classes .menugroup-*, #mainmenu a.item of main.css keep working; this file only refines them.
+*/
+
+/* ----------------------------------------------------------------------------- side menu */
+#mainmenu .menugroup-header {
+    color: var(--zx-text-muted);
+    font-size: 0.82em;
+    padding: 0.6em 0.5em 0.4em;
+    min-height: 2.4em;
+}
+#mainmenu .menugroup-header:hover { background-color: var(--zx-surface-2); color: var(--zx-text); }
+body.darkTheme #mainmenu .menugroup-header { color: var(--zx-text-muted); }
+body.darkTheme #mainmenu .menugroup-header:hover { background-color: var(--zx-surface-2); color: var(--zx-text); }
+#mainmenu .menugroup-icon-i {
+    flex: 0 0 auto;
+    width: 1.5em !important;
+    margin: 0 0.45em 0 0 !important;
+    font-size: 1.05em;
+    opacity: 0.85;
+    text-align: center;
+}
+#mainmenu .menugroup-header > span { overflow-wrap: anywhere; }
+/* the chevron of the old markup was nudged with negative margins; in the new markup it simply sits at the end of the row */
+#mainmenu .menugroup-header .menugroup-chevron,
+#mainmenu .menugroup-header .menugroup-chevron:not(.collapsed) {
+    margin: 0 0.3em 0 auto !important;
+    align-self: center;
+}
+#mainmenu .menugroup-items .item { color: var(--zx-text-muted); }
+#mainmenu .menugroup-items .item:hover { color: var(--zx-text); }
+#mainmenu .menugroup-items a.item.active,
+#mainmenu a.item[aria-current="page"] {
+    color: var(--zx-text);
+    font-weight: 600;
+    background: var(--zx-primary-soft);
+}
+#mainmenu .menugroup-items a.item.active:hover { background: var(--zx-primary-soft); }
+#mainmenu .menugroup-header:focus-visible,
+#mainmenu a.item:focus-visible { outline: 2px solid var(--zx-focus) !important; outline-offset: -2px; border-radius: var(--zx-radius-sm); }
+@media (max-width: 748px) {
+    #mainmenu .menugroup-header { min-height: 44px; }
+    #mainmenu .menugroup-items a.item, #mainmenu > a.item { min-height: 44px; display: flex; align-items: center; }
+}
+
+/* ----------------------------------------------------------------------------- breadcrumb strip */
+.zx-crumbstrip { padding: 0.85em 1.5em 0; min-height: 1.6em; }
+.zx-crumbstrip[hidden] { display: none; }
+.zx-crumbstrip .zx-crumbs { font-size: var(--zx-fs-sm); }
+.zx-page-header__crumbs.zx-crumbs { font-size: var(--zx-fs-sm); }
+.zx-crumbs [aria-current="page"] { color: var(--zx-text); }
+@media (max-width: 748px) {
+    .zx-crumbstrip { padding: 0.7em 1.2em 0; }
+}
+
+/* ----------------------------------------------------------------------------- header search button */
+.zx-searchbtn {
+    display: inline-flex; align-items: center; gap: 0.55em;
+    height: 2.6em; padding: 0 0.8em; margin: 0;
+    font: inherit; font-size: 0.95em; color: var(--zx-text);
+    background: var(--zx-surface); border: 1px solid var(--zx-border-strong); border-radius: 0.28rem; cursor: pointer;
+}
+.zx-searchbtn:hover { background: var(--zx-surface-2); }
+.zx-searchbtn kbd, .zx-palette kbd {
+    font: 600 0.8em/1 var(--zx-font-mono); padding: 0.25em 0.45em; color: var(--zx-text-muted);
+    background: var(--zx-surface-2); border: 1px solid var(--zx-border); border-radius: 4px;
+}
+.zx-searchbtn i.icon { margin: 0; }
+.zx-searchbtn:focus-visible { outline: 2px solid var(--zx-focus) !important; outline-offset: 2px; }
+@media (max-width: 1000px) { .zx-searchbtn .zx-searchbtn__text, .zx-searchbtn kbd { display: none; } .zx-searchbtn { width: 2.6em; justify-content: center; padding: 0; } }
+@media (max-width: 748px) { .zx-searchbtn { min-width: 44px; height: 38px; } }
+
+/* ----------------------------------------------------------------------------- command palette */
+.zx-palette-backdrop {
+    position: fixed; inset: 0; z-index: var(--zx-z-palette); background: var(--zx-overlay);
+    display: flex; align-items: flex-start; justify-content: center; padding: 12vh 1rem 1rem;
+}
+.zx-palette-backdrop[hidden] { display: none; }
+.zx-palette {
+    width: min(40rem, 100%); max-height: min(34rem, 100%); display: flex; flex-direction: column;
+    background: var(--zx-surface); color: var(--zx-text); border: 1px solid var(--zx-border-strong);
+    border-radius: var(--zx-radius-lg); box-shadow: var(--zx-shadow-3); overflow: hidden;
+}
+.zx-palette__search { display: flex; align-items: center; gap: 0.6em; padding: 0 0.9em; border-bottom: 1px solid var(--zx-border); }
+.zx-palette__search > i.icon { margin: 0; color: var(--zx-text-muted); }
+.zx-palette__input {
+    flex: 1 1 auto; min-width: 0; height: 3.4em; padding: 0; font: inherit; font-size: 1.15em; color: var(--zx-text);
+    background: transparent; border: 0; outline: 0; box-shadow: none;
+}
+.zx-palette__input::placeholder { color: var(--zx-text-faint); opacity: 1; }
+.zx-palette__close {
+    flex: 0 0 auto; font: 600 0.78em/1 var(--zx-font-mono); color: var(--zx-text-muted); background: var(--zx-surface-2);
+    border: 1px solid var(--zx-border); border-radius: 4px; padding: 0.4em 0.6em; cursor: pointer; min-height: 28px;
+}
+.zx-palette__list { overflow-y: auto; padding: 0.4em 0.4em 0.6em; overscroll-behavior: contain; }
+.zx-palette__group { padding: 0.7em 0.7em 0.3em; font-size: 0.78em; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--zx-text-muted); }
+.zx-palette__item {
+    display: flex; align-items: center; gap: 0.7em; min-height: 40px; padding: 0.45em 0.7em; border-radius: var(--zx-radius-md); cursor: pointer;
+}
+.zx-palette__item > i.icon { flex: 0 0 auto; width: 1.4em; margin: 0; text-align: center; color: var(--zx-text-muted); }
+.zx-palette__label { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.zx-palette__label mark { background: transparent; color: inherit; font-weight: 800; text-decoration: underline; text-underline-offset: 2px; }
+.zx-palette__sub { flex: 1 1 0; min-width: 0; margin-left: auto; text-align: right; font-size: var(--zx-fs-sm); color: var(--zx-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zx-palette__item.is-active { background: var(--zx-primary-soft); color: var(--zx-primary-soft-text); }
+.zx-palette__item.is-active > i.icon, .zx-palette__item.is-active .zx-palette__sub { color: var(--zx-primary-soft-text); }
+.zx-palette__empty { padding: 1.6em 1em; text-align: center; color: var(--zx-text-muted); overflow-wrap: anywhere; }
+.zx-palette__foot { display: flex; gap: 1.2em; padding: 0.55em 0.9em; border-top: 1px solid var(--zx-border); font-size: var(--zx-fs-xs); color: var(--zx-text-muted); background: var(--zx-surface-2); }
+.zx-palette__foot kbd { margin-right: 2px; }
+body.zx-palette-open { overflow: hidden; }
+@media (max-width: 748px) {
+    .zx-palette-backdrop { padding: 0.5rem; }
+    .zx-palette { max-height: calc(100dvh - 1rem); }
+    .zx-palette__item { min-height: 44px; }
+    .zx-palette__sub { display: none; }
+    .zx-palette__foot { display: none; }
+    .zx-palette__input { font-size: 16px; }   /* no zoom on focus in iOS Safari */
+}
+
+/* ----------------------------------------------------------------------------- "found it" highlight */
+.zx-flash { animation: zx-flash 2.2s ease-out; border-radius: var(--zx-radius-md); }
+@keyframes zx-flash {
+    0%, 55% { box-shadow: 0 0 0 4px var(--zx-focus); background-color: var(--zx-primary-soft); }
+    100% { box-shadow: 0 0 0 4px transparent; }
+}
+@media (prefers-reduced-motion: reduce) { .zx-flash { animation: none; box-shadow: 0 0 0 4px var(--zx-focus); } }

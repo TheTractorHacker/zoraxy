@@ -34,11 +34,12 @@ SKIP_HTML = {"apidocs.html"}
 CORE = ["index.html", "login.html", "components/status.html", "components/httprp.html", "components/security.html",
         "components/security/", "components/waf.html", "components/captcha.html", "components/cert.html",
         "components/globalsettings.html", "components/quickstart.html",
+        "script/zxui.js", "script/nav.js", "script/palette.js", "components/settings.html",
         "script/newrule.js", "script/proxytable.js", "script/quicksetup.js", "script/proxybulk.js", "script/uxkit.js",
         "snippet/upstreams.html", "snippet/accessRuleEditor.html", "snippet/notifications.html"]
 SKIP_TAGS = {"script", "style", "code", "pre", "textarea", "noscript", "svg"}
 TEXT_ATTRS = ("placeholder", "title", "aria-label", "alt")
-HELPERS = r"(?:msgbox|confirmBox|alert|confirm|prompt|showToast|setStatus|t)"
+HELPERS = r"(?:msgbox|confirmBox|alert|confirm|prompt|showToast|setStatus|t|tf|N_|ZxUI\.toast)"
 
 
 def norm(s):
