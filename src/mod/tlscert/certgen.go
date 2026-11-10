@@ -8,7 +8,9 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"math/big"
+	"net"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -20,6 +22,10 @@ func (m *Manager) GenerateSelfSignedCertificate(cn string, sans []string, certFi
 		m.Logger.PrintAndLog("tls-router", "Failed to generate private key", err)
 		return err
 	}
+
+	// Browsers and Go ignore the common name when a certificate is checked, only the Subject Alternative
+	// Names count: a certificate made for "cn" alone must list cn as a name, or it covers no host at all
+	dnsNames, ipAddrs := sanList(cn, sans)
 
 	// Create certificate template
 	template := x509.Certificate{
@@ -35,7 +41,8 @@ func (m *Manager) GenerateSelfSignedCertificate(cn string, sans []string, certFi
 		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
-		DNSNames:              sans, // Subject Alternative Names
+		DNSNames:              dnsNames, // Subject Alternative Names
+		IPAddresses:           ipAddrs,
 	}
 
 	// Create self-signed certificate
@@ -89,4 +96,24 @@ func (m *Manager) GenerateSelfSignedCertificate(cn string, sans []string, certFi
 	}
 	m.Logger.PrintAndLog("tls-router", "Certificate and key generated: "+certFile+", "+keyFile, nil)
 	return nil
+}
+
+// sanList returns the Subject Alternative Names of a self-signed certificate: the given names plus the
+// common name when it is not among them. Entries that are IP addresses go to the IP list.
+func sanList(cn string, sans []string) (dns []string, ips []net.IP) {
+	seen := map[string]bool{}
+	for _, n := range append(append([]string{}, sans...), strings.TrimSpace(cn)) {
+		n = strings.TrimSpace(n)
+		key := strings.ToLower(n)
+		if n == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		if ip := net.ParseIP(n); ip != nil {
+			ips = append(ips, ip)
+		} else {
+			dns = append(dns, n)
+		}
+	}
+	return dns, ips
 }

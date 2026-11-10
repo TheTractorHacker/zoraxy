@@ -40,6 +40,9 @@ type Plan struct {
 	Changes []Change
 	Refusal string   // non-empty: preconditions are not met, nothing may be changed
 	Notes   []string // facts that explain the plan (rules left alone, ...)
+	// Title and Description replace the action's static texts when what the action does right now
+	// differs from what its name says (e.g. the WAF is already on, only its baseline values are missing)
+	Title, Description string
 }
 
 // Backend reads and writes settings; implemented by the host with the same internal functions the admin APIs use.
@@ -212,6 +215,10 @@ func builtinActions() []Action {
 					newMode = "detection_only"
 				}
 				enabled := get(b, "waf.enabled") == "on"
+				if enabled {
+					p.Title = "Fill in the WAF baseline values"
+					p.Description = "The WAF is already on and its mode (" + modeLabel(mode) + ") is not changed. This only sets the paranoia level and the anomaly threshold that are still at their defaults, so the rules have something to score against."
+				}
 				if !enabled && mode == "block" {
 					// enabling the master switch with a stored block mode would start rejecting requests
 					newMode = "detection_only"
@@ -275,7 +282,7 @@ func builtinActions() []Action {
 				for _, k := range []string{"waf_block", "exploit_block", "bot_block", "login_fail"} {
 					key := "autoban.detector." + k
 					if get(b, key) != "on" {
-						p.Changes = append(p.Changes, Change{key, "Detector " + k, "auto-ban", "off", "on", ""})
+						p.Changes = append(p.Changes, Change{key, "Detector: " + detectorLabel(k), "auto-ban", "off", "on", ""})
 					}
 				}
 				return p
@@ -381,7 +388,7 @@ func builtinActions() []Action {
 					case !ok:
 						skipped = append(skipped, r.Name+": certificate not checked")
 					case c.State != "ok":
-						skipped = append(skipped, r.Name+": certificate is "+c.State)
+						skipped = append(skipped, r.Name+": "+certStateText(c.State))
 					case c.DaysLeft < 30:
 						skipped = append(skipped, fmt.Sprintf("%s: certificate has only %d days left", r.Name, c.DaysLeft))
 					default:
@@ -399,6 +406,50 @@ func builtinActions() []Action {
 			},
 		},
 	}
+}
+
+// detectorLabel is the name the Auto-ban tab shows for a detector id
+func detectorLabel(id string) string {
+	switch id {
+	case "waf_block":
+		return "WAF blocks"
+	case "exploit_block":
+		return "exploit filter hits"
+	case "bot_block":
+		return "bot rule hits"
+	case "login_fail":
+		return "failed admin logins"
+	}
+	return id
+}
+
+// certStateText says in words what a certificate check state means for a host name
+func certStateText(state string) string {
+	switch state {
+	case "missing":
+		return "no certificate found"
+	case "fallback":
+		return "no certificate matches, the built-in localhost certificate would be served"
+	case "mismatch":
+		return "the certificate that would be served does not cover this name"
+	case "expired":
+		return "the certificate has expired"
+	case "selfsigned":
+		return "the certificate is self-signed"
+	}
+	return "certificate state: " + state
+}
+
+func modeLabel(mode string) string {
+	switch mode {
+	case "block":
+		return "Block"
+	case "detection_only":
+		return "detection-only"
+	case "", "off":
+		return "off"
+	}
+	return mode
 }
 
 func orDash(s string) string {

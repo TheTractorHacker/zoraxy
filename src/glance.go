@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"sort"
 	"sync"
 	"time"
@@ -23,6 +24,7 @@ import (
 type glanceCertCache struct {
 	mu   sync.Mutex
 	at   time.Time
+	dir  time.Time // modification time of the cert store when the list was read
 	list []notify.CertExpiry
 }
 
@@ -31,9 +33,16 @@ var glanceCerts glanceCertCache
 func (c *glanceCertCache) get() []notify.CertExpiry {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if time.Since(c.at) > 10*time.Minute {
+	// Re-read when the cache is old, or when files were added to / removed from the
+	// store since the last read (so a new certificate shows up at once, not 10 minutes later)
+	var dirMod time.Time
+	if st, err := os.Stat(CONF_CERT_STORE); err == nil {
+		dirMod = st.ModTime()
+	}
+	if c.at.IsZero() || time.Since(c.at) > 10*time.Minute || !dirMod.Equal(c.dir) {
 		c.list = notify.ScanCertExpiry(CONF_CERT_STORE)
 		c.at = time.Now()
+		c.dir = dirMod
 	}
 	return c.list
 }

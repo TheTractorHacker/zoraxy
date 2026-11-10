@@ -52,6 +52,9 @@ var routeTable = []routeLabel{
 	{"/api/trustedproxy/", "Trusted proxies changed"},
 	{"/api/pathrule/", "Path rule changed"},
 	{"/api/streamprox/", "Stream proxy changed"},
+	{"/api/security/posture/undo", "Security fix undone"},
+	{"/api/security/posture/apply", "Security fixes applied"},
+	{"/api/security/posture/", "Security overview settings changed"},
 	{"/api/cert/", "Certificate settings changed"},
 	{"/api/acme/", "ACME settings changed"},
 	{"/api/abuse/", "Auto-ban settings changed"},
@@ -85,7 +88,7 @@ var skipPrefixes = []string{
 	"/api/info/", "/api/sysinfo/", "/api/ping", "/api/metrics", "/api/updater/", "/api/cluster/", "/api/fleet/",
 	"/api/proxy/testupstream", "/api/proxy/tlscheck", "/api/proxy/script/test", "/api/proxy/sablier/test",
 	"/api/proxy/templates/preview", "/api/proxy/ops/errorpreview", "/api/proxy/captcha/preview",
-	"/api/waf/validate", "/api/i18n/", "/api/docker/", "/api/mdns/", "/api/conf/export",
+	"/api/waf/validate", "/api/security/posture/preview", "/api/i18n/", "/api/docker/", "/api/mdns/", "/api/conf/export",
 	"/api/cert/download", "/api/authaudit/",
 }
 
@@ -129,7 +132,8 @@ func summaryOf(r *http.Request, form url.Values) string {
 	}
 	label := best.Label
 	if label == "" {
-		label = "Configuration changed (" + p + ")"
+		// never show a raw API path to the person reading the history
+		label = "Configuration changed"
 	}
 	if best.Label != "" {
 		if strings.HasPrefix(p, "/api/v1/proxy-rules/") {

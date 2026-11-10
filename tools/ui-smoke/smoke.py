@@ -30,6 +30,7 @@ ap.add_argument("--site-editor-only", action="store_true", help="run only the si
 ap.add_argument("--rules-only", action="store_true", help="run only the Security rules (rules builder) scenario")
 ap.add_argument("--waf-tuning-only", action="store_true", help="run only the WAF Tuning tab scenario")
 ap.add_argument("--consistency-only", action="store_true", help="run only the consistency-pass scenario (certificates, Related boxes, save bar, history toast, hostile host, renamed pages)")
+ap.add_argument("--overview-only", action="store_true", help="run only the Status / Security overview / History / palette / navigation fix scenario")
 ap.add_argument("--zrok-fake", default=os.environ.get("SMOKE_ZROK_FAKE", ""), help="path of a fake zrok script; enables the zrok flow (the instance needs -allow_external_tools)")
 ap.add_argument("--allow", action="append", default=[], help="regex of messages whose failure is tolerated")
 args = ap.parse_args()
@@ -2262,6 +2263,7 @@ def rules_scenario(pg, ctx):
     rules_ui(pg, ctx, {"fail": fail, "current": current, "settle": settle, "check_horizontal": check_horizontal, "out": args.out, "allow": allow})
 
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "consistency_smoke.py")).read(), "consistency_smoke.py", "exec"))  # defines consistency_ui
+exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "overview_smoke.py")).read(), "overview_smoke.py", "exec"))  # defines overview_ui
 
 
 def main():
@@ -2284,6 +2286,10 @@ def main():
 
         if args.consistency_only:
             consistency_ui(pg, ctx)
+            b.close()
+            return
+        if args.overview_only:
+            overview_ui(pg, ctx)
             b.close()
             return
         if args.i18n_only:
@@ -3184,6 +3190,8 @@ def main():
         posture_ui(pg, ctx)
 
         history_ui(pg, ctx)
+
+        overview_ui(pg, ctx)
 
         current["page"] = "site-editor"
         site_editor_ui(pg, ctx)

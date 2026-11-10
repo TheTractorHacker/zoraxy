@@ -95,10 +95,11 @@
         window.openTabById(tag);
         if (then) { whenVisible("#" + tag, then, 4000); }
     }
+    var wafOn = false;   // from GET /api/waf/policy when the palette opens: "Enable WAF" is not offered for a WAF that is on
     var ACTIONS = [
         { id: "newrule", label: N_("New proxy rule"), kw: "add create host site website", icon: "plus",
           run: function () { goPage("httprp", function () { if (typeof window.openNewRuleDialog === "function") { window.openNewRuleDialog(); } }); } },
-        { id: "waf", label: N_("Enable WAF"), kw: "firewall protect start safely detection", icon: "shield alternate",
+        { id: "waf", label: N_("Enable WAF"), labelOn: N_("Review WAF mode"), isOn: function () { return wafOn; }, kw: "firewall protect start safely detection mode", icon: "shield alternate",
           run: function () { goPage("waf", function () { reveal("#wafQuickStart, #wafModeCards"); }); } },
         { id: "newsecrule", label: N_("New security rule"), kw: "add create rule builder when then block allow log only", icon: "filter",
           run: function () { goPage("ruleset", function () { var b = document.getElementById("rbNew"); if (b) { b.click(); } }); } },
@@ -216,6 +217,33 @@
         }).always(function () { hostsLoading = false; if (done) { done(); } });
     }
 
+    // Redirects, stream proxies, access rules and security rules. Names are user data: shown as text only.
+    var objects = [];
+    function loadObjects() {
+        if (!window.jQuery) { return; }
+        var next = [], pending = 4;
+        function done() { if (--pending === 0) { objects = next; if (root && !root.hidden) { render(); } } }
+        function get(url, fn) {
+            jQuery.getJSON(url).done(function (d) { try { if (Array.isArray(d)) { d.forEach(fn); } } catch (e) { /* odd answer */ } }).always(done);
+        }
+        get("./api/redirect/list", function (r) {
+            if (r && r.RedirectURL) { next.push({ type: "redirect", label: String(r.RedirectURL), sub: "→ " + String(r.TargetURL || ""), icon: "level up alternate", page: "redirectset", extra: String(r.TargetURL || "") }); }
+        });
+        get("./api/streamprox/config/list", function (r) {
+            if (r && (r.Name || r.ListeningAddr)) { next.push({ type: "stream", label: String(r.Name || r.ListeningAddr), sub: String(r.ListeningAddr || "") + " → " + String(r.ProxyAddr || ""), icon: "exchange", page: "streamproxy", extra: String(r.ListeningAddr || "") + " " + String(r.ProxyAddr || "") }); }
+        });
+        get("./api/access/list", function (r) {
+            if (r && r.Name) { next.push({ type: "access", label: String(r.Name), sub: String(r.Desc || ""), icon: "ban", page: "access", extra: String(r.Desc || "") }); }
+        });
+        get("./api/ruleset/rules", function (r) {
+            if (r && r.name) { next.push({ type: "rule", label: String(r.name), sub: String(r.description || ""), icon: "filter", page: "ruleset", extra: String(r.description || "") + " " + String(r.expression || "") }); }
+        });
+    }
+    function loadWafState() {
+        if (!window.jQuery) { return; }
+        jQuery.getJSON("./api/waf/policy").done(function (p) { wafOn = !!(p && p.Enabled); if (root && !root.hidden) { render(); } });
+    }
+
     function allItems() {
         var items = [];
         (window.ZxNav ? ZxNav.pages() : []).forEach(function (p) {
@@ -229,14 +257,19 @@
             var pg = window.ZxNav && ZxNav.find(s.page);
             items.push({ type: "setting", key: "setting:" + i + ":" + s.label, label: s.label, sub: pg ? pg.group.label + " › " + pg.item.label : s.page, icon: "sliders horizontal", extra: s.kw + " " + s.page, run: function () { goSetting(s); } });
         });
+        objects.forEach(function (o) {
+            items.push({ type: o.type, key: o.type + ":" + o.label, label: o.label, sub: o.sub, icon: o.icon, raw: true, extra: o.extra, run: function () { goPage(o.page); } });
+        });
         ACTIONS.forEach(function (a) {
-            items.push({ type: "action", key: "action:" + a.id, label: a.label, sub: "", icon: a.icon, extra: a.kw, run: a.run });
+            var on = a.isOn && a.isOn();
+            items.push({ type: "action", key: "action:" + a.id, label: on ? a.labelOn : a.label, sub: "", icon: a.icon, extra: a.kw, run: a.run });
         });
         return items;
     }
 
-    var GROUPS = [["page", N_("Pages"), 8], ["site", N_("Sites"), 6], ["setting", N_("Settings"), 8], ["action", N_("Actions"), 5]];
-    var TYPE_BIAS = { page: 6, action: 4, setting: 0, site: 2 };
+    var GROUPS = [["page", N_("Pages"), 8], ["site", N_("Sites"), 6], ["redirect", N_("Redirects"), 4], ["stream", N_("Stream proxies"), 4],
+        ["access", N_("Access rules"), 4], ["rule", N_("Rules"), 5], ["setting", N_("Settings"), 8], ["action", N_("Actions"), 5]];
+    var TYPE_BIAS = { page: 6, action: 4, setting: 0, site: 2, redirect: 2, stream: 2, access: 2, rule: 2 };
 
     function search(q) {
         var items = allItems();
@@ -254,7 +287,9 @@
             }
         });
         out.sort(function (a, b) { return b.score - a.score || a.text.localeCompare(b.text); });
-        return out;
+        var actionNames = {};
+        out.forEach(function (it) { if (it.type === "action") { actionNames[norm(it.text)] = true; } });
+        return out.filter(function (it) { return !(it.type === "setting" && actionNames[norm(it.text)]); });
     }
 
     /* ----------------------------------------------------------------- recent */
@@ -396,7 +431,7 @@
             none.textContent = words.length ? trf(N_("No results for \"{0}\""), q.trim()) : tr(N_("Type to search"));
             list.appendChild(none);
         }
-        status.textContent = rows.length ? trf(N_("{0} results"), rows.length) : tr(N_("No results"));
+        status.textContent = rows.length === 1 ? tr(N_("1 result")) : rows.length ? trf(N_("{0} results"), rows.length) : tr(N_("No results"));
         setActive(rows.length ? 0 : -1, true);
     }
 
@@ -434,6 +469,8 @@
         document.body.classList.add("zx-palette-open");
         input.value = "";
         loadHosts(function () { if (!root.hidden) { render(); } });
+        loadObjects();
+        loadWafState();
         render();
         input.focus();
         if (window.i18n && i18n.apply) { i18n.apply(root); }

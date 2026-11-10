@@ -519,7 +519,18 @@ func (m *Manager) LastRestore() *RestoreRecord {
 	return &c
 }
 
-// Latest returns the newest version id (0 if none).
+// Count returns how many versions are stored.
+func (m *Manager) Count() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	idx, err := m.loadIndexLocked()
+	if err != nil {
+		return 0
+	}
+	return len(idx.Versions)
+}
+
+// Latest returns the id of the newest version (0 when there is none)
 func (m *Manager) Latest() int64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()

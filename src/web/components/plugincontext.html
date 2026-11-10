@@ -1,8 +1,6 @@
-<div class="">
-    <iframe id="pluginContextLoader" src="" style="width: 100%; border: none;" allow="scripts" sandbox="allow-scripts allow-same-origin">
-    
-    </iframe>
-</div>
+<!-- The iframe is created when a plugin UI is opened (not on every page load): a frame with both
+     allow-scripts and allow-same-origin makes the browser log a console warning each time it is parsed -->
+<div id="pluginContextHost"></div>
 <script>
     function initPluginUIView(forceOverwritePluginID = undefined){
         if (typeof(forceOverwritePluginID) != "undefined"){
@@ -22,6 +20,10 @@
     function loadPluginContext(pluginID){
         //Check if the iframe is currently visable
         let pluginContextURL = `/plugin.ui/${pluginID}/`;
+        if ($("#pluginContextLoader").length == 0){
+            $("#pluginContextHost").append($('<iframe id="pluginContextLoader" title="Plugin" style="width: 100%; border: none;" sandbox="allow-scripts allow-same-origin"></iframe>'));
+            resizeIframe();
+        }
         $("#pluginContextLoader").attr("src", pluginContextURL);
     }
 
@@ -44,6 +46,7 @@
 
     function resizeIframe() {
         let iframe = document.getElementById('pluginContextLoader');
+        if (!iframe) return;
         let mainMenuHeight = document.getElementById('mainmenu').offsetHeight;
         //Size to the taller of the sidebar and the viewport so the iframe
         //fills the window on tall browsers instead of leaving a footer gap

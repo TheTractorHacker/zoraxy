@@ -380,7 +380,10 @@
     #status .cardHead h4{ margin: 0 0 0.15em; }
     #status .cardHead .cardSubtitle{ margin: 0; }
     #status .cardLink{ font-size: 0.88em; white-space: nowrap; }
-    #status .kpiGrid{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.8em; }
+    /* 7 tiles: 4 + 3 on wide screens (never one orphan), 2 per row on phones with the last one full width */
+    #status .kpiGrid{ display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 0.8em; }
+    #status .kpiGrid > .kpiCard{ grid-column: span 3; }
+    #status .kpiGrid > .kpiCard:nth-child(n+5){ grid-column: span 4; }
     #status .kpiCard{
         position: relative; display: flex; flex-direction: column; gap: 0.1em; min-height: 5.8em;
         padding: 0.9em 1em 0.8em 1.15em; overflow: hidden;
@@ -438,7 +441,10 @@
     @media screen and (max-width: 768px){
         #status .diagramCard #trafficFlowDiagramWrapper{ min-height: 380px; }
         #status .trafficChartWrapper{ height: 170px; }
-        #status .kpiGrid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        #status .kpiGrid > .kpiCard, #status .kpiGrid > .kpiCard:nth-child(n+5){ grid-column: span 6; }
+        #status .kpiGrid > .kpiCard:last-child:nth-child(odd){ grid-column: 1 / -1; }
+        /* the Start / Stop buttons sit above the title instead of on top of it */
+        #serverstatus .poweroptions{ position: static; display: flex; gap: 0.5em; justify-content: flex-end; margin-bottom: 0.8em; }
         #status .diagramTools .ui.button span{ display: none; }
     }
     @media (prefers-reduced-motion: reduce){
@@ -447,6 +453,17 @@
     }
 </style>
 
+<!-- Page title (same header as every other page); the hero banner below carries the live state -->
+<div class="standardContainer nobottom">
+    <header class="zx-page-header" style="margin-bottom:0.8em">
+        <div class="zx-page-header__main">
+            <div class="zx-page-header__crumbs" data-zx-crumbs></div>
+            <h2 class="zx-page-header__title">Status</h2>
+            <p class="zx-page-header__sub">Is the proxy running, how much traffic it handles and what needs your attention.</p>
+        </div>
+    </header>
+</div>
+
 <!-- Server Status Hero Banner -->
 <div class="standardContainer nobottom">
     <div id="serverstatus" class="ui statustab inverted segment" style="margin: 0;">
@@ -454,13 +471,13 @@
             <button id="startbtn" class="ui small basic inverted disabled button" onclick="startService();"><i class="ui arrow alternate circle up icon"></i> Start</button>
             <button id="stopbtn" class="ui small basic inverted notloopbackOnly disabled button" onclick="stopService();"><i class="ui minus circle icon"></i> Stop</button>
         </div>
-        <h1 class="ui header" style="margin: 0;">
+        <div class="ui header" role="status" style="margin: 0;">
             <i id="rpStatusIcon" class="loading spinner icon"></i>
             <div class="content">
                 <span id="statusTitle">Loading</span>
                 <div class="sub header" id="statusText">Checking server status</div>
             </div>
-        </h1>
+        </div>
         <div class="heroDivider"></div>
         <div class="ui four column stackable grid heroMetrics">
             <div class="column heroMetric">
@@ -1053,7 +1070,7 @@
     let worldMapObserver = undefined;
     function worldMapHasSize(){
         let el = document.getElementById("worldMap");
-        return !!el && el.clientWidth > 0 && el.clientHeight > 0;
+        return !!el && el.offsetParent !== null && el.clientWidth > 0 && el.clientHeight > 0; // offsetParent is null while any ancestor is display:none
     }
     //updateSize() on a hidden (zero size) container makes jsVectorMap compute scale(NaN)
     function updateWorldMapSize(){
@@ -1606,9 +1623,9 @@
         $("#glanceCertSub").html(d.CertsTotal === 0 ? "no certificates yet" : ce.length === 0 ? d.CertsTotal + " certificates, none expiring within " + d.WarnDays + " days" : "soonest: " + esc(ce[0].Name) + (ce.length > 1 ? " (+" + (ce.length - 1) + " more)" : ""));
         setKpi("kpiCert", cc);
         var ac = d.AlertsFailed ? "warn" : "";
-        $("#glanceAlerts").text(d.AlertsFailed ? d.AlertsFailed + " failed" : ((d.AlertsRecent || []).length ? d.AlertsRecent.length + " recent" : "none")).attr("class", "kpiValue " + ac);
+        $("#glanceAlerts").text(d.AlertsFailed ? d.AlertsFailed + " failed" : ((d.AlertsRecent || []).length ? d.AlertsRecent.length + " recent" : "None")).attr("class", "kpiValue " + ac);
         var r0 = (d.AlertsRecent || [])[0];
-        $("#glanceAlertsSub").html(r0 ? esc(r0.event) + " &rarr; " + esc(r0.channel) + " (" + esc(r0.status) + ")" : '<a href="snippet/notifications.html" target="_blank">Set up notifications</a>');
+        $("#glanceAlertsSub").html(r0 ? esc(r0.event) + " &rarr; " + esc(r0.channel) + " (" + esc(r0.status) + ")" : '<a href="snippet/notifications.html" target="_blank" rel="noopener" title="Opens in a new tab">Set up notifications</a>');
         setKpi("kpiAlerts", ac);
 
         // upstream list
@@ -1630,7 +1647,7 @@
 
         // alerts
         var al = d.AlertsRecent || [];
-        $("#alertList").html(al.length === 0 ? empty("bell slash", 'No alerts were sent.<br><a href="snippet/notifications.html" target="_blank">Set up notifications</a>') :
+        $("#alertList").html(al.length === 0 ? empty("bell slash", 'No alerts were sent.<br><a href="snippet/notifications.html" target="_blank" rel="noopener" title="Opens in a new tab">Set up notifications</a>') :
             al.map(function(a){
                 var cls = a.status === "failed" ? "bad" : "ok";
                 return '<div class="healthItem"><i class="hDot ' + cls + '"></i><span class="hName" title="' + esc(a.error || "") + '">' + esc(a.event) + (a.subject ? " - " + esc(a.subject) : "") + '</span><span class="hMeta">' + esc(a.channel) + '</span><span class="hMeta">' + esc(ago(Math.floor(new Date(a.time).getTime() / 1000))) + "</span></div>";
@@ -1680,19 +1697,24 @@
             var hasRule = (rules[0] && rules[0].length > 0), hasCert = (certs[0] && certs[0].length > 0), checks = {};
             ((post[0] && post[0].checks) || []).forEach(function(c){ checks[c.id] = c.status; });
             var steps = [
-                {done: hasRule, text: "Create your first proxy rule", hint: "Point a domain at the service that should answer it.", btn: "Create a rule", go: function(){ if (typeof openNewRuleDialog === "function") openNewRuleDialog(); else openTabById("httprp"); }},
-                {done: hasCert, text: "Add a certificate", hint: "HTTPS sites need one; request a free one with ACME or upload your own.", btn: "Certificates", go: function(){ openTabById("cert"); }}
+                {done: hasRule, text: t("Create your first proxy rule"), hint: t("Point a domain at the service that should answer it."), doneHint: t("At least one proxy rule exists."), btn: t("Create a rule"), go: function(){ if (typeof openNewRuleDialog === "function") openNewRuleDialog(); else openTabById("httprp"); }},
+                {done: hasCert, text: t("Add a certificate"), hint: t("HTTPS sites need one; request a free one with ACME or upload your own."), doneHint: t("The certificate store has at least one certificate."), btn: t("Certificates"), go: function(){ openTabById("cert"); }}
             ];
-            if (checks["waf.active"]) steps.push({done: checks["waf.active"] === "ok", text: "Turn on the WAF", hint: "It is off until you enable it. Start in detection-only mode so nothing breaks.", btn: "Security Overview", go: function(){ openTabById("secoverview"); }});
-            if (checks["ops.backup"]) steps.push({done: checks["ops.backup"] === "ok", text: "Make a backup", hint: "Keep a copy of your configuration you can restore.", btn: "Utilities", go: function(){ openTabById("utils"); }});
-            if (checks["ops.notifications"]) steps.push({done: checks["ops.notifications"] === "ok", text: "Get notified when something goes wrong", hint: "Add an email, webhook or other channel.", btn: "Notifications", go: function(){ window.open("snippet/notifications.html", "_blank", "noopener"); }});
+            if (checks["waf.active"]) steps.push({done: checks["waf.active"] === "ok", text: t("Turn on the WAF"), hint: t("It is off until you enable it. Start in detection-only mode so nothing breaks."), doneHint: t("The WAF is on."), btn: t("Security Overview"), go: function(){ openTabById("secoverview"); }});
+            if (checks["ops.backup"]) steps.push({done: checks["ops.backup"] === "ok", text: t("Make a backup"), hint: t("Keep a copy of your configuration you can restore."), doneHint: t("A backup of your configuration exists."), btn: t("Utilities"), go: function(){ openTabById("utils"); }});
+            if (checks["ops.notifications"]) steps.push({done: checks["ops.notifications"] === "ok", text: t("Get notified when something goes wrong"), hint: t("Add an email, webhook or other channel."), doneHint: t("At least one notification channel is set up."), btn: t("Notifications"), newTab: true, go: function(){ window.open("snippet/notifications.html", "_blank", "noopener"); }});
             var open = steps.filter(function(x){ return !x.done; });
             var ul = $("#getStartedList").empty();
             steps.forEach(function(x, i){
                 var li = $('<li></li>').append(
-                    $('<span class="zx-badge"></span>').addClass(x.done ? "zx-badge--ok" : "zx-badge--warn").text(x.done ? "Done" : "To do"),
-                    $('<span class="zx-steps__text"></span>').append($("<strong></strong>").text(x.text), $('<span class="zx-sub"></span>').text(x.hint)));
-                if (!x.done){ li.append($('<button type="button" class="zx-btn zx-btn--secondary zx-btn--sm"></button>').text(x.btn).on("click", x.go)); }
+                    $('<span class="zx-badge"></span>').addClass(x.done ? "zx-badge--ok" : "zx-badge--warn").text(x.done ? t("Done") : t("To do")),
+                    $('<span class="zx-steps__text"></span>').append($("<strong></strong>").text(x.text), $('<span class="zx-sub"></span>').text(x.done ? x.doneHint : x.hint)));
+                if (!x.done){
+                    var btn = $('<button type="button" class="zx-btn zx-btn--secondary zx-btn--sm"></button>').text(x.btn).on("click", x.go);
+                    // the notification settings are a stand-alone page: say so instead of surprising people with a new tab
+                    if (x.newTab) btn.append(' <i class="external alternate icon" aria-hidden="true"></i>').attr("title", t("Opens in a new tab"));
+                    li.append(btn);
+                }
                 ul.append(li);
             });
             $("#getStartedPanel").prop("hidden", open.length == 0);

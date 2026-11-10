@@ -42,7 +42,7 @@
                 h += "<tr><td>" + n + "</td><td>" + esc(u.Role) + "</td><td>" + (u.Disabled ? "disabled" : "active") + "</td><td>" +
                     '<button class="ui mini basic button usrA" data-a="setPassword" data-u="' + n + '">Set password</button> ' +
                     '<button class="ui mini basic button usrA" data-a="rename" data-u="' + n + '">Rename</button> ' +
-                    '<button class="ui mini basic button usrA" data-a="setRole" data-r="' + (u.Role === "admin" ? "viewer" : "admin") + '" data-u="' + n + '">Make ' + (u.Role === "admin" ? "viewer" : "admin") + "</button> " +
+                    '<button class="ui mini basic button usrA" data-a="setRole" data-r="' + (u.Role === "admin" ? "viewer" : "admin") + '" data-u="' + n + '">' + (u.Role === "admin" ? t("Make viewer") : t("Make admin")) + "</button> " +
                     '<button class="ui mini basic button usrA" data-a="' + (u.Disabled ? "enable" : "disable") + '" data-u="' + n + '">' + (u.Disabled ? "Enable" : "Disable") + "</button> " +
                     '<button class="ui mini basic red button usrA" data-a="delete" data-u="' + n + '">Delete</button></td></tr>';
             });

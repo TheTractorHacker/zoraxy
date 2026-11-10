@@ -249,7 +249,7 @@ var tourSteps = {
     //Homepage steps
     "homepage": [
         tourStepFactory({
-            title: "🎉 Congratulation on your first site!",
+            title: "🎉 Congratulations on your first site!",
             desc: "In this tour, you will be guided through the steps required to setup a basic static website using your own domain name with Zoraxy."
         }),
         tourStepFactory({

@@ -1192,7 +1192,7 @@ body.darkTheme select.i18n-picker{
     border-color: rgba(255,255,255,0.18);
 }
 @media (max-width: 750px){
-    .menubar select.i18n-picker{ max-width: 6.5em; }
+    .menubar select.i18n-picker{ max-width: 8.2em; padding: 0 0.25em 0 0.4em; } /* longer names (Español, 繁體中文) stay readable */
 }
 
 /* Longer translated strings (German, Russian, CJK): let flex/grid children shrink and long words wrap */

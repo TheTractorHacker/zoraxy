@@ -96,3 +96,5 @@ A starting point, review it before use. Fits a site that only serves files. If t
 Rate limit 10 req/s per IP (burst 20), WAF in block mode, exploit blocking, browser hardening headers
 A starting point, review it before use. This preset does not turn on authentication by itself: choose an authentication provider and an access rule for the rule. The WAF can block legitimate admin actions, so watch the WAF log.
 Dismiss
+Make admin
+Make viewer
