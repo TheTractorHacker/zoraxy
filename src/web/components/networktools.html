@@ -1,12 +1,15 @@
 <div class="standardContainer">
-    <div class="ui basic segment">
-        <h2>Network Tools</h2>
-        <p>Network tools to help manage your cluster nodes</p>
-    </div>
+    <header class="zx-page-header">
+        <div class="zx-page-header__main">
+            <div class="zx-page-header__crumbs" data-zx-crumbs></div>
+            <h2 class="zx-page-header__title">Network Tools</h2>
+            <p class="zx-page-header__sub">Find and reach devices on your network, run connection diagnostics, calculate subnets and answer local DNS names.</p>
+        </div>
+    </header>
 
 
     <div class="ui top attached tabular menu">
-        <a class="nettools item active bluefont" data-tab="tab1">Discovery</a>
+        <a class="nettools item active bluefont" data-tab="tab1">Discovery &amp; Lookup</a>
         <a class="nettools item bluefont" data-tab="tab2">Connection</a>
         <a class="nettools item bluefont" data-tab="tab3">Diagnostics</a>
         <a class="nettools item bluefont" data-tab="tab4">Calculators</a>
@@ -42,7 +45,7 @@
             <div class="two fields">
                 <div class="field">
                     <label>Target domain or IP</label>
-                    <input type="text" id="traceroute_domain" placeholder="1.1.1.1">
+                    <input type="text" id="traceroute_domain" placeholder="1.1.1.1" onkeypress="if(event.keyCode === 13) { traceroute(); }">
                 </div>
                 <div class="field">
                   <label>Max Hops</label>
@@ -54,7 +57,7 @@
             <br><br>
             <div class="field">
                 <label>Results</label>
-                <textarea id="traceroute_results" rows="10" style=""></textarea>
+                <textarea id="traceroute_results" rows="10" readonly aria-live="polite"></textarea>
             </div>
             
         </div>
@@ -63,7 +66,7 @@
         <h2>Whois</h2>
         <p>Check the owner and registration information of a given domain</p>
         <div class="ui icon input">
-            <input id="whoisdomain" type="text" onkeypress="if(event.keyCode === 13) { performWhoisLookup(); }" placeholder="Domain or IP">
+            <input id="whoisdomain" type="text" aria-label="Domain or IP" onkeypress="if(event.keyCode === 13) { performWhoisLookup(); }" placeholder="Domain or IP">
             <i onclick="performWhoisLookup();" class="circular search link icon"></i>
         </div><br>
         <small>Lookup might take a few minutes to complete</small>
@@ -75,7 +78,7 @@
         <div id="websshTool" style="position: relative;">
             <h2>Web SSH</h2>
             <p>Connect to a network node within the local area network of the gateway</p>
-            <div class="ui small form">
+            <div class="ui form">
                 <div class="three fields">
                     <div class="field">
                         <label>Server Name or IP Address</label>
@@ -105,7 +108,7 @@
             <div class="field">
                 <label>Listening Port</label>
                 <div class="ui action input">
-                    <input id="forwardProxyPort" type="number" placeholder="5587" step="1", min="1024" max="65535" value="5587">
+                    <input id="forwardProxyPort" type="number" placeholder="5587" step="1" min="1024" max="65535" value="5587">
                     <button onclick="updateForwardProxyPort(); event.preventDefault();" class="ui basic button"><i class="ui green check icon"></i> Apply</button>
                 </div>
             </div>
@@ -227,17 +230,41 @@
 
 <script>
     // Diagnostics tab (DNS lookup / TLS inspector / HTTP tester). All output is inserted with .text() (remote data is untrusted)
+    //Empty required input: mark the field, focus it and say what is missing (no silent dead buttons)
+    function ntRequire(inputSel, message){
+        let el = $(inputSel);
+        if (String(el.val()).trim() != ""){
+            el.closest(".field, .ui.input").removeClass("error");
+            return true;
+        }
+        el.closest(".field, .ui.input").addClass("error");
+        el.trigger("focus");
+        msgbox(message, false, 5000);
+        return false;
+    }
+    $(document).on("input", "#networktool .field.error input, #networktool .ui.input.error input", function(){
+        $(this).closest(".field, .ui.input").removeClass("error");
+    });
+
     function diagCommon(){
         return $("#diagAllowMetadata").is(":checked") ? {allowmetadata: "true"} : {};
     }
     function diagCell(text){ return $("<td></td>").text(text); }
 
     function diagDns(){
+        if (!ntRequire("#diagDnsHost", "Enter a host name")){ return; }
         let host = $("#diagDnsHost").val().trim();
-        if (host == ""){ msgbox("Enter a host name", false); return; }
+        $("#diagDnsResult").hide().find("tbody").empty(); //never leave the previous answer under a new lookup
+        $("#diagDnsNote").remove();
         $.get("/api/tools/dns", {host: host, server: $("#diagDnsServer").val().trim()}, function(data){
             if (data.error != undefined){ msgbox(data.error, false); return; }
             let tbody = $("#diagDnsResult tbody").empty();
+            if (data.every(function(r){ return r.Records.length == 0; })){
+                //six "no records" rows are not an answer: say it once
+                $("#diagDnsResult").before($("<div id='diagDnsNote' class='ui warning message'></div>").text(
+                    tf("No DNS records found for {0}. The name does not exist, or the DNS server could not be reached.", host)));
+                return;
+            }
             data.forEach(function(r){
                 let td = $("<td></td>");
                 if (r.Records.length == 0){
@@ -251,8 +278,8 @@
     }
 
     function diagTls(){
+        if (!ntRequire("#diagTlsHost", "Enter a host name")){ return; }
         let host = $("#diagTlsHost").val().trim();
-        if (host == ""){ msgbox("Enter a host name", false); return; }
         let params = Object.assign({host: host, port: $("#diagTlsPort").val(), sni: $("#diagTlsSni").val().trim()}, diagCommon());
         $("#diagTlsResult").empty().append($("<div class='ui active inline loader'></div>"));
         $.get("/api/tools/tlsinspect", params, function(data){
@@ -283,8 +310,9 @@
     }
 
     function diagHttp(){
+        if (!ntRequire("#diagHttpUrl", "Enter a URL")){ return; }
         let url = $("#diagHttpUrl").val().trim();
-        if (url == ""){ msgbox("Enter a URL", false); return; }
+        $("#diagHttpResult").hide().find("tbody").empty(); //a refused or failed request must not show the previous result
         let params = Object.assign({url: url, method: $("#diagHttpMethod").val(), follow: $("#diagHttpFollow").is(":checked"), skipverify: $("#diagHttpSkipVerify").is(":checked")}, diagCommon());
         $.get("/api/tools/httptest", params, function(data){
             if (data.error != undefined){ msgbox(data.error, false); return; }
@@ -594,12 +622,14 @@ function updateMDNSListForWoL(){
 updateMDNSListForWoL();
 
 function traceroute(){
+    if (!ntRequire("#traceroute_domain", "Enter a target domain or IP address")){ return; }
     let domain = $("#traceroute_domain").val().trim();
     let maxhops = $("#traceroute_maxhops").val().trim();
     $("#traceroute_results").val("Loading...");
-    $.get("/api/tools/traceroute?target=" + domain + "&maxhops=" + maxhops, function(data){
+    $.get("/api/tools/traceroute", {target: domain, maxhops: maxhops}, function(data){
         if (data.error != undefined){
-            $("#traceroute_results").val("");
+            //show the reason in the result box as well, the toast disappears
+            $("#traceroute_results").val(data.error);
             msgbox(data.error, false, 6000);
         }else{
             $("#traceroute_results").val(data.join("\n"));
@@ -608,11 +638,12 @@ function traceroute(){
 }
 
 function ping(){
+    if (!ntRequire("#traceroute_domain", "Enter a target domain or IP address")){ return; }
     let domain = $("#traceroute_domain").val().trim();
     $("#traceroute_results").val("Loading...");
-    $.get("/api/tools/ping?target=" + domain, function(data){
+    $.get("/api/tools/ping", {target: domain}, function(data){
         if (data.error != undefined){
-            $("#traceroute_results").val("");
+            $("#traceroute_results").val(data.error);
             msgbox(data.error, false, 6000);
         }else{
             $("#traceroute_results").val(`--------- ICMP Ping -------------
@@ -626,12 +657,14 @@ ${data.UDP.join("\n")}`);
 }
 
 function performWhoisLookup(){
+    if (!ntRequire("#whoisdomain", "Enter a domain or IP address")){ return; }
     let whoisDomain = $("#whoisdomain").val().trim();
+    $("#whois_table").empty();
     $("#whoisdomain").parent().addClass("disabled");
     $("#whoisdomain").parent().css({
         "cursor": "wait"
     });
-    $.get("/api/tools/whois?target=" + whoisDomain, function(data){
+    $.get("/api/tools/whois", {target: whoisDomain}, function(data){
         $("#whoisdomain").parent().removeClass("disabled");
         $("#whoisdomain").parent().css({
             "cursor": "auto"
@@ -718,12 +751,16 @@ function toggleForwadProxy(enabled){
 }
 
 function updateForwardProxyPort(){
-    let newPortNumber = $("#forwardProxyPort").val();
-    if (newPortNumber < 1024 || newPortNumber > 65535){
-        $("#newPortNumber").parent().addClass('error');
-    }else{
-        $("#newPortNumber").parent().removeClass('error');
+    let rawPort = String($("#forwardProxyPort").val()).trim();
+    let newPortNumber = Number(rawPort);
+    let field = $("#forwardProxyPort").closest(".field");
+    if (!/^\d+$/.test(rawPort) || newPortNumber < 1024 || newPortNumber > 65535){
+        field.addClass("error");
+        $("#forwardProxyPort").trigger("focus");
+        msgbox("Invalid port: use a whole number between 1024 and 65535", false, 5000);
+        return;
     }
+    field.removeClass("error");
 
     $.cjax({
         url: "/api/tools/fwdproxy/port",
@@ -733,7 +770,9 @@ function updateForwardProxyPort(){
         },
         success: function(data){
             if (data.error != undefined){
-                msgbox(data.error, false);
+                msgbox(data.error, false, 6000);
+                initForwardProxyInfo(); //show the port that is really in use
+                return;
             }
             msgbox("Forward proxy port updated");
             initForwardProxyInfo();

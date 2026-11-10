@@ -18,7 +18,7 @@
     #zrokPanel .zkFacts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .7em; margin-top: .8em; }
     #zrokPanel .zkFact { border-left: 4px solid var(--divider_color); padding: .25em .8em; min-width: 0; }
     #zrokPanel .zkFact .l { text-transform: uppercase; letter-spacing: .04em; font-size: .72em; color: var(--text_color_secondary); }
-    #zrokPanel .zkFact .v { font-size: 1.05em; font-weight: 600; overflow-wrap: anywhere; }
+    #zrokPanel .zkFact .v { font-size: 1.05em; font-weight: 600; overflow-wrap: break-word; }
     #zrokPanel .zkFact.good { border-left-color: #21ba45; }
     #zrokPanel .zkFact.warn { border-left-color: #f2711c; }
     #zrokPanel .zkFact.bad { border-left-color: #db2828; }
@@ -68,7 +68,7 @@
     #zrokPanel code.zkCode { background: rgba(128,128,128,.16); padding: .05em .4em; border-radius: 4px; overflow-wrap: anywhere; }
     @media (max-width: 600px) { #zrokPanel .zkCard { padding: .8em .8em 1em; } #zrokPanel .zkPill { white-space: normal; } }
 </style>
-<div id="zrokPanel">
+<div id="zrokPanel" class="standardContainer">
     <div class="zkHero">
         <div style="min-width:0; flex:1 1 30em">
             <h2 class="ui header" style="margin-bottom:.35em"><i class="plug icon"></i><div class="content">Tunnels (zrok)</div></h2>
@@ -199,8 +199,10 @@
     var flavor = "v1", status = null, confirmFn = null, logOpen = {}, pendingDelete = {};
     var LOG_TAIL = 60;
     function $id(id){ return $("#" + id); }
+    //Backend messages start lower case ("public name is required"): show them like the toast does
+    function cap(t){ t = String(t); return t.charAt(0).toUpperCase() + t.slice(1); }
     function errText(r, xhr){
-        if (r && typeof r === "object" && r.error != undefined) { return String(r.error); }
+        if (r && typeof r === "object" && r.error != undefined) { return cap(String(r.error)); }
         if (xhr && xhr.status === 401) { return "Your session has expired. Sign in again."; }
         if (xhr && xhr.status === 403) { return "You are not allowed to do this."; }
         if (xhr && xhr.status >= 500) { return "Zoraxy returned a server error. Check the system log."; }
@@ -219,7 +221,12 @@
         function legacy(){ var ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select(); var ok = false; try { ok = document.execCommand("copy"); } catch(e){} document.body.removeChild(ta); done(ok); }
         if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(text).then(function(){ done(true); }, legacy); } else { legacy(); }
     }
-    function fact(l, v, cls){ return $("<div class='zkFact'>").addClass(cls || "").append($("<div class='l'>").text(l)).append($("<div class='v'>").text(v)); }
+    //Long values (a binary path) may only wrap after a "/", never inside a word
+    function fact(l, v, cls){
+        var val = $("<div class='v'>"), parts = String(v).split("/");
+        parts.forEach(function(part, i){ val.append(document.createTextNode(part + (i < parts.length - 1 ? "/" : ""))); if (i < parts.length - 1) { val.append("<wbr>"); } });
+        return $("<div class='zkFact'>").addClass(cls || "").append($("<div class='l'>").text(l)).append(val);
+    }
     function banner(kind, icon, title, text){
         return $("<div class='zkBanner' role='alert'>").addClass(kind).append($("<i class='icon'>").addClass(icon)).append($("<div class='t'>").append($("<b>").text(title)).append(document.createTextNode(text || "")));
     }
@@ -237,7 +244,12 @@
         $id("zkConfirmTitle").text(title); $id("zkConfirmText").text(" " + text); $id("zkConfirmYes").text(yesLabel);
         var box = $id("zkConfirm").show(); try { box[0].scrollIntoView({block: "nearest"}); } catch(e){}
     }
-    $id("zkConfirmNo").on("click", function(){ confirmFn = null; $id("zkConfirm").hide(); });
+    function closeConfirm(){ confirmFn = null; $id("zkConfirm").hide(); }
+    $id("zkConfirmNo").on("click", closeConfirm);
+    //A question that was not answered goes away as soon as the user does something else on the page
+    $("#zrokPanel").on("click focusin", function(e){
+        if (!$(e.target).closest("#zkConfirm, #zkDisable, #zkClearToken").length) { closeConfirm(); }
+    });
     $id("zkConfirmYes").on("click", function(){ var f = confirmFn; confirmFn = null; $id("zkConfirm").hide(); if (f) { f(); } });
 
     // ---- form ----
@@ -332,6 +344,9 @@
         $id("zkErrorBox").hide();
         $id("zrokNotAllowed").toggle(!d.Allowed);
         $id("zkBin").val(s.BinaryPath); $id("zkFlavor").val(s.Flavor || "auto"); $id("zkApi").val(s.ApiEndpoint);
+        //Nothing to disable or forget: keep the buttons off until there is something to act on
+        $id("zkDisable").prop("disabled", !s.EnabledEnv);
+        $id("zkClearToken").prop("disabled", !d.TokenSet);
         $id("zkToken").val("").attr("placeholder", d.TokenSet ? "a token is stored (enter a new one to replace it)" : "paste the account token");
         var tunnels = d.Tunnels || [], running = tunnels.filter(function(t){ return t.State == "running"; }).length;
 
@@ -413,7 +428,7 @@
         }, error: function(x){ btn.removeClass("loading disabled"); res.append(banner("bad", "times circle", "Request failed", " " + errText(null, x))); }});
     });
     $id("zkDisable").on("click", function(){
-        ask("Disable the zrok environment?", "All tunnels are stopped and zrok disables the environment. Saved tunnels stay.", "Disable", function(){ post("/api/zrok/disable", {}, "Environment disabled"); });
+        ask("Disable the zrok environment?", "All tunnels are stopped and zrok disables the environment. Saved tunnels stay.", "Disable", function(){ $id("zkEnableResult").hide().empty(); post("/api/zrok/disable", {}, "Environment disabled"); });
     });
     $id("zkClearToken").on("click", function(){
         ask("Forget the stored token?", "The token file is deleted. You need to paste it again to enable an environment.", "Forget token", function(){

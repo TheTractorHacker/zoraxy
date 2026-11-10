@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -2297,6 +2298,9 @@ func HandleQuicToggle(w http.ResponseWriter, r *http.Request) {
 	utils.SendOK(w)
 }
 
+// maxProxyTimeoutSeconds caps the listener timeouts (one week), larger values are a typo
+const maxProxyTimeoutSeconds = 7 * 24 * 3600
+
 func HandleGlobalProxyTimeoutSettings(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		js, _ := json.Marshal(globalProxyTimeoutSettings{
@@ -2314,20 +2318,20 @@ func HandleGlobalProxyTimeoutSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	readHeaderTimeout, err := utils.PostInt(r, "readHeaderTimeout")
-	if err != nil || readHeaderTimeout < 0 {
-		utils.SendErrorResponse(w, "Invalid read header timeout given")
+	if err != nil || readHeaderTimeout < 0 || readHeaderTimeout > maxProxyTimeoutSeconds {
+		utils.SendErrorResponse(w, "Invalid read header timeout given: use whole seconds between 0 and 604800")
 		return
 	}
 
 	writeTimeout, err := utils.PostInt(r, "writeTimeout")
-	if err != nil || writeTimeout < 0 {
-		utils.SendErrorResponse(w, "Invalid write timeout given")
+	if err != nil || writeTimeout < 0 || writeTimeout > maxProxyTimeoutSeconds {
+		utils.SendErrorResponse(w, "Invalid write timeout given: use whole seconds between 0 and 604800")
 		return
 	}
 
 	idleTimeout, err := utils.PostInt(r, "idleTimeout")
-	if err != nil || idleTimeout < 0 {
-		utils.SendErrorResponse(w, "Invalid idle timeout given")
+	if err != nil || idleTimeout < 0 || idleTimeout > maxProxyTimeoutSeconds {
+		utils.SendErrorResponse(w, "Invalid idle timeout given: use whole seconds between 0 and 604800")
 		return
 	}
 
@@ -2358,17 +2362,50 @@ func HandleGlobalProxyTimeoutSettings(w http.ResponseWriter, r *http.Request) {
 	utils.SendOK(w)
 }
 
+// validateProxyListenPort rejects a proxy listening port that cannot work, so the Save of
+// the port never reports success while the listener then fails to start (admin port,
+// the plain HTTP listener, ports that are in use or not permitted for this user).
+func validateProxyListenPort(port int) error {
+	if port < 1 || port > 65535 {
+		return errors.New("Invalid incoming port value: use a port between 1 and 65535")
+	}
+	if _, ap, err := net.SplitHostPort(*webUIPort); err == nil {
+		if apn, e := strconv.Atoi(ap); e == nil && apn == port {
+			return errors.New("This port is used by the management interface, choose another port")
+		}
+	}
+	if dynamicProxyRouter != nil && port == dynamicProxyRouter.Option.Port {
+		return nil //unchanged
+	}
+	if dynamicProxyRouter != nil && dynamicProxyRouter.Option.ListenOnPort80 && port == dynamicProxyRouter.HttpListenPort() {
+		return errors.New("This port is used by the HTTP listener, choose another port")
+	}
+	ln, err := net.Listen("tcp", ":"+strconv.Itoa(port))
+	if err != nil {
+		if errors.Is(err, os.ErrPermission) {
+			return fmt.Errorf("Port %d needs elevated permission (run as root or grant the bind capability), choose a port above 1024", port)
+		}
+		return fmt.Errorf("Port %d cannot be used: it is already in use by another program", port)
+	}
+	ln.Close()
+	return nil
+}
+
 // Handle incoming port set. Change the current proxy incoming port
 func HandleIncomingPortSet(w http.ResponseWriter, r *http.Request) {
 	newIncomingPort, err := utils.PostPara(r, "incoming")
 	if err != nil {
-		utils.SendErrorResponse(w, "invalid incoming port given")
+		utils.SendErrorResponse(w, "Invalid incoming port value")
 		return
 	}
 
 	newIncomingPortInt, err := strconv.Atoi(newIncomingPort)
 	if err != nil {
-		utils.SendErrorResponse(w, "Invalid incoming port given")
+		utils.SendErrorResponse(w, "Invalid incoming port value")
+		return
+	}
+	if err := validateProxyListenPort(newIncomingPortInt); err != nil {
+		utils.SendErrorResponse(w, err.Error())
 		return
 	}
 

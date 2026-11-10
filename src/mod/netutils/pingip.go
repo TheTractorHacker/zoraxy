@@ -1,8 +1,11 @@
 package netutils
 
 import (
+	"errors"
 	"fmt"
 	"net"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -51,7 +54,7 @@ func PingIP(ipOrDomain string) (string, time.Duration, int, error) {
 
 	conn, err := net.Dial("ip:icmp", ip)
 	if err != nil {
-		return ip, 0, 0, fmt.Errorf("failed to establish ICMP connection: %v", err)
+		return ip, 0, 0, fmt.Errorf("failed to establish ICMP connection: %v", icmpPermissionHint(err))
 	}
 	defer conn.Close()
 
@@ -78,4 +81,13 @@ func PingIP(ipOrDomain string) (string, time.Duration, int, error) {
 	ttl := int(reply[8])
 
 	return ip, pingTime, ttl, nil
+}
+
+// icmpPermissionHint explains the usual reason ICMP sockets cannot be opened (no raw socket permission)
+// instead of showing only the raw operating system error.
+func icmpPermissionHint(err error) error {
+	if err != nil && (errors.Is(err, os.ErrPermission) || strings.Contains(err.Error(), "operation not permitted")) {
+		return fmt.Errorf("ICMP needs raw socket permission: run Zoraxy as root or grant it CAP_NET_RAW (setcap cap_net_raw+ep <zoraxy binary>) (%v)", err)
+	}
+	return err
 }

@@ -117,6 +117,12 @@
         c.innerHTML = "<i class=\"times icon\" aria-hidden=\"true\"></i>";
         c.addEventListener("click", dismiss);
         node.appendChild(c);
+        //The same message again replaces the toast that is still showing instead of stacking a duplicate
+        var key = type + "|" + msg.textContent + "|" + (opts.action ? opts.action.label : "");
+        node.setAttribute("data-zx-toast-key", key);
+        Array.prototype.slice.call(box.children).forEach(function (old) {
+            if (old.getAttribute("data-zx-toast-key") === key) { box.removeChild(old); }
+        });
         box.appendChild(node);
         while (box.children.length > 5) { box.removeChild(box.firstChild); }
         var duration = opts.duration !== undefined ? opts.duration : (opts.undo || opts.action ? 10000 : (type === "error" ? 8000 : 4000));

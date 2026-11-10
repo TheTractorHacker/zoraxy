@@ -1,3 +1,14 @@
+<style>
+    /* Release notes: rendered Markdown in a scroll box that follows the theme */
+    #upNotes { max-height: 20em; overflow: auto; background: var(--zx-surface-2, #f6f6f6); color: var(--zx-text, #222); padding: 0.75em 1em 1em; border-radius: 4px; line-height: 1.5; overflow-wrap: anywhere; }
+    #upNotes h1, #upNotes h2, #upNotes h3, #upNotes h4 { margin: 0.6em 0 0.3em; font-size: 1.1em; }
+    #upNotes h1:first-child, #upNotes h2:first-child, #upNotes h3:first-child { margin-top: 0; }
+    #upNotes p { margin: 0.3em 0; }
+    #upNotes ul { margin: 0.3em 0; padding-left: 1.4em; }
+    #upNotes code { font-family: var(--zx-font-mono, monospace); font-size: 0.92em; background: rgba(128,128,128,.18); padding: 0 .3em; border-radius: 3px; }
+    /* reasons why a button is off are explanations, not errors */
+    #upBtnReasons { color: var(--zx-text-muted, #666); font-size: 0.95em; }
+</style>
 <div class="standardContainer">
     <div class="ui basic segment">
         <h2>Update</h2>
@@ -25,7 +36,7 @@
         <div id="upReason" class="ui small message" style="display:none;"></div>
         <div id="upNotesWrap" style="display:none;">
             <h4>Release notes</h4>
-            <pre id="upNotes" class="themed-pre" style="white-space:pre-wrap; max-height:14em; overflow:auto; background:#f6f6f6; color:#222; padding:0.75em; border-radius:4px;"></pre>
+            <div id="upNotes" class="upNotes" tabindex="0" role="region" aria-label="Release notes"></div>
         </div>
     </div>
 
@@ -55,7 +66,7 @@
             <button class="ui orange button" id="upDbBtn" onclick="window.upConfirm('db');"><i class="database icon"></i> Update Database</button>
             <button class="ui basic red button" id="upRollbackBtn" onclick="window.upConfirm('rollback');"><i class="undo icon"></i> Roll back</button>
         </div>
-        <div id="upBtnReasons" style="margin-top:0.75em; color:#a33; font-size:0.95em;"></div>
+        <div id="upBtnReasons" style="margin-top:0.75em;"></div>
         <div id="upRateLimit" class="ui warning message" style="display:none; margin-top:0.75em;"></div>
         <details style="margin-top:1em;">
             <summary>GitHub access token (optional)</summary>
@@ -116,6 +127,28 @@
         if (xhr && xhr.responseJSON && xhr.responseJSON.error) return xhr.responseJSON.error;
         return (xhr && xhr.statusText) || "request failed";
     }
+    //Small, safe Markdown renderer for the release notes: everything is escaped first, only headings, lists,
+    //**bold**, *italic* and `code` become markup. Links and raw HTML are shown as plain text.
+    function renderMarkdown(md){
+        function inline(t){
+            return esc(t).replace(/\x60([^\x60]+)\x60/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>");
+        }
+        let out = "", inList = false;
+        String(md).replace(/\r/g, "").split("\n").forEach(function(line){
+            let h = /^(#{1,6})\s+(.*)$/.exec(line), li = /^\s*[-*]\s+(.*)$/.exec(line);
+            if (li){
+                if (!inList){ out += "<ul>"; inList = true; }
+                out += "<li>" + inline(li[1]) + "</li>";
+                return;
+            }
+            if (inList){ out += "</ul>"; inList = false; }
+            if (h){ out += "<h4>" + inline(h[2]) + "</h4>"; }
+            else if (line.trim() !== ""){ out += "<p>" + inline(line) + "</p>"; }
+        });
+        if (inList){ out += "</ul>"; }
+        return out;
+    }
+    window.upRenderMarkdown = renderMarkdown; //exposed for tools/ui-smoke
     function fmtTime(t){ return t && t.indexOf("0001-") != 0 ? new Date(t).toLocaleString() : "-"; }
     function fmtSize(n){ return n > 0 ? (n / 1048576).toFixed(1) + " MiB" : "-"; }
 
@@ -164,7 +197,7 @@
         if ((r = setBtn("#upRollbackBtn", rbReason))) reasons.push("Roll back: " + r);
         setBtn("#upCheckBtn", busy ? "An update operation is running." : "");
         $("#upChannel").prop("disabled", busy);
-        $("#upBtnReasons").html(reasons.map(esc).join("<br>"));
+        $("#upBtnReasons").html(reasons.length ? esc(t("Not available right now:")) + "<br>" + reasons.map(esc).join("<br>") : "");
     }
 
     function renderCheck(res){
@@ -180,7 +213,7 @@
             $r.attr("class", "ui small message").text(res.reason || "No update available.").show();
         }
         if (l && l.notes){
-            $("#upNotes").text(l.notes);
+            $("#upNotes").html(renderMarkdown(l.notes));
             $("#upNotesWrap").show();
         }else{
             $("#upNotesWrap").hide();

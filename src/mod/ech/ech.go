@@ -128,6 +128,11 @@ func ValidatePublicName(name string) error {
 	if len(name) > 253 {
 		return errors.New("public name too long")
 	}
+	for _, r := range name {
+		if r > 127 {
+			return errors.New("public name must use ASCII letters only: convert an international name to punycode (xn--...) first")
+		}
+	}
 	if name != strings.ToLower(name) {
 		return errors.New("public name must be lowercase")
 	}

@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -78,6 +80,21 @@ func (h *Handler) Stop() error {
 
 // Update the port number of the forward proxy
 func (h *Handler) UpdatePort(newPort int) error {
+	if newPort < 1 || newPort > 65535 {
+		return errors.New("Invalid port number: use a port between 1 and 65535")
+	}
+	if newPort != h.Port {
+		//The listener starts in the background, so probe the port first or a conflict (for example
+		//the management port) would be reported as success while nothing listens
+		ln, err := net.Listen("tcp", ":"+strconv.Itoa(newPort))
+		if err != nil {
+			if errors.Is(err, os.ErrPermission) {
+				return errors.New("Port " + strconv.Itoa(newPort) + " needs elevated permission, choose a port above 1024")
+			}
+			return errors.New("Port " + strconv.Itoa(newPort) + " is already in use by another program")
+		}
+		ln.Close()
+	}
 	h.Stop()
 	h.Port = newPort
 	return h.Start()

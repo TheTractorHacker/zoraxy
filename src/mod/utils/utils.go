@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"html"
 	"log"
@@ -30,9 +32,18 @@ func SendJSONResponse(w http.ResponseWriter, json string) {
 	w.Write([]byte(json))
 }
 
+// The message is JSON-escaped: Go errors often contain quotes ("lookup \"x\": no such host"),
+// which used to produce an invalid body that the UI could only report as "Request failed (HTTP 200)".
 func SendErrorResponse(w http.ResponseWriter, errMsg string) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte("{\"error\":\"" + errMsg + "\"}"))
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(map[string]string{"error": errMsg}); err != nil {
+		w.Write([]byte("{\"error\":\"unknown error\"}"))
+		return
+	}
+	w.Write(bytes.TrimRight(buf.Bytes(), "\n"))
 }
 
 func SendOK(w http.ResponseWriter) {

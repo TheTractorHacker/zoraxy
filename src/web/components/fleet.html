@@ -1,12 +1,13 @@
 <div class="standardContainer" id="fleetPage">
-    <div class="ui basic segment">
-        <h2>Fleet</h2>
-        <p>Central management of several Zoraxy nodes from one hub. The hub publishes versioned configuration for the scopes you
+    <header class="zx-page-header">
+        <div class="zx-page-header__main">
+            <div class="zx-page-header__crumbs" data-zx-crumbs></div>
+            <h2 class="zx-page-header__title">Fleet</h2>
+            <p class="zx-page-header__sub">Central management of several Zoraxy nodes from one hub. The hub publishes versioned configuration for the scopes you
             choose; nodes pull it with their own credentials and keep everything else local. The hub can only publish
             configuration and ask a node to sync: <b>it can never run commands on a node</b>.</p>
-    </div>
-    <div class="ui divider"></div>
-    <div id="flMsg" class="ui small message" style="display:none;"></div>
+        </div>
+    </header>
 
     <!-- standalone: choose -->
     <div id="flStandalone" style="display:none;">
@@ -21,7 +22,7 @@
                 <h3><i class="plug icon"></i> Join a fleet</h3>
                 <div class="ui form">
                     <div class="field"><label>Hub admin URL</label><input type="text" id="flJoinUrl" placeholder="https://10.0.0.10:8000"><small style="opacity:0.7;">Node outside the hub's network? Start the hub with <code>-fleet_port :8010</code> (serves only the Fleet node endpoints), publish it through a proxy rule with a real certificate and use that https address here.</small></div>
-                    <div class="field"><label>Join token</label><input type="text" id="flJoinToken" autocomplete="off" placeholder="zj1.xxxxxxxx.xxxxxxxx..."></div>
+                    <div class="field"><label>Join token</label><input type="password" id="flJoinToken" autocomplete="off" placeholder="zj1.xxxxxxxx.xxxxxxxx..."></div>
                     <div id="flProbeBox" class="ui small info message" style="display:none;"></div>
                     <button class="ui basic button" id="flProbeBtn">1. Check hub certificate</button>
                     <button class="ui primary basic button" id="flJoinBtn" disabled>2. Join</button>
@@ -147,9 +148,9 @@
             <p>Create a one time join token (single use, short lived). On the new node open Fleet, enter this hub's admin URL and the token.</p>
             <div class="ui form">
                 <div class="four fields">
-                    <div class="field"><label>Valid for (minutes)</label><input type="number" id="flTokMin" value="15" min="1" max="1440"></div>
+                    <div class="field"><label>Valid for (minutes)</label><input type="number" id="flTokMin" value="15" min="1" max="1440" step="1"></div>
                     <div class="field"><label>Node name (optional)</label><input type="text" id="flTokName"></div>
-                    <div class="field"><label>Group (optional)</label><input type="text" id="flTokGroup" placeholder="default"></div>
+                    <div class="field"><label>Group (optional)</label><input type="text" id="flTokGroup" placeholder="default"><small style="opacity:0.7;">Created when the node joins if it does not exist yet.</small></div>
                     <div class="field"><label>&nbsp;</label><button class="ui primary basic button" id="flTokCreate">Create token</button></div>
                 </div>
             </div>
@@ -192,11 +193,12 @@
     function ts(u){ return u ? new Date(u * 1000).toLocaleString() : "-"; }
     function ago(u){ if (!u) return "never"; let d = Math.max(0, Math.floor(Date.now()/1000 - u)); return d < 90 ? d + "s ago" : d < 5400 ? Math.round(d/60) + "m ago" : Math.round(d/3600) + "h ago"; }
     function dur(s){ if (!s) return "-"; return s < 3600 ? Math.round(s/60) + "m" : s < 172800 ? Math.round(s/3600) + "h" : Math.round(s/86400) + "d"; }
-    function msg(text, bad){
-        $("#flMsg").removeClass("positive negative").addClass(bad ? "negative" : "positive").text(text).show();
-        setTimeout(function(){ $("#flMsg").fadeOut(); }, 7000);
-    }
-    function fail(xhr){ msg((xhr && xhr.responseJSON && xhr.responseJSON.error) || (xhr && xhr.statusText) || "request failed", true); }
+    //Results are toasts (visible wherever the page is scrolled), not a banner that pushes the page down
+    function msg(text, bad){ ZxUI.toast(text, {type: bad ? "error" : "success"}); }
+    //HTTP failures are already reported by the global ajax error toast (script/uxkit.js) with the server's reason
+    function fail(xhr){}
+    //In-page confirmation (ZxUI.confirm) instead of the native browser dialog
+    function ask(title, message, confirmLabel, danger){ return ZxUI.confirm({title: title, message: message, confirmLabel: confirmLabel, danger: !!danger}); }
     function post(url, data, ok){
         $.cjax({method: "POST", url: url, data: data, success: function(d){
             if (d && d.error) { msg(d.error, true); return; }
@@ -240,12 +242,14 @@
     function loadInfo(){ $.ajax({url: "./api/fleet/node/info", method: "GET", success: renderInfo, error: fail}); }
 
     $("#flBecomeHub").on("click", function(){
-        if (!confirm("Turn this Zoraxy into a Fleet hub?")) return;
-        post("./api/cluster/config", {role: "hub"}, function(){ loadInfo(); });
+        ask("Turn this Zoraxy into a Fleet hub?", "This node becomes the management console. Its configuration is published to the nodes you add.", "Enable hub role").then(function(ok){
+            if (ok) post("./api/cluster/config", {role: "hub"}, function(){ loadInfo(); });
+        });
     });
     $("#flBecomeStandalone").on("click", function(){
-        if (!confirm("Turn the hub role off? Nodes keep their current configuration but stop receiving updates.")) return;
-        post("./api/cluster/config", {role: "standalone"}, function(){ loadInfo(); });
+        ask("Turn the hub role off?", "Nodes keep their current configuration but stop receiving updates.", "Turn the hub role off", true).then(function(ok){
+            if (ok) post("./api/cluster/config", {role: "standalone"}, function(){ loadInfo(); });
+        });
     });
     $("#flProbeBtn").on("click", function(){
         post("./api/fleet/node/probe", {hubUrl: $("#flJoinUrl").val()}, function(p){
@@ -261,15 +265,20 @@
     });
     $("#flJoinBtn").on("click", function(){
         let plain = probedFp === "";
-        if (plain && !confirm("Join over plain http? The join token and node key are not encrypted on the wire.")) return;
-        post("./api/fleet/node/join", {hubUrl: $("#flJoinUrl").val(), token: $("#flJoinToken").val(), fingerprint: probedFp || "", allowHttp: plain ? "true" : "false"}, function(){
-            $("#flJoinToken").val(""); msg("Joined the fleet"); loadInfo();
-        });
+        function doJoin(){
+            post("./api/fleet/node/join", {hubUrl: $("#flJoinUrl").val(), token: $("#flJoinToken").val(), fingerprint: probedFp || "", allowHttp: plain ? "true" : "false"}, function(){
+                $("#flJoinToken").val(""); msg("Joined the fleet"); loadInfo();
+            });
+        }
+        if (!plain) { doJoin(); return; }
+        ask("Join over plain http?", "The join token and node key are not encrypted on the wire.", "Join anyway", true).then(function(ok){ if (ok) doJoin(); });
     });
     $("#flJoinUrl").on("input", function(){ probedFp = null; $("#flJoinBtn").prop("disabled", true); $("#flProbeBox").hide(); });
     $("#flNodeSync").on("click", function(){ post("./api/fleet/node/syncNow", {}, function(){ msg("Synced"); loadInfo(); }); });
     $("#flNodeLeave").on("click", function(){
-        if (confirm("Leave the fleet? The current files stay as local configuration.")) post("./api/fleet/node/leave", {}, function(){ loadInfo(); });
+        ask("Leave the fleet?", "The current files stay as local configuration.", "Leave fleet", true).then(function(ok){
+            if (ok) post("./api/fleet/node/leave", {}, function(){ loadInfo(); });
+        });
     });
 
     /* ---------------- hub ---------------- */
@@ -324,7 +333,8 @@
         });
         $("#flGroups").html(g || "<tr><td colspan='5'>No groups yet</td></tr>");
         let keepSel = $("#flPubGroup").val();
-        $("#flPubGroup").html(opts).val(keepSel || $("#flPubGroup option:first").val());
+        $("#flPubGroup").html(opts || "<option value=''>" + esc(window.t("No groups yet")) + "</option>").val(keepSel || $("#flPubGroup option:first").val());
+        $("#flPubGroup, #flPublishBtn").prop("disabled", !ov.groups.length); //nothing to publish to until a group exists
         fillCanary();
         if ($("#flGScopes").children().length == 0) checks(ov.scopes, "#flGScopes", []);
 
@@ -396,12 +406,15 @@
     });
     $("#flNodes").on("click", "[data-act]", function(){
         let id = $(this).closest("tr").attr("data-id"), act = $(this).data("act");
-        if (act == "nodeRevoke") { if (!confirm("Revoke this node? Its credentials stop working immediately.")) return; }
-        if (act == "nodeRemove") { if (!confirm("Remove this node from the hub?")) return; }
-        if (act == "nodeRotate") { if (!confirm("Rotate the node key? The node picks the new key up at its next sync.")) return; }
         let data = {id: id};
+        let question = {
+            nodeRevoke: ["Revoke this node?", "Its credentials stop working immediately.", "Revoke", true],
+            nodeRemove: ["Remove this node from the hub?", "The node keeps its current configuration but is no longer managed.", "Remove", true],
+            nodeRotate: ["Rotate the node key?", "The node picks the new key up at its next sync.", "Rotate key", false]
+        }[act];
         if (act == "nodeGroup") { let g = prompt("New group name:"); if (!g) return; data.group = g; }
-        hub(act, data);
+        if (!question) { hub(act, data); return; }
+        ask(question[0], question[1], question[2], question[3]).then(function(ok){ if (ok) hub(act, data); });
     });
     $("#flDrawerClose").on("click", function(){ $("#flDrawer").hide(); openNode = null; });
     $("#flNodeSync").on("change", function(){ hub("nodePaused", {id: openNode, paused: $(this).is(":checked") ? "false" : "true"}); });
@@ -418,15 +431,29 @@
     $("#flGroups").on("click", "[data-g]", function(){
         let name = $(this).data("name"), a = $(this).data("g");
         let g = ov.groups.filter(function(x){ return x.name == name; })[0];
-        if (a == "del") { if (confirm("Delete group " + name + "?")) hub("groupDelete", {name: name}); return; }
-        if (a == "rollback") { if (confirm("Roll " + name + " back to the version it ran before?")) hub("rollback", {group: name, strategy: "immediate"}, function(){ msg("Rolled back"); }); return; }
+        if (a == "del") { ask(tf("Delete group {0}?", name), "Nodes in this group keep their current configuration.", "Delete group", true).then(function(ok){ if (ok) hub("groupDelete", {name: name}); }); return; }
+        if (a == "rollback") { ask(tf("Roll {0} back?", name), "The group returns to the version it ran before.", "Roll back", true).then(function(ok){ if (ok) hub("rollback", {group: name, strategy: "immediate"}, function(){ msg("Rolled back"); }); }); return; }
         $("#flGroupFormTitle").text("Edit group " + name);
         $("#flGName").val(name); $("#flGTags").val(((g.sel.proxyTags) || []).join(", "));
         $("#flGVars").val(JSON.stringify(g.vars || {}, null, 1));
         checks(ov.scopes, "#flGScopes", g.sel.scopes || []);
         $("#flGName")[0].scrollIntoView();
     });
+    function varsError(text){
+        text = $.trim(text);
+        if (text === "") return "";
+        try { let o = JSON.parse(text); if (o === null || typeof o !== "object" || Array.isArray(o) || Object.keys(o).some(function(k){ return typeof o[k] !== "string"; })) throw 1; }
+        catch (e) { return t("Variables must be a JSON object with text values, for example {\"upstream_ip\": \"10.0.0.5\"}"); }
+        return "";
+    }
+    $("#flSaveVars").off("click").on("click", function(){
+        let err = varsError($("#flNodeVars").val());
+        if (err) { msg(err, true); return; }
+        hub("nodeVars", {id: openNode, vars: $("#flNodeVars").val()}, function(){ msg("Variables saved"); });
+    });
     $("#flGSave").on("click", function(){
+        let err = varsError($("#flGVars").val());
+        if (err) { msg(err, true); return; }
         hub("groupSet", {name: $("#flGName").val(), scopes: picked("#flGScopes"), tags: $("#flGTags").val(), vars: $("#flGVars").val()}, function(){ msg("Group saved"); });
     });
     $("#flPublishBtn").on("click", function(){
@@ -440,7 +467,9 @@
         let b = $(this).data("b"), a = $(this).data("a");
         if ($(this).data("v") == "roll") {
             let g = $("#flPubGroup").val();
-            if (confirm("Publish v" + b + " to group " + g + " now?")) hub("publish", {group: g, version: b, strategy: "immediate", note: "re-publish v" + b}, function(){ msg("Published v" + b); });
+            ask(tf("Publish v{0} to group {1} now?", b, g), "All nodes of the group receive this version.", "Publish").then(function(ok){
+                if (ok) hub("publish", {group: g, version: b, strategy: "immediate", note: "re-publish v" + b}, function(){ msg("Published v" + b); });
+            });
             return;
         }
         $.ajax({url: "./api/fleet/hub/diff?a=" + a + "&b=" + b, success: function(d){
@@ -454,6 +483,9 @@
         }, error: fail});
     });
     $("#flTokCreate").on("click", function(){
+        $("#flTokShow").hide(); $("#flTokText").text(""); //an old secret must not stay visible next to a new request or its error
+        let mins = String($("#flTokMin").val()).trim();
+        if (mins !== "" && (!/^\d+$/.test(mins) || Number(mins) < 1 || Number(mins) > 1440)) { msg(t("Valid for must be a whole number of minutes between 1 and 1440"), true); $("#flTokMin").trigger("focus"); return; }
         hub("tokenCreate", {minutes: $("#flTokMin").val(), name: $("#flTokName").val(), group: $("#flTokGroup").val()}, function(d){
             $("#flTokText").text(d.token); $("#flTokShow").show();
             $.ajax({url: "./api/fleet/hub/joinInfo", success: function(j){ $("#flHubFp").text(j.tlsFingerprint || "none (admin port is plain http)"); }});

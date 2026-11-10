@@ -159,8 +159,12 @@ func randID() string {
 	return hex.EncodeToString(b)
 }
 
+// MaxExpirySeconds is the longest lifetime a token can be created with (10 years)
+const MaxExpirySeconds = 10 * 365 * 86400
+
 // Create makes a new token. The returned string is the only time the clear
 // text token is available.
+
 func (m *Manager) Create(name, scope string, expires int64, cidrs []string) (string, *Info, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || len(name) > 64 {
@@ -172,6 +176,9 @@ func (m *Manager) Create(name, scope string, expires int64, cidrs []string) (str
 	now := m.clock().Unix()
 	if expires != 0 && expires <= now {
 		return "", nil, errors.New("expiry must be in the future")
+	}
+	if expires > now+MaxExpirySeconds {
+		return "", nil, errors.New("expiry is too far in the future (maximum 10 years)")
 	}
 	clean := []string{}
 	for _, c := range cidrs {

@@ -18,6 +18,7 @@ package main
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -277,6 +278,12 @@ func HandleStaticWebServerPortChange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	err = staticWebServer.ChangePort(strconv.Itoa(newPort))
+	if err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
+	}
+
 	if dynamicProxyRouter.Root.DefaultSiteOption == dynamicproxy.DefaultSite_InternalStaticWebServer {
 		//Update the root site as well
 		newDraftingRoot := dynamicProxyRouter.Root.Clone()
@@ -300,12 +307,6 @@ func HandleStaticWebServerPortChange(w http.ResponseWriter, r *http.Request) {
 		dynamicProxyRouter.Root = activatedNewRoot
 
 		SaveReverseProxyConfig(newDraftingRoot)
-	}
-
-	err = staticWebServer.ChangePort(strconv.Itoa(newPort))
-	if err != nil {
-		utils.SendErrorResponse(w, err.Error())
-		return
 	}
 
 	utils.SendOK(w)
@@ -450,7 +451,7 @@ func HandleZoraxyInfo(w http.ResponseWriter, r *http.Request) {
 	displayAllowSSHLB := *allowSshLoopback
 	displayBootTime := bootTime
 
-	if !authAgent.CheckAuth(r) {
+	if requireAuth && !authAgent.CheckAuth(r) { //-noauth: every request is the admin (same rule as router.go)
 		displayUUID = "Unauthorized"
 		displayAllowSSHLB = false
 		displayBootTime = 0
@@ -491,6 +492,11 @@ func HandleIpAccessCheck(w http.ResponseWriter, r *http.Request) {
 	ip, err := utils.GetPara(r, "ip")
 	if err != nil {
 		utils.SendErrorResponse(w, "ip not given")
+		return
+	}
+	ip = strings.TrimSpace(ip)
+	if net.ParseIP(ip) == nil {
+		utils.SendErrorResponse(w, "not a valid IPv4 or IPv6 address: "+ip)
 		return
 	}
 

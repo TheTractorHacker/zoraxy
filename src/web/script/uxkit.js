@@ -298,6 +298,13 @@
     function initAjaxErrorToast() {
         $(document).ajaxError(function (ev, xhr, settings) {
             if (!xhr || xhr.statusText === "abort" || xhr.status === 0 && xhr.readyState === 0) { return; }
+            //The server explains itself in {"error": "..."} (also with HTTP 4xx): show that text, not a bare status code
+            var reason = "";
+            try {
+                var body = xhr.responseJSON || JSON.parse(xhr.responseText);
+                if (body && typeof body.error === "string") { reason = body.error; }
+            } catch (e) { /* not JSON */ }
+            if (reason) { toast(reason, false); return; }
             var now = Date.now();
             if (now - lastAjaxToast < 10000) { return; }
             lastAjaxToast = now;
@@ -307,8 +314,31 @@
         });
     }
 
+    /* ---------------------------------------------------------------
+       6. Scroll cue for tab bars that scroll sideways on narrow screens: a fade at the cut-off edge
+          (classes zx-scroll-start / zx-scroll-end, styled in main.css) so hidden tabs can be discovered
+    --------------------------------------------------------------- */
+    function updateScrollCue(el) {
+        var max = el.scrollWidth - el.clientWidth;
+        el.classList.toggle("zx-scroll-end", max > 2 && el.scrollLeft < max - 2);
+        el.classList.toggle("zx-scroll-start", max > 2 && el.scrollLeft > 2);
+    }
+    function initScrollCue() {
+        var SEL = ".ui.tabular.menu, .zx-tabs";
+        var timer = null;
+        function scan() { document.querySelectorAll(SEL).forEach(updateScrollCue); }
+        function later() { clearTimeout(timer); timer = setTimeout(scan, 120); }
+        document.addEventListener("scroll", function (e) {
+            if (e.target && e.target.matches && e.target.matches(SEL)) { updateScrollCue(e.target); }
+        }, true);
+        window.addEventListener("resize", later);
+        new MutationObserver(later).observe(document.body, { childList: true, subtree: true });
+        scan();
+    }
+
     $(function () {
         try {
+            initScrollCue();
             initMenuFilter();
             initToastRegion();
             initA11y();

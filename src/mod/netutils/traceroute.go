@@ -25,7 +25,7 @@ func liveTraceRoute(dst string, maxHops int, liveRespHandler func(string)) error
 	// create a socket to listen for incoming ICMP packets
 	conn, err := icmp.ListenPacket("ip4:icmp", "0.0.0.0")
 	if err != nil {
-		return fmt.Errorf("failed to create ICMP listener: %v", err)
+		return fmt.Errorf("failed to create ICMP listener: %v", icmpPermissionHint(err))
 	}
 	defer conn.Close()
 	id := os.Getpid() & 0xffff
@@ -124,7 +124,7 @@ func traceroute(dst string, maxHops int) ([]string, error) {
 	// create a socket to listen for incoming ICMP packets
 	conn, err := icmp.ListenPacket("ip4:icmp", "0.0.0.0")
 	if err != nil {
-		return results, fmt.Errorf("failed to create ICMP listener: %v", err)
+		return results, fmt.Errorf("failed to create ICMP listener: %v", icmpPermissionHint(err))
 	}
 	defer conn.Close()
 	id := os.Getpid() & 0xffff
