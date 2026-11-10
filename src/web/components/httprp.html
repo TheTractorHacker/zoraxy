@@ -1163,7 +1163,7 @@
 
                 let upstreamLink = `${upstream.RequireTLS?"https://":"http://"}${upstream.OriginIpOrDomain}`;
 
-                upstreams += `<a href="${upstreamLink}" target="_blank">${upstream.OriginIpOrDomain} ${tlsIcon}</a><br>`;
+                upstreams += `<a href="${ZxUI.esc(upstreamLink)}" target="_blank" rel="noopener noreferrer">${ZxUI.esc(upstream.OriginIpOrDomain)} ${tlsIcon}</a><br>`;
             })
         }
         return upstreams;
@@ -1172,7 +1172,7 @@
     function renderVirtualDirectoryList(subd){
         let vdList = `<div class="ui list">`;
         subd.VirtualDirectories.forEach(vdir => {
-            vdList += `<div class="item">${vdir.MatchingPath} <i class="green angle double right icon"></i> ${vdir.Domain}</div>`;
+            vdList += `<div class="item">${ZxUI.esc(vdir.MatchingPath)} <i class="green angle double right icon"></i> ${ZxUI.esc(vdir.Domain)}</div>`;
         });
         vdList += `</div>`
         if (subd.VirtualDirectories.length == 0){
@@ -1238,15 +1238,15 @@
                 // Add primary domain entry
                 resolveList.append(`
                     <tr>
-                        <td>${primaryDomain}</td>
-                        <td class="certificateDropdown" domain="${primaryDomain}">${certMap[primaryDomain] || "Fallback Certificate"}</td>
+                        <td>${ZxUI.esc(primaryDomain)}</td>
+                        <td class="certificateDropdown" domain="${ZxUI.esc(primaryDomain)}">${ZxUI.esc(certMap[primaryDomain] || "Fallback Certificate")}</td>
                     </tr>
                 `);
                 aliasDomains.forEach(alias => {
                     resolveList.append(`
                         <tr>
-                            <td>${alias}</td>
-                            <td class="certificateDropdown" domain="${alias}">${certMap[alias] || "Fallback Certificate"}</td>
+                            <td>${ZxUI.esc(alias)}</td>
+                            <td class="certificateDropdown" domain="${ZxUI.esc(alias)}">${ZxUI.esc(certMap[alias] || "Fallback Certificate")}</td>
                         </tr>
                     `);
                 });
@@ -1837,7 +1837,7 @@
                 let dropdown = $('<div class="ui fluid selection dropdown"></div>');
                 let menu = $('<div class="menu"></div>');
                 (data || []).forEach(cert => {
-                    menu.append(`<div class="item" data-value="${cert}">${cert}</div>`);
+                    menu.append(`<div class="item" data-value="${ZxUI.esc(cert)}">${ZxUI.esc(cert)}</div>`);
                 });
                 // Add a hidden input to store the selected certificate
                 dropdown.append('<input type="hidden" name="certificate">');
@@ -1887,9 +1887,9 @@
         
         //Check if the domain is wildcard domain, if yes do not render as a link
         if (subd.RootOrMatchingDomain.indexOf("*") > -1){
-            editor.find(".downstream_primary_hostname").html(subd.RootOrMatchingDomain);
+            editor.find(".downstream_primary_hostname").html(ZxUI.esc(subd.RootOrMatchingDomain));
         }else{
-            editor.find(".downstream_primary_hostname").html(`<a href="//${subd.RootOrMatchingDomain}" target="_blank">${subd.RootOrMatchingDomain}</a>`);
+            editor.find(".downstream_primary_hostname").html(`<a href="//${ZxUI.esc(subd.RootOrMatchingDomain)}" target="_blank" rel="noopener noreferrer">${ZxUI.esc(subd.RootOrMatchingDomain)}</a>`);
         }
         editor.find(".BypassGlobalTLS").off('change');
         editor.find(".BypassGlobalTLS").prop("checked", subd.BypassGlobalTLS);
@@ -1995,10 +1995,10 @@
         (subd.MatchingDomainAlias || []).forEach(alias => {
             if (alias.indexOf("*") > -1){
                 //Wildcard alias
-                aliasHTML += `<span class="ui tiny label">${alias}</span> `;
+                aliasHTML += `<span class="ui tiny label">${ZxUI.esc(alias)}</span> `;
             }else{
                 //Normal alias
-                aliasHTML += `<span class="ui tiny label"><a href="//${alias}" target="_blank">${alias}</a></span> `;
+                aliasHTML += `<span class="ui tiny label"><a href="//${ZxUI.esc(alias)}" target="_blank" rel="noopener noreferrer">${ZxUI.esc(alias)}</a></span> `;
             }
             
         });

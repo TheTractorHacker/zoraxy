@@ -147,6 +147,25 @@ def consistency_ui(pg, ctx):
         if HOSTILE not in js("document.getElementById('hostDomainList').innerText"):
             fail("xss", "the hostile host name is not shown as plain text in the Path routes host list")
 
+        # ---- HTTP Proxy rule editor: host, alias, upstream and path-route values are text, never markup ----
+        current["page"] = "hostile-editor"
+        js("window.__xss = 0")
+        js("openTabById('httprp')")
+        pg.wait_for_timeout(700)
+        js("""h => {
+            const rule = {RootOrMatchingDomain: h, MatchingDomainAlias: [h, "*" + h], ActiveOrigins: [{OriginIpOrDomain: h, RequireTLS: false, SkipCertValidations: false}],
+                          VirtualDirectories: [{MatchingPath: h, Domain: h}], ListeningPorts: [], RequireTLS: false};
+            try { initHttpProxyRuleEditorModal(rule); } catch (e) { window.__editorErr = String(e); }
+            const subd = rule;
+            document.querySelector('#httprpEditModalWrapper .upstream_list').innerHTML = renderUpstreamList(subd);
+            document.querySelector('#httprpEditModalWrapper .vdir_list').innerHTML = renderVirtualDirectoryList(subd);
+        }""", HOSTILE)
+        pg.wait_for_timeout(600)
+        if js("document.querySelectorAll('#httprpEditModalWrapper img[src=\"x\"]').length") or js("window.__xss"):
+            fail("xss", "a hostile host / alias / upstream / path-route value became markup in the HTTP Proxy rule editor")
+        if HOSTILE not in js("document.querySelector('#httprpEditModalWrapper .downstream_alias_hostname').innerText"):
+            fail("xss", "the hostile alias is not shown as plain text in the HTTP Proxy rule editor: " + str(js("window.__editorErr")))
+
         # ---- tags, deep links and labels of the renamed pages ----
         current["page"] = "renamed-pages"
         for tag, label, h2 in (("globalsettings", "Listeners", "Listeners"), ("vdir", "Path routes", "Path routes"), ("rules", "Raw rule form", "Raw rule form")):

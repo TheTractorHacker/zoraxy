@@ -31,5 +31,5 @@ Newest first within each area. Each item names the page and what a user notices;
 * Ingress is **Listeners**, Virtual Directories are **Path routes**, Advanced Rule Form is **Raw rule form** (see [terminology.md](terminology.md)).
 
 ## Fixes found on the way
-* Host names, aliases, upstreams, tags, rule names and similar values from the configuration were inserted into pages without escaping on several pages (Path routes, Uptime Monitor, Redirection, Access Rules, Stream Proxy, Trusted Proxies, Wake on LAN, Plugins, upstream / alias / tag / access-rule editors, ...). They are escaped now.
+* Host names, aliases, upstreams, tags, rule names and similar values from the configuration were inserted into pages without escaping on several pages (HTTP Proxy rule editor and lists, Path routes, Uptime Monitor, Redirection, Access Rules, Stream Proxy, Trusted Proxies, Wake on LAN, Plugins, upstream / alias / tag / access-rule editors, ...). They are escaped now.
 * Status: the Upstream health card no longer makes the page scroll sideways on a phone when a host name is very long.
