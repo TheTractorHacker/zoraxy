@@ -133,10 +133,8 @@ type ExplainOutput struct {
 	Explanation string           `json:"explanation"`
 	Actions     []ResolvedAction `json:"actions"`
 	Dropped     int              `json:"dropped_actions,omitempty"`
-}
-
-func exclusionPathOK(p string) bool {
-	return strings.HasPrefix(p, "/") && len(p) <= 200 && !strings.ContainsAny(p, "\"'\\\r\n\x00;,?#") && !strings.Contains(p, "%{")
+	// Refused holds, in code-written words, why unsafe actions were discarded (never model text).
+	Refused []string `json:"refused_actions,omitempty"`
 }
 
 // blocklistableIP refuses addresses that are never a sensible blocklist entry: loopback, private,
@@ -151,11 +149,23 @@ func blocklistableIP(a netip.Addr) bool {
 // Exclusions need a likely_false_positive verdict and blocklist proposals a likely_attack verdict. This is
 // enforced here and not only in the prompt, because the model reads attacker controlled text.
 func resolveActions(res *ExplainResult, in EventInput) ([]ResolvedAction, int) {
+	out, dropped, _ := resolveActionsChecked(res, in)
+	return out, dropped
+}
+
+// resolveActionsChecked is resolveActions plus the reasons for actions refused as unsafe.
+func resolveActionsChecked(res *ExplainResult, in EventInput) ([]ResolvedAction, int, []string) {
 	var out []ResolvedAction
+	var refused []string
 	dropped := 0
 	seen := map[string]bool{}
 	for _, a := range res.Actions {
 		var ra *ResolvedAction
+		if msg := unsafeExclusion(a, in); msg != "" {
+			refused = append(refused, msg)
+			dropped++
+			continue
+		}
 		switch a.Type {
 		case ActNoAction:
 			ra = &ResolvedAction{Type: ActNoAction, Summary: "No change"}
@@ -217,7 +227,7 @@ func resolveActions(res *ExplainResult, in EventInput) ([]ResolvedAction, int) {
 		ra.Reason = a.Reason
 		out = append(out, *ra)
 	}
-	return out, dropped
+	return out, dropped, refused
 }
 
 // PreviewExplain returns the exact payload for an event.
@@ -249,8 +259,8 @@ func (s *Service) Explain(ctx context.Context, in EventInput) (*ExplainOutput, e
 		s.audit("ai.explain", "answer rejected")
 		return nil, err
 	}
-	acts, dropped := resolveActions(res, in)
-	return &ExplainOutput{Verdict: res.Verdict, Explanation: res.Explanation, Actions: acts, Dropped: dropped}, nil
+	acts, dropped, refused := resolveActionsChecked(res, in)
+	return &ExplainOutput{Verdict: res.Verdict, Explanation: res.Explanation, Actions: acts, Dropped: dropped, Refused: refused}, nil
 }
 
 // ---------- traffic summary and rule proposals ----------

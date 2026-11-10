@@ -84,7 +84,7 @@ func TestActionsEnforceVerdictAndSafeAddresses(t *testing.T) {
 		}
 	}
 	acts, dropped := resolveActions(mk(VerdictFalsePositive), in)
-	if len(acts) != 2 || dropped != 1 {
+	if len(acts) != 1 || acts[0].Type != ActExcludeVariable || dropped != 2 { // the whole-path form of a SQLi rule is refused
 		t.Fatalf("false positive: %+v dropped=%d", acts, dropped)
 	}
 	acts, _ = resolveActions(mk(VerdictAttack), in)

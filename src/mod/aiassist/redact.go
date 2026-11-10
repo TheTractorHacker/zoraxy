@@ -188,6 +188,35 @@ func (r *Redactor) Host(h string) string {
 	return r.Text(h, capHost)
 }
 
+// cleanPath decodes the path part (the model should see what the server saw) but treats every
+// delimiter that appears, raw or after decoding, as the end of the path: ? # and ; (matrix
+// parameters). So /a%3Fq=secret, /a%23x=y, /a%253Fq=secret and /a;k=v never reach the model with
+// their values. Decoding is bounded; if the text is still encoded after the last pass it is cut at
+// the first percent sign.
+func cleanPath(path string) string {
+	const passes = 3
+	cut := func(s string) string {
+		if i := strings.IndexAny(s, "?#;"); i >= 0 {
+			return s[:i]
+		}
+		return s
+	}
+	path = cut(path)
+	for i := 0; i < passes; i++ {
+		u, err := url.PathUnescape(path)
+		if err != nil || u == path {
+			break
+		}
+		path = cut(u)
+	}
+	if u, err := url.PathUnescape(path); err == nil && u != path {
+		if i := strings.IndexByte(path, '%'); i >= 0 {
+			path = path[:i]
+		}
+	}
+	return path
+}
+
 // Path removes query VALUES (names are kept when paths are sent), fragments and tokens.
 func (r *Redactor) Path(p string) string {
 	if !r.P.SendPaths {
@@ -201,9 +230,7 @@ func (r *Redactor) Path(p string) string {
 	if i := strings.IndexByte(p, '?'); i >= 0 {
 		path, query = p[:i], p[i+1:]
 	}
-	if u, err := url.PathUnescape(path); err == nil && u != path {
-		path = u // the model should see what the server saw; scrubbing below handles tokens
-	}
+	path = cleanPath(path)
 	out := r.Text(path, capPath)
 	if query != "" {
 		var names []string
@@ -218,6 +245,9 @@ func (r *Redactor) Path(p string) string {
 			}
 			if un, err := url.QueryUnescape(n); err == nil {
 				n = un
+			}
+			if k := strings.IndexAny(n, "?#;=&"); k >= 0 { // an encoded delimiter ends the name, never starts a value
+				n = n[:k]
 			}
 			n = r.Text(n, 40)
 			if n != "" {

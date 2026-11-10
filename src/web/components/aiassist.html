@@ -226,16 +226,16 @@
 
     function proposals(list, appliable){
         var box = $(P + "#aiResult").empty();
-        if (!list.length) { box.append($('<p class="aiHint"></p>').text("Nothing worth a rule was found.")); return; }
+        if (!list.length) { box.append($('<p class="aiHint"></p>').text(t("Nothing worth a rule was found."))); return; }
         list.forEach(function(p){
             var c = $('<div class="aiProposal"></div>');
-            c.append($("<b></b>").text(p.name), $('<span class="ui mini label" style="margin-left:.6em"></span>').text("log only, action if enabled later: " + p.action));
+            c.append($("<b></b>").text(p.name), $('<span class="ui mini label" style="margin-left:.6em"></span>').text(tf("log only, action if enabled later: {0}", p.action)));
             c.append($("<div></div>").text(p.description));
             c.append($("<code></code>").text(p.expression));
-            c.append($('<div class="aiHint"></div>').text("Why: " + p.reason));
+            c.append($('<div class="aiHint"></div>').text(tf("Why: {0}", p.reason)));
             c.append($('<button type="button" class="ui mini basic button"><i class="copy icon"></i> Copy expression</button>').on("click", function(){
-                if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(p.expression).then(function(){ zrAI.note("Copied"); }, function(){ zrAI.note("Copy is not available in this context", false); });
-                else zrAI.note("Copy is not available in this context", false);
+                if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(p.expression).then(function(){ zrAI.note(t("Copied")); }, function(){ zrAI.note(t("Copy is not available in this context"), false); });
+                else zrAI.note(t("Copy is not available in this context"), false);
             }));
             box.append(c);
         });
@@ -265,10 +265,10 @@
             box.append($("<div></div>").html(zrAI.render(d.summary)));
             (d.steps || []).sort(function(a, b){ return a.priority - b.priority; }).forEach(function(s){
                 var c = $('<div class="aiStep p' + (parseInt(s.priority, 10) || 3) + '"></div>');
-                c.append($("<b></b>").text(s.title), $("<div></div>").html(zrAI.render(s.why)), $('<div class="aiHint"></div>').text("Where: " + s.how));
+                c.append($("<b></b>").text(s.title), $("<div></div>").html(zrAI.render(s.why)), $('<div class="aiHint"></div>').text(tf("Where: {0}", s.how)));
                 box.append(c);
             });
-            box.append($('<p class="aiHint"></p>').text("AI generated plan. Nothing was changed."));
+            box.append($('<p class="aiHint"></p>').text(t("AI generated plan. Nothing was changed.")));
         });
     });
 

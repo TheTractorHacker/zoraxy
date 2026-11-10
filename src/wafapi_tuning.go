@@ -102,6 +102,12 @@ func applyWAFTuning(scope, endpoint string, s waf.TuningSuggestion, variable str
 	if len(s.RuleIDs) == 0 {
 		return errors.New("suggestion has no rule IDs")
 	}
+	// The anomaly-score evaluation rules turn the score into a block; excluding one disables blocking.
+	for _, id := range s.RuleIDs {
+		if waf.SpecTouchesScoreRule(id) {
+			return errors.New("rule " + id + " evaluates the anomaly score and decides whether a request is blocked; it cannot be excluded here")
+		}
+	}
 	switch s.Kind {
 	case "variable":
 		target := s.Target

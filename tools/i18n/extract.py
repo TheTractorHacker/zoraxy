@@ -38,7 +38,7 @@ CORE = ["index.html", "login.html", "components/status.html", "components/httprp
         "snippet/upstreams.html", "snippet/accessRuleEditor.html", "snippet/notifications.html"]
 SKIP_TAGS = {"script", "style", "code", "pre", "textarea", "noscript", "svg"}
 TEXT_ATTRS = ("placeholder", "title", "aria-label", "alt")
-HELPERS = r"(?:msgbox|confirmBox|alert|confirm|prompt|showToast|setStatus|t)"
+HELPERS = r"(?:msgbox|confirmBox|alert|confirm|prompt|showToast|setStatus|tf|t)"
 
 
 def norm(s):

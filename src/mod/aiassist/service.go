@@ -210,6 +210,14 @@ func (s *Service) call(ctx context.Context, st Settings, o *Outbound) (*Response
 		s.audit("ai."+o.Feature, "refused: "+err.Error())
 		return nil, err
 	}
+	// Whatever happens below (a panic included), the reservation is settled and, once a request may
+	// have reached the provider, the estimate is charged: an aborting client cannot dodge the budget.
+	settled := false
+	defer func() {
+		if !settled {
+			res.Done(0)
+		}
+	}()
 	cctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 	hc := s.clientFn(st.Provider == ProviderOpenAICompatible && st.LocalModel)
@@ -224,13 +232,14 @@ func (s *Service) call(ctx context.Context, st Settings, o *Outbound) (*Response
 	if resp != nil {
 		in, out = resp.InputTokens, resp.OutputTokens
 	}
-	switch {
-	case resp == nil && err != nil && !reachedNetwork(err):
+	settled = true
+	switch settleKind(resp, err) {
+	case settleCancel:
 		res.Cancel()
-	case resp == nil && err != nil:
-		res.Fail() // no answer, no usage: a wrong key or a closed tab must not burn the budget
+	case settleFree:
+		res.Fail()
 	default:
-		res.Done(in + out)
+		res.Done(in + out) // 0 = unknown: the reservation estimate is charged
 	}
 	result := "ok"
 	if err != nil {
@@ -243,13 +252,33 @@ func (s *Service) call(ctx context.Context, st Settings, o *Outbound) (*Response
 	return resp, nil
 }
 
-// reachedNetwork is false for errors that happen before a request could have been sent.
-func reachedNetwork(err error) bool {
+type settleMode int
+
+const (
+	settleCharge settleMode = iota // may have been billed: real usage, or the estimate when unknown
+	settleFree                     // nothing sent or cleanly refused: no tokens, the rate slot stays used
+	settleCancel                   // never left this process: no tokens, the rate slot is returned
+)
+
+// settleKind decides how a finished call is charged. A reply that carries usage is always charged
+// as reported. Without a reply, only errors that prove the provider did not process the request
+// (providerError.unbilled) are free; everything else, including client cancellation, the timeout,
+// an oversized reply and a 200 that is not valid JSON, is charged at the estimate.
+func settleKind(resp *Response, err error) settleMode {
+	if resp != nil || err == nil {
+		return settleCharge
+	}
 	var pe *providerError
 	if errors.As(err, &pe) {
-		return pe.msg != "invalid endpoint"
+		if pe.msg == "invalid endpoint" {
+			return settleCancel
+		}
+		if pe.unbilled {
+			return settleFree
+		}
+		return settleCharge
 	}
-	return true
+	return settleCancel // local error before the provider call (e.g. encoding the request)
 }
 
 func scrubKey(msg, key string) string {

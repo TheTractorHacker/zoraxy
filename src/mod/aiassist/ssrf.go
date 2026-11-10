@@ -39,6 +39,16 @@ var reserved = netip.MustParsePrefix("240.0.0.0/4")
 // checkIP returns an error when ip must not be contacted.
 func checkIP(ip netip.Addr, allowLocal bool) error {
 	ip = ip.Unmap()
+	if ip.Is6() {
+		if emb, refuse, ok := embeddedIPv4(ip); ok {
+			if refuse {
+				return errors.New("IPv6 transition addresses (Teredo, NAT64 local-use) are refused")
+			}
+			// the same checks as for the plain IPv4 address; for the non-local provider the
+			// translated address must also be public (a NAT64 gateway can reach the private range)
+			return checkIP(emb, allowLocal)
+		}
+	}
 	for _, m := range metadataAddrs {
 		if ip == m {
 			return errors.New("the endpoint address is a cloud metadata address and is always refused")
@@ -116,4 +126,34 @@ func newGuardedClient(allowLocal bool, timeout time.Duration) *http.Client {
 			return http.ErrUseLastResponse
 		},
 	}
+}
+
+var (
+	nat64WK    = netip.MustParsePrefix("64:ff9b::/96")
+	nat64Local = netip.MustParsePrefix("64:ff9b:1::/48")
+	sixToFour  = netip.MustParsePrefix("2002::/16")
+	teredo     = netip.MustParsePrefix("2001::/32")
+	v4Compat   = netip.MustParsePrefix("::/96")
+)
+
+// embeddedIPv4 extracts the IPv4 address carried by an IPv6 transition address. ok is false for
+// ordinary IPv6. refuse is true for prefixes that are refused outright (Teredo, local-use NAT64).
+// The IPv4-compatible form ::a.b.c.d is decoded as well; ::, ::1 and the v4-compat space below
+// 0.0.0.2 stay with the normal unspecified/loopback checks.
+func embeddedIPv4(ip netip.Addr) (v4 netip.Addr, refuse, ok bool) {
+	b := ip.As16()
+	switch {
+	case nat64WK.Contains(ip):
+		return netip.AddrFrom4([4]byte{b[12], b[13], b[14], b[15]}), false, true
+	case nat64Local.Contains(ip), teredo.Contains(ip):
+		return netip.Addr{}, true, true
+	case sixToFour.Contains(ip):
+		return netip.AddrFrom4([4]byte{b[2], b[3], b[4], b[5]}), false, true
+	case v4Compat.Contains(ip):
+		if ip == netip.IPv6Unspecified() || ip == netip.IPv6Loopback() {
+			return netip.Addr{}, false, false
+		}
+		return netip.AddrFrom4([4]byte{b[12], b[13], b[14], b[15]}), false, true
+	}
+	return netip.Addr{}, false, false
 }

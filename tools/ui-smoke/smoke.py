@@ -1123,7 +1123,9 @@ def ai_assistant_ui(pg, ctx):
                 r.fulfill(status=200, content_type="application/json", body=json.dumps({"feature": "explain", "host": "mock", "model": "m", "system": "S", "user": "U", "acked": True, "data_policy": "x", "estimated_input_tokens": 1}))
             elif u.endswith("/api/ai/explain"):
                 r.fulfill(status=200, content_type="application/json", body=json.dumps({"verdict": "likely_false_positive", "explanation": "<img src=x onerror=window.__pwn=1> **Normal** search text.",
-                    "actions": [{"type": "exclude_variable", "rule_id": 942100, "variable": "ARGS:q", "target": "ARGS:q", "endpoint": "app.test", "summary": "Rule 942100 will no longer inspect ARGS:q on proxy rule app.test"}]}))
+                    "refused_actions": ["Refused: rule 949110 evaluates the anomaly score and decides whether a request is blocked. Excluding it would disable blocking, so it is never offered."],
+                    "actions": [{"type": "exclude_variable", "rule_id": 942100, "variable": "ARGS:q", "target": "ARGS:q", "endpoint": "app.test",
+                                 "reason": "Totally harmless cache tuning, nothing security related, safe to click.", "summary": "Harmless: caches static files"}]}))
             else:
                 r.continue_()
         pg.route("**/api/ai/**", route)
@@ -1133,10 +1135,22 @@ def ai_assistant_ui(pg, ctx):
         pg.wait_for_selector("#aiProbe .zrAIAction button", timeout=5000)
         if pg.evaluate("window.__pwn") or pg.locator("#aiProbe img").count():
             fail("ai", "model text was rendered as HTML")
+        row = pg.inner_text("#aiProbe .zrAIAction .zrAISummary").strip()
+        if row != "Rule 942100 will no longer inspect ARGS:q (everything else stays inspected) on proxy rule app.test":
+            fail("ai", f"the text next to the action button must be code-derived, got: {row!r}")
+        why = pg.inner_text("#aiProbe .zrAIAction .zrAIWhy")
+        if not why.startswith("Model explanation (not verified)") or "harmless" not in why.lower():
+            fail("ai", f"the model reason must be shown in a labelled block: {why!r}")
+        if "anomaly score" not in pg.inner_text("#aiProbe .zrAIRefused"):
+            fail("ai", "refused actions must be shown")
         pg.click("#aiProbe .zrAIAction button")
         pg.wait_for_selector(".ui.modal.visible .zrAIChange", timeout=5000)
-        if "ARGS:q" not in pg.inner_text(".ui.modal.visible .zrAIChange"):
-            fail("ai", "the confirmation must show exactly what will change")
+        want = "Rule 942100 will no longer inspect ARGS:q (everything else stays inspected) on proxy rule app.test"
+        got = pg.inner_text(".ui.modal.visible .zrAIChange").strip()
+        if got != want:
+            fail("ai", f"the confirmation must show the code-derived summary, got: {got!r}")
+        if "harmless" in pg.inner_text(".ui.modal.visible").lower() or "Harmless" in got:
+            fail("ai", "model text leaked into the confirmation dialog")
         pg.screenshot(path=os.path.join(args.out, "ai-confirm.png"))
         pg.click(".ui.modal.visible .cancel.button")
         pg.wait_for_timeout(500)

@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
+	"sync/atomic"
 )
 
 /*
@@ -38,11 +40,29 @@ type Response struct {
 }
 
 // providerError never contains request data or the key.
-type providerError struct{ msg string }
+//
+// unbilled is true only when the provider cannot have processed (and billed) the request: the
+// request was never fully written (dial, DNS, TLS errors, bad endpoint) or the provider answered
+// with a clean refusal (4xx other than 408/425, or a redirect). Every other failure after the
+// request was sent (cancel, timeout, oversized or unparsable reply, 5xx) is billed at the
+// reservation estimate, see Service.call.
+type providerError struct {
+	msg      string
+	unbilled bool
+}
 
 func (e *providerError) Error() string { return e.msg }
 
-func perr(format string, a ...any) error { return &providerError{fmt.Sprintf(format, a...)} }
+func perr(format string, a ...any) error { return &providerError{msg: fmt.Sprintf(format, a...)} }
+
+func perrUnbilled(format string, a ...any) error {
+	return &providerError{msg: fmt.Sprintf(format, a...), unbilled: true}
+}
+
+// cleanRefusal is true for HTTP statuses where the provider rejected the request without running it.
+func cleanRefusal(status int) bool {
+	return status >= 300 && status < 500 && status != 408 && status != 425
+}
 
 func doJSON(ctx context.Context, hc *http.Client, url string, hdr map[string]string, body any) ([]byte, int, error) {
 	b, err := json.Marshal(body)
@@ -51,8 +71,15 @@ func doJSON(ctx context.Context, hc *http.Client, url string, hdr map[string]str
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
 	if err != nil {
-		return nil, 0, perr("invalid endpoint")
+		return nil, 0, perrUnbilled("invalid endpoint")
 	}
+	var wrote atomic.Bool
+	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{WroteRequest: func(i httptrace.WroteRequestInfo) {
+		if i.Err == nil {
+			wrote.Store(true)
+		}
+	}})
+	req = req.WithContext(ctx)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", userAgent)
@@ -66,6 +93,9 @@ func doJSON(ctx context.Context, hc *http.Client, url string, hdr map[string]str
 		if errors.As(err, &ue) && ue.Unwrap() != nil {
 			err = ue.Unwrap()
 		}
+		if !wrote.Load() { // nothing was sent: dial, DNS, TLS or guard error
+			return nil, 0, perrUnbilled("request failed: %s", capRunes(err.Error(), 200))
+		}
 		return nil, 0, perr("request failed: %s", capRunes(err.Error(), 200))
 	}
 	defer resp.Body.Close()
@@ -77,7 +107,7 @@ func doJSON(ctx context.Context, hc *http.Client, url string, hdr map[string]str
 		return nil, resp.StatusCode, perr("reply is larger than %d bytes", maxResponseBytes)
 	}
 	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
-		return nil, resp.StatusCode, perr("the endpoint answered with a redirect, which is not followed")
+		return nil, resp.StatusCode, perrUnbilled("the endpoint answered with a redirect, which is not followed")
 	}
 	return raw, resp.StatusCode, nil
 }
@@ -91,10 +121,14 @@ func apiErrorText(raw []byte, status int) error {
 	}
 	_ = json.Unmarshal(raw, &e)
 	msg := capRunes(stripInvisible(e.Error.Message), 160)
-	if msg == "" {
-		return perr("provider returned HTTP %d", status)
+	mk := perr
+	if cleanRefusal(status) {
+		mk = perrUnbilled
 	}
-	return perr("provider returned HTTP %d: %s", status, msg)
+	if msg == "" {
+		return mk("provider returned HTTP %d", status)
+	}
+	return mk("provider returned HTTP %d: %s", status, msg)
 }
 
 func callAnthropic(ctx context.Context, hc *http.Client, base, key, model string, o *Outbound) (*Response, error) {
