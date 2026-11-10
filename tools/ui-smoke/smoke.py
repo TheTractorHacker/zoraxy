@@ -42,6 +42,23 @@ allow = [re.compile(a) for a in args.allow] + [
 failures = []
 current = {"page": "init"}
 
+# Every tab id of the menu before the navigation redesign: all of them must keep opening their page (deep links, openTabById calls
+# in the components, bookmarks). Value = the breadcrumb "Group > Page" the new menu shows for it.
+OLD_TABS = {
+    "qstart": ("Overview", "Quick Start"), "status": ("Overview", "Status"),
+    "httprp": ("Sites", "HTTP Proxy"), "setroot": ("Sites", "Default Site"), "redirectset": ("Sites", "Redirection"),
+    "vdir": ("Sites", "Path routes"), "streamproxy": ("Sites", "Stream Proxy"), "rules": ("Sites", "Raw rule form"), "webserv": ("Sites", "Static Web Server"),
+    "seccenter": ("Security", "Security Center"), "waf": ("Security", "WAF"), "access": ("Security", "Access Rules"),
+    "sso": ("Security", "SSO / OAuth2"), "captcha": ("Security", "CAPTCHA"),
+    "cert": ("Certificates", "TLS / SSL Certificates"), "acme": ("Certificates", "ACME Client"),
+    "stats": ("Traffic", "Statistics"), "visitors": ("Traffic", "Visitors"), "utm": ("Traffic", "Uptime Monitor"),
+    "globalsettings": ("Network", "Listeners"), "trustproxy": ("Network", "Trusted Proxies"), "zrok": ("Network", "Tunnels (zrok)"),
+    "ech": ("Network", "Encrypted Client Hello"), "iface": ("Network", "Network Interfaces"), "networktool": ("Network", "Network Tools"),
+    "fleet": ("Fleet & HA", "Fleet"), "cluster": ("Fleet & HA", "Cluster / HA"),
+    "updater": ("System", "Update"), "apitokens": ("System", "API Tokens"), "plugins": ("System", "Plugin Manager"),
+    "appstore": ("System", "App Store"), "utils": ("System", "Utilities"), "settings": ("System", "Settings"),
+}
+
 
 def fail(kind, msg):
     s = f"[{current['page']}] {kind}: {msg}"
@@ -148,42 +165,85 @@ def proxy_ux(pg, ctx):
     pg.evaluate("openTabById('status')")
     settle(pg, 400)
     groups = pg.eval_on_selector_all("#mainmenu .menugroup-items", "els => els.map(e => e.id.replace('group-', ''))")
-    if groups != ["proxy", "security", "certs", "observe", "tools", "system"]:
+    if groups != ["overview", "sites", "security", "certs", "traffic", "network", "ha", "system"]:
         fail("nav", f"unexpected nav groups {groups}")
     missing = pg.evaluate("""() => [...document.querySelectorAll('#mainmenu a.item[tag]')].filter(a => {
         const i = a.querySelector(':scope > i.icon'); if (!i) return true;
         const c = getComputedStyle(i, '::before').content; return !c || c === 'none' || c === 'normal' || c === '""'; }).map(a => a.getAttribute('tag'))""")
     if missing:
         fail("nav", f"menu items without a rendered icon: {missing}")
-    for tab in ("status", "httprp", "setroot", "redirectset", "vdir", "streamproxy", "globalsettings", "rules", "seccenter", "waf", "access",
-                "trustproxy", "sso", "cert", "acme", "stats", "utm", "webserv", "networktool", "iface", "utils", "cluster", "fleet", "apitokens", "updater"):
+    gicons = pg.evaluate("""() => [...document.querySelectorAll('#mainmenu .menugroup-header[data-group] > i.icon:first-child')].filter(i => {
+        const c = getComputedStyle(i, '::before').content; return !c || c === 'none' || c === 'normal' || c === '""'; }).map(i => i.parentElement.dataset.group)""")
+    if gicons:
+        fail("nav", f"menu groups without a rendered icon: {gicons}")
+    for tab in OLD_TABS:
         if pg.locator(f"#mainmenu a.item[tag='{tab}']").count() != 1:
             fail("nav", f"menu item for tab {tab} missing or duplicated")
-    pg.evaluate("if ($('#group-tools').is(':hidden')) toggleMenuGroup('tools')")
+    heads = pg.evaluate("""() => [...document.querySelectorAll('#mainmenu .menugroup-header[data-group]')].map(h => [h.getAttribute('role'), h.getAttribute('aria-controls'),
+        h.getAttribute('aria-expanded'), h.tabIndex])""")
+    if any(h[0] != "button" or not h[1] or h[2] not in ("true", "false") or h[3] < 0 for h in heads):
+        fail("a11y", f"menu group headers need role=button, aria-controls, aria-expanded and to be focusable: {heads}")
+    if pg.locator("#mainmenu a.item[aria-current=page]").count() != 1:
+        fail("a11y", "exactly one menu item must carry aria-current=page")
+    pg.evaluate("if ($('#group-network').is(':hidden')) toggleMenuGroup('network')")
     pg.wait_for_timeout(400)
-    pg.click("#mainmenu .menugroup-header:has(#chevron-tools)")
+    pg.click("#mainmenu .menugroup-header[data-group=network]")
     pg.wait_for_timeout(450)
-    if pg.is_visible("#group-tools"):
+    if pg.is_visible("#group-network"):
         fail("nav", "clicking a group header did not collapse the group")
-    if pg.evaluate("JSON.parse(localStorage.getItem('zoraxy_menu_groups')).tools") is not False:
+    if pg.evaluate("JSON.parse(localStorage.getItem('zoraxy_menu_groups')).network") is not False:
         fail("nav", "collapsed state not saved")
-    pg.click("#mainmenu .menugroup-header:has(#chevron-tools)")
+    if pg.get_attribute("#mainmenu .menugroup-header[data-group=network]", "aria-expanded") != "false":
+        fail("a11y", "aria-expanded not updated after collapsing")
+    pg.click("#mainmenu .menugroup-header[data-group=network]")
     pg.wait_for_timeout(450)
-    if not pg.is_visible("#group-tools"):
+    if not pg.is_visible("#group-network"):
         fail("nav", "clicking the header again did not expand the group")
-    # state saved by the previous menu (old group ids) is carried over to the groups that replaced them
+    # keyboard: Enter on a focused header toggles it, ArrowDown moves to the next entry
+    pg.focus("#mainmenu .menugroup-header[data-group=network]")
+    pg.keyboard.press("ArrowDown")
+    if pg.evaluate("document.activeElement.getAttribute('tag')") != "globalsettings":
+        fail("a11y", "ArrowDown from a group header should focus its first item")
+    pg.keyboard.press("ArrowLeft")
+    if pg.evaluate("document.activeElement.dataset.group") != "network":
+        fail("a11y", "ArrowLeft on an item should focus its group header")
+    pg.keyboard.press("Enter")
+    pg.wait_for_timeout(450)
+    if pg.is_visible("#group-network"):
+        fail("a11y", "Enter on a group header did not collapse it")
+    pg.keyboard.press("Enter")
+    pg.wait_for_timeout(450)
+    # opening a page expands its group and leaves the other groups alone
+    pg.evaluate("localStorage.setItem('zoraxy_menu_groups', JSON.stringify({_v: 3, overview: true, sites: true, system: false}))")
+    pg.reload(wait_until="networkidle")
+    pg.wait_for_timeout(900)
+    pg.evaluate("openTabById('cert')")
+    pg.wait_for_timeout(500)
+    if not pg.is_visible("#group-certs") or not pg.is_visible("#group-sites") or pg.is_visible("#group-system"):
+        fail("nav", "opening a page must expand its group only (sites stays open, system stays closed)")
+    # state saved by the previous menus (old group ids) is carried over to the groups that replaced them
+    pg.evaluate("localStorage.setItem('zoraxy_menu_groups', JSON.stringify({_v: 2, proxy: false, tools: false, observe: true, system: false, security: true}))")
+    pg.reload(wait_until="networkidle")
+    pg.wait_for_timeout(900)
+    st = pg.evaluate("JSON.parse(localStorage.getItem('zoraxy_menu_groups'))")
+    if st.get("sites") is not False or st.get("network") is not False or st.get("traffic") is not True or st.get("system") is not False or st.get("_v") != 3 or "proxy" in st or "tools" in st:
+        fail("nav", f"menu state migration v2 -> v3 wrong: {st}")
     pg.evaluate("localStorage.setItem('zoraxy_menu_groups', JSON.stringify({reverseproxy:false, others:false, security:true, accessconn:true}))")
     pg.reload(wait_until="networkidle")
     pg.wait_for_timeout(900)
     st = pg.evaluate("JSON.parse(localStorage.getItem('zoraxy_menu_groups'))")
-    if st.get("proxy") is not False or st.get("system") is not False or st.get("_v") != 2 or "reverseproxy" in st:
-        fail("nav", f"menu state migration wrong: {st}")
+    if st.get("sites") is not False or st.get("system") is not False or st.get("_v") != 3 or "reverseproxy" in st:
+        fail("nav", f"menu state migration v1 -> v3 wrong: {st}")
     pg.evaluate("localStorage.removeItem('zoraxy_menu_groups')")
     pg.reload(wait_until="networkidle")
     pg.wait_for_timeout(900)
+    if not pg.is_visible("#group-overview"):
+        fail("nav", "first visit: the Overview group should be open")
+    pg.evaluate("openTabById('status')")
+    pg.wait_for_timeout(300)
     pg.screenshot(path=out("nav-groups.png"))
 
-    # ---- Quick Start: dismiss, stays away after a reload, comes back from Ingress ----
+    # ---- Quick Start: dismiss, stays away after a reload, comes back from Settings ----
     current["page"] = "quickstart"
     was_shown = pg.evaluate("fetch('/api/quickstart').then(r => r.json())").get("show")
     pg.evaluate("setQuickStartDismissed(true)")
@@ -196,12 +256,12 @@ def proxy_ux(pg, ctx):
     pg.wait_for_timeout(800)
     if pg.is_visible("#qstartNavItem") or pg.evaluate("location.hash") != "#status":
         fail("quickstart", f"a dismissed instance should land on Status without the item (hash {pg.evaluate('location.hash')})")
-    pg.evaluate("openTabById('globalsettings')")
+    pg.evaluate("openTabById('settings')")
     settle(pg, 500)
     if not pg.is_visible(".quickStartShowAgain"):
-        fail("quickstart", "'Show Quick Start again' is missing in Ingress")
+        fail("quickstart", "'Show Quick Start again' is missing in Settings")
     else:
-        pg.click(".quickStartShowAgain")
+        pg.click(".quickStartShowAgain button")
         settle(pg, 600)
         if not pg.is_visible("#qstartNavItem"):
             fail("quickstart", "Quick Start did not come back")
@@ -408,6 +468,293 @@ def proxy_ux(pg, ctx):
         pg.screenshot(path=out("httprp-empty.png"))
 
 
+def nav_palette(pg, ctx):
+    """Navigation redesign: every legacy tab id still opens its page with the right breadcrumb, deep links, command palette
+    (Ctrl+K: page, host, setting, XSS safety, keyboard), the settings index anchors, the UI kit page, and the save bar on
+    Listeners and Settings."""
+    out = lambda n: os.path.join(args.out, n)
+    pg.set_viewport_size({"width": 1366, "height": 900})
+    api = lambda path, data: pg.evaluate(API, [path, data, "POST"])
+    host = "palette-host.smoke.invalid"
+    evil = "x<img src=x onerror=window.__xss=1>.smoke.invalid"
+    pg.evaluate("localStorage.removeItem('zoraxy_palette_recent')")
+    pg.reload(wait_until="networkidle")
+    pg.wait_for_timeout(800)
+    api("/api/proxy/add", {"type": "host", "rootname": host, "ep": "127.0.0.1:9", "tls": "false", "tlsval": "false", "bypassGlobalTLS": "false"})
+
+    # ---- every legacy tab id: opens, component loaded, breadcrumb "Group / Page", aria-current ----
+    for tab, (group, label) in OLD_TABS.items():
+        current["page"] = f"legacy-tab/{tab}"
+        pg.evaluate("t => openTabById(t)", tab)
+        settle(pg, 450)
+        vis = pg.evaluate("""t => { const e = document.getElementById(t); return e && e.offsetParent !== null ? e.innerText.trim().length : -1 }""", tab)
+        if vis <= 0:
+            fail("legacy-tab", f"#{tab} did not open or is empty ({vis})")
+        crumbs = pg.evaluate("""() => { const vis = [...document.querySelectorAll('.zx-crumbs')].filter(c => c.offsetParent !== null)[0];
+            return vis ? [...vis.querySelectorAll('li')].map(li => li.textContent.trim()) : null }""")
+        if crumbs != [group, label]:
+            fail("breadcrumb", f"{tab}: expected {[group, label]}, got {crumbs}")
+        if pg.evaluate("location.hash") != "#" + tab:
+            fail("legacy-tab", f"{tab}: location.hash is {pg.evaluate('location.hash')}")
+        if pg.evaluate("document.querySelector('#mainmenu a.item[aria-current=page]').getAttribute('tag')") != tab:
+            fail("a11y", f"{tab}: aria-current is not on its menu item")
+        if label.replace(" ", "") not in pg.evaluate("document.title").replace(" ", ""):
+            fail("legacy-tab", f"{tab}: document title {pg.evaluate('document.title')!r} lacks {label}")
+    # deep links by URL hash
+    for tab in ("httprp", "cert", "globalsettings", "settings", "waf", "fleet"):
+        current["page"] = f"deeplink/{tab}"
+        pg.goto(args.url + "/#" + tab, wait_until="networkidle")
+        pg.reload(wait_until="networkidle")
+        pg.wait_for_timeout(700)
+        if not pg.is_visible("#" + tab):
+            fail("deeplink", f"#{tab} did not open from the URL hash")
+
+    # ---- command palette ----
+    current["page"] = "palette"
+    pg.goto(args.url + "/#status", wait_until="networkidle")
+    pg.wait_for_timeout(800)
+    pg.keyboard.press("Control+k")
+    pg.wait_for_selector("#zxPalette:not([hidden])", timeout=3000)
+    if pg.evaluate("document.activeElement.className") != "zx-palette__input":
+        fail("palette", "the search input is not focused after Ctrl+K")
+    pg.keyboard.type("firewall")
+    pg.wait_for_timeout(250)
+    first = pg.inner_text("#zxPalette [role=option] >> nth=0").replace("\n", " ")
+    if "WAF" not in first:
+        fail("palette", f"'firewall' should find the WAF first, got {first!r}")
+    pg.screenshot(path=out("palette-light.png"))
+    pg.fill("#zxPalette input", "ssl")
+    pg.wait_for_timeout(200)
+    if "TLS / SSL Certificates" not in pg.inner_text("#zxPalette [role=option] >> nth=0"):
+        fail("palette", "'ssl' should find Certificates")
+    pg.fill("#zxPalette input", "ban")
+    pg.wait_for_timeout(200)
+    txt = pg.inner_text("#zxPalette")
+    if "Access Rules" not in txt or "Auto-ban" not in txt:
+        fail("palette", "'ban' should find Access Rules and Auto-ban")
+    # a proxy host
+    pg.fill("#zxPalette input", "palette-host")
+    pg.wait_for_function("document.querySelector('#zxPalette .zx-palette__label') && document.querySelector('#zxPalette .zx-palette__label').textContent.includes('palette-host')", timeout=4000)
+    if "Sites" not in pg.eval_on_selector_all("#zxPalette .zx-palette__group", "els => els.map(e => e.textContent)"):
+        fail("palette", "hosts should be listed under 'Sites'")
+    pg.keyboard.press("Enter")
+    pg.wait_for_timeout(900)
+    if pg.evaluate("document.querySelector('#zxPalette').hidden") is not True:
+        fail("palette", "Enter did not close the palette")
+    if not pg.is_visible("#httprp"):
+        fail("palette", "choosing a host did not open the HTTP Proxy page")
+    # a setting inside a closed accordion
+    pg.keyboard.press("Control+k")
+    pg.keyboard.type("minimum tls")
+    pg.wait_for_timeout(250)
+    if "Minimum TLS version" not in pg.inner_text("#zxPalette [role=option] >> nth=0"):
+        fail("palette", "'minimum tls' should find the setting first")
+    pg.keyboard.press("Enter")
+    pg.wait_for_timeout(1800)
+    if not pg.is_visible("#globalsettings"):
+        fail("palette", "choosing a setting did not open its page")
+    if not pg.is_visible("#tlsVersionSlider"):
+        fail("palette", "the setting's accordion was not opened / anchor not visible")
+    # arrow keys + recent + Escape
+    pg.keyboard.press("Control+k")
+    pg.wait_for_timeout(200)
+    if "Minimum TLS version" not in pg.inner_text("#zxPalette"):
+        fail("palette", "recent items are not listed when the query is empty")
+    pg.keyboard.type("stat")
+    pg.keyboard.press("ArrowDown")
+    if pg.evaluate("document.querySelectorAll('#zxPalette [aria-selected=true]').length") != 1:
+        fail("palette", "exactly one result must be selected")
+    pg.keyboard.press("Escape")
+    pg.wait_for_timeout(150)
+    if pg.evaluate("document.querySelector('#zxPalette').hidden") is not True:
+        fail("palette", "Escape did not close the palette")
+    pg.keyboard.press("Control+k")
+    pg.keyboard.press("Control+k")
+    if pg.evaluate("document.querySelector('#zxPalette').hidden") is not True:
+        fail("palette", "Ctrl+K again should close it")
+    # the header button, and the old "/" menu filter next to it
+    pg.click("#zxSearchBtn")
+    pg.wait_for_selector("#zxPalette:not([hidden])", timeout=3000)
+    pg.keyboard.press("Escape")
+    pg.keyboard.press("/")
+    if pg.evaluate("document.activeElement.id") != "navFilterInput":
+        fail("palette", "'/' no longer focuses the menu filter")
+    pg.keyboard.press("Escape")
+    # XSS: a host name that is HTML must be shown as text and must not run. The hostile rule exists only for this check
+    # (other pages of the UI render rule names too).
+    evil_res = api("/api/proxy/add", {"type": "host", "rootname": evil, "ep": "127.0.0.1:9", "tls": "false", "tlsval": "false", "bypassGlobalTLS": "false"})
+    if not (isinstance(evil_res, dict) and evil_res.get("error")):
+        pg.keyboard.press("Control+k")
+        pg.keyboard.type("smoke.invalid")
+        pg.wait_for_function("document.querySelectorAll('#zxPalette [role=option]').length >= 2", timeout=4000)
+        pg.wait_for_timeout(400)
+        if pg.evaluate("window.__xss") is not None:
+            fail("palette", "XSS: markup in a host name was executed")
+        if pg.locator("#zxPalette img").count():
+            fail("palette", "XSS: markup in a host name was rendered as an element")
+        if "<img" not in pg.inner_text("#zxPalette"):
+            fail("palette", "the hostile host name should be shown literally as text")
+        pg.keyboard.press("Escape")
+        api("/api/proxy/del", {"ep": evil})
+    else:
+        print("  note: the server refused the hostile host name, XSS check limited to static review:", evil_res.get("error"))
+    # palette on a phone and in the dark theme
+    pg.set_viewport_size({"width": 390, "height": 700})
+    pg.keyboard.press("Control+k")
+    pg.keyboard.type("waf")
+    pg.wait_for_timeout(300)
+    check_horizontal(pg, "palette mobile")
+    pg.screenshot(path=out("palette-mobile.png"))
+    pg.keyboard.press("Escape")
+    pg.set_viewport_size({"width": 1366, "height": 900})
+    if not pg.evaluate("document.body.classList.contains('darkTheme')"):
+        pg.evaluate("toggleTheme()")
+    pg.keyboard.press("Control+k")
+    pg.keyboard.type("ssl")
+    pg.wait_for_timeout(300)
+    pg.screenshot(path=out("palette-dark.png"))
+    pg.keyboard.press("Escape")
+    pg.evaluate("toggleTheme()")
+    api("/api/proxy/del", {"ep": host})
+
+    # ---- the settings index: every anchor resolves ----
+    entries = pg.evaluate("ZxPalette.settings.map(s => ({label: s.label, page: s.page, pre: s.pre || '', at: s.at || '', text: s.text || ''}))")
+    if len(entries) < 40:
+        fail("palette", f"settings index has only {len(entries)} entries (need at least 40)")
+    for e in entries:
+        current["page"] = f"settings-index/{e['label']}"
+        pg.evaluate("t => openTabById(t)", e["page"])
+        settle(pg, 350)
+        if e["pre"]:
+            pg.evaluate("([p, sel]) => { const el = document.querySelector('#' + p + ' ' + sel); if (el) el.click(); }", [e["page"], e["pre"]])
+            pg.wait_for_timeout(450)
+        found = pg.evaluate("""([p, at, text]) => { const root = document.getElementById(p);
+            if (at && root.querySelector(at)) return true;
+            if (text) return [...root.querySelectorAll('h1,h2,h3,h4,label,.title,button,b')].some(n => n.textContent.includes(text));
+            return false }""", [e["page"], e["at"], e["text"]])
+        if not found:
+            fail("palette", f"settings index entry {e['label']!r}: anchor {e['at'] or e['text']!r} not found on #{e['page']}")
+
+    # ---- UI kit page (served only with -dev; this test server runs with -dev) ----
+    current["page"] = "kit"
+    kp = ctx.new_page()
+    kp.on("pageerror", lambda e: fail("pageerror", str(e)))
+    kp.on("console", lambda m: m.type == "error" and fail("console.error", m.text + " " + m.location.get("url", "")))
+    kp.on("response", lambda r: r.status >= 400 and fail("http", f"{r.status} {r.url}"))
+    kp.goto(args.url + "/ui/kit.html", wait_until="networkidle")
+    kp.wait_for_function("window.__kitReady === true", timeout=5000)
+    if kp.locator(".kit-pane").count() < 28:
+        fail("kit", f"kit page shows only {kp.locator('.kit-pane').count()} panes")
+    if kp.locator(".kit-fail").count():
+        fail("kit", "contrast table of the kit has failing pairs")
+    dups = kp.evaluate("(() => { const a = [...document.querySelectorAll('[id]')].map(e => e.id); return a.filter((x, i) => a.indexOf(x) !== i) })()")
+    if dups:
+        fail("kit", f"duplicate ids on the kit page: {dups[:5]}")
+    kp.screenshot(path=out("kit-light.png"), full_page=True)
+    kp.evaluate("setDarkTheme(true)")
+    kp.wait_for_timeout(300)
+    kp.screenshot(path=out("kit-dark.png"), full_page=True)
+    kp.set_viewport_size({"width": 390, "height": 800})
+    kp.wait_for_timeout(300)
+    check_horizontal(kp, "kit 390px")
+    kp.screenshot(path=out("kit-mobile.png"), full_page=True)
+    kp.evaluate("setDarkTheme(false)")
+    kp.close()
+    if pg.locator("#mainmenu a.item[href='ui/kit.html']").count() != 1 or not pg.evaluate("[...document.querySelectorAll('#mainmenu a.item[href=\"ui/kit.html\"]')].every(a => a.style.display !== 'none')"):
+        fail("kit", "the UI kit menu entry is not visible on a -dev server")
+
+    # ---- Listeners: one Save bar instead of Apply buttons ----
+    current["page"] = "listeners-savebar"
+    pg.evaluate("openTabById('globalsettings')")
+    settle(pg, 1200)
+    if pg.locator("#globalsettings button:has-text('Apply')").count():
+        fail("listeners", "per-field Apply buttons are still on the Listeners page")
+    for gone in ("#uiLanguageSetting", ".quickStartShowAgain", "#defaultErrorPagesBtn"):
+        if pg.locator("#globalsettings " + gone).count():
+            fail("listeners", f"{gone} must live on the Settings page only")
+    if pg.evaluate("document.querySelector('#globalsettings .zx-savebar').hidden") is not True:
+        fail("listeners", "the save bar must be hidden while nothing changed")
+    if not pg.is_visible("#readHeaderTimeoutInput"):
+        pg.click("#statusAdvanceSettings > .title")   # the timeouts sit in the Advance Settings accordion
+        pg.wait_for_timeout(500)
+    old = pg.evaluate("$.get('/api/proxy/timeouts')")
+    pg.fill("#readHeaderTimeoutInput", str(int(old["readHeaderTimeout"]) + 7))
+    pg.fill("#idleTimeoutInput", str(int(old["idleTimeout"]) + 3))
+    pg.wait_for_timeout(300)
+    bar_txt = pg.inner_text("#globalsettings .zx-savebar")
+    if "2 unsaved changes" not in bar_txt or "Read Header Timeout" not in bar_txt:
+        fail("listeners", f"save bar should count and name the two changed fields: {bar_txt!r}")
+    pg.screenshot(path=out("listeners-savebar-light.png"))
+    pg.click("#globalsettings [data-zx-save]")
+    pg.wait_for_function("document.querySelector('#globalsettings .zx-savebar').classList.contains('is-success')", timeout=8000)
+    new = pg.evaluate("$.get('/api/proxy/timeouts')")
+    if int(new["readHeaderTimeout"]) != int(old["readHeaderTimeout"]) + 7 or int(new["idleTimeout"]) != int(old["idleTimeout"]) + 3:
+        fail("listeners", f"the save bar did not apply the timeouts: {old} -> {new}")
+    pg.wait_for_function("document.querySelector('#globalsettings .zx-savebar').hidden", timeout=6000)
+    # programmatic changes (page code filling the form) must not make it dirty; a failing save keeps the bar and the values
+    pg.evaluate("$('#readHeaderTimeoutInput').val('55').trigger('input').trigger('change')")
+    pg.wait_for_timeout(300)
+    if pg.evaluate("document.querySelector('#globalsettings .zx-savebar').hidden") is not True:
+        fail("listeners", "a programmatic change marked the form dirty")
+    pg.evaluate("$('#readHeaderTimeoutInput').val(" + str(int(new["readHeaderTimeout"])) + ")")
+    pg.fill("#incomingPort", "99999")
+    pg.click("#globalsettings [data-zx-save]")
+    pg.wait_for_function("document.querySelector('#globalsettings .zx-savebar').classList.contains('is-error')", timeout=5000)
+    if "Invalid incoming port value" not in pg.inner_text("#globalsettings .zx-savebar"):
+        fail("listeners", "the save bar should show the validation message of the port")
+    pg.screenshot(path=out("listeners-savebar-error.png"))
+    # leaving the page asks first; Discard puts the old value back
+    pg.evaluate("openTabById('status')")
+    pg.wait_for_selector(".zx-dialog", timeout=3000)
+    pg.click(".zx-dialog [data-zx-cancel]")
+    if not pg.is_visible("#globalsettings"):
+        fail("listeners", "'Stay on this page' must keep the Listeners page open")
+    pg.click("#globalsettings [data-zx-discard]")
+    pg.wait_for_timeout(300)
+    if pg.evaluate("document.querySelector('#globalsettings .zx-savebar').hidden") is not True or pg.input_value("#incomingPort") == "99999":
+        fail("listeners", "Discard did not restore the saved values")
+    # put the timeouts back through the bar
+    pg.fill("#readHeaderTimeoutInput", str(old["readHeaderTimeout"]))
+    pg.fill("#idleTimeoutInput", str(old["idleTimeout"]))
+    pg.click("#globalsettings [data-zx-save]")
+    pg.wait_for_function("document.querySelector('#globalsettings .zx-savebar').classList.contains('is-success')", timeout=8000)
+    back = pg.evaluate("$.get('/api/proxy/timeouts')")
+    if int(back["readHeaderTimeout"]) != int(old["readHeaderTimeout"]):
+        fail("listeners", f"restoring the timeouts failed: {back}")
+
+    # ---- Settings: language and default error pages live here ----
+    current["page"] = "settings-savebar"
+    pg.evaluate("openTabById('settings')")
+    settle(pg, 700)
+    pg.screenshot(path=out("settings-light.png"))
+    pg.focus("#uiLanguageSetting")
+    pg.keyboard.type("Deutsch")   # a real (trusted) change event; select_option would fire a synthetic one, which the dirty tracker ignores by design
+    pg.wait_for_timeout(250)
+    if pg.evaluate("document.querySelector('#settings .zx-savebar').hidden") is not False:
+        fail("settings", "choosing a language should show the save bar")
+    if pg.evaluate("i18n.lang") != "en":
+        fail("settings", "the language must only change when the bar is saved")
+    pg.click("#settings [data-zx-save]")
+    pg.wait_for_function("i18n.lang === 'de'", timeout=6000)
+    pg.wait_for_timeout(600)
+    if pg.input_value(".menubar select.i18n-picker") != "de":
+        fail("settings", "the picker in the top bar did not follow")
+    saved = pg.evaluate("fetch('/api/i18n/language').then(r => r.json())")
+    if saved.get("language") != "de":
+        fail("settings", f"language not stored on the server: {saved}")
+    pg.evaluate("i18n.setLanguage('en')")
+    pg.wait_for_function("i18n.lang === 'en'", timeout=5000)
+    pg.evaluate("$.cjax({url: '/api/i18n/language', method: 'POST', data: {language: ''}})")
+    pg.evaluate("localStorage.removeItem('zoraxy.lang')")
+    pg.wait_for_timeout(300)
+    pg.click("#defaultErrorPagesBtn")
+    pg.wait_for_timeout(900)
+    if not pg.is_visible(".sideWrapper"):
+        fail("settings", "'Default error pages' did not open the side panel")
+    pg.evaluate("hideSideWrapper(true)")
+    pg.wait_for_timeout(500)
+
+
 def i18n_checks(pg, ctx):
     """Runtime translation layer: English is a no-op, zh-CN switch is fast, stable (no mutation feedback loop) and complete enough."""
     current["page"] = "i18n"
@@ -479,11 +826,13 @@ def i18n_checks(pg, ctx):
             fail("i18n", "translation queue never drained")
 
         # lazily loaded component + snippet iframe pick the language up
-        for tab in ("seccenter", "waf", "cert", "globalsettings"):
+        for tab in ("seccenter", "waf", "cert", "globalsettings", "settings"):
             pg.evaluate("t => openTabById(t)", tab)
             settle(pg, 900)
-        if "界面语言" not in pg.inner_text("#globalsettings"):
-            fail("i18n", "Ingress / settings page not translated (language picker label)")
+        pg.evaluate("openTabById('settings')")
+        settle(pg, 900)
+        if "界面语言" not in pg.inner_text("#settings"):
+            fail("i18n", "Settings page not translated (language label)")
         pg.screenshot(path=os.path.join(args.out, "i18n-zh-CN-settings.png"))
         pg.evaluate("openTabById('seccenter')")
         settle(pg, 900)
@@ -1080,8 +1429,8 @@ def main():
         # ---- nav: the Recent block must not repeat the always visible top level items ----
         current["page"] = "nav-recent"
         recent = pg.eval_on_selector_all("#group-recent .recent-item", "els => els.map(e => e.getAttribute('title'))")
-        if any(t in ("Status", "Quick Start") for t in recent):
-            fail("nav", f"Recent repeats the top level items listed right below it: {recent}")
+        if len(set(recent)) != len(recent):
+            fail("nav", f"Recent lists an entry twice: {recent}")
         if len(recent) == 0 and tabs:
             fail("nav", "Recent is empty after visiting every page")
 
@@ -1911,6 +2260,8 @@ def main():
             fail("visitors", "purge needs a second confirmation click")
         pg.click("#vsPurgeNo")
         pg.click("#vTabs .item[data-vtab=list]")
+
+        nav_palette(pg, ctx)
 
         proxy_ux(pg, ctx)
 

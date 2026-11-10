@@ -111,24 +111,24 @@
         width: 8em;
     }
 </style>
-<!-- Ingress Settings -->
-<div class="standardContainer">
-    <h2>Ingress</h2>
-    <p>Ingress settings for the reverse proxy server (Previously named Global Settings)</p>
-    <div class="ui divider"></div>
-    <button class="ui basic small button" onclick="showSideWrapper('snippet/globalErrorPages.html?t=' + Date.now());"><i class="orange exclamation triangle icon"></i> Default error pages</button>
-    <button class="ui basic small button quickStartShowAgain" style="display:none;" onclick="setQuickStartDismissed(false);" title="Put the Quick Start page back in the menu"><i class="magic icon"></i> Show Quick Start again</button>
-    <div class="ui divider"></div>
-    <p>Interface language</p>
-    <select class="i18n-picker" id="uiLanguageSetting" aria-label="Interface language" style="min-width: 12em;"></select>
-    <br><small>Applies immediately and is remembered for this instance. Machine-assisted translations: help improve them (docs/translating.md).</small>
-    <script>if (window.i18n) { i18n.mountPickers(); }</script>
-    <div class="ui divider"></div>
-    <p>Inbound / Proxy Listening Port</p>
-    <div class="ui action fluid notloopbackOnly input" tourstep="incomingPort">
-        <small id="applyButtonReminder">Click "Apply" button to confirm listening port changes</small>
-        <input type="text" id="incomingPort" placeholder="Incoming Port" value="443">
-        <button class="ui green notloopbackOnly button" style="background: var(--theme_green);" onclick="handlePortChange();"><i class="ui checkmark icon"></i> Apply</button>
+<!-- Listeners (tag globalsettings; menu label renamed from "Ingress", ids unchanged) -->
+<div class="standardContainer" id="listenersPage">
+    <header class="zx-page-header">
+        <div class="zx-page-header__main">
+            <div class="zx-page-header__crumbs" data-zx-crumbs></div>
+            <h2 class="zx-page-header__title">Listeners</h2>
+            <p class="zx-page-header__sub">Where Zoraxy accepts visitors: ports, HTTPS and protocol options (previously named Ingress). Port, listener address and timeouts are applied with the Save bar; the switches apply immediately.</p>
+        </div>
+    </header>
+    <div id="gsloopbackWarning" class="zx-callout zx-callout--warn" role="note" style="display:none;">
+        <span class="zx-callout__icon" aria-hidden="true"><i class="warning icon"></i></span>
+        <div class="zx-callout__body"><span class="zx-callout__title">Loopback Routing Warning</span>
+        This management interface is a loopback proxied service. <br>Some ingress settings are disabled to prevent accidentally cutting off access to this management interface.</div>
+    </div>
+    <div class="zx-card"><div class="zx-card__body">
+    <label class="zx-field__label" for="incomingPort" data-zx-label="Listening port">Inbound / Proxy Listening Port</label>
+    <div class="ui fluid notloopbackOnly input" tourstep="incomingPort" style="margin-top: 0.3em;">
+        <input type="text" id="incomingPort" placeholder="Incoming Port" value="443" inputmode="numeric">
     </div>
     <br>
     <div id="tls" class="ui toggle notloopbackOnly checkbox">
@@ -147,9 +147,9 @@
         Port 80 is occupied by another service and might not be working properly
     </div>
     <div id="httpListenAddrBox" class="notloopbackOnly tlsEnabledOnly" style="margin: 0.5em 0 0.8em 0;">
-        <div class="ui action fluid input" style="max-width: 360px;">
+        <label class="zx-field__label" for="httpListenAddrInput" data-zx-label="HTTP listener address">HTTP listener address</label>
+        <div class="ui fluid input" style="max-width: 360px; margin-top: 0.3em;">
             <input type="text" id="httpListenAddrInput" placeholder=":80" value=":80">
-            <button class="ui basic button" onclick="applyHttpListenAddr();"><i class="ui checkmark icon"></i> Apply</button>
         </div>
         <small>Address of the plain HTTP listener, as <code>:port</code> or <code>ip:port</code> (default <code>:80</code>). Useful when port 80 is taken or you sit behind a port forward (e.g. <code>:8080</code>). Cannot be the management interface port or the proxy (HTTPS) port. Applying restarts the proxy service. Let's Encrypt HTTP-01 validation still requires this to be reachable from the internet on public port 80.</small>
         <div id="httpListenAddrRuntime" style="display:none;"><small></small></div>
@@ -255,7 +255,6 @@
                             </div>
                         </div>
                     </div>
-                    <button class="ui basic green button" style="margin-top: 0.6em;" onclick="saveProxyTimeoutSettings();"><i class="ui checkmark icon"></i> Apply Timeouts</button>
                 </div>
 
                 <!-- Client IP headers -->
@@ -281,11 +280,8 @@
         </div>
     </div>
 
-    <div id="gsloopbackWarning" class="ui segment" style="display:none;">
-        <b><i class="yellow warning icon"></i> Loopback Routing Warning</b><br>
-        <small>This management interface is a loopback proxied service. <br>Some ingress settings are disabled to prevent accidentally cutting off access to this management interface.</small>
-    </div>
-    <div class="ui divider"></div>
+    </div></div>
+    <div class="zx-card"><div class="zx-card__body">
     <h4>Secondary Listening Ports</h4>
     <p>Additional ports configured for specific proxy rules</p>
     <div id="secondaryListenersContainer">
@@ -308,6 +304,7 @@
     <br>
     <button class="ui right floated basic button" onclick="loadSecondaryListeners();"><i class="green refresh icon"></i> Refresh</button>
     <br><br>
+    </div></div>
 </div>
 <script>
     let currentListeningPort = 80;
@@ -326,27 +323,21 @@
 
     //Load the current listening port state into the input field
     function initIncomingPortSetting(){
-        $.get("/api/proxy/status", function(data){
-            $("#incomingPort").off("change");
+        return $.get("/api/proxy/status", function(data){
             $("#incomingPort").val(data.Option.Port);
             currentListeningPort = data.Option.Port;
-            $("#incomingPort").on("change", function(){
-                let newPortValue = $("#incomingPort").val().trim();
-                if (currentListeningPort != newPortValue){
-                    $("#applyButtonReminder").show();
-                }else{
-                    $("#applyButtonReminder").hide();
-                }
-            });
+            if (window.listenersBar){ listenersBar.tracker.commit(["incomingPort"]); }
         });
     }
     initIncomingPortSetting();
 
+    //Apply the listening port. Returns a promise: resolved when the server accepted it, rejected with the message otherwise.
     function handlePortChange(){
+        var done = $.Deferred();
         var newPortValue = $("#incomingPort").val();
         if (isNaN(newPortValue - 1) || newPortValue < 1 || newPortValue > 65535){
             msgbox("Invalid incoming port value", false, 5000);
-            return;
+            return done.reject("Invalid incoming port value").promise();
         }
 
         $.cjax({
@@ -356,16 +347,16 @@
             success: function(data){
                 if (data.error != undefined){
                     msgbox(data.error, false, 5000);
+                    done.reject(data.error);
                     return;
                 }
                 msgbox("Listening Port Updated");
-                initIncomingPortSetting();
+                $.when(initIncomingPortSetting()).always(function(){ done.resolve(); });
                 initRPStaste();
-
-                //Hide the reminder text
-                $("#applyButtonReminder").hide();
-            }
+            },
+            error: function(xhr){ done.reject(xhr.statusText || "Request failed"); }
         });
+        return done.promise();
     }
 
     function handleP80ListenerStateChange(enabled){
@@ -394,7 +385,7 @@
 
     function initPort80ListenerSetting(){
         $("#listenP80").find("input").off("change");
-        $.get("/api/proxy/listenPort80", function(data){
+        return $.get("/api/proxy/listenPort80", function(data){
             let configEnabled = data.config || false;
             let runtimeEnabled = data.runtime || false;
 
@@ -422,9 +413,10 @@
     initPort80ListenerSetting();
 
     function initHttpListenAddrSetting(){
-        $.get("/api/proxy/httpListenAddr", function(data){
+        return $.get("/api/proxy/httpListenAddr", function(data){
             if (data.error != undefined){ return; }
             $("#httpListenAddrInput").val(data.config || ":80");
+            if (window.listenersBar){ listenersBar.tracker.commit(["httpListenAddrInput"]); }
             if (data.runtime){
                 $("#httpListenAddrRuntime small").text("Currently listening on " + data.runtime);
                 $("#httpListenAddrRuntime").show();
@@ -433,21 +425,27 @@
             }
         });
     }
+    //Apply the HTTP listener address (promise, see handlePortChange)
     function applyHttpListenAddr(){
+        var done = $.Deferred();
         $.cjax({
             url: "/api/proxy/httpListenAddr",
             method: "POST",
             data: {"addr": $("#httpListenAddrInput").val().trim()},
             success: function(data){
-                if (data.error != undefined){
+                var failed = data.error != undefined;
+                if (failed){
                     msgbox(data.error, false, 5000);
                 }else{
                     msgbox("HTTP listener address updated");
                 }
-                initHttpListenAddrSetting();
-                initPort80ListenerSetting();
-            }
+                $.when(initHttpListenAddrSetting(), initPort80ListenerSetting()).always(function(){
+                    if (failed){ done.reject(data.error); }else{ done.resolve(); }
+                });
+            },
+            error: function(xhr){ done.reject(xhr.statusText || "Request failed"); }
         });
+        return done.promise();
     }
     initHttpListenAddrSetting();
 
@@ -717,7 +715,7 @@
     initQuicToggle();
 
     function initProxyTimeoutSettings(){
-        $.get("/api/proxy/timeouts", function(data){
+        return $.get("/api/proxy/timeouts", function(data){
             if (!data){
                 return;
             }
@@ -725,18 +723,21 @@
             $("#readHeaderTimeoutInput").val(data.readHeaderTimeout);
             $("#writeTimeoutInput").val(data.writeTimeout);
             $("#idleTimeoutInput").val(data.idleTimeout);
+            if (window.listenersBar){ listenersBar.tracker.commit(["readHeaderTimeoutInput", "writeTimeoutInput", "idleTimeoutInput"]); }
         });
     }
     initProxyTimeoutSettings();
 
+    //Apply the three timeouts (promise, see handlePortChange)
     function saveProxyTimeoutSettings(){
+        var done = $.Deferred();
         const readHeaderTimeout = parseInt($("#readHeaderTimeoutInput").val(), 10);
         const writeTimeout = parseInt($("#writeTimeoutInput").val(), 10);
         const idleTimeout = parseInt($("#idleTimeoutInput").val(), 10);
 
         if ([readHeaderTimeout, writeTimeout, idleTimeout].some(value => Number.isNaN(value) || value < 0)){
             msgbox("Timeout values must be non-negative integers", false, 5000);
-            return;
+            return done.reject("Timeout values must be non-negative integers").promise();
         }
 
         $.cjax({
@@ -750,15 +751,17 @@
             success: function(data){
                 if (data.error != undefined){
                     msgbox(data.error, false, 5000);
-                    initProxyTimeoutSettings();
+                    $.when(initProxyTimeoutSettings()).always(function(){ done.reject(data.error); });
                     return;
                 }
 
                 msgbox("Proxy timeout settings updated");
-                initProxyTimeoutSettings();
+                $.when(initProxyTimeoutSettings()).always(function(){ done.resolve(); });
                 initRPStaste();
-            }
+            },
+            error: function(xhr){ done.reject(xhr.statusText || "Request failed"); }
         });
+        return done.promise();
     }
 
     function initTlsSetting(){
@@ -856,4 +859,30 @@
     // Load secondary listeners on page load and refresh periodically
     loadSecondaryListeners();
     setInterval(loadSecondaryListeners, 10000);
+
+    /*
+        Save bar: the listening port, the HTTP listener address and the three timeouts are applied together with
+        one "Save changes" instead of one Apply button per field. Same API calls and validation as before, in this order.
+        The switches, the TLS version / cipher profile keep applying immediately (they are live toggles).
+    */
+    window.listenersBar = ZxUI.saveBar({
+        form: "#listenersPage",
+        id: "listeners",
+        ignore: ".ui.checkbox, #tlsCipherProfileSelect",
+        onSave: function(ctx){
+            var keys = ctx.changes.map(function(c){ return c.key; });
+            var steps = [];
+            if (keys.indexOf("incomingPort") >= 0){ steps.push(["incomingPort", handlePortChange]); }
+            if (keys.indexOf("httpListenAddrInput") >= 0){ steps.push(["httpListenAddrInput", applyHttpListenAddr]); }
+            var timeoutKeys = ["readHeaderTimeoutInput", "writeTimeoutInput", "idleTimeoutInput"].filter(function(k){ return keys.indexOf(k) >= 0; });
+            if (timeoutKeys.length){ steps.push([timeoutKeys, saveProxyTimeoutSettings]); }
+            var chain = $.Deferred().resolve().promise();
+            steps.forEach(function(step){
+                chain = chain.then(function(){
+                    return step[1]().then(function(){ ctx.tracker.commit([].concat(step[0])); });
+                });
+            });
+            return chain;
+        }
+    });
 </script>

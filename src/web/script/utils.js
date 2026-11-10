@@ -48,5 +48,5 @@ $.cjax = function(payload){
         }
     }
 
-    $.ajax(payload);
+    return $.ajax(payload);
 }

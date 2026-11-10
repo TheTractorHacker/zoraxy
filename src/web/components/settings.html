@@ -1,0 +1,89 @@
+<!--
+    System > Settings (tag "settings").  The single owner of: interface language, default error pages, Quick Start visibility.
+    Built on the component kit (ui/zxui.css, script/zxui.js, docs/ux/components.md).
+-->
+<div class="standardContainer" id="settingsPage">
+    <header class="zx-page-header">
+        <div class="zx-page-header__main">
+            <div class="zx-page-header__crumbs" data-zx-crumbs></div>
+            <h2 class="zx-page-header__title">Settings</h2>
+            <p class="zx-page-header__sub">Preferences of this management interface and of the pages Zoraxy shows to visitors.</p>
+        </div>
+    </header>
+
+    <section class="zx-card" aria-labelledby="settingsLangTitle">
+        <div class="zx-card__head">
+            <h3 class="zx-card__title" id="settingsLangTitle">Interface language</h3>
+        </div>
+        <div class="zx-card__body">
+            <div class="zx-field" style="margin-bottom: 0;">
+                <div class="zx-field__label-row">
+                    <label class="zx-field__label" for="uiLanguageSetting">Language of the management interface</label>
+                    <button type="button" class="zx-whatis" aria-expanded="false" aria-controls="settingsLangWhat" aria-label="What is this?">?</button>
+                </div>
+                <div class="zx-popover" id="settingsLangWhat" role="note" hidden>This only changes the text of this admin interface in your browser and the language remembered for this instance. It does not change the pages visitors of your sites see.</div>
+                <div class="zx-field__control">
+                    <select class="zx-select" id="uiLanguageSetting" aria-label="Interface language" style="max-width: 16em;"></select>
+                </div>
+                <p class="zx-help">Choose a language and save. It is applied right away and remembered for this instance. Machine-assisted translations: help improve them (docs/translating.md).</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="zx-card" aria-labelledby="settingsErrTitle">
+        <div class="zx-card__head">
+            <h3 class="zx-card__title" id="settingsErrTitle">Default error pages</h3>
+        </div>
+        <p class="zx-card__desc">The pages visitors see when a host is not found, access is denied or an upstream fails.</p>
+        <div class="zx-card__body">
+            <button type="button" class="zx-btn zx-btn--secondary" id="defaultErrorPagesBtn" onclick="showSideWrapper('snippet/globalErrorPages.html?t=' + Date.now());"><i class="orange exclamation triangle icon"></i> Edit default error pages</button>
+        </div>
+    </section>
+
+    <section class="zx-card quickStartShowAgain" style="display:none;" aria-labelledby="settingsQsTitle">
+        <div class="zx-card__head">
+            <h3 class="zx-card__title" id="settingsQsTitle">Quick Start</h3>
+        </div>
+        <p class="zx-card__desc">The Quick Start page was hidden from the menu.</p>
+        <div class="zx-card__body">
+            <button type="button" class="zx-btn zx-btn--secondary" onclick="setQuickStartDismissed(false);" title="Put the Quick Start page back in the menu"><i class="magic icon"></i> Show Quick Start again</button>
+        </div>
+    </section>
+</div>
+<script>
+    (function () {
+        var sel = document.getElementById("uiLanguageSetting");
+        if (window.i18n) {
+            i18n.languages.forEach(function (l) {
+                var o = document.createElement("option");
+                o.value = l[0]; o.textContent = l[1]; o.setAttribute("data-i18n-skip", "");
+                sel.appendChild(o);
+            });
+            sel.value = i18n.lang;
+        }
+        // Save bar: the language is chosen here and applied with Save (the picker in the top bar stays an instant shortcut)
+        var bar = ZxUI.saveBar({
+            form: "#settingsPage",
+            id: "settings",
+            onSave: function () {
+                var want = sel.value;
+                return new Promise(function (ok, fail) {
+                    if (!window.i18n || i18n.lang === want) { ok(); return; }
+                    var done = false;
+                    function on(e) {
+                        if (e.detail && e.detail.lang === want) { done = true; document.removeEventListener("zoraxy:i18n", on); ok(); }
+                    }
+                    document.addEventListener("zoraxy:i18n", on);
+                    i18n.setLanguage(want);
+                    setTimeout(function () {
+                        if (!done) { document.removeEventListener("zoraxy:i18n", on); fail(new Error(t("Could not load the language file"))); }
+                    }, 5000);
+                });
+            }
+        });
+        // a language chosen in the top bar is shown here too
+        document.addEventListener("zoraxy:i18n", function (e) {
+            if (e.detail && sel.value !== e.detail.lang) { sel.value = e.detail.lang; bar.reset(); }
+        });
+    })();
+</script>

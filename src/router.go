@@ -94,12 +94,23 @@ func FSHandler(handler http.Handler) http.Handler {
 	})
 }
 
+// Pages that exist only for developers of the admin UI (living documentation of the component kit)
+func isDevOnlyPage(requestPath string) bool {
+	return strings.HasSuffix(requestPath, "/ui/kit.html")
+}
+
 func isHTMLFilePath(requestURI string) bool {
 	return strings.HasSuffix(requestURI, ".html") || strings.HasSuffix(requestURI, "/")
 }
 
 // Serve the html file with template token injected
 func handleInjectHTML(w http.ResponseWriter, r *http.Request, relativeFilepath string) {
+	//The UI kit documentation page is only served by development (-dev) servers
+	if isDevOnlyPage(relativeFilepath) && !*development_build {
+		http.NotFound(w, r)
+		return
+	}
+
 	// Read the HTML file
 	var content []byte
 	var err error

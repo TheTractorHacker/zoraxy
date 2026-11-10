@@ -17,11 +17,14 @@
         <script src="script/countryCode.js"></script>
         <script src="script/chart.js"></script>
         <script src="script/utils.js"></script>
+        <script src="script/zxui.js"></script>
         <link rel="stylesheet" href="script/jsvectormap/jsvectormap.min.css">
         <script src="script/jsvectormap/jsvectormap.min.js"></script>
         <script src="script/jsvectormap/world.js"></script>
         <link rel="stylesheet" href="main.css">
         <link rel="stylesheet" href="darktheme.css">
+        <link rel="stylesheet" href="ui/zxui.css">
+        <link rel="stylesheet" href="ui/nav.css">
     </head>
     <body>
         <script src="script/darktheme.js"></script>
@@ -42,10 +45,13 @@
             <div class="ui right floated buttons" style="padding-top: 2px; margin-right: 0.4em;">
                 <button id="themeColorButton" class="ui icon button" onclick="toggleTheme();" title="Switch light / dark theme (follows your system until you choose)" aria-label="Switch light or dark theme"><i class="sun icon"></i></button>
             </div>
+            <div style="float: right; padding-top: 2px; margin-right: 0.4em;">
+                <button id="zxSearchBtn" type="button" class="zx-searchbtn" title="Search pages, sites and settings" aria-label="Search pages, sites and settings (Ctrl+K)" aria-haspopup="dialog"><i class="search icon"></i><span class="zx-searchbtn__text">Search</span><kbd>Ctrl K</kbd></button>
+            </div>
         </div>
         <div class="wrapper">
             <div class="toolbar">
-                <div id="mainmenu" class="ui secondary vertical menu">
+                <div id="mainmenu" class="ui secondary vertical menu" role="navigation" aria-label="Main menu">
                     <!-- Recent Items Section -->
                     <div class="recent-section-header menugroup-header" onclick="toggleMenuGroup('recent')">
                         <img class="menugroup-icon theme-icon-light" src="img/icons/recent_black.svg" alt="Recent">
@@ -59,184 +65,13 @@
                     <div class="ui divider recent-section-divider"></div>
 
                     <!--
-                        NAVIGATION MAP.  To add a page: append ONE line inside the group it belongs to:
-                            <a class="item" tag="TABID" tab_group="GROUPID"><i class="simplistic ICON icon"></i> Label</a>
-                        TABID is the id of the <div class="functiontab"> further down, GROUPID the suffix of the group id
-                        (id="group-GROUPID"). Every item needs an icon (Semantic UI 2.4.2 / Font Awesome 5 free names).
-                        Groups: proxy, security, certs, observe, tools, system.
+                        NAVIGATION MAP: the menu is defined in script/nav.js (the NAV array) and rendered into #navTree.
+                        To add a page: add its <div class="functiontab" id="TABID" target="..."> below and ONE line to NAV in nav.js.
                         Do not rename existing tab ids or group ids: scripts, the UI smoke test and saved menu state use them.
                     -->
-                    <a class="item" tag="qstart" id="qstartNavItem" style="display:none;">
-                        <i class="simplistic magic icon"></i> Quick Start
-                    </a>
-                    <a class="item active" tag="status">
-                        <i class="simplistic info circle icon"></i> Status
-                    </a>
-
-                    <!-- Proxy: everything that routes traffic to an upstream -->
-                    <div class="menugroup-container">
-                        <div class="menugroup-header" onclick="toggleMenuGroup('proxy')">
-                            <img class="menugroup-icon theme-icon-light" src="img/icons/proxy_black.svg" alt="Proxy">
-                            <img class="menugroup-icon theme-icon-dark" src="img/icons/proxy_white.svg" alt="Proxy">
-                            <span>Proxy</span>
-                            <i class="chevron down icon menugroup-chevron" id="chevron-proxy"></i>
-                        </div>
-                        <div class="menugroup-items" id="group-proxy">
-                            <a class="item" tag="httprp" tab_group="proxy">
-                                <i class="simplistic sitemap icon"></i> HTTP Proxy
-                            </a>
-                            <a class="item" tag="setroot" tab_group="proxy">
-                                <i class="simplistic home icon"></i> Default Site
-                            </a>
-                            <a class="item" tag="redirectset" tab_group="proxy">
-                                <i class="simplistic level up alternate icon"></i> Redirection
-                            </a>
-                            <a class="item" tag="vdir" tab_group="proxy">
-                                <i class="simplistic folder icon"></i> Virtual Directories
-                            </a>
-                            <a class="item" tag="streamproxy" tab_group="proxy">
-                                <i class="simplistic exchange icon"></i> Stream Proxy
-                            </a>
-                            <a class="item" tag="globalsettings" tab_group="proxy">
-                                <i class="simplistic arrow alternate circle right icon"></i> Ingress
-                            </a>
-                            <a class="item" tag="rules" tab_group="proxy">
-                                <i class="simplistic plus square icon"></i> Advanced Rule Form
-                            </a>
-                        </div>
-                    </div>
-
-                    <!-- Security: who may connect and how they are checked -->
-                    <div class="menugroup-container">
-                        <div class="menugroup-header" onclick="toggleMenuGroup('security')">
-                            <img class="menugroup-icon theme-icon-light" src="img/icons/security_black.svg" alt="Security">
-                            <img class="menugroup-icon theme-icon-dark" src="img/icons/security_white.svg" alt="Security">
-                            <span>Security</span>
-                            <i class="chevron down icon menugroup-chevron" id="chevron-security"></i>
-                        </div>
-                        <div class="menugroup-items" id="group-security">
-                            <a class="item" tag="seccenter" tab_group="security">
-                                <i class="simplistic user secret icon"></i> Security Center
-                            </a>
-                            <a class="item" tag="waf" tab_group="security">
-                                <i class="simplistic shield alternate icon"></i> WAF
-                            </a>
-                            <a class="item" tag="access" tab_group="security">
-                                <i class="simplistic ban icon"></i> Access Rules
-                            </a>
-                            <a class="item" tag="trustproxy" tab_group="security">
-                                <i class="simplistic handshake icon"></i> Trusted Proxies
-                            </a>
-                            <a class="item" tag="sso" tab_group="security">
-                                <i class="simplistic user circle icon"></i> SSO / OAuth2
-                            </a>
-                            <a class="item" tag="captcha" tab_group="security"><i class="simplistic check square icon"></i> CAPTCHA</a> <!-- feat/ui-audit-captcha-waf: nav entry -->
-                        </div>
-                    </div>
-
-                    <!-- Certificates -->
-                    <div class="menugroup-container">
-                        <div class="menugroup-header" onclick="toggleMenuGroup('certs')">
-                            <img class="menugroup-icon theme-icon-light" src="img/icons/certs_black.svg" alt="Certificates">
-                            <img class="menugroup-icon theme-icon-dark" src="img/icons/certs_white.svg" alt="Certificates">
-                            <span>Certificates</span>
-                            <i class="chevron down icon menugroup-chevron" id="chevron-certs"></i>
-                        </div>
-                        <div class="menugroup-items" id="group-certs">
-                            <a class="item" tag="cert" tab_group="certs">
-                                <i class="simplistic lock icon"></i> TLS / SSL Certificates
-                            </a>
-                            <a class="item" tag="acme" tab_group="certs">
-                                <i class="simplistic asterisk icon"></i> ACME Client
-                            </a>
-                        </div>
-                    </div>
-
-                    <!-- Observability: what is happening and who is calling (Visitors goes here) -->
-                    <div class="menugroup-container">
-                        <div class="menugroup-header" onclick="toggleMenuGroup('observe')">
-                            <img class="menugroup-icon theme-icon-light" src="img/icons/observe_black.svg" alt="Observability">
-                            <img class="menugroup-icon theme-icon-dark" src="img/icons/observe_white.svg" alt="Observability">
-                            <span>Observability</span>
-                            <i class="chevron down icon menugroup-chevron" id="chevron-observe"></i>
-                        </div>
-                        <div class="menugroup-items" id="group-observe">
-                            <a class="item" tag="stats" tab_group="observe">
-                                <i class="simplistic chart bar icon"></i> Statistics
-                            </a>
-                            <a class="item" tag="visitors" tab_group="observe">
-                                <i class="simplistic users icon"></i> Visitors
-                            </a>
-                            <a class="item" tag="utm" tab_group="observe">
-                                <i class="simplistic time icon"></i> Uptime Monitor
-                            </a>
-                        </div>
-                    </div>
-
-                    <!-- Tools: extra services and helpers that run next to the proxy -->
-                    <div class="menugroup-container">
-                        <div class="menugroup-header" onclick="toggleMenuGroup('tools')">
-                            <img class="menugroup-icon theme-icon-light" src="img/icons/service_black.svg" alt="Tools">
-                            <img class="menugroup-icon theme-icon-dark" src="img/icons/service_white.svg" alt="Tools">
-                            <span>Tools</span>
-                            <i class="chevron down icon menugroup-chevron" id="chevron-tools"></i>
-                        </div>
-                        <div class="menugroup-items" id="group-tools">
-                            <a class="item" tag="webserv" tab_group="tools">
-                                <i class="simplistic globe icon"></i> Static Web Server
-                            </a>
-                            <a class="item" tag="networktool" tab_group="tools">
-                                <i class="simplistic terminal icon"></i> Network Tools
-                            </a>
-                            <a class="item" tag="iface" tab_group="tools">
-                                <i class="simplistic wifi icon"></i> Network Interfaces
-                            </a>
-                            <a class="item" tag="utils" tab_group="tools">
-                                <i class="simplistic paperclip icon"></i> Utilities
-                            </a>
-                            <!-- platform-features nav: begin -->
-                            <a class="item" tag="ech" tab_group="tools">
-                                <i class="user secret icon"></i> Encrypted Client Hello
-                            </a>
-                            <a class="item" tag="zrok" tab_group="tools">
-                                <i class="plug icon"></i> Tunnels (zrok)
-                            </a>
-                            <!-- platform-features nav: end -->
-                        </div>
-                    </div>
-
-                    <!-- System: running, clustering and updating Zoraxy itself -->
-                    <div class="menugroup-container">
-                        <div class="menugroup-header" onclick="toggleMenuGroup('system')">
-                            <img class="menugroup-icon theme-icon-light" src="img/icons/others_black.svg" alt="System">
-                            <img class="menugroup-icon theme-icon-dark" src="img/icons/others_white.svg" alt="System">
-                            <span>System</span>
-                            <i class="chevron down icon menugroup-chevron" id="chevron-system"></i>
-                        </div>
-                        <div class="menugroup-items" id="group-system">
-                            <a class="item" tag="cluster" tab_group="system">
-                                <i class="simplistic server icon"></i> Cluster / HA
-                            </a>
-                            <a class="item" tag="fleet" tab_group="system">
-                                <i class="simplistic cubes icon"></i> Fleet
-                            </a>
-                            <a class="item" tag="apitokens" tab_group="system">
-                                <i class="simplistic key icon"></i> API Tokens
-                            </a>
-                            <a class="item" tag="updater" tab_group="system">
-                                <i class="simplistic download icon"></i> Update
-                            </a>
-                        </div>
-                    </div>
+                    <div id="navTree"></div>
+                    <script src="script/nav.js"></script>
                     <div class="ui divider"></div>
-                    <!-- App Store -->
-                    <a class="item" tag="appstore">
-                        <i class="simplistic shopping bag icon"></i> App Store
-                    </a>
-                    <!-- Plugin Manager -->
-                    <a class="item" tag="plugins">
-                        <i class="simplistic puzzle piece icon"></i> Plugin Manager
-                    </a>
                     <!-- Installed Plugins -->
                     <cx id="pluginMenu">
                         <a class="item" style="pointer-events: none; user-select: none; opacity: 0.6;">
@@ -257,8 +92,11 @@
                     <br><br><div class="ui active centered inline loader"></div>
                 </div>
 
-                <!-- Ingress Settings Tab -->
+                <!-- Listeners (was Ingress) -->
                 <div id="globalsettings" class="functiontab" target="globalsettings.html"></div>
+
+                <!-- Settings: interface language, default error pages, Quick Start -->
+                <div id="settings" class="functiontab" target="settings.html"></div>
 
                 <!-- Virtual Directory Tab -->
                 <div id="vdir" class="functiontab" target="vdir.html"></div>
@@ -495,7 +333,7 @@
                 $(".ui.checkbox").checkbox();
 
                 //Click on the current tab
-                $("#mainmenu").find(".item").each(function(){
+                $("#mainmenu").find(".item[tag]").each(function(){
                     $(this).on("click", function(event){
                         let tabid = $(this).attr("tag");
                         openTabById(tabid, $(this));
@@ -641,6 +479,8 @@
 
                 // Expand the group containing this tab if it is collapsed
                 expandGroupContaining(tabID);
+                // Breadcrumbs, aria-current (script/nav.js)
+                if (window.ZxNav) { ZxNav.onOpen(tabID, $(targetBtn)); }
                 // Record in recent navigation history (skip during initial page load)
                 if (_menuInitDone) { recordRecentTab(tabID, $(targetBtn)); }
             }
@@ -793,7 +633,7 @@
                 $.cjax({url: "./api/quickstart", method: "POST", data: {dismissed: dismissed}, success: function(s){
                     if (s && s.error){ msgbox(s.error, false); return; }
                     applyQuickStartState(s);
-                    msgbox(dismissed ? "Quick Start hidden. You can bring it back in Ingress settings." : "Quick Start is back in the menu", true);
+                    msgbox(dismissed ? "Quick Start hidden. You can bring it back in System > Settings." : "Quick Start is back in the menu", true);
                     if (!dismissed) { openTabById("qstart"); }
                 }});
             }
@@ -814,20 +654,29 @@
                 return map;
             })();
 
-            // Saved state (localStorage zoraxy_menu_groups) is {groupId: expanded}. Version 2 of the menu renamed the
-            // groups; state saved under the old ids is carried over to the group that took their place.
-            var MENU_GROUP_MIGRATION = {
-                reverseproxy: 'proxy', security: 'security', services: 'tools', others: 'system'
-            };
+            // Saved state (localStorage zoraxy_menu_groups) is {groupId: expanded, _v: version}.
+            // v2 renamed the groups, v3 (navigation by task: Sites, Traffic, Network, Fleet & HA, ...) renamed them again;
+            // state saved under an old id is carried over to the group that took its place.
+            var MENU_GROUP_MIGRATION_V1 = { reverseproxy: 'proxy', security: 'security', services: 'tools', others: 'system' };
+            var MENU_GROUP_MIGRATION_V2 = { proxy: 'sites', observe: 'traffic', tools: 'network', security: 'security', certs: 'certs', system: 'system' };
+            var MENU_GROUP_DEFAULT_OPEN = { recent: true, overview: true }; // groups without a saved state: open; all others start collapsed
             function getMenuGroupStates() {
                 var states;
                 try { states = JSON.parse(localStorage.getItem('zoraxy_menu_groups') || '{}') || {}; }
                 catch(e) { return {}; }
-                if (states._v !== 2) {
-                    var migrated = { _v: 2 };
+                if (states._v !== 3) {
+                    var migrated = { _v: 3 };
                     if (states.recent !== undefined) { migrated.recent = states.recent; }
-                    Object.keys(MENU_GROUP_MIGRATION).forEach(function(oldId) {
-                        if (states[oldId] !== undefined) { migrated[MENU_GROUP_MIGRATION[oldId]] = states[oldId]; }
+                    if (states._v !== 2) {
+                        // v1: translate to the v2 ids first
+                        var v2 = {};
+                        Object.keys(MENU_GROUP_MIGRATION_V1).forEach(function(oldId) {
+                            if (states[oldId] !== undefined) { v2[MENU_GROUP_MIGRATION_V1[oldId]] = states[oldId]; }
+                        });
+                        states = v2;
+                    }
+                    Object.keys(MENU_GROUP_MIGRATION_V2).forEach(function(oldId) {
+                        if (states[oldId] !== undefined) { migrated[MENU_GROUP_MIGRATION_V2[oldId]] = states[oldId]; }
                     });
                     states = migrated;
                     try { localStorage.setItem('zoraxy_menu_groups', JSON.stringify(states)); } catch(e) {}
@@ -853,6 +702,7 @@
                     states[groupId] = false;
                 }
                 saveMenuGroupStates(states);
+                if (window.ZxNav) { ZxNav.syncAria(); setTimeout(ZxNav.syncAria, 220); }
             }
 
             // Build the list of collapsible group IDs at runtime from the DOM
@@ -868,30 +718,20 @@
                 return groups;
             })();
 
+            // Opening a page makes sure its group is expanded. Other groups keep the state the user chose.
             function expandGroupContaining(tabID) {
                 var groupId = TAB_TO_GROUP[tabID];
                 if (!groupId) return;
                 var states = getMenuGroupStates();
-                COLLAPSIBLE_GROUPS.forEach(function(gid) {
-                    var $items   = $('#group-' + gid);
-                    var $chevron = $('#chevron-' + gid);
-                    if (gid === groupId) {
-                        // Ensure the parent group is expanded
-                        if ($items.is(':hidden')) {
-                            $items.slideDown(180);
-                            $chevron.removeClass('collapsed');
-                        }
-                        states[gid] = true;
-                    } else {
-                        // Collapse all other groups
-                        if ($items.is(':visible')) {
-                            $items.slideUp(180);
-                            $chevron.addClass('collapsed');
-                        }
-                        states[gid] = false;
-                    }
-                });
+                var $items   = $('#group-' + groupId);
+                var $chevron = $('#chevron-' + groupId);
+                if ($items.is(':hidden')) {
+                    $items.slideDown(180);
+                    $chevron.removeClass('collapsed');
+                }
+                states[groupId] = true;
                 saveMenuGroupStates(states);
+                if (window.ZxNav) { ZxNav.syncAria(); setTimeout(ZxNav.syncAria, 220); }
             }
 
             function initMenuGroupStates() {
@@ -899,11 +739,13 @@
                 // Discover all group containers from DOM (includes recent + all menugroup-items)
                 $('#mainmenu [id^="group-"]').each(function() {
                     var gid = $(this).attr('id').slice('group-'.length);
-                    if (states[gid] === false) {
+                    var open = states[gid] !== undefined ? states[gid] : !!MENU_GROUP_DEFAULT_OPEN[gid];
+                    if (open === false) {
                         $(this).hide();
                         $('#chevron-' + gid).addClass('collapsed');
                     }
                 });
+                if (window.ZxNav) { ZxNav.syncAria(); }
             }
 
             /* Recent Items */
@@ -1027,6 +869,7 @@
             });
         </script>
         <script src="script/uxkit.js"></script>
+        <script src="script/palette.js"></script>
         <script src="script/wafapi.js"></script>
         <script src="script/newrule.js"></script>
         <script src="script/ruletemplates.js"></script>
