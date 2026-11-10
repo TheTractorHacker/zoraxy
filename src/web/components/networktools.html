@@ -524,12 +524,12 @@ function listWoL(callback) {
             let thisServerName = data[i].ServerName;
             let thisMacAddr = data[i].MacAddr
             $("#wolAddressList").append(`
-                <tr class="wolmacentry" mac="${thisMacAddr}">
-                    <td>${thisServerName}</td>
-                    <td>${thisMacAddr}</td>
+                <tr class="wolmacentry" mac="${ZxUI.esc(thisMacAddr)}">
+                    <td>${ZxUI.esc(thisServerName)}</td>
+                    <td>${ZxUI.esc(thisMacAddr)}</td>
                     <td>
-                        <button onclick="wakeWoL('${thisMacAddr}', this);" class="ui tiny basic button"><i class="green power icon"></i>Wake on LAN</button>
-                        <button onclick="delWoLAddr('${thisMacAddr}', '${thisServerName}');" class="ui tiny red basic icon button"><i class="red trash icon"></i></button>
+                        <button data-mac="${ZxUI.esc(thisMacAddr)}" onclick="wakeWoL(this.dataset.mac, this);" class="ui tiny basic button"><i class="green power icon"></i>Wake on LAN</button>
+                        <button data-mac="${ZxUI.esc(thisMacAddr)}" data-name="${ZxUI.esc(thisServerName)}" aria-label="Delete this record" onclick="delWoLAddr(this.dataset.mac, this.dataset.name);" class="ui tiny red basic icon button"><i class="red trash icon"></i></button>
                     </td>
 
                 </tr>
@@ -584,7 +584,7 @@ function updateMDNSListForWoL(){
                         continue;
                     }
                     let encodedObject = encodeURIComponent(JSON.stringify([thisServer.HostName, thisMacAddr]));
-                    $("#mdnsResultForWoL").append(`<div class="item" data-value="${encodedObject}"><i class="server icon"></i> ${thisServer.HostName} (${thisMacAddr})</div>`);
+                    $("#mdnsResultForWoL").append(`<div class="item" data-value="${encodedObject}"><i class="server icon"></i> ${ZxUI.esc(thisServer.HostName)} (${ZxUI.esc(thisMacAddr)})</div>`);
                 }
             }
         });

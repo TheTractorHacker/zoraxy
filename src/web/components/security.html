@@ -1,9 +1,25 @@
-<div class="standardContainer">
-    <div class="ui basic segment">
-        <h2>Security Center</h2>
-        <p>Automatic abuse banning, bot rules, admin accounts and an authentication audit. Every feature here is off
-            (or empty) until you configure it.</p>
-    </div>
+<!-- Security Center (tag seccenter): kit page header, Related box; the sections below load from components/security/ -->
+<div class="standardContainer" id="secCenterPage">
+    <header class="zx-page-header">
+        <div class="zx-page-header__main">
+            <div class="zx-page-header__crumbs" data-zx-crumbs></div>
+            <h2 class="zx-page-header__title">Security Center</h2>
+            <p class="zx-page-header__sub">Ban abusive clients automatically, block bots, add or check logins, and see who signed in to the admin panel. Every feature here is off (or empty) until you configure it.</p>
+        </div>
+        <div class="zx-page-header__actions">
+            <button type="button" class="zx-btn zx-btn--secondary" id="secHistoryBtn" data-zx-history="Auto-ban"><i class="history icon" aria-hidden="true"></i> History</button>
+        </div>
+    </header>
+    <aside class="zx-related" aria-label="Related pages">
+        <span class="zx-related__title">Related</span>
+        <ul>
+            <li><a href="#secoverview" data-nav-open="secoverview">Security Overview</a> <span>your score and what to turn on first</span></li>
+            <li><a href="#access" data-nav-open="access">Access Rules</a> <span>Quick Ban, blocklists and countries (Auto-ban is the automatic version)</span></li>
+            <li><a href="#waf" data-nav-open="waf">WAF</a> <span>blocks attacks inside requests</span></li>
+            <li><a href="#sso" data-nav-open="sso">SSO / OAuth2</a> <span>login for your sites</span></li>
+            <li><a href="#trustproxy" data-nav-open="trustproxy">Trusted Proxies</a> <span>needed for correct client addresses behind a CDN</span></li>
+        </ul>
+    </aside>
     <div class="ui top attached tabular menu" id="secTabs">
         <a class="item active" data-sec="abuse"><i class="ban icon"></i> Auto-ban</a>
         <a class="item" data-sec="bots"><i class="bug icon"></i> Bot rules</a>
@@ -18,9 +34,11 @@
 </div>
 <script>
     (function () {
+        var HISTORY_OBJECT = { abuse: "Auto-ban", bots: "Bot rules", headers: "Header rules", basicauth: "Basic auth", authaudit: "", users: "" };
         function loadSecTab(name) {
             $("#secTabs .item").removeClass("active");
             $("#secTabs .item[data-sec='" + name + "']").addClass("active");
+            $("#secHistoryBtn").attr("data-zx-history", HISTORY_OBJECT[name] || "");
             $("#secPane").html('<div class="ui active centered inline loader"></div>');
             $.get("./components/security/" + name + ".html", function (html) {
                 $("#secPane").html(html);
@@ -28,8 +46,24 @@
                 $("#secPane").html('<div class="ui negative message">Unable to load this section.</div>');
             });
         }
+        // a section with a save bar must not lose unsaved edits silently when another section is opened
+        function switchSecTab(name) {
+            var bar = window.zxSecBar;
+            if (bar && bar.isDirty()) {
+                ZxUI.confirm({ title: "Leave without saving?", message: "Your unsaved changes in this section will be lost.", confirmLabel: "Leave", danger: true }).then(function (ok) {
+                    if (ok) { bar.destroy(); window.zxSecBar = null; loadSecTab(name); }
+                });
+                return;
+            }
+            if (bar) { bar.destroy(); window.zxSecBar = null; }
+            loadSecTab(name);
+        }
         $("#secTabs").on("click", ".item", function () {
-            loadSecTab($(this).attr("data-sec"));
+            switchSecTab($(this).attr("data-sec"));
+        });
+        // keyboard: the section links are focusable and open with Enter / Space
+        $("#secTabs .item").attr({ tabindex: "0", role: "button" }).on("keydown", function (e) {
+            if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $(this).trigger("click"); }
         });
         loadSecTab("abuse");
     })();

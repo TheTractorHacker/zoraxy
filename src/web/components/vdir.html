@@ -1,22 +1,36 @@
-<div class="standardContainer">
-    <div class="ui basic segment" style="padding-left: 0; padding-right: 0;">
-        <h2>Virtual Directory</h2>
-        <p>A virtual directory is a consolidated view of multiple directories that provides a unified entry point for users to access disparate sources.</p>
-    </div>
-    <div id="currentVirtualDirectoryAttachingHost" class="ui basic segment">
-        Select a host / routing rule to start editing Virtual Directory
+<div class="standardContainer" id="vdirPage">
+    <header class="zx-page-header">
+        <div class="zx-page-header__main">
+            <div class="zx-page-header__crumbs" data-zx-crumbs></div>
+            <h2 class="zx-page-header__title">Path routes</h2>
+            <p class="zx-page-header__sub">Send part of a site to a different place: requests whose path starts with a prefix such as <code>/api/</code> go to another upstream, the rest of the site is unchanged. Previously named Virtual Directories.</p>
+        </div>
+        <div class="zx-page-header__actions">
+            <button type="button" class="zx-btn zx-btn--secondary" data-zx-history="Virtual directory"><i class="history icon" aria-hidden="true"></i> History</button>
+        </div>
+    </header>
+    <aside class="zx-related" aria-label="Related pages">
+        <span class="zx-related__title">Related</span>
+        <ul>
+            <li><a href="#httprp" data-nav-open="httprp">HTTP Proxy</a> <span>the sites that own the path routes</span></li>
+            <li><a href="#redirectset" data-nav-open="redirectset">Redirection</a> <span>send visitors to another address instead</span></li>
+            <li><a href="#setroot" data-nav-open="setroot">Default Site</a> <span>what answers when no site matches</span></li>
+        </ul>
+    </aside>
+    <div id="currentVirtualDirectoryAttachingHost" class="ui basic segment" role="status">
+        Select a host / routing rule to start editing path routes
     </div>  
     <div class="ui stackable grid">
         <div class="six wide column">
             <h4>Select a Target Host / Site</h4>
-            <p>Attach Virtual Directory routing rule to root proxy router</p>
+            <p>Attach path routes to the root proxy router</p>
             <div class="ui checkbox">
                 <input type="checkbox" id="useRootProxyRouterForVdir" onchange="handleVdirAttachTargetChange(this);">
-                <label>Root Proxy Router<br>
+                <label for="useRootProxyRouterForVdir">Root Proxy Router<br>
                 <small>Only applicable when Default Site is set to "Reverse Proxy" mode</small></label>
             </div>
             <div class="ui horizontal divider">OR</div>
-            <p>Create Virtual Directory routing in existing host / routing rule entries</p>
+            <p>Create path routes on an existing host / routing rule</p>
             <div class="ui fluid search selection dropdown">
                 <input type="hidden" id="vdirBaseRoutingRule" name="vdirBaseRoutingRule" onchange="handleVdirAttachTargetChange();">
                 <i class="dropdown icon"></i>
@@ -27,13 +41,13 @@
             </div>
         </div>
         <div class="ten wide column">
-            <h4>Edit Virtual Directory Routing Rules</h4>
-            <p>The following are the list of Virtual Directories currently handled by the host router above</p>
+            <h4>Edit path routes</h4>
+            <p>The path routes currently handled by the host selected on the left</p>
             <div style="width: 100%; overflow-x: auto; margin-bottom: 1em;">
                 <table class="ui celled sortable unstackable compact table">
                     <thead>
                         <tr>
-                            <th>Virtual Directory</th>
+                            <th>Path route</th>
                             <th>Destination</th>
                             <th class="no-sort" style="min-width: 7.2em;">Actions</th>
                         </tr>
@@ -49,10 +63,10 @@
             <br><br>
             <div class="ui divider"></div>
             <div id="newVDSection" class="disabled section">
-                <h4>New Virtual Directory Rule</h4>
+                <h4>New path route</h4>
                 <form class="ui form">
                     <div class="field">
-                        <label>Matching Path Prefix</label>
+                        <label for="virtualDirectoryPath">Matching Path Prefix</label>
                         <input type="text" id="virtualDirectoryPath" placeholder="/mysite/">
                         <small>Path that follows your select host / domain, e.g. <code>/mysite/</code> as path prefix will forward all request that matches <code>mydomain.com/mysite/*</code></small>
                     </div>
@@ -86,7 +100,7 @@
                             </div>
                         </div>
                     </div>
-                    <button class="ui basic button" onclick="addVdirToHost(); event.preventDefault();"><i class="green add icon"></i> Create Virtual Directory</button>
+                    <button class="ui basic button" onclick="addVdirToHost(); event.preventDefault();"><i class="green add icon"></i> Create path route</button>
                 </form>
             </div>
         </div>
@@ -109,7 +123,7 @@
                 }else{
                     data.forEach(proxyEndpoint => {
                         let domain = proxyEndpoint.RootOrMatchingDomain;
-                        $("#hostDomainList").append(`<div class="item" data-value="${domain}">${domain}</div>`);
+                        $("#hostDomainList").append(`<div class="item" data-value="${ZxUI.esc(domain)}">${ZxUI.esc(domain)}</div>`);
                     });
 
                     //Update the dropdown events
@@ -139,9 +153,16 @@
         }
     }
 
+    //Row buttons carry their values in data attributes (no host name or path is ever put into JavaScript source)
+    $(document).on("click", "#vdirList [data-vact]", function(){
+        var b = $(this);
+        if (b.attr("data-vact") == "edit"){ editVdir(b.attr("data-path"), b.attr("data-ep")); }
+        else { deleteVdir(b.attr("data-path"), b.attr("data-ep")); }
+    });
+
     //List the Vdir of the given endpoint, use "root" for root router
     function loadVdirList(endpoint){
-        $("#currentVirtualDirectoryAttachingHost").html(`Editing Host: ${endpoint}`);
+        $("#currentVirtualDirectoryAttachingHost").text("Editing host: " + endpoint);
         let reqURL = "/api/proxy/vdir/list?type=host&ep=" + endpoint;
         if (endpoint == "root"){
             //Load root endpoint vdir list
@@ -156,7 +177,7 @@
                 if (data.length == 0){
                     //No virtual directory for this host
                     $("#vdirList").append(`<tr>
-                        <td data-label="" colspan="3"><i class="green check circle icon"></i> No Virtual Directory Routing Rule</td>
+                        <td data-label="" colspan="3"><div class="zx-empty"><div class="zx-empty__title">No path routes yet</div><p class="zx-empty__text">Every request to this host goes to its main upstream. Add a path prefix below to send part of the site elsewhere.</p></div></td>
                     </tr>`);
                 }else{
                     //List the vdirs
@@ -173,11 +194,11 @@
                         let payload = JSON.stringify(vdir).hexEncode();
 
                         $("#vdirList").append(`<tr vdirid="${vdir.MatchingPath.hexEncode()}" class="vdirEntry" payload="${payload}">
-                            <td data-label="" editable="false" >${vdir.MatchingPath}</td>
-                            <td data-label="" editable="true" datatype="domain">${vdir.Domain} ${tlsIcon}</td>
+                            <td data-label="" editable="false" >${ZxUI.esc(vdir.MatchingPath)}</td>
+                            <td data-label="" editable="true" datatype="domain">${ZxUI.esc(vdir.Domain)} ${tlsIcon}</td>
                             <td class="center aligned" editable="true" datatype="action" data-label="">
-                                <button class="ui circular mini basic icon button editBtn" onclick='editVdir("${vdir.MatchingPath}", "${endpoint}")'><i class="edit icon"></i></button>
-                                <button class="ui circular mini red basic icon button"  onclick='deleteVdir("${vdir.MatchingPath}", "${endpoint}")'><i class="trash icon"></i></button>
+                                <button type="button" aria-label="Edit this path route" class="ui circular mini basic icon button editBtn" data-vact="edit" data-path="${ZxUI.esc(vdir.MatchingPath)}" data-ep="${ZxUI.esc(endpoint)}"><i class="edit icon"></i></button>
+                                <button type="button" aria-label="Delete this path route" class="ui circular mini red basic icon button" data-vact="delete" data-path="${ZxUI.esc(vdir.MatchingPath)}" data-ep="${ZxUI.esc(endpoint)}"><i class="trash icon"></i></button>
                             </td>
                         </tr>`);
                     })
@@ -272,13 +293,13 @@
                 if (data.error != undefined){
                     msgbox(data.error, false);
                 }else{
-                    msgbox("New Virtual Directory rule added");
+                    msgbox("New path route added");
                     reloadVdirList();
                     resetVdirForm();
                 }
             }, 
             error: function(){
-                msgbox("Add Virtual Directory failed due to unknown reasons", false);
+                msgbox("Adding the path route failed for an unknown reason", false);
             }
         })
         
@@ -312,7 +333,7 @@
                 if (data.error != undefined){
                     msgbox(data.error, false);
                 }else{
-                    msgbox("Virtual Directory rule removed", true);
+                    msgbox("Path route removed", true);
                     reloadVdirList();
                 }
             }
@@ -348,7 +369,7 @@
 
                 input = `
                     <div class="ui mini fluid input">
-                        <input type="text" class="Domain" value="${domain}">
+                        <input type="text" class="Domain" aria-label="Target IP address or domain name" value="${ZxUI.esc(domain)}">
                     </div>
                     <div class="ui checkbox" style="margin-top: 0.4em;">
                         <input type="checkbox" class="RequireTLS" ${tls}>
@@ -364,8 +385,8 @@
                 column.empty().append(input);
             }else if (datatype == 'action'){
                 column.empty().append(`
-                    <button title="Save" onclick="saveVdirInlineEdit('${payload.MatchingPath.hexEncode()}');" class="ui basic small icon circular button inlineEditActionBtn"><i class="ui green save icon"></i></button>
-                    <button title="Cancel" onclick="exitVdirInlineEdit();" class="ui basic small icon circular button inlineEditActionBtn"><i class="ui remove icon"></i></button>
+                    <button type="button" title="Save" aria-label="Save" onclick="saveVdirInlineEdit('${payload.MatchingPath.hexEncode()}');" class="ui basic small icon circular button inlineEditActionBtn"><i class="ui green save icon"></i></button>
+                    <button type="button" title="Cancel" aria-label="Cancel" onclick="exitVdirInlineEdit();" class="ui basic small icon circular button inlineEditActionBtn"><i class="ui remove icon"></i></button>
                 `);
             }
         }); 
@@ -404,7 +425,7 @@
                 if (data.error != undefined){
                     msgbox(data.error, false);
                 }else{
-                    msgbox("Virtual Directory rule updated", true);
+                    msgbox("Path route updated", true);
                     exitVdirInlineEdit();
                 }
             },

@@ -2536,3 +2536,10 @@ scenario `site_editor_ui` (`--site-editor-only`) fails when one disappears or is
 with `data-hrp-card` (and `data-hrp-nd` when it has a default) and, if it is a form field of the rule, nothing else: the Save bar
 tracks it. A field that saves itself must be marked `data-zx-ignore` (and `data-hrp-selfsave` so the unsaved-changes guard still
 covers it).
+
+## UX consistency pass (`ux-consistency`)
+
+User-visible summary in `docs/ux/changes.md`; patterns in `docs/ux/components.md` section 7; terminology in `docs/ux/terminology.md`.
+* AI audit: `aiassist_glue.go` passes `aiPosture` (reads the cached `posture.Engine.Overview(false)`, never previews or applies a fix) as `Deps.Posture`; `aiassist_posture_test.go` covers the mapping with a fake.
+* History hook: `ZxHistory.view` / `ZxHistory.savedToast`, `ZxUI.toast({action})`, `ZxUI.saveBar({historyObject})`.
+* Smoke: `tools/ui-smoke/consistency_smoke.py` (`--consistency-only`) covers Certificates sections, Related boxes, the Auto-ban save bar, the View history toast action, a hostile host name and the deep links of renamed pages.

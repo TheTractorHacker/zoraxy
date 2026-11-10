@@ -8,7 +8,7 @@ A general purpose HTTP reverse proxy and forwarding tool. Now written in Go!
 
 - Simple to use interface with detail in-system instructions
 - Reverse Proxy (HTTP/2)
-  - Virtual Directory
+  - Path routes (virtual directories)
   - WebSocket Proxy (automatic, no set-up needed) 
   - Basic Auth
   - Alias Hostnames

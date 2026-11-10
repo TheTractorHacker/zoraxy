@@ -71,6 +71,27 @@
         },
         settings: function (v) { return v ? call("POST", "settings", v) : call("GET", "settings"); },
         snapshot: function (note) { return call("POST", "snapshot", { note: note || "" }); },
+        // Opens System > History with the Object filter set (a substring of the changed object, e.g. "example.com" or "WAF").
+        // Read-only: it never restores anything.
+        view: function (object) {
+            if (typeof window.openTabById === "function") { window.openTabById("history"); }
+            var tries = 0;
+            (function apply() {
+                var input = document.getElementById("hxFilterObject"), btn = document.getElementById("hxFilterBtn");
+                if (input && btn && window.ZxHistoryUI) {
+                    input.value = object || "";
+                    btn.click();
+                } else if (tries++ < 60) {
+                    setTimeout(apply, 100);
+                }
+            })();
+        },
+        // The kit toast shown after a successful configuration save: message plus a "View history" action.
+        savedToast: function (message, object) {
+            if (!window.ZxUI || !window.ZxUI.toast) { return null; }
+            var label = typeof window.t === "function" ? window.t("View history") : "View history";
+            return window.ZxUI.toast(message || "Saved", { type: "success", action: { label: label, run: function () { ZxHistory.view(object); } } });
+        },
         undoLast: function () {
             return call("GET", "list", { pageSize: 2 }).then(function (res) {
                 var items = res.items || [];

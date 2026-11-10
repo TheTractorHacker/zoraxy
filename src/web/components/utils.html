@@ -545,8 +545,8 @@
                     ? '<i class="green check circle icon"></i> Allow'
                     : '<i class="red times circle icon"></i> Deny';
                 tbody.innerHTML += `<tr>
-                    <td style="font-family: monospace; font-size: 0.85em;">${rule.id}</td>
-                    <td>${rule.name}</td>
+                    <td style="font-family: monospace; font-size: 0.85em;">${ZxUI.esc(rule.id)}</td>
+                    <td>${ZxUI.esc(rule.name)}</td>
                     <td>${icon}</td>
                 </tr>`;
             });

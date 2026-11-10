@@ -7,11 +7,26 @@
     }
 </style>
 <div class="standardContainer">
-    <div class="ui basic segment">
-        <h2>Access Control</h2>
-        <p>Setup blacklist or whitelist based on estimated IP geographic location or IP address. <br>
-            To apply access control to a proxy hosts, create a "Access Rule" below and apply it to the proxy hosts in the HTTP Proxy tab.</p>
-    </div>
+    <header class="zx-page-header">
+        <div class="zx-page-header__main">
+            <div class="zx-page-header__crumbs" data-zx-crumbs></div>
+            <h2 class="zx-page-header__title">Access Rules</h2>
+            <p class="zx-page-header__sub">Choose who may reach your sites: block or allow visitors by IP address or country. To apply a rule to a site, create an access rule below and pick it in that site's settings in HTTP Proxy.</p>
+        </div>
+        <div class="zx-page-header__actions">
+            <button type="button" class="zx-btn zx-btn--secondary" data-zx-history="Access rule"><i class="history icon" aria-hidden="true"></i> History</button>
+        </div>
+    </header>
+    <aside class="zx-related" aria-label="Related pages">
+        <span class="zx-related__title">Related</span>
+        <ul>
+            <li><a href="#seccenter" data-nav-open="seccenter">Security Center</a> <span>Auto-ban bans abusive addresses automatically (the automatic version of Quick Ban)</span></li>
+            <li><a href="#trustproxy" data-nav-open="trustproxy">Trusted Proxies</a> <span>behind a CDN, address rules only work when the CDN is trusted</span></li>
+            <li><a href="#waf" data-nav-open="waf">WAF</a> <span>blocks attacks inside requests, not addresses</span></li>
+            <li><a href="#secoverview" data-nav-open="secoverview">Security Overview</a> <span>is your site protected?</span></li>
+            <li><a href="#httprp" data-nav-open="httprp">HTTP Proxy</a> <span>where an access rule is applied to a site</span></li>
+        </ul>
+    </aside>
     <div id="currentEditingAccessRule" class="ui basic segment">
         Select an access rule to start editing
     </div>
@@ -716,8 +731,9 @@
             </div>
             <!-- Quick ban list-->
             <div class="ui bottom attached tab segment" data-tab="tab_quickban">
-                <h2>Quick Ban List</h2>
-                <button style="margin-top: -1em;" onclick="initBlacklistQuickBanTable();" class="ui green small right floated circular basic icon button"><i class="ui refresh icon"></i></button>
+                <h3>Quick Ban List</h3>
+                <button style="margin-top: -1em;" onclick="initBlacklistQuickBanTable();" aria-label="Refresh the Quick Ban list" class="ui green small right floated circular basic icon button"><i class="ui refresh icon"></i></button>
+                <p class="zx-sub" style="margin-bottom:.6em">Want addresses banned automatically after repeated abuse? Use <a href="#seccenter" data-nav-open="seccenter">Auto-ban in the Security Center</a>.</p>
                 <p>You can perform one-click IP ban on the list below if you observe unusual traffic from an unknown origin<br>
                 Blacklist must be enabled in order to use this feature.</p>
                 <div class="ui divider"></div>
@@ -809,7 +825,7 @@
                         //This is a whitelist filter
                         icon = `<i class="ui green filter icon"></i>`;
                     }
-                    $("#accessRuleList").append(`<div class="item" data-value="${rule.ID}">${icon} ${rule.Name}</div>`);
+                    $("#accessRuleList").append(`<div class="item" data-value="${ZxUI.esc(rule.ID)}">${icon} ${ZxUI.esc(rule.Name)}</div>`);
                 });
                 currentListOfAccessRules = data;
                 $(".dropdown").dropdown();
@@ -828,7 +844,7 @@
         for (var i = 0; i < currentListOfAccessRules.length; i++){
             let thisAccessRule = currentListOfAccessRules[i];
             if (thisAccessRule.ID == "default"){
-                $("#currentEditingAccessRule").html(`Editing Access Rule: ${thisAccessRule.Name} <span style="font-weight: 300;">[${thisAccessRule.ID}]</span>`);
+                $("#currentEditingAccessRule").html(`Editing Access Rule: ${ZxUI.esc(thisAccessRule.Name)} <span style="font-weight: 300;">[${ZxUI.esc(thisAccessRule.ID)}]</span>`);
                 $("#accessRuleDesc").text(thisAccessRule.Desc);
                 break;
             }
@@ -850,7 +866,7 @@
                 break;
             }
         }
-        $("#currentEditingAccessRule").html(`Editing Access Rule: ${name} <span style="font-weight: 300;">[${newRuleUUID}]</span>`);
+        $("#currentEditingAccessRule").html(`Editing Access Rule: ${ZxUI.esc(name)} <span style="font-weight: 300;">[${ZxUI.esc(newRuleUUID)}]</span>`);
         $("#accessRuleDesc").text(desc);
 
         initBlackWhitelistTables();

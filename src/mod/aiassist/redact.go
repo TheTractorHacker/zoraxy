@@ -163,6 +163,17 @@ func (r *Redactor) Text(s string, max int) string {
 	return capRunes(strings.TrimSpace(s), max)
 }
 
+var hostLike = regexp.MustCompile(`(?i)(?:\*\.)?[a-z0-9_](?:[a-z0-9_-]*[a-z0-9_])?(?:\.[a-z0-9_](?:[a-z0-9_-]*[a-z0-9_])?)*\.[a-z][a-z0-9-]*[a-z0-9]`)
+
+// FreeText is Text for free text that may name hosts (posture evidence). With MaskHosts set every
+// host-like token (name.tld, *.name.tld) is replaced by its pseudonym.
+func (r *Redactor) FreeText(s string, max int) string {
+	if r.P.MaskHosts {
+		s = hostLike.ReplaceAllStringFunc(s, func(h string) string { return r.Pseudo("host", h) })
+	}
+	return r.Text(s, max)
+}
+
 // IP returns the IP as allowed by the policy.
 func (r *Redactor) IP(ip string) string {
 	ip = strings.TrimSpace(ip)

@@ -9,11 +9,28 @@
         user-select: none;
     }
 </style>
-<div class="standardContainer">
-    <div class="ui basic segment">
-        <h2>Certificate Authority (CA) and Auto Renew (ACME)</h2>
-        <p>Management features regarding CA and ACME</p>
-    </div>
+<div class="standardContainer" id="acmePage">
+    <header class="zx-page-header">
+        <div class="zx-page-header__main">
+            <div class="zx-page-header__crumbs" data-zx-crumbs></div>
+            <h2 class="zx-page-header__title">ACME Client</h2>
+            <p class="zx-page-header__sub">Let Zoraxy request and renew free certificates from a certificate authority such as Let's Encrypt, so HTTPS sites keep a valid certificate without manual work.</p>
+        </div>
+        <div class="zx-page-header__actions">
+            <button type="button" class="zx-btn zx-btn--secondary" data-zx-history="ACME"><i class="history icon" aria-hidden="true"></i> History</button>
+        </div>
+    </header>
+    <nav class="zx-pagetabs" aria-label="Certificate pages">
+        <a href="#cert" data-nav-open="cert">Certificates</a>
+        <a href="#acme" data-nav-open="acme" aria-current="page">ACME Client</a>
+    </nav>
+    <aside class="zx-related" aria-label="Related pages">
+        <span class="zx-related__title">Related</span>
+        <ul>
+            <li><a href="#cert" data-nav-open="cert">TLS / SSL Certificates</a> <span>expiry, hosts without a certificate, upload</span></li>
+            <li><a href="#httprp" data-nav-open="httprp">HTTP Proxy</a> <span>the sites that use the certificates</span></li>
+        </ul>
+    </aside>
     <div class="ui divider"></div>
     <div class="ui basic segment acmeRenewStateWrapper">
         <h4 class="ui header" id="acmeAutoRenewer">
@@ -39,8 +56,8 @@
     <p>The default CA to use when create a new subdomain proxy endpoint with TLS certificate</p>
     <div class="ui fluid form" tourstep="acmeSettings">
         <div class="field">
-            <label>Preferred CA</label>
-            <div class="ui selection dropdown" id="defaultCA">
+            <label id="defaultCALabel">Preferred CA</label>
+            <div class="ui selection dropdown" id="defaultCA" aria-labelledby="defaultCALabel">
                 <input type="hidden" name="defaultCA">
                 <i class="dropdown icon"></i>
                 <div class="default text">Let's Encrypt</div>
@@ -53,19 +70,19 @@
             </div>
         </div>
         <div class="field">
-            <label>ACME Email</label>
+            <label for="prefACMEEmail">ACME Email</label>
             <input id="prefACMEEmail" type="text" placeholder="ACME Email">
         </div>
         <div class="field" id="prefcaInput" style="display:none;">
-            <label>ACME Server URL</label>
+            <label for="prefcaURL">ACME Server URL</label>
             <input id="prefcaURL" type="text" placeholder="https://example.com/acme/directory">
         </div>
         <div class="field" id="prefkidInput" style="display:none;">
-            <label>EAB Credentials (KID) for current provider</label>
+            <label for="prefeab_kid">EAB Credentials (KID) for current provider</label>
             <input id="prefeab_kid" type="text" placeholder="Leave this field blank to keep the current configuration">
         </div>
         <div class="field" id="prefhmacInput" style="display:none;">
-            <label>EAB HMAC Key for current provider</label>
+            <label for="prefeab_hmac">EAB HMAC Key for current provider</label>
             <input id="prefeab_hmac" type="text" placeholder="Leave this field blank to keep the current configuration">
         </div>
         <div class="field" id="skipTLS" style="display:none;">

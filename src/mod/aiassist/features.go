@@ -498,7 +498,7 @@ func (s *Service) auditOutbound(st Settings) (*Outbound, map[string]bool, error)
 		}
 		id := r.Name(it.ID, 60)
 		known[id] = true
-		p.Items = append(p.Items, PostureItem{ID: id, Title: r.Text(it.Title, 120), Status: r.Name(it.Status, 12), Severity: r.Name(it.Severity, 12), Detail: r.Text(it.Detail, 200)})
+		p.Items = append(p.Items, PostureItem{ID: id, Title: r.FreeText(it.Title, 120), Status: r.Name(it.Status, 12), Severity: r.Name(it.Severity, 12), Detail: r.FreeText(it.Detail, 200)})
 	}
 	o, err := r.Seal(FeatureAudit, auditTask, p, "audit_plan", "Return the prioritised plan.", planSchema(), 1500)
 	return o, known, err

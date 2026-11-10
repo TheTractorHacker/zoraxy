@@ -5,7 +5,10 @@
         <meta charset="utf-8">
         <meta name="zoraxy.csrf.Token" content="{{.csrfToken}}">
         <link rel="stylesheet" href="../script/semantic/semantic.min.css">
-        <script src="../script/jquery-3.6.0.min.js"></script>
+        <script>
+function zxEsc(s){ return String(s === undefined || s === null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]; }); }
+</script>
+<script src="../script/jquery-3.6.0.min.js"></script>
         <script src="../script/semantic/semantic.min.js"></script>
         <script src="../script/utils.js"></script>
     </head>
@@ -389,7 +392,7 @@
                         password = `<span style="color: #c9c9c9;"><i class="eye slash outline icon"></i> Hidden<span>`;
                     }
                     var row = '<tr>' +
-                        '<td>' + username + '</td>' +
+                        '<td>' + zxEsc(username) + '</td>' +
                         '<td>' + password + '</td>' +
                         '<td><button class="ui basic tiny circular button" onclick="removeCredentialFromEditingList(' + i + ');"><i class="red remove icon"></i> Remove</button></td>' +
                         '</tr>';

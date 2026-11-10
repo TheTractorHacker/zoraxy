@@ -26,13 +26,28 @@
     body.darkTheme #captchaPage .cpSticky { --cp-bg: #1b1c1d; }
 </style>
 <div class="standardContainer" id="captchaPage">
-    <div class="ui basic segment">
-        <h2><i class="shield alternate icon"></i> CAPTCHA / Bot check</h2>
-        <p>Make visitors prove they are human before they reach a proxy rule. Pick a provider (Cloudflare Turnstile, Google reCAPTCHA, Friendly Captcha or the
-            self-hosted Altcha), then customise how the challenge, failure and blocked pages look. The challenge also backs the
-            <b>Challenge</b> action of the Security Center bot rules and the country challenge. Previews use the provider's public test
-            keys and verify nothing.</p>
-    </div>
+    <header class="zx-page-header">
+        <div class="zx-page-header__main">
+            <div class="zx-page-header__crumbs" data-zx-crumbs></div>
+            <h2 class="zx-page-header__title">CAPTCHA / Bot check</h2>
+            <p class="zx-page-header__sub">Make visitors prove they are human before they reach a proxy rule. Pick a provider (Cloudflare Turnstile, Google reCAPTCHA, Friendly Captcha or the
+                self-hosted Altcha), then customise how the challenge, failure and blocked pages look. The challenge also backs the
+                <b>Challenge</b> action of the Security Center bot rules and the country challenge. Previews use the provider's public test
+                keys and verify nothing.</p>
+        </div>
+        <div class="zx-page-header__actions">
+            <button type="button" class="zx-btn zx-btn--secondary" data-zx-history="CAPTCHA"><i class="history icon" aria-hidden="true"></i> History</button>
+        </div>
+    </header>
+    <aside class="zx-related" aria-label="Related pages">
+        <span class="zx-related__title">Related</span>
+        <ul>
+            <li><a href="#seccenter" data-nav-open="seccenter">Security Center</a> <span>bot rules can answer with a challenge</span></li>
+            <li><a href="#access" data-nav-open="access">Access Rules</a> <span>challenge visitors from chosen countries</span></li>
+            <li><a href="#waf" data-nav-open="waf">WAF</a> <span>the WAF can challenge borderline requests</span></li>
+            <li><a href="#secoverview" data-nav-open="secoverview">Security Overview</a></li>
+        </ul>
+    </aside>
 
     <!-- ===== Overview ===== -->
     <div id="cpOverview">

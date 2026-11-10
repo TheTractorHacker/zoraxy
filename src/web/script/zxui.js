@@ -5,7 +5,7 @@
     No dependencies except jQuery (already used everywhere in the admin UI).  Everything here is optional progressive
     enhancement: the markup/CSS of a component works without it unless noted.
 
-      ZxUI.toast(message, {type, undo, undoLabel, duration})   notification, optional "Undo"
+      ZxUI.toast(message, {type, undo, undoLabel, action:{label,run}, duration})   notification, optional "Undo" and one more action
       ZxUI.confirm({title, message, confirmLabel, danger, typed})  -> Promise<boolean>
       ZxUI.dirty(form, opts)                                   dirty tracker (ignores programmatic changes)
       ZxUI.saveBar({form, onSave, onDiscard})                  sticky "unsaved changes" bar
@@ -98,6 +98,18 @@
             });
             node.appendChild(u);
         }
+        if (opts.action && typeof opts.action.run === "function") {     // a second, non-destructive action, e.g. "View history"
+            var a = document.createElement("button");
+            a.type = "button";
+            a.className = "zx-btn zx-btn--ghost zx-btn--sm zx-toast__undo";
+            a.textContent = String(opts.action.label || "");
+            a.addEventListener("click", function () {
+                var fn = opts.action.run;
+                dismiss();
+                try { fn(); } catch (e) { console.error("toast action failed", e); }
+            });
+            node.appendChild(a);
+        }
         var c = document.createElement("button");
         c.type = "button";
         c.className = "zx-btn zx-btn--ghost zx-btn--sm zx-btn--icon zx-toast__close";
@@ -107,7 +119,7 @@
         node.appendChild(c);
         box.appendChild(node);
         while (box.children.length > 5) { box.removeChild(box.firstChild); }
-        var duration = opts.duration !== undefined ? opts.duration : (opts.undo ? 10000 : (type === "error" ? 8000 : 4000));
+        var duration = opts.duration !== undefined ? opts.duration : (opts.undo || opts.action ? 10000 : (type === "error" ? 8000 : 4000));
         function arm() { if (duration > 0) { clearTimeout(timer); timer = setTimeout(dismiss, duration); } }
         node.addEventListener("mouseenter", function () { clearTimeout(timer); });
         node.addEventListener("mouseleave", arm);
@@ -376,7 +388,7 @@
             mount:     optional element; the bar is appended here (default: the page container of the form, so it
                        sticks to the bottom of the viewport while the page is scrolled)
             ignore:    optional selector of controls that are not part of the form state
-            saveLabel / discardLabel / successText
+            saveLabel / discardLabel / successText / historyObject (substring of the History "Object" filter, e.g. "WAF")
         })
         -> bar: {reset(), isDirty(), save(), discard(), tracker, destroy()}
         Call bar.reset() after the page loaded its values from the API, and after changing values from code.
@@ -460,6 +472,7 @@
                 tracker.reset();
                 state = "success";
                 render();
+                if (window.ZxHistory && window.ZxHistory.savedToast) { window.ZxHistory.savedToast(o.successText || tr(N_("Saved")), o.historyObject); }
                 return true;
             }, function (e) { fail(e); return false; });
         }

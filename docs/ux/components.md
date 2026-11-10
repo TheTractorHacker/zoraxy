@@ -151,3 +151,37 @@ To add a setting: one line in `SETTINGS`, `{label: N_("..."), page: "tag", pre: 
 ## 6. What was verified, and what was not
 
 Verified by the browser smoke test (`tools/ui-smoke`): palette (Ctrl+K, page/host/setting, Enter), breadcrumbs, every legacy `tag`, every palette settings anchor, kit page load, save bar on Listeners and Settings, screenshots in light, dark and 390px. **Not verified:** real screen readers (NVDA, VoiceOver, TalkBack), real touch devices, Safari/Firefox rendering (Chromium only), forced-colors mode.
+
+## 7. Page patterns of the consistency pass
+
+Added in `src/web/ui/zxpages.css` and `src/web/script/zxpage.js` (loaded by `index.html`). Same rules as the kit: tokens only, namespaced `zx-`.
+
+| Pattern | Markup | Used by |
+|---|---|---|
+| Page header with breadcrumbs, one-line plain-language subtitle and a History shortcut | `.zx-page-header` with `data-zx-crumbs` and `<button class="zx-btn zx-btn--secondary" data-zx-history="Object">` | Certificates, ACME, Access Rules, Trusted Proxies, SSO, CAPTCHA, Security Center, Path routes (WAF has its own hero with the same crumbs and button) |
+| Related box | `<aside class="zx-related"><span class="zx-related__title">Related</span><ul><li><a data-nav-open="tag">Page</a> <span>why</span></li></ul></aside>` | the same pages; `data-nav-open` is handled by `nav.js` so the link uses `openTabById` and the unsaved-changes guard |
+| Sibling page tabs | `.zx-pagetabs > a[data-nav-open]` with `aria-current="page"` | Certificates and ACME Client: two pages (and two menu entries) that look like tabs of one |
+| Stat row | `.zx-statrow > .zx-stat` | Certificates |
+| Collapsible card | `button.zx-collapse__toggle[data-zx-toggle=id][aria-expanded]` + `div#id[hidden]` | "Add a certificate" |
+| Item list in a callout or card | `.zx-itemlist` | Expiring soon, Hosts without a certificate |
+| Checklist | `.zx-steps` | Get started on Status |
+| Help popover | `.zx-whatis` + `.zx-popover` (section 2) | SNI, fallback certificate, trusted proxy gating, paranoia level, anomaly score |
+
+### 7.1 History hook
+
+`ZxUI.toast(msg, {action: {label, run}})` shows one extra, non-destructive action. `ZxHistory.savedToast(msg, object)` is the standard success toast with a **View history** action; `ZxHistory.view(object)` opens System > History with the Object filter set (it never restores: every restore restarts Zoraxy, so a toast must not trigger one). `ZxUI.saveBar({historyObject: "Auto-ban"})` shows that toast after every successful save. The object is a substring of the history entry label ("Certificate", "ACME", "WAF", "Access rule", "Auto-ban", "Virtual directory", ...).
+
+### 7.2 Save model decision (D2 applied)
+
+Converted to the kit save bar (an explicit form with one Save): Listeners and Settings (earlier), **Security Center > Auto-ban**.
+Deliberately left, because a save bar would change behaviour:
+
+* Access Rules, WAF mode cards, ACME auto-renew switch, Trusted Proxies list: live switches and per-row add / remove actions. They keep instant save with the toast.
+* Trusted Proxies "Edit as text": already a modal edit mode with its own Save and Cancel.
+* CAPTCHA: has its own dirty tracker, a scope switch with a discard prompt and per-rule Save; rebuilding that on the kit tracker is a separate change.
+* WAF profiles / exclusions, SSO providers, ACME CA settings: several independent Save buttons for independent objects.
+* Bot rules, Header rules, Basic auth (Security Center): edited as lists with their own add / remove actions.
+
+### 7.3 Escaping
+
+Anything that came from the configuration (host names, aliases, upstreams, tags, rule names, redirect addresses, user names) is escaped with `ZxUI.esc()` (components) or the local `zxEsc()` (snippets run in their own iframe). Values that a button needs are carried in `data-*` attributes and read with `this.dataset`, never put inside `onclick="f('${value}')"`. `tools/ui-smoke` adds a rule with the host name `"><img src=x onerror=...>` and fails if it becomes markup on any listing page.

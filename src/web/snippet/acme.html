@@ -407,8 +407,8 @@
         
         // Create the auto-renew checkbox cell
         let domainsEncoded = encodeURIComponent(JSON.stringify(domains));
-        var checkboxCell = $(`<td domain="${domainsEncoded}" srcfile="${srcfile}">`);
-        var checkbox = $(`<input name="${srcfile}">`).attr('type', 'checkbox');
+        var checkboxCell = $("<td>").attr("domain", domainsEncoded).attr("srcfile", srcfile);
+        var checkbox = $("<input>").attr("name", srcfile).attr('type', 'checkbox');
         checkboxCell.append(checkbox);
         row.append(checkboxCell);
         
