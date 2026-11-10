@@ -49,6 +49,7 @@
             { tag: "seccenter", label: N_("Security Center"), icon: "user secret", kw: "auto ban autoban abuse bots header rules basic auth audit admin accounts users" },
             { tag: "waf", label: N_("WAF"), icon: "shield alternate", kw: "firewall web application owasp coraza crs attacks sql injection xss" },
             { tag: "ruleset", label: N_("Rules"), icon: "filter", kw: "rules builder when then expression block allow redirect challenge rate limit log only conditions country path user agent firewall custom" },
+            { tag: "aicrawlers", label: N_("AI crawlers"), icon: "microchip", kw: "ai crawler bots gptbot claudebot perplexity openai anthropic training scraping llms.txt robots.txt user agent allow block verify" },
             { tag: "access", label: N_("Access Rules"), icon: "ban", kw: "ban block blacklist whitelist allow deny ip country geo blocklist" },
             { tag: "sso", label: N_("SSO / OAuth2"), icon: "user circle", kw: "login oidc oauth authentication forward auth authentik single sign on" },
             { tag: "captcha", label: N_("CAPTCHA"), icon: "check square", kw: "challenge turnstile recaptcha bot human verification" }

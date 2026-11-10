@@ -28,7 +28,8 @@ const (
 	ReasonPeer             = "peer"
 	ReasonAuth             = "auth"
 	ReasonPlugin           = "plugin"
-	ReasonRule             = "rule" // the rules engine (mod/ruleset); the detail is the rule name
+	ReasonRule             = "rule"       // the rules engine (mod/ruleset); the detail is the rule name
+	ReasonAICrawler        = "ai-crawler" // the AI crawler policy (mod/aicrawler); the detail names the crawler and the decision
 )
 
 // Classify turns a router forwardType into a reason key and a detail. ok is false when the
@@ -86,6 +87,11 @@ func Classify(forwardType string) (reason, detail string, ok bool) {
 		return ReasonBot, strings.TrimPrefix(ft, "bot-"), true
 	}
 	switch {
+	case strings.HasPrefix(ft, "aicrawler-"):
+		if strings.HasSuffix(ft, "-logonly") {
+			return "", "", false // log-only decision: the request went through
+		}
+		return ReasonAICrawler, strings.TrimPrefix(ft, "aicrawler-"), true
 	case strings.HasPrefix(ft, "client-cert-"):
 		return ReasonClientCert, strings.TrimPrefix(ft, "client-cert-"), true
 	case strings.HasPrefix(ft, "auth-"):
@@ -135,6 +141,7 @@ func Reasons() []ReasonInfo {
 		{ReasonPeer, "Peer not allowed", "The direct connection came from an address outside the allowed peer list of the rule.", "httprp", "HTTP Proxy, rule settings", ""},
 		{ReasonAuth, "Authentication", "Basic auth, SSO or OAuth rejected the credentials.", "seccenter", "Security Center, Auth audit", "authaudit"},
 		{ReasonRule, "Rule", "A rule of the rules engine (global or of this site) blocked, rate limited or challenged the request. The detail is the rule name.", "ruleset", "Rules", ""},
+		{ReasonAICrawler, "AI crawler policy", "A crawler that claims to be a known AI crawler was blocked, challenged or rate limited by the AI crawler policy, or its claim failed verification (spoofed). The detail names the crawler.", "aicrawlers", "AI crawlers", ""},
 		{ReasonPlugin, "Plugin", "A plugin refused the request.", "plugins", "Plugins", ""},
 	}
 }

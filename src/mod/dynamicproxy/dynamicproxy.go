@@ -355,6 +355,9 @@ func (router *Router) handleNonTLSRequest(w http.ResponseWriter, r *http.Request
 	defer abuseDone()
 	w = router.pluginWrapResponse(w, r, sep) //plugin response stage, no-op without response plugins
 	w = router.opsBegin(w, r, sep)           //request vars + CORS / error page / bandwidth wrapper
+	var crawlerDone func()
+	w, crawlerDone = router.crawlerFileWrap(w, r, sep) //robots.txt / llms.txt merge (aicrawler_hook.go)
+	defer crawlerDone()
 	if proxyHandler.runEndpointChain(w, r, sep, domainOnly) {
 		return
 	}

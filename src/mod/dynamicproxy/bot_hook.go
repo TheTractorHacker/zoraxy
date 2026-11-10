@@ -18,6 +18,12 @@ import (
 */
 
 func (h *ProxyHandler) handleBotRules(w http.ResponseWriter, r *http.Request, sep *ProxyEndpoint) bool {
+	return h.handleBotRulesOpt(w, r, sep, false)
+}
+
+// handleBotRulesOpt is handleBotRules; skipAI leaves out the managed "ai_crawler" category because the AI crawler
+// policy (aicrawler_hook.go) allowed this crawler explicitly. Every other bot rule still applies.
+func (h *ProxyHandler) handleBotRulesOpt(w http.ResponseWriter, r *http.Request, sep *ProxyEndpoint, skipAI bool) bool {
 	eng := h.Parent.Option.Bots
 	if eng == nil {
 		return false
@@ -31,6 +37,10 @@ func (h *ProxyHandler) handleBotRules(w http.ResponseWriter, r *http.Request, se
 			return false
 		}
 	}
+	skip := ""
+	if skipAI {
+		skip = "ai_crawler"
+	}
 	//Every User-Agent header value is judged: a duplicate header must not hide a bot from the rules
 	//while the upstream reads the other one
 	var d botrules.Decision
@@ -42,7 +52,7 @@ func (h *ProxyHandler) handleBotRules(w http.ResponseWriter, r *http.Request, se
 	}
 	ipFn := func() string { return h.Parent.GetClientIPForEndpoint(r, sep) }
 	for _, ua := range uas {
-		if d = eng.Evaluate(ua, ipFn); d.Action != "" {
+		if d = eng.EvaluateSkip(ua, ipFn, skip); d.Action != "" {
 			break
 		}
 	}

@@ -35,6 +35,7 @@ ap.add_argument("--securityfix-only", action="store_true", help="run only the se
 ap.add_argument("--certs-traffic-only", action="store_true", help="run only the Certificates / ACME / Statistics / Visitors / Uptime scenario (certs_traffic_smoke.py)")
 ap.add_argument("--netsys-only", action="store_true", help="run only the Network / System pages scenario (ux-fix-network-system audit)")
 ap.add_argument("--overview-only", action="store_true", help="run only the Status / Security overview / History / palette / navigation fix scenario")
+ap.add_argument("--aicrawlers-only", action="store_true", help="run only the AI crawlers page scenario (aicrawlers_smoke.py)")
 ap.add_argument("--zrok-fake", default=os.environ.get("SMOKE_ZROK_FAKE", ""), help="path of a fake zrok script; enables the zrok flow (the instance needs -allow_external_tools)")
 ap.add_argument("--allow", action="append", default=[], help="regex of messages whose failure is tolerated")
 args = ap.parse_args()
@@ -2270,6 +2271,7 @@ exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "cons
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "sites_smoke.py")).read(), "sites_smoke.py", "exec"))  # defines sites_ui
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "securityfix_smoke.py")).read(), "securityfix_smoke.py", "exec"))  # defines securityfix_ui
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "certs_traffic_smoke.py")).read(), "certs_traffic_smoke.py", "exec"))  # defines certs_traffic_ui
+exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "aicrawlers_smoke.py")).read(), "aicrawlers_smoke.py", "exec"))  # defines aicrawlers_ui
 
 
 def network_system_ui(pg, ctx):
@@ -2849,6 +2851,10 @@ def main():
             securityfix_ui(pg, ctx)
         if args.certs_traffic_only:
             certs_traffic_ui(pg, ctx)
+        if args.aicrawlers_only:
+            aicrawlers_ui(pg, ctx)
+            b.close()
+            return
         if args.overview_only:
             overview_ui(pg, ctx)
             b.close()
@@ -3759,6 +3765,8 @@ def main():
         history_ui(pg, ctx)
 
         overview_ui(pg, ctx)
+
+        aicrawlers_ui(pg, ctx)
 
         current["page"] = "site-editor"
         site_editor_ui(pg, ctx)
