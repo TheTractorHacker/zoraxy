@@ -635,6 +635,7 @@ var scopeAPIPrefixes = map[string][]string{
 	"redirect":    {"/api/redirect/"},
 	"access":      {"/api/access/", "/api/blacklist/", "/api/whitelist/", "/api/quickban/", "/api/trustedproxy/"},
 	"pathrules":   {"/api/pathrule/"},
+	"ruleset":     {"/api/ruleset/rule/", "/api/ruleset/list/"}, //validate / test / migrate are read-only and stay open
 	"streamproxy": {"/api/streamprox/"},
 	"acme":        {"/api/acme/autoRenew/"},
 	"certs":       {"/api/cert/"},

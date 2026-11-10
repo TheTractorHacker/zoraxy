@@ -221,6 +221,7 @@ func (h *ProxyHandler) hostRequest(w http.ResponseWriter, r *http.Request, targe
 		EnablePermissionPolicyHeader: headerRewriteOptions.EnablePermissionPolicyHeader,
 		PermissionPolicy:             headerRewriteOptions.PermissionPolicy,
 	})
+	downstreamHeaders = append(downstreamHeaders, h.Parent.rulesDownstreamHeaders(r)...) //response header actions of the rules engine
 
 	//Handle the request reverse proxy. Retries (if enabled for this endpoint) re-run this on another upstream
 	serveUpstream := func(w http.ResponseWriter, r *http.Request, upstream *loadbalance.Upstream) (int, error) {
@@ -393,6 +394,7 @@ func (h *ProxyHandler) vdirRequest(w http.ResponseWriter, r *http.Request, targe
 		EnablePermissionPolicyHeader: headerRewriteOptions.EnablePermissionPolicyHeader,
 		PermissionPolicy:             headerRewriteOptions.PermissionPolicy,
 	})
+	downstreamHeaders = append(downstreamHeaders, h.Parent.rulesDownstreamHeaders(r)...) //response header actions of the rules engine
 
 	//Handle the virtual directory reverse proxy request
 	statusCode, err := target.proxy.ServeHTTP(w, r, &dpcore.ResponseRewriteRuleSet{
@@ -599,6 +601,7 @@ func (router *Router) recordBlocked(r *http.Request, statusCode int, forwardType
 	e := blocklog.Entry{
 		Time: time.Now().Unix(), IP: clientIP, Host: r.Host, Rule: endpoint.RootOrMatchingDomain,
 		Method: r.Method, Path: path, Status: statusCode, Reason: reason, Detail: detail, UA: r.UserAgent(),
+		Tags: router.rulesTags(r),
 	}
 	if e.Host == "" {
 		e.Host = endpoint.RootOrMatchingDomain

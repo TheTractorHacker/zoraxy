@@ -58,6 +58,7 @@ var baseRoots = []string{
 	"trusted_proxies.json",
 	"acme_conf.json",
 	"waf_central.json",
+	"ruleset",
 }
 
 const certRoot = "certs"

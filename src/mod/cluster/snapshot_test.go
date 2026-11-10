@@ -25,6 +25,7 @@ func writeTree(t *testing.T, dir string) {
 		"trusted_proxies.json":     `["10.0.0.0/8"]`,
 		"acme_conf.json":           `{"Enabled":true,"Email":"ops@example.com"}`,
 		"waf_central.json":         `{"Policy":{"Enabled":true,"DefaultMode":"block"},"Profiles":[]}`,
+		"ruleset/global.json":      `{"version":1,"rules":[]}`,
 		"certs/a.pem":              "CERT-A",
 		"certs/a.key":              "KEY-A",
 		"webui/webui.key":          "WEBUI-TLS-PRIVATE-KEY",

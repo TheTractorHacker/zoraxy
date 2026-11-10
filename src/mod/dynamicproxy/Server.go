@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	zoraxyPlugin "imuslab.com/zoraxy/mod/plugins/zoraxy_plugin"
+	"imuslab.com/zoraxy/mod/ruleset"
 )
 
 /*
@@ -114,8 +115,14 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	//Rules engine for the default site (global rules + the rules of the default site)
+	ruleHandled, ruleSkips := h.Parent.handleRuleset(w, r, h.Parent.Root)
+	if ruleHandled {
+		return
+	}
+
 	/* WAF for the default site (root endpoint) -- WAF-HOOK: keep in the shared pre-proxy chain */
-	if h.Parent.wafInspect(w, r, h.Parent.Root) {
+	if ruleSkips&ruleset.SkipBitWAF == 0 && h.Parent.wafInspect(w, r, h.Parent.Root) {
 		return
 	}
 
@@ -300,6 +307,12 @@ func (h *ProxyHandler) runEndpointChain(w http.ResponseWriter, r *http.Request, 
 		return true
 	}
 
+	//Rules engine (mod/ruleset, ruleset_hook.go): global then per-site WHEN/THEN rules. Zero cost without rules.
+	ruleHandled, ruleSkips := h.Parent.handleRuleset(w, r, sep)
+	if ruleHandled {
+		return true
+	}
+
 	//CORS preflight and public static responses (robots.txt, health checks ...) are answered before the heavier checks
 	if h.handleCORSPreflight(w, r, sep) || h.handleStaticResponses(w, r, sep, true) {
 		return true
@@ -316,7 +329,7 @@ func (h *ProxyHandler) runEndpointChain(w http.ResponseWriter, r *http.Request, 
 	}
 
 	/* WAF (Coraza + OWASP CRS) -- WAF-HOOK: runs on both the TLS and non-TLS paths via this shared chain */
-	if h.Parent.wafInspect(w, r, sep) {
+	if ruleSkips&ruleset.SkipBitWAF == 0 && h.Parent.wafInspect(w, r, sep) {
 		return true
 	}
 
@@ -334,7 +347,7 @@ func (h *ProxyHandler) runEndpointChain(w http.ResponseWriter, r *http.Request, 
 	}
 
 	// Rate Limit
-	if sep.RequireRateLimit {
+	if sep.RequireRateLimit && ruleSkips&ruleset.SkipBitRateLimit == 0 {
 		err := h.handleRateLimitRouting(w, r, sep)
 		if err != nil {
 			if !sep.DisableLogging {
@@ -346,15 +359,17 @@ func (h *ProxyHandler) runEndpointChain(w http.ResponseWriter, r *http.Request, 
 	}
 
 	// CAPTCHA Gating
-	if handled, challenged := h.Parent.handleCaptchaGating(w, r, sep); handled {
-		if challenged {
-			h.Parent.logRequest(r, false, 403, "captcha-required", domainOnly, "captcha", sep)
+	if ruleSkips&ruleset.SkipBitCaptcha == 0 {
+		if handled, challenged := h.Parent.handleCaptchaGating(w, r, sep); handled {
+			if challenged {
+				h.Parent.logRequest(r, false, 403, "captcha-required", domainOnly, "captcha", sep)
+			}
+			return true
 		}
-		return true
 	}
 
 	//Validate auth (basic auth or SSO auth)
-	if handleAuthProviderRouting(sep, w, r, h) {
+	if ruleSkips&ruleset.SkipBitAuth == 0 && handleAuthProviderRouting(sep, w, r, h) {
 		//Request handled by subroute
 		return true
 	}
