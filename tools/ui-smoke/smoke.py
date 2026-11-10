@@ -2164,7 +2164,10 @@ def main():
             pg.click("#wafTabs .item[data-tab=waf-exclusions]")
             pg.fill("#wafxRule", "942999")
             pg.click("#wafxAdd")
-            pg.wait_for_timeout(1200)
+            for _ in range(80):  # up to 8 s: the save is a GET + POST + reload of the policy and a history snapshot follows
+                if "942999" in pg.inner_text("#wafxBody"):
+                    break
+                pg.wait_for_timeout(100)
             if "942999" not in pg.inner_text("#wafxBody"):
                 fail("waf", "added exclusion is not listed")
             pg.fill("#wafxFilter", "942999")
