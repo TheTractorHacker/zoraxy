@@ -356,6 +356,7 @@ body.darkTheme,
     .zx-table td::before { content: attr(data-label); flex: 0 0 38%; text-align: left; font-size: var(--zx-fs-xs); font-weight: 700; color: var(--zx-text-muted); text-transform: uppercase; letter-spacing: 0.03em; }
     .zx-table td.zx-actions { width: 100%; justify-content: flex-end; }
     .zx-table td.zx-actions::before { content: none; }
+    .zx-table td:empty { display: none; }
     .zx-table tbody tr:hover td { background: transparent; }
 }
 
