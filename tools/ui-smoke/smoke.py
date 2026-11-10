@@ -1377,6 +1377,95 @@ def ech_zrok_ui(pg, ctx):
         fail("dialog", f"native dialogs used: {dialogs}")
 
 
+def history_ui(pg, ctx):
+    """System > History: timeline, diff viewer, restore preview (dry run, typed confirmation for the whole configuration),
+    scoped restore enabling, ZxHistory.undoLast(), light/dark/390px. The restore itself restarts the instance and is
+    covered by the Go tests and the manual end-to-end run, not here."""
+    def shot(name):
+        pg.screenshot(path=os.path.join(args.out, name), full_page=True)
+
+    def theme(want_dark):
+        if pg.evaluate("document.body.classList.contains('darkTheme')") != want_dark:
+            pg.evaluate("toggleTheme()")
+            pg.wait_for_timeout(300)
+
+    dialogs = []
+    pg.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
+    theme(False)
+    pg.set_viewport_size({"width": 1366, "height": 900})
+    current["page"] = "history-flow"
+    host = "hist-smoke.example.com"
+    pg.wait_for_timeout(3000)  # let earlier flows' changes close their own history burst first
+    pg.evaluate("""host => new Promise(res => $.cjax({url: '/api/proxy/add', method: 'POST',
+        data: {type: 'host', rootname: host, ep: '127.0.0.1:9', tls: false, tlsval: false, bypassGlobalTLS: false}, success: res, error: res}))""", host)
+    pg.wait_for_timeout(2800)  # the debounce window of the history capture is 2 s
+    pg.evaluate("""host => new Promise(res => $.cjax({url: '/api/proxy/del', method: 'POST', data: {ep: host}, success: res, error: res}))""", host)
+    pg.wait_for_timeout(2800)
+    pg.evaluate("openTabById('history')")
+    settle(pg, 900)
+    pg.wait_for_function("document.querySelectorAll('#hxTimeline .hx-item').length >= 2", timeout=10000)
+    pg.fill("#hxFilterObject", host)
+    pg.click("#hxFilterBtn")
+    pg.wait_for_function("document.querySelectorAll('#hxTimeline .hx-item').length == 2", timeout=10000)
+    deleted = pg.locator("#hxTimeline .hx-item", has_text="Proxy rule deleted: " + host).first
+    added = pg.locator("#hxTimeline .hx-item", has_text="Proxy rule added: " + host).first
+    if deleted.count() == 0 or added.count() == 0:
+        fail("history", "versions for the added and the deleted smoke rule are missing: " + " | ".join(pg.eval_on_selector_all("#hxTimeline .hx-summary", "e => e.map(x => x.textContent)")))
+    deleted.locator(".hx-show").click()
+    pg.wait_for_selector("#hxTimeline .hx-diff details", timeout=8000)
+    if host not in deleted.locator(".hx-diff").inner_text():
+        fail("history", "diff of the deletion should show the removed rule")
+    shot("history-light.png")
+    # the version that still had the rule: dry run preview, typed confirmation
+    added.locator(".hx-restore").click()
+    pg.wait_for_selector("#hxRestoreModal.visible", timeout=5000)
+    pg.wait_for_function("document.getElementById('hxPreview').innerText.includes('would change')", timeout=8000)
+    if "Nothing has been changed yet" not in pg.inner_text("#hxPreview"):
+        fail("history", "preview should say nothing was changed yet")
+    if not pg.locator("#hxRestoreGo").evaluate("e => e.classList.contains('disabled')"):
+        fail("history", "whole-configuration restore must stay disabled until RESTORE is typed")
+    pg.fill("#hxConfirmWord", "restore")
+    if not pg.locator("#hxRestoreGo").evaluate("e => e.classList.contains('disabled')"):
+        fail("history", "confirmation word is case sensitive")
+    pg.fill("#hxConfirmWord", "RESTORE")
+    if pg.locator("#hxRestoreGo").evaluate("e => e.classList.contains('disabled')"):
+        fail("history", "typing RESTORE should enable the button")
+    shot("history-restore-light.png")
+    pg.select_option("#hxScope", "proxy")
+    pg.wait_for_function("document.getElementById('hxConfirmWrap').style.display == 'none'", timeout=8000)
+    pg.wait_for_function("!document.getElementById('hxRestoreGo').classList.contains('disabled')", timeout=8000)
+    theme(True)
+    shot("history-restore-dark.png")
+    pg.set_viewport_size({"width": 390, "height": 800})
+    pg.wait_for_timeout(400)
+    check_horizontal(pg, "history restore 390px")
+    shot("history-restore-390-dark.png")
+    pg.click("#hxRestoreCancel")
+    pg.wait_for_timeout(500)
+    check_horizontal(pg, "history 390px")
+    shot("history-390-dark.png")
+    theme(False)
+    shot("history-390-light.png")
+    pg.set_viewport_size({"width": 1366, "height": 900})
+    shot("history-light-2.png")
+    # the global helper opens the same preview for the state before the last change
+    current["page"] = "history-undo-helper"
+    pg.evaluate("openTabById('status')")
+    settle(pg, 400)
+    res = pg.evaluate("window.ZxHistory.undoLast()")
+    if res.get("target", 0) <= 0 or res["target"] >= res["latest"]:
+        fail("history", f"undoLast returned {res}")
+    pg.wait_for_selector("#hxRestoreModal.visible", timeout=8000)
+    pg.wait_for_function("document.getElementById('hxPreview').innerText.includes('would change')", timeout=8000)
+    pg.click("#hxRestoreCancel")
+    # list API filters
+    flt = pg.evaluate("window.ZxHistory.list({object: 'hist-smoke'})")
+    if flt.get("total", 0) < 2:
+        fail("history", f"object filter should find the two smoke versions: {flt.get('total')}")
+    if dialogs:
+        fail("dialog", f"native dialogs used: {dialogs}")
+
+
 def posture_ui(pg, ctx):
     """Security overview: score, evidence, preview -> apply of the WAF fix (detection-only) with the WAF page and the
     Status tile following, undo, empty state, dark and 390px."""
@@ -2475,6 +2564,8 @@ def main():
         ech_zrok_ui(pg, ctx)
 
         posture_ui(pg, ctx)
+
+        history_ui(pg, ctx)
 
         # ---- narrow / mobile layout ----
         current["page"] = "mobile"
