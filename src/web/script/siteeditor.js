@@ -141,7 +141,7 @@
         var orig = window.updateAccessRuleNameUnderHost;
         window.updateAccessRuleNameUnderHost = function (ep, id) {
             if (typeof orig === "function") { orig.apply(this, arguments); }
-            if (st.subd && ep === st.subd.RootOrMatchingDomain) { st.subd.AccessFilterUUID = id; $("#hrpAccess").val(id); rebase(); }
+            if (st.subd && ep === st.subd.RootOrMatchingDomain) { st.subd.AccessFilterUUID = id; $("#hrpAccess").val(id); rebaseAccess(); }
         };
 
         // a real user edit stops the automatic re-baselining after late loaded fields
@@ -316,7 +316,7 @@
             var cur = subd.AccessFilterUUID || "default";
             if (!$sel.find("option").filter(function () { return this.value === cur; }).length) { $sel.append($("<option>").val(cur).text(cur)); }
             $sel.val(cur).prop("disabled", false);
-            rebase();
+            rebaseAccess();
         });
     }
 
@@ -361,6 +361,8 @@
     /* ------------------------------------------------------------------ dirty state and saving */
     function isDirty() { return !!(st.bar && st.bar.isDirty()); }
     function rebase() { if (st.bar) { st.bar.reset(); } }
+    // only the access field was saved elsewhere (the picker saves at once): other unsaved edits stay pending
+    function rebaseAccess() { if (st.bar) { st.bar.tracker.commit(["hrpAccess"]); } }
 
     // A setting changed. Live switches (inside [data-hrp-live]) save at once when nothing else is pending.
     function edited(el) {

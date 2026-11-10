@@ -2068,6 +2068,17 @@ def site_editor_ui(pg, ctx):
         pg.click("#httprpEditModal .Tls_EnableLegacyCertificateMatching + label")
         pg.click("#httprpEditModal [data-zx-save]")
         wait_saved("TLS option reset")
+        # the Advanced access picker saves at once: that must not drop other unsaved edits from the bar
+        pg.evaluate("HrpEditor.setMode('easy')")
+        pg.click("#httprpEditModal .EnableWebSocket + label")
+        pg.wait_for_selector("#httprpEditModal .zx-savebar:visible", timeout=3000)
+        pg.evaluate("updateAccessRuleNameUnderHost(%s, 'default')" % json.dumps(host))
+        pg.wait_for_timeout(300)
+        if not pg.evaluate("HrpEditor.isDirty()"):
+            fail("site-editor", "picking an access rule must not clear other unsaved edits from the Save bar")
+        pg.click("#httprpEditModal [data-zx-discard]")
+        pg.wait_for_selector("#httprpEditModal .zx-savebar", state="hidden", timeout=3000)
+        pg.evaluate("HrpEditor.setMode('advanced')")
         # no false prompt: browse around, then close
         pg.click("#httprpEditModal .hrpedit_menu_item[cfgpage=security]")
         pg.wait_for_timeout(800)

@@ -189,3 +189,34 @@ func TestAppPresetTextsAreInI18nExtraKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestNoDowngradeKeepsInheritedBlock(t *testing.T) {
+	var p *RuleTemplate
+	for _, c := range AppPresets() {
+		if c.WAFSource != nil && *c.WAFSource == "detection_only" {
+			p = c
+			break
+		}
+	}
+	if p == nil {
+		t.Skip("no detection_only preset")
+	}
+	for _, src := range []string{"", "inherit"} {
+		ep := presetTestRule()
+		ep.WAFSource = src
+		if _, err := ApplyRuleTemplateIn(ep, p, "block"); err != nil {
+			t.Fatal(err)
+		}
+		if ep.WAFSource != src {
+			t.Errorf("source %q under an inherited block was replaced by %q", src, ep.WAFSource)
+		}
+		ep = presetTestRule()
+		ep.WAFSource = src
+		if _, err := ApplyRuleTemplateIn(ep, p, "detection_only"); err != nil {
+			t.Fatal(err)
+		}
+		if ep.WAFSource != "detection_only" {
+			t.Errorf("source %q under inherited detection should become detection_only, got %q", src, ep.WAFSource)
+		}
+	}
+}

@@ -141,6 +141,13 @@ func yesNo(b bool) string {
 // ApplyRuleTemplate applies t to ep (mutating it) and returns the list of changes. Callers that only want
 // a preview pass a CopyEndpoint of the rule.
 func ApplyRuleTemplate(ep *ProxyEndpoint, t *RuleTemplate) ([]RuleChange, error) {
+	return ApplyRuleTemplateIn(ep, t, "")
+}
+
+// ApplyRuleTemplateIn is ApplyRuleTemplate with the effective mode of the central WAF policy for inheriting
+// rules (off, detection_only or block; "" when unknown). A no-downgrade template never replaces an inherited
+// block with a weaker source.
+func ApplyRuleTemplateIn(ep *ProxyEndpoint, t *RuleTemplate, inheritedWAF string) ([]RuleChange, error) {
 	if err := t.Validate(); err != nil {
 		return nil, err
 	}
@@ -192,7 +199,7 @@ func ApplyRuleTemplate(ep *ProxyEndpoint, t *RuleTemplate) ([]RuleChange, error)
 		add("Uptime monitor URI", ep.UptimeMonitorURI, *t.UptimeMonitorURI)
 		ep.UptimeMonitorURI = *t.UptimeMonitorURI
 	}
-	if t.WAFSource != nil && !(t.NoDowngrade && wafRank(ep) >= wafRankOf(*t.WAFSource)) {
+	if t.WAFSource != nil && !(t.NoDowngrade && wafRank(ep, inheritedWAF) >= wafRankOf(*t.WAFSource)) {
 		old := ep.WAFSource
 		if old == "" {
 			old = "(default)"
@@ -277,9 +284,12 @@ func wafRankOf(source string) int {
 	}
 }
 
-func wafRank(ep *ProxyEndpoint) int {
+func wafRank(ep *ProxyEndpoint, inheritedWAF string) int {
 	if ep.WAFSource == "" && ep.WAF != nil {
 		return 3
+	}
+	if (ep.WAFSource == "" || ep.WAFSource == "inherit") && inheritedWAF == "block" {
+		return 3 //the rule follows a central policy that blocks
 	}
 	return wafRankOf(ep.WAFSource)
 }

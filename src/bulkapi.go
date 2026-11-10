@@ -152,7 +152,7 @@ func HandleRuleTemplatePreview(w http.ResponseWriter, r *http.Request) {
 		d := dynamicproxy.GetDefaultProxyEndpoint()
 		ep = &d
 	}
-	changes, err := dynamicproxy.ApplyRuleTemplate(ep, t)
+	changes, err := dynamicproxy.ApplyRuleTemplateIn(ep, t, inheritedWAFMode())
 	if err != nil {
 		sendTemplateError(w, err.Error())
 		return
@@ -187,7 +187,7 @@ func applyRuleTemplateByName(ep *dynamicproxy.ProxyEndpoint, name string) error 
 	if err != nil {
 		return err
 	}
-	_, err = dynamicproxy.ApplyRuleTemplate(ep, t)
+	_, err = dynamicproxy.ApplyRuleTemplateIn(ep, t, inheritedWAFMode())
 	return err
 }
 
@@ -247,4 +247,12 @@ func HandleProxyBulk(w http.ResponseWriter, r *http.Request) {
 	}
 	js, _ := json.Marshal(map[string]interface{}{"results": results})
 	utils.SendJSONResponse(w, string(js))
+}
+
+// inheritedWAFMode is the mode inheriting rules get from the central WAF policy ("" when unknown)
+func inheritedWAFMode() string {
+	if dynamicProxyRouter == nil {
+		return ""
+	}
+	return dynamicProxyRouter.WAFState().InheritMode()
 }
