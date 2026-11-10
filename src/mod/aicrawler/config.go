@@ -331,3 +331,29 @@ func writeFileAtomic(path string, data []byte) error {
 	}
 	return os.Rename(tmp, path)
 }
+
+// pruneUnknown removes group and crawler ids this build does not know (a policy written by another version)
+func (c *Config) pruneUnknown() {
+	known := map[string]bool{}
+	for _, g := range Groups() {
+		known[g.ID] = true
+	}
+	prune := func(groups, crawlers map[string]string) {
+		for id := range groups {
+			if !known[id] {
+				delete(groups, id)
+			}
+		}
+		for id := range crawlers {
+			if _, ok := Lookup(id); !ok {
+				delete(crawlers, id)
+			}
+		}
+	}
+	prune(c.Global.Groups, c.Global.Crawlers)
+	for _, s := range c.Sites {
+		if s != nil {
+			prune(s.Custom.Groups, s.Custom.Crawlers)
+		}
+	}
+}

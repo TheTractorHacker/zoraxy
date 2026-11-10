@@ -151,7 +151,7 @@
         q("#aicSpoof").val(g.SpoofAction || "block");
         q("#aicRate").val(g.RateLimitPerMinute || state.data.DefaultRateLimit || 30);
         q("#aicBypass").prop("checked", !!g.BypassWAF);
-        q("select[data-group]").each(function () { $(this).val((g.Groups || {})[$(this).attr("data-group")] || ""); });
+        q("select[data-group]:not(.aicSG)").each(function () { $(this).val((g.Groups || {})[$(this).attr("data-group")] || ""); });
         q("select[data-crawler]").each(function () { $(this).val((g.Crawlers || {})[$(this).attr("data-crawler")] || ""); });
     }
 
@@ -169,7 +169,7 @@
         c.Global = c.Global || {};
         c.Global.Groups = {};
         c.Global.Crawlers = {};
-        q("select[data-group]").each(function () { if ($(this).val()) { c.Global.Groups[$(this).attr("data-group")] = $(this).val(); } });
+        q("select[data-group]:not(.aicSG)").each(function () { if ($(this).val()) { c.Global.Groups[$(this).attr("data-group")] = $(this).val(); } });
         q("select[data-crawler]").each(function () { if ($(this).val()) { c.Global.Crawlers[$(this).attr("data-crawler")] = $(this).val(); } });
         c.Global.VerifiedOnly = q("#aicVerified").prop("checked");
         c.Global.SpoofAction = q("#aicSpoof").val() || "block";

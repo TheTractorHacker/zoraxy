@@ -206,3 +206,21 @@ func Match(ua string) (Entry, bool) {
 	}
 	return Entry{}, false
 }
+
+// MatchAll returns every crawler whose token the User-Agent contains, longest token first
+func MatchAll(ua string) []Entry {
+	if ua == "" {
+		return nil
+	}
+	if len(ua) > maxUA {
+		ua = ua[:maxUA]
+	}
+	lower := strings.ToLower(ua)
+	var out []Entry
+	for _, i := range matchOrder {
+		if strings.Contains(lower, registry[i].UA) {
+			out = append(out, registry[i])
+		}
+	}
+	return out
+}

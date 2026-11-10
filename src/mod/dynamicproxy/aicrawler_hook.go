@@ -2,11 +2,14 @@ package dynamicproxy
 
 import (
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"imuslab.com/zoraxy/mod/abuse"
 	"imuslab.com/zoraxy/mod/aicrawler"
+	"imuslab.com/zoraxy/mod/dynamicproxy/exploits"
 	"imuslab.com/zoraxy/mod/metrics"
 )
 
@@ -19,7 +22,8 @@ import (
 
 	An allowed crawler (action allow, or rate limit while under its limit) is only exempted from the two checks that
 	would otherwise stop it by name: the "ai_crawler" category of the bot rules and the AI crawler switch of the
-	exploit detector. It is still subject to everything else, the WAF included, unless the admin ticked the WAF bypass
+	exploit detector, and only when the User-Agent claims no other crawler that is blocked or without a policy and
+	carries no AI signature outside the allowed tokens. It is still subject to everything else, the WAF included, unless the admin ticked the WAF bypass
 	AND the crawler's identity was verified. Without a policy for the crawler, or with the policy off, nothing changes.
 */
 
@@ -48,6 +52,10 @@ func (h *ProxyHandler) handleAICrawlers(w http.ResponseWriter, r *http.Request, 
 	}
 	switch d.Outcome {
 	case aicrawler.OutAllow:
+		if otherAISignature(uas) {
+			// another AI bot that is not in the registry rides along: the older checks must still see it
+			return false, crawlerResult{}
+		}
 		return false, crawlerResult{allowed: true, bypassWAF: d.BypassWAF}
 	case aicrawler.OutLogOnly:
 		h.Parent.logRequestDetail(r, true, 200, "aicrawler-"+kind+"-logonly", r.Host, "", sep, d.Detail())
@@ -68,6 +76,33 @@ func (h *ProxyHandler) handleAICrawlers(w http.ResponseWriter, r *http.Request, 
 		return true, crawlerResult{}
 	}
 	return false, crawlerResult{} // no policy for this crawler
+}
+
+var aiSigOnce sync.Once
+var aiSigRe []*regexp.Regexp
+
+// otherAISignature reports whether a User-Agent still carries an AI bot signature (the list of the exploit detector)
+// after every registry crawler token is removed. The allow of one crawler never covers a different AI bot.
+func otherAISignature(uas []string) bool {
+	aiSigOnce.Do(func() {
+		for _, p := range exploits.AIBotPatterns() {
+			if re, err := regexp.Compile(p); err == nil {
+				aiSigRe = append(aiSigRe, re)
+			}
+		}
+	})
+	for _, ua := range uas {
+		rest := strings.ToLower(ua)
+		for _, m := range aicrawler.MatchAll(ua) {
+			rest = strings.ReplaceAll(rest, m.UA, " ")
+		}
+		for _, re := range aiSigRe {
+			if re.MatchString(rest) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 /* ---- /robots.txt and /llms.txt ---- */

@@ -193,9 +193,49 @@ func TestOldAndPartialConfigsLoad(t *testing.T) {
 		t.Fatal("broken JSON must be reported")
 	}
 	// an invalid value in the file is refused rather than half applied
-	os.WriteFile(p, []byte(`{"Enabled":true,"Global":{"Crawlers":{"nosuchbot":"block"}}}`), 0o600)
+	os.WriteFile(p, []byte(`{"Enabled":true,"Global":{"Crawlers":{"gptbot":"explode"}}}`), 0o600)
 	if err := New(p, "").Load(); err == nil {
-		t.Fatal("unknown crawler id must be reported")
+		t.Fatal("invalid action must be reported")
+	}
+}
+
+// A crawler or group id from another version, or a corrupt range cache, must not switch the whole policy off
+func TestLoadToleratesUnknownIDsAndCorruptRangeCache(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "a.json")
+	rp := filepath.Join(dir, "r.json")
+	os.WriteFile(p, []byte(`{"Enabled":true,"Global":{"Groups":{"training":"block","oldgroup":"block"},"Crawlers":{"nosuchbot":"block","gptbot":"allow"}},"Sites":{"s":{"Mode":"custom","Custom":{"Crawlers":{"gone":"block"}}}}}`), 0o600)
+	os.WriteFile(rp, []byte(`{"sets":`), 0o600)
+	e := New(p, rp)
+	e.Load() // the range cache error may be reported, the policy must be live anyway
+	if !e.Enabled() {
+		t.Fatal("policy disabled by unknown ids or a corrupt range cache")
+	}
+	if d := e.Evaluate("x", []string{"CCBot/2.0"}, nil); d.Outcome != OutBlock {
+		t.Fatalf("known entries of the file must still apply: %+v", d)
+	}
+	if d := e.Evaluate("x", []string{"GPTBot/1.0"}, nil); d.Outcome != OutAllow {
+		t.Fatalf("crawler rule lost: %+v", d)
+	}
+}
+
+func TestEvaluateMostRestrictiveOfSeveralClaims(t *testing.T) {
+	e := New("", "")
+	c := enabledCfg(func(c *Config) {
+		c.Global.Crawlers = map[string]string{"chatgpt-user": ActAllow, "bytespider": ActBlock}
+	})
+	if err := e.SetConfig(c); err != nil {
+		t.Fatal(err)
+	}
+	if d := e.Evaluate("x", []string{"Bytespider ChatGPT-User"}, nil); d.Outcome != OutBlock {
+		t.Fatalf("a longer allowed token hid a blocked crawler: %+v", d)
+	}
+	if d := e.Evaluate("x", []string{"ChatGPT-User", "Bytespider"}, nil); d.Outcome != OutBlock {
+		t.Fatalf("a second header hid a blocked crawler: %+v", d)
+	}
+	// a crawler without a policy next to an allowed one: no exemption
+	if d := e.Evaluate("x", []string{"ClaudeBot ChatGPT-User"}, nil); d.Outcome == OutAllow {
+		t.Fatalf("allowed token exempted a crawler without a policy: %+v", d)
 	}
 }
 

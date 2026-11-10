@@ -340,3 +340,37 @@ func TestCrawlerFileWriterCases(t *testing.T) {
 		t.Fatalf("HEAD: %d %q", rec.Code, rec.Body.String())
 	}
 }
+
+func TestAICrawlerAllowDoesNotCoverOtherAIBots(t *testing.T) {
+	router, sep, _ := newNonTLSTestRouter(t)
+	sep.BlockAICrawlers = true
+	sep.MitigationAction = 1
+	sep.InitializeExploitDetector()
+	router.Option.AICrawlers = crawlerEngine(t, func(c *aicrawler.Config) {
+		c.Global.Crawlers = map[string]string{"oai-searchbot": aicrawler.ActAllow, "bytespider": aicrawler.ActBlock}
+	})
+	if w := serveUA(router, sep, "OAI-SearchBot/1.0; +https://openai.com/searchbot"); w.Code != 299 {
+		t.Fatalf("the allowed crawler alone must pass: %d", w.Code)
+	}
+	for _, ua := range []string{
+		"Bytespider oai-searchbot",    // blocked crawler with a longer allowed token
+		"ClaudeBot oai-searchbot",     // crawler without a policy, the legacy switch must still apply
+		"oai-searchbot PerplexityBot", // second registry crawler
+		"oai-searchbot sogou",         // AI signature that is not in the registry
+	} {
+		if w := serveUA(router, sep, ua); w.Code != 403 {
+			t.Errorf("%q passed (%d), the allow of one crawler must not cover another", ua, w.Code)
+		}
+	}
+}
+
+func TestAICrawlerRegistryTokensPassTheirOwnAllow(t *testing.T) {
+	for _, e := range aicrawler.Registry() {
+		if e.UA == "" {
+			continue
+		}
+		if otherAISignature([]string{"Mozilla/5.0 (compatible; " + e.Token + "/1.0; +https://example.com/" + e.UA + ")"}) {
+			t.Errorf("%s: its own User-Agent is seen as a second AI signature", e.ID)
+		}
+	}
+}

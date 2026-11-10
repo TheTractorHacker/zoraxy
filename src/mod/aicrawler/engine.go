@@ -115,26 +115,27 @@ func (e *Engine) SetConfig(c Config) error {
 // Load reads the persisted configuration and the range cache. A missing file means the disabled defaults,
 // an old or partial file keeps the defaults for every field it does not have.
 func (e *Engine) Load() error {
-	if err := e.Ranges.Load(); err != nil {
-		return err
-	}
+	// The range cache is optional data: a corrupt file must not switch the policy off (the lists are fetched again)
+	rangesErr := e.Ranges.Load()
 	if e.path == "" {
-		return nil
+		return rangesErr
 	}
 	js, err := os.ReadFile(e.path)
 	if err != nil {
-		return nil
+		return rangesErr
 	}
 	c := DefaultConfig()
 	if err := json.Unmarshal(js, &c); err != nil {
 		return err
 	}
+	// crawler and group ids come and go between versions: unknown ones are dropped, not fatal for the whole policy
+	c.pruneUnknown()
 	if err := c.Validate(); err != nil {
 		return err
 	}
 	n := c.normalise()
 	e.cfg.Store(&n)
-	return nil
+	return rangesErr
 }
 
 // Preview says what the policy would do for a User-Agent on a site, without verifying, counting or limiting anything
@@ -169,11 +170,16 @@ func (e *Engine) Evaluate(site string, userAgents []string, clientIP func() stri
 	if ef.off {
 		return Decision{}
 	}
+	// Every claimed crawler is looked at, the most restrictive policy decides: a longer allowed token in the same
+	// header (or in a second header) must not hide another crawler that is blocked or has no policy.
 	var entry Entry
 	found := false
+	best := -1
 	for _, ua := range userAgents {
-		if entry, found = Match(ua); found {
-			break
+		for _, m := range MatchAll(ua) {
+			if r := actionStrictness(ef.actionFor(m)); r > best {
+				best, entry, found = r, m, true
+			}
 		}
 	}
 	if !found {
@@ -221,6 +227,24 @@ func (e *Engine) Evaluate(site string, userAgents []string, clientIP func() stri
 	}
 	e.stats.add(site, entry.ID, outcomeKey(d.Outcome), e.now())
 	return d
+}
+
+// actionStrictness orders the configured actions for a request that claims several crawlers. "No policy" ranks above
+// allow, log and rate limit because the older switches then still apply and must not be skipped.
+func actionStrictness(a string) int {
+	switch a {
+	case ActBlock:
+		return 6
+	case ActChallenge:
+		return 5
+	case "":
+		return 4
+	case ActLog:
+		return 3
+	case ActRateLimit:
+		return 2
+	}
+	return 1 // allow
 }
 
 func spoofOutcome(a string) string {

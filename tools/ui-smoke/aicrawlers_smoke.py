@@ -197,6 +197,17 @@ def aicrawlers_ui(pg, ctx):
         pre = js("document.getElementById('aicSPre').innerText")
         if "User-agent: GPTBot" not in pre:
             fail("aicrawlers", "the robots.txt preview does not list GPTBot")
+        # the site editor's purpose selects and the defaults form must not leak into each other
+        g_before = get_cfg()["Config"]["Global"]["Groups"].get("training")
+        pg.select_option("#aicSg-training", "log" if g_before != "log" else "allow")
+        pg.fill("#aicRate", "31")
+        pg.click("#aiCrawlersPage [data-zx-save]")
+        pg.wait_for_timeout(1200)
+        c2 = get_cfg()["Config"]["Global"]
+        if c2["Groups"].get("training") != g_before or c2["RateLimitPerMinute"] != 31:
+            fail("aicrawlers", f"saving the defaults took the site editor's selects (or did not save): {c2}")
+        if js("document.getElementById('aicSg-training').value") == (g_before or ""):
+            fail("aicrawlers", "the defaults form overwrote the open site editor's purpose select")
         st, body, ct = data_plane("/", AIC_GPT)
         if st == 403:
             fail("aicrawlers", "the site override (GPTBot: allow) did not take effect")
