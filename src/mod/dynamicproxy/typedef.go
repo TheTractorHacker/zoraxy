@@ -40,6 +40,7 @@ import (
 	"imuslab.com/zoraxy/mod/geodb"
 	"imuslab.com/zoraxy/mod/info/logger"
 	"imuslab.com/zoraxy/mod/plugins"
+	"imuslab.com/zoraxy/mod/ruleset"
 	"imuslab.com/zoraxy/mod/statistic"
 	"imuslab.com/zoraxy/mod/tlscert"
 	"imuslab.com/zoraxy/mod/visitors"
@@ -116,6 +117,7 @@ type RouterOption struct {
 	BasicAuthLists       *CredentialLists           `json:"-"` //Optional named basic auth credential lists (basicauth_ext.go)
 	Bots                 *botrules.Engine           `json:"-"` //Optional bot (User-Agent) rules, see bot_hook.go
 	Abuse                *abuse.Manager             `json:"-"` //Optional automatic abuse banning (nil or disabled = no overhead), see abuse_hook.go
+	Rules                *ruleset.Engine            `json:"-"` //Optional rules engine (nil or no rule = one atomic load), see ruleset_hook.go
 
 	/* Timeouts */
 	ReadHeaderTimeout int64 //HTTP server read timeout in seconds

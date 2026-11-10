@@ -40,6 +40,8 @@ type Entry struct {
 	Reason  string `json:"reason"`
 	Detail  string `json:"detail,omitempty"`
 	UA      string `json:"ua,omitempty"`
+
+	Tags []string `json:"tags,omitempty"` // tags set by rules of the rules engine on this request
 }
 
 // Settings are persisted by the caller

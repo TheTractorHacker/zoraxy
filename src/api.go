@@ -260,6 +260,8 @@ func RegisterStatisticalAPIs(authRouter *auth.RouterDef) {
 	RegisterVisitorAPIs(authRouter)
 	/* Blocked requests (what was rejected, and why) */
 	RegisterBlockedAPIs(authRouter)
+	/* Rules engine (WHEN expression THEN action, global and per site) */
+	RegisterRulesetAPIs(authRouter)
 	/* UpTime Monitor */
 	authRouter.HandleFunc("/api/utm/list", HandleUptimeMonitorListing)
 	authRouter.HandleFunc("/api/utm/healthyStatus", HandleUptimeHealthyStatus)

@@ -29,7 +29,8 @@ info:
     configuration backup and restore, certificate upload and ACME, cluster and fleet
     management, SSO / OAuth2 providers, scripting, plugins, and user or role
     administration. Create or change those objects in the admin panel; the
-    proxy-rule endpoints below carry the common rule fields only.
+    proxy-rule endpoints below carry the common rule fields only. The rules engine can be read with a
+    token (`/api/v1/ruleset/*`); its rules and lists are created and changed in the admin panel (`/api/ruleset/*`).
 servers:
   - url: /
 security:
@@ -245,6 +246,32 @@ paths:
       operationId: getWafCoverage
       responses:
         "200": {description: Coverage entries, content: {application/json: {schema: {}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+  /api/v1/ruleset/rules:
+    get:
+      summary: Rules of the rules engine (read only)
+      description: >
+        The rules of one rule set in evaluation order, each with its expression, structured tree, action,
+        warnings and hit counters. Creating and changing rules is done in the admin panel.
+      operationId: listRulesetRules
+      parameters:
+        - name: site
+          in: query
+          description: Proxy rule key; empty or absent is the global rule set, `_default_site` the default site
+          schema: {type: string}
+      responses:
+        "200": {description: Array of rules, content: {application/json: {schema: {type: array, items: {type: object}}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+  /api/v1/ruleset/lists:
+    get:
+      summary: Named lists used by the rules engine (read only)
+      operationId: listRulesetLists
+      responses:
+        "200": {description: Array of lists with the rules that use them, content: {application/json: {schema: {type: array, items: {type: object}}}}}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/TooManyRequests"}

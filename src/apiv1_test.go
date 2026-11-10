@@ -64,6 +64,7 @@ func v1TestSetup(t *testing.T) (*apitoken.Manager, http.Handler, *v1Capture, str
 		ProxyAdd:  stub(`"OK"`), ProxyEdit: stub(`"OK"`), ProxyToggle: stub(`"OK"`),
 		ProxyDelete: stub(`{"error":"proxy rule not found"}`),
 		AccessList:  stub(`[]`), RedirectList: stub(`[]`), CertList: stub(`[]`), StatsSummary: stub(`{}`), WAF: stub(`[]`), StatsBlocked: stub(`{}`),
+		RulesetRules: stub(`[]`), RulesetLists: stub(`[]`),
 	}
 	h := newAPIv1Handler(mgr, b, func(next http.Handler) http.Handler { return next })
 	ro, _, _ := mgr.Create("ro", apitoken.ScopeRead, 0, nil)
@@ -126,7 +127,7 @@ func TestAPIv1ReadWriteScopes(t *testing.T) {
 	if w := v1Do(h, "GET", "/api/v1/proxy-rules/none", ro, ""); w.Code != 404 {
 		t.Fatalf("get missing: %d", w.Code)
 	}
-	for _, p := range []string{"access-rules", "redirects", "certificates", "stats/summary", "waf/coverage", "health"} {
+	for _, p := range []string{"access-rules", "redirects", "certificates", "stats/summary", "waf/coverage", "ruleset/rules", "ruleset/lists", "health"} {
 		if w := v1Do(h, "GET", "/api/v1/"+p, ro, ""); w.Code != 200 {
 			t.Errorf("%s: %d", p, w.Code)
 		}

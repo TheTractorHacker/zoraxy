@@ -590,6 +590,247 @@ security schemes. Everything is per request: there is no rate or volume accounti
 **Tests:** `waf/apiguard_test.go`, `waf/apiguard_config_test.go`, `waf/openapi_test.go`, `dynamicproxy/waf_api_test.go`,
 `src/wafapi_openapi_test.go`.
 
+## Rules engine (WHEN expression THEN action)
+
+One rule model for what is spread over access rules, path rules, header rules, bot rules, redirects, rate
+limits, the WAF and CAPTCHA (finding 1 of `docs/ux/audit-2026-11.md`): **WHEN expression THEN action**,
+evaluated for every request, a global rule set plus one rule set per proxy rule (and one for the default
+site). Rules are ordered, individually enabled or disabled, and can be **log-only** (dry run) so a new rule
+is observed before it acts. This is the backend; the visual builder and an assistant that proposes rules sit
+on top of the `/api/ruleset/` API later.
+
+Code: `src/mod/ruleset` (language, engine, storage), `src/mod/dynamicproxy/ruleset_hook.go` (the pipeline
+glue), `src/rulesetapi.go` (admin API), `src/rulesetmigrate.go` (read-only migration proposals).
+
+### Language reference
+
+```
+http.path starts_with "/admin" and ip.country != "US"
+(http.path starts_with "/api" or http.path == "/metrics") and ip.src not in $office
+lower(http.user_agent) contains "sqlmap" or http.user_agent matches "(?i)^(curl|wget)/"
+not ip.is_private and http.header["x-api-key"] not exists
+```
+
+Grammar: `or` of `and` of (`not` unary | `( expr )` | condition). A condition is `operand op value`.
+Keywords are lower case. The canonical text (what `validate` returns and what is stored) puts one space around
+operators, prints `==`/`!=`/`<`/`>`/`<=`/`>=`, writes `not (...)` with parentheses and `ip.is_private == true`
+for a bare boolean; `eq ne lt gt le ge` are accepted as aliases and a bare boolean field means `== true`.
+
+**Fields** (typed; `GET /api/ruleset/meta` returns this table for the builder):
+
+| Field | Type | Meaning |
+|---|---|---|
+| `http.host` | string | Host header, lower case, port removed |
+| `http.path` | string | **normalised** path (below), case sensitive |
+| `http.raw_path` | string | path as received, still percent-encoded |
+| `http.query` | string | raw query string without `?` |
+| `http.method` | string | method as received |
+| `http.scheme` | string | `https` if the client connection used TLS, else `http` (forwarded-proto headers are never trusted) |
+| `http.version` | string | `HTTP/1.0`, `HTTP/1.1`, `HTTP/2.0`, `HTTP/3.0` |
+| `http.user_agent`, `http.referer`, `http.content_type` | string | the headers (several values joined with `, `) |
+| `http.header["name"]` | string | request header; name case-insensitive; `exists` tests presence |
+| `http.cookie["name"]` | string | cookie; name case-sensitive |
+| `http.query_arg["name"]` | string | decoded query parameter, first value, name case-sensitive |
+| `ip.src` | ip | client address after trusted-proxy resolution (same resolver as the access lists, rate limit and CAPTCHA) |
+| `ip.country` | string | ISO 3166 alpha-2 from the GeoIP database, upper case, `XX` when unknown |
+| `ip.is_private` | bool | loopback, RFC 1918 / ULA, link-local, unspecified, CGNAT |
+| `tls.version` | string | `TLSv1.0` ... `TLSv1.3`, empty on plain HTTP |
+| `tls.sni` | string | lower case server name of the handshake, empty without TLS or SNI |
+| `req.size` | int | Content-Length, -1 when unknown (chunked) |
+
+`ip.asn` is **not available**: the bundled GeoIP database (`mod/geodb`) maps addresses to countries only. The
+parser says so when a rule uses it. Adding it needs an ASN database first.
+
+`http.path` normalisation: percent-decoded once (by the URL parser), backslashes read as `/`, everything after
+a NUL dropped, `;params` removed from every segment, dot segments and duplicate slashes resolved, no trailing
+slash (except `/`). `//admin`, `/./admin`, `/x/../admin`, `/admin;a=b`, `/admin%00.png` and `\admin` all read
+`/admin`. Double encoding (`%252e`) is not unfolded: use the WAF for that, and be careful with `allow` on a
+path (an `allow` only ends the rules engine, it does not bypass the WAF, authentication or other stages).
+
+**Operators**: `==` `!=` (all types), `<` `>` `<=` `>=` (int), `contains` `starts_with` `ends_with` `matches`
+(string; each also as `not contains` ...), `in` / `not in` (string against a list, ip against networks),
+`exists` / `not exists` (header, cookie and query argument only; an absent key compares as the empty
+string, so `http.header["x"] != "y"` is true when the header is missing). `matches` is an **unanchored** RE2
+search; anchor with `^` / `$`. `lower(...)` is the only function and takes a string field; it does not change
+the literal, so `lower(http.path) == "/Admin"` can never match (the validator warns).
+
+Values: `"strings"` (escapes `\\ \" \n \r \t \xHH` for 00-7f, `\uHHHH`, `\UHHHHHHHH`), whole numbers, `true`
+and `false`, inline lists `["a", "b"]` (at most 100; IP lists hold addresses or CIDR networks, country lists
+two upper case letters) and **named lists** `$office`. Named lists are managed through the API
+(`conf/ruleset/lists.json`): type `ip` (addresses and CIDR, v4 and v6), `string` (exact, case-sensitive) or
+`country`. A list in use cannot be deleted and cannot change type under a rule.
+
+**Structured JSON form** (`tree`), edited by the visual builder; round-trips with the text:
+
+```json
+{"type":"and","children":[
+  {"type":"cond","field":"http.path","op":"starts_with","value":"/admin"},
+  {"type":"cond","field":"http.header","key":"x-api-key","op":"not_exists"},
+  {"type":"not","children":[{"type":"cond","field":"ip.country","op":"in","value":["US","CA"]}]},
+  {"type":"cond","field":"http.host","transform":"lower","op":"in","value":{"list":"hosts"}}]}
+```
+
+Ops: `eq ne lt gt le ge contains not_contains starts_with not_starts_with ends_with not_ends_with matches
+not_matches in not_in exists not_exists`. A group with one child collapses into the child, so
+`validate` returns the normalised tree; text -> tree -> text is lossless for every normalised tree
+(property and fuzz tests in `lang_test.go`).
+
+### Actions
+
+| Action | Parameters | Effect |
+|---|---|---|
+| `allow` | - | stop evaluating the global and site rules (later rules do not run). **Not** a bypass: the WAF, rate limit, CAPTCHA and authentication still apply, use `skip` for those |
+| `block` | `status` 400-599 (403), `body` plain text, `report_abuse` (false) | answer with the status; default the standard 403 page |
+| `challenge` | `ttl_minutes` 1-1440 (30) | the site's CAPTCHA; a solved challenge is remembered in a signed cookie. **No CAPTCHA provider on the site: the request is blocked (fail closed)** |
+| `log` | - | count and record the match, nothing else |
+| `skip` | `skip`: any of `waf` `rate_limit` `auth` `captcha` `rules` | switch protections off for this request; `rules` = later rules |
+| `rate_limit` | `rate` req/s, `burst`, `status` (429) | the existing token bucket limiter, one bucket per (rule, client address); acts only when over the limit |
+| `redirect` | `status` 301/302/303/307/308 (302), `url` | Location from a template: `https://example.com{uri}`, `/login?next={path}`; placeholders `{host} {path} {query} {uri} {scheme}` |
+| `set_request_header` / `remove_request_header` | `name`, `value` | before the upstream sees the request |
+| `set_response_header` / `remove_response_header` | `name`, `value` | on the response the client gets (set replaces what the upstream sent) |
+| `tag` | `tag` | adds a tag to the request; blocked-request log entries carry the tags |
+
+Validation of every parameter happens when the rule is saved and again when files are loaded: stray
+parameters are errors; header names are RFC tokens and values printable ASCII (no CR/LF/NUL); framing
+headers (`Host`, `Content-Length`, `Transfer-Encoding`, `Connection`, `Upgrade` ...) and every header that
+carries the client address or protocol (`X-Forwarded-*`, `X-Real-IP`, `Forwarded`, `CF-Connecting-IP` ...) cannot
+be set or removed by a request header action, `Set-Cookie` / `Location` / framing headers not by a response
+header action; a redirect target must be `http(s)://host...` or a path starting with a single `/`
+(no `//`, no backslash, no credentials, no control characters); `{path}` / `{uri}` may only follow the host,
+`{query}` / `{scheme}` never appear in it; expanded values are percent-encoded and a relative target cannot
+start with `//`.
+
+Rules are created **log-only** unless `dry_run:false` is sent. A log-only rule is evaluated, counted, shown in
+the recent matches and the tester, but never acts, never blocks, never feeds the abuse ban and never changes
+the request.
+
+### Evaluation order
+
+```
+trusted proxy / client IP resolution, access lists (blacklist / whitelist, country challenge)
+  -> RULES ENGINE: global rules in order, then the rules of the site (or of the default site)
+  -> CORS preflight and static responses, path rules, header rules, bot rules
+  -> plugin pre_auth, WAF, exploit detection, rate limit, CAPTCHA, authentication
+  -> plugin routing, forward to the upstream (response header actions are applied here)
+```
+
+The engine runs in `runEndpointChain` (TLS, plain HTTP and secondary listeners share it) and in `ServeHTTP` for
+the default site. The first non-dry-run rule whose action terminates (`allow`, `block`, `redirect`,
+`challenge` not yet solved, `rate_limit` over the limit) ends the evaluation; `log`, `tag`, `skip` and the header
+actions let it continue. `skip waf` etc. only affect the current request.
+
+Field values are computed lazily and cached per request. With no enabled rule the whole feature is one atomic
+pointer load (`Engine.Active()`), 0 allocations. Blocked requests are recorded in the blocked-request log with
+reason `rule` and the rule name as detail (status 403 or the configured one; challenges, fail-closed challenges
+and rate limits are `rule` entries too), plus the `tags` set on the request. `report_abuse:true` makes a `block`
+count as a `forbidden` event for the automatic ban; the default is that it does not (the 403 is explicitly
+not counted). A `rate_limit` rule behaves like the proxy rule limiter: its 429 counts as a rate-limited event.
+
+Per rule counters (since start, in memory): total acting hits, log-only hits, evaluation errors, last hit time and
+24 hourly buckets (`last_24h` counts acting and log-only matches). Memory is bounded (about 250 bytes per rule,
+at most 5000 rules, plus 100 recent matches) and counters are dropped with their rule.
+
+### Limits and security model
+
+Expression text 2000 bytes, 200 nodes (conditions + groups), nesting 24, string literal 1024 bytes, regex 200
+bytes and at most 1000 compiled RE2 instructions, inline list 100 entries, index key 128 bytes, 500 rules
+per set, 5000 in total, 1000 sites, 100 lists with 10000 entries each, rule file 8 MiB. String fields are cut at
+32 KiB before matching (a longer header cannot slow the engine down; it can hide a `contains` match placed
+beyond 32 KiB, so keep body-size and header-size limits on the listener).
+
+* The language is a hand-written lexer and parser into a typed AST. There are no user defined functions, no
+  arithmetic, no variables, loops, recursion or reflection; the only function is `lower()`; fields are looked
+  up in a fixed table; nothing does I/O (no DNS, no network, no files). Comparing two fields is a syntax error.
+* Regular expressions are Go RE2 (linear time, no backreferences or lookaround), compiled once when the rule is
+  saved, rejected when too long or too large. `validate` warns about nested repetition and large patterns.
+* Source text must be valid UTF-8 without control characters, zero-width / bidi / separator characters or
+  non-ASCII spaces, in strings too (write them as escapes); identifiers are ASCII, so homoglyph field names do
+  not parse. The printer escapes the same characters, so a stored expression always shows what it contains.
+* Step budget: every node costs one step, a string condition one more per 256 bytes of value (a regex per 32).
+  A rule may spend 50 000 steps and a request 400 000 over all rules. With the limits above a validated rule cannot
+  reach its budget; if one does (tests lower the budget), the rule does not match, `errors` is counted and the
+  request goes on (fail open for availability). A rule set whose worst case exceeds the per-request budget can
+  skip its last rules on an adversarial request.
+* The client address is the trusted-proxy aware one, forwarded headers from untrusted peers cannot change
+  `ip.src` or `ip.country` (tested).
+* Rules are data: the admin API validates everything, files loaded from disk (or published by a Fleet hub) are
+  validated again and a broken rule stays in the list as inactive with its error instead of breaking the rest.
+* `validate`, `test` and `migrate` are rate limited (10/s, burst 30, one shared bucket); the request tester performs no
+  action and counts nothing.
+
+### Storage, API, Fleet
+
+Files under `conf/ruleset/` (mode 0600, written atomically): `global.json`, `sites/<percent-encoded site>.json`,
+`lists.json`. Site key = the proxy rule key (`app.example.com`, `*.example.com`), `_default_site` for the default
+site, empty for the global set. The folder is a Fleet scope (`ruleset`, in `fleet_scope.go`), part of the cluster
+snapshot roots and of the change history (everything under `conf/`). Fleet applies restart the process, so
+nodes pick the published rules up on start; while a node is managed, `/api/ruleset/rule/*` and
+`/api/ruleset/list/*` writes are refused by the edit guard, `validate`, `test` and `migrate` stay available.
+
+Admin API (cookie + CSRF, JSON; errors are `{"error": "..."}` with a real status code): `GET meta`, `GET rules?site=`,
+`GET rule?site=&id=`, `POST rule/create|update|delete|reorder|enable|disable|dryrun`, `GET lists`,
+`POST list/save|delete`, `POST validate`, `POST test`, `GET stats?site=`, `GET migrate` (all under `/api/ruleset/`).
+`validate` takes `{expression | tree, action?}` and returns `{ok, errors:[{pos,end,message}] (byte offsets) | [{path,message}] (tree),
+text, tree, fields, lists, warnings, action_error}`. `test` takes `{site, method, url, headers, client_ip, country,
+body_size, tls_version, sni}` (or a draft `expression` / `tree`) and returns the field values, every rule reached with
+its trace (a truth value for each condition, no short-circuit), the first terminating decision and its effect, tags,
+skips and header changes. Token users get read-only `GET /api/v1/ruleset/rules` and `/api/v1/ruleset/lists`.
+
+`GET /api/ruleset/migrate` returns proposals converting path rules, header rules, custom bot rules and access list
+entries (blacklist / whitelist / country challenge), each log-only, validated, with `exact` and `notes`, plus
+`not_converted` (path rule `require_auth`, bot categories, good-bot verification, empty whitelists). Nothing is
+created or removed.
+
+### Adding a field or an action
+
+*Field*: add a `FieldDef` to `fieldDefs` and an id constant in `mod/ruleset/fields.go`, then a case in `Env.strValue`
+(or `intValue` / `boolValue`); add warnings in `analyze.go` if there are values that can never match; add the field to the
+table above and to `TestFieldsAndOperators`. The parser, printer, tree, `meta` API and tester follow from the table.
+
+*Action*: add the type constant, its parameters to `Action`, validation to `Action.Validate` and a row to `actionDocs`
+(`rulesetapi.go`), the behaviour in `handleRuleset` (`ruleset_hook.go`) and the tester (`check.go`), then tests for the
+validation (`TestActionValidation`) and for the pipeline (`ruleset_hook_test.go`). A new stage that `skip` should be able
+to switch off needs a `SkipBit*` and a check at its call site in `runEndpointChain`.
+
+### Why a hand-written parser (library comparison)
+
+Measured on this machine (linux/amd64, Go 1.27.3, `CGO_ENABLED=0 -ldflags "-s -w"`), a small program that uses
+`net/http` + `regexp` as the baseline and compiles/evaluates `path startsWith "/admin" and country != "US" and ua
+matches "(?i)curl|wget"`:
+
+| | amd64 binary | mipsle binary | compile | eval |
+|---|---|---|---|---|
+| baseline (net/http + regexp) | 3.83 MB | 4.33 MB | - | - |
+| `github.com/expr-lang/expr` v1.17.5 | 6.64 MB (**+2.81 MB**) | 7.54 MB (**+3.21 MB**) | 59 us | 0.33 us |
+| `github.com/google/cel-go` v0.26.1 | 11.70 MB (**+7.88 MB**) | 12.78 MB (**+8.45 MB**) | 141 us | 5.6 us |
+| this package (`mod/ruleset`, same harness) | 5.03 MB (**+1.20 MB**) | 5.70 MB (**+1.38 MB**) | 25-90 us (parse + link + warnings, machine under load) | ~0.5 us per rule (20 rule set: ~10-12 us per request) |
+
+The harness only links `net/http` and `regexp`, so every row also pays for `encoding/json`, `crypto/tls`, unicode tables
+and so on that the real Zoraxy binary already contains. Measured in the real binary (`go build -trimpath -ldflags "-s -w"`,
+linux/amd64, `dev` vs this branch, API, hook, migration and tests' helpers included) the whole feature adds
+**+0.40 MB (126,386,336 -> 126,787,744 bytes, +0.32 %)**. The expr and CEL rows would shrink in the real binary as well
+(they share `reflect`, `regexp`, `fmt`), but they were not measured there.
+
+expr is fast but reflection based (it reads Go structs and maps through `reflect`), has loops and
+a large builtin function set that has to be switched off one by one, bounds memory but not run time, and does not
+cap the size of a regular expression. CEL is the safest of the two
+(non Turing complete, cost limits) and has the right ideas, but adds almost 8 MB to a binary that targets
+mipsle and arm. A hand-written parser for exactly this grammar is a few hundred lines per concern, adds
+no dependency, makes the typed fields, the position-accurate errors, the lossless JSON tree and the budget
+natural, and leaves nothing to sandbox because the language cannot express anything the evaluator does not
+implement. The cost is that new operators are written by hand, which the table-driven field registry keeps small.
+
+### Tests
+
+`go test ./mod/ruleset/` (parser, canonical text, tree and text round trip as a property test over 3000 random trees,
+`go test -fuzz FuzzParse`, every field and operator, adversarial input, action validation, redirect safety, budgets,
+persistence and corrupt files, limits, lists, the tester, concurrency), `go test ./mod/dynamicproxy -run TestRules`
+(the real request chain: block, allow, site vs global order, disabled, log-only, redirect, header actions through the
+proxy, `skip waf` against a real WAF, skip rate limit / captcha / rules, rate limit, challenge fallback and pass cookie,
+blocked log category and tags, abuse only when opted in, lists, default site, trusted proxy headers), and
+`go test . -run TestRuleset` (the API, rate limiting, migration). Benchmarks: `go test ./mod/ruleset -bench .` and
+`go test ./mod/dynamicproxy -run xxx -bench Rules`.
+
 ## Customising CAPTCHA pages
 
 Each proxy endpoint with "Require CAPTCHA Challenge" enabled can restyle its bot-check pages from the endpoint editor

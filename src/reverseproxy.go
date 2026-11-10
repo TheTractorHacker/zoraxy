@@ -358,6 +358,7 @@ func ReverseProxyInit() {
 		Metrics:             metricsRegistry,
 		Abuse:               getAbuseManager(),
 		Bots:                getBotEngine(),
+		Rules:               getRulesEngine(),
 		BasicAuthLists:      getCredentialLists(),
 		/* Timeouts */
 		ReadHeaderTimeout: int64(readHeaderTimeout),

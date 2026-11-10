@@ -28,6 +28,7 @@ const (
 	ReasonPeer             = "peer"
 	ReasonAuth             = "auth"
 	ReasonPlugin           = "plugin"
+	ReasonRule             = "rule" // the rules engine (mod/ruleset); the detail is the rule name
 )
 
 // Classify turns a router forwardType into a reason key and a detail. ok is false when the
@@ -73,6 +74,12 @@ func Classify(forwardType string) (reason, detail string, ok bool) {
 		return ReasonPathRule, "authentication required", true
 	case "path-rule-ratelimit":
 		return ReasonPathRule, "rate limit", true
+	case "rule-block":
+		return ReasonRule, "", true
+	case "rule-ratelimit":
+		return ReasonRule, "rate limit", true
+	case "rule-challenge", "rule-challenge-unavailable":
+		return ReasonRule, strings.TrimPrefix(ft, "rule-"), true
 	case "country-challenge", "country-challenge-unavailable":
 		return ReasonCountryChallenge, strings.TrimPrefix(ft, "country-"), true
 	case "bot-challenge", "bot-challenge-unavailable":
@@ -127,6 +134,7 @@ func Reasons() []ReasonInfo {
 		{ReasonClientCert, "Client certificate", "The client certificate was missing or not accepted (mTLS).", "httprp", "HTTP Proxy, rule settings", ""},
 		{ReasonPeer, "Peer not allowed", "The direct connection came from an address outside the allowed peer list of the rule.", "httprp", "HTTP Proxy, rule settings", ""},
 		{ReasonAuth, "Authentication", "Basic auth, SSO or OAuth rejected the credentials.", "seccenter", "Security Center, Auth audit", "authaudit"},
+		{ReasonRule, "Rule", "A rule of the rules engine (global or of this site) blocked, rate limited or challenged the request. The detail is the rule name.", "rules", "Rules", ""},
 		{ReasonPlugin, "Plugin", "A plugin refused the request.", "plugins", "Plugins", ""},
 	}
 }
