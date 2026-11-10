@@ -27,6 +27,7 @@ ap.add_argument("--i18n-only", action="store_true", help="run only the multi-lan
 ap.add_argument("--posture-only", action="store_true", help="run only the Security overview scenario")
 ap.add_argument("--ai-only", action="store_true", help="run only the AI assistant page scenario")
 ap.add_argument("--site-editor-only", action="store_true", help="run only the site editor scenario (Easy/Advanced, Save bar, presets, control inventory)")
+ap.add_argument("--editor-tabs-only", action="store_true", help="run only the classic tabs of the proxy rule editor scenario (editortabs_smoke.py)")
 ap.add_argument("--rules-only", action="store_true", help="run only the Security rules (rules builder) scenario")
 ap.add_argument("--waf-tuning-only", action="store_true", help="run only the WAF Tuning tab scenario")
 ap.add_argument("--consistency-only", action="store_true", help="run only the consistency-pass scenario (certificates, Related boxes, save bar, history toast, hostile host, renamed pages)")
@@ -2267,6 +2268,7 @@ def rules_scenario(pg, ctx):
     rules_ui(pg, ctx, {"fail": fail, "current": current, "settle": settle, "check_horizontal": check_horizontal, "out": args.out, "allow": allow})
 
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "consistency_smoke.py")).read(), "consistency_smoke.py", "exec"))  # defines consistency_ui
+exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "editortabs_smoke.py")).read(), "editortabs_smoke.py", "exec"))  # defines editortabs_ui
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "sites_smoke.py")).read(), "sites_smoke.py", "exec"))  # defines sites_ui
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "securityfix_smoke.py")).read(), "securityfix_smoke.py", "exec"))  # defines securityfix_ui
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "certs_traffic_smoke.py")).read(), "certs_traffic_smoke.py", "exec"))  # defines certs_traffic_ui
@@ -2823,6 +2825,9 @@ def main():
     with sync_playwright() as p:
         b = p.chromium.launch()
         ctx = b.new_context(viewport={"width": 1366, "height": 800})
+        # The proxy rule editor opens in the Tabs (classic) layout by default. The older scenarios were written for the five sections,
+        # so they run with the Sections layout stored; editortabs_smoke.py sets zx_smoke_default_layout to see the real default.
+        ctx.add_init_script("try { if (localStorage.getItem('zx_smoke_default_layout') !== '1' && !localStorage.getItem('zoraxy_site_editor_layout')) { localStorage.setItem('zoraxy_site_editor_layout', 'sections'); } } catch (e) {}")
         pg = ctx.new_page()
         pg.on("pageerror", lambda e: fail("pageerror", str(e) + " @ " + " | ".join((e.stack or "").splitlines()[1:3])))
         pg.on("console", lambda m: m.type == "error" and fail("console.error", m.text + " " + m.location.get("url", "")))
@@ -2873,6 +2878,10 @@ def main():
         if args.site_editor_only:
             current["page"] = "site-editor"
             site_editor_ui(pg, ctx)
+        if args.editor_tabs_only:
+            editortabs_ui(pg, ctx)
+            b.close()
+            return
         if args.rules_only:
             rules_scenario(pg, ctx)
             b.close()
@@ -3762,6 +3771,9 @@ def main():
 
         current["page"] = "site-editor"
         site_editor_ui(pg, ctx)
+
+        current["page"] = "editor-tabs"
+        editortabs_ui(pg, ctx)
 
         ai_assistant_ui(pg, ctx)
 

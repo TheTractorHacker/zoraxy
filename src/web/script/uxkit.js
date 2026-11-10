@@ -324,7 +324,7 @@
         el.classList.toggle("zx-scroll-start", max > 2 && el.scrollLeft > 2);
     }
     function initScrollCue() {
-        var SEL = ".ui.tabular.menu, .zx-tabs";
+        var SEL = ".ui.tabular.menu, .zx-tabs, #hrpNav";
         var timer = null;
         function scan() { document.querySelectorAll(SEL).forEach(updateScrollCue); }
         function later() { clearTimeout(timer); timer = setTimeout(scan, 120); }

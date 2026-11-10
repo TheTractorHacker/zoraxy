@@ -4,8 +4,11 @@
     Logic of the proxy rule editor (markup: components/httprp.html, styles: ui/siteeditor.css,
     design notes and the old tab -> new section table: docs/ux/site-editor.md).
 
-      * five sections (General, Routing, Security, TLS, Advanced) and an Easy / Advanced switch
-        that is remembered per browser; Easy shows a few cards, Advanced one section at a time
+      * two layouts of the same cards, chosen by a Layout switch that is remembered per browser:
+        the classic 11 tabs (Host, Destinations, ... Tags; the default) or five sections (General,
+        Routing, Security, TLS, Advanced) with an Easy / Advanced switch. Every card carries its old
+        tab (data-hrp-tab, data-hrp-ord) and sits in its section element, so the controls exist
+        once and both layouts show the same DOM.
       * a card whose setting is not at its default is shown in Easy mode too, and listed in a note
       * one save model: a Save bar (ZxUI.saveBar) collects the edits of the whole editor; only the
         inherently live switches (logging) save at once, with a toast
@@ -30,11 +33,35 @@
     }
 
     var MODE_KEY = "zoraxy_site_editor_mode";
+    var LAYOUT_KEY = "zoraxy_site_editor_layout";
     var SECTIONS = ["general", "routing", "security", "tls", "advanced"];
     // old tab names (cfgpage / rpcfg) -> section
     var LEGACY = { downstream: "general", upstream: "general", alias: "general", tags: "general", vdirs: "routing", websocket: "routing",
         headers: "routing", accessrule: "security", security: "security", waf: "security", ssl: "tls" };
-    var st = { inited: false, bar: null, subd: null, mode: "easy", section: "general", touched: false, opener: null, pending: null,
+    // the classic tabs, in the order of the old editor (cfgpage values), with the old icons. Labels go through t().
+    var TABS = [
+        { name: "downstream", icon: "home", label: function () { return t("Host"); } },
+        { name: "upstream", icon: "server", label: function () { return t("Destinations"); } },
+        { name: "vdirs", icon: "angle folder", label: function () { return t("Virtual Directory"); } },
+        { name: "websocket", icon: "exchange", label: function () { return t("WebSocket"); } },
+        { name: "alias", icon: "at", label: function () { return t("Alias"); } },
+        { name: "ssl", icon: "lock", label: function () { return t("TLS / SSL"); } },
+        { name: "headers", icon: "heading", label: function () { return t("Headers"); } },
+        { name: "accessrule", icon: "star", label: function () { return t("Access Rules"); } },
+        { name: "security", icon: "key", label: function () { return t("Security"); } },
+        { name: "waf", icon: "shield alternate", label: function () { return t("WAF"); } },
+        { name: "tags", icon: "tags", label: function () { return t("Tags"); } }
+    ];
+    var SECTION_NAV = [
+        { name: "general", icon: "home", label: function () { return t("General"); } },
+        { name: "routing", icon: "exchange", label: function () { return t("Routing"); } },
+        { name: "security", icon: "shield alternate", label: function () { return t("Security"); } },
+        { name: "tls", icon: "lock", label: function () { return t("TLS"); } },
+        { name: "advanced", icon: "cogs", label: function () { return t("Advanced"); } }
+    ];
+    // a section name opened in the Tabs layout (deep links written for the sections) -> the tab that holds its first card
+    var SEC2TAB = { general: "downstream", routing: "vdirs", security: "security", tls: "ssl", advanced: "downstream" };
+    var st = { inited: false, bar: null, subd: null, mode: "easy", layout: "tabs", section: "general", tab: "downstream", touched: false, opener: null, pending: null,
         accessSeq: 0, certSeq: 0, settleTimer: null, nd: [] };
 
     /*
@@ -66,6 +93,9 @@
     function visible() { return $("#httprpEditModalWrapper").is(":visible"); }
     function storeGet() { try { return localStorage.getItem(MODE_KEY); } catch (e) { return null; } }
     function storeSet(v) { try { localStorage.setItem(MODE_KEY, v); } catch (e) { /* storage blocked */ } }
+    function layoutGet() { try { return localStorage.getItem(LAYOUT_KEY) === "sections" ? "sections" : "tabs"; } catch (e) { return "tabs"; } }
+    function layoutSet(v) { try { localStorage.setItem(LAYOUT_KEY, v); } catch (e) { /* storage blocked */ } }
+    function tabs() { return st.layout === "tabs"; }
 
     /* ------------------------------------------------------------------ init */
     // Controls without a name or id get a stable one so the dirty tracker keys do not depend on their position,
@@ -107,12 +137,16 @@
         prepareControls();
 
         st.mode = storeGet() === "advanced" ? "advanced" : "easy";
+        st.layout = layoutGet();
+        $root.find(".hrp-card[data-hrp-ord]").each(function () { this.style.order = this.getAttribute("data-hrp-ord"); });
         ZxUI.segmented("#hrpMode", { onChange: function (v) { setMode(v, true); } });
+        ZxUI.segmented("#hrpLayout", { onChange: function (v) { setLayout(v, true); } });
 
-        // section navigation (kept class name and cfgpage attribute of the old side menu)
-        var $nav = $root.find(".hrpedit_menu_item");
-        $nav.on("click", function () { showSection($(this).attr("cfgpage")); });
-        $nav.on("keydown", function (e) {
+        // navigation (kept class name and cfgpage attribute of the old side menu). The buttons are rendered by renderNav
+        // for the current layout; the handlers are delegated so they survive a layout change.
+        $root.find("#hrpNav").on("click", ".hrpedit_menu_item", function () { showSection($(this).attr("cfgpage")); });
+        $root.find("#hrpNav").on("keydown", ".hrpedit_menu_item", function (e) {
+            var $nav = $root.find(".hrpedit_menu_item");
             var i = $nav.index(this), n = $nav.length, j = -1;
             if (e.key === "ArrowDown" || e.key === "ArrowRight") { j = (i + 1) % n; }
             else if (e.key === "ArrowUp" || e.key === "ArrowLeft") { j = (i + n - 1) % n; }
@@ -181,40 +215,97 @@
         applyMode();
     }
 
+    // Switch between the classic tabs and the five sections. The open place is carried over (a tab opens the section that
+    // holds its cards, a section opens the tab with its first card).
+    function setLayout(layout, remember) {
+        var next = layout === "sections" ? "sections" : "tabs";
+        if (next === st.layout && $m().attr("data-layout") === next) { return; }
+        if (next === "sections") { st.section = LEGACY[st.tab] || st.section; } else { st.tab = SEC2TAB[st.section] || st.tab; }
+        st.layout = next;
+        if (remember) { layoutSet(next); }
+        applyMode();
+    }
+
+    // The mode that decides what is shown: the Tabs layout has no Easy / Advanced, everything is visible.
+    // The remembered Easy / Advanced preference (st.mode) is not touched by the layout.
+    function effMode() { return tabs() ? "advanced" : st.mode; }
+
+    function renderNav() {
+        var items = tabs() ? TABS : SECTION_NAV, $nav = $("#hrpNav").empty();
+        items.forEach(function (it) {
+            var $b = $("<button type=\"button\" role=\"tab\" class=\"hrp-nav__item hrpedit_menu_item\">")
+                .attr({ cfgpage: it.name, id: "hrpTab-" + it.name, "aria-controls": tabs() ? "hrpSections" : "hrpSec-" + it.name, "aria-selected": "false", tabindex: "-1" });
+            $b.append($("<i>").addClass(it.icon + " icon"), $("<span class=\"editorSideMenuText\">").text(it.label()));
+            $nav.append($b);
+        });
+        $nav.attr("aria-label", tabs() ? t("Site settings tabs") : t("Site settings sections"));
+        // roles of the panels: one tabpanel for the Tabs layout (its cards are filtered by tab), one per section otherwise
+        var $panel = $("#hrpSections"), $secs = $m().find(".hrp-sec");
+        if (tabs()) {
+            $secs.attr("role", "presentation").removeAttr("aria-labelledby").removeAttr("tabindex");
+            $panel.attr({ role: "tabpanel", tabindex: "-1" });
+        } else {
+            $secs.each(function () {
+                var n = $(this).attr("data-hrp-sec");
+                $(this).attr({ role: "tabpanel", "aria-labelledby": "hrpTab-" + n, tabindex: "-1" });
+            });
+            $panel.removeAttr("role").removeAttr("aria-labelledby").removeAttr("tabindex");
+        }
+    }
+
     function applyMode() {
-        var adv = st.mode === "advanced";
-        $m().attr("data-mode", st.mode);
+        var mode = effMode();
+        $m().attr({ "data-mode": mode, "data-layout": st.layout });
         $("#hrpMode .zx-segmented__item").each(function () {
             var on = $(this).attr("data-value") === st.mode;
             this.setAttribute("aria-checked", on ? "true" : "false");
             this.tabIndex = on ? 0 : -1;
         });
-        showSection(st.section, true);
+        $("#hrpLayout .zx-segmented__item").each(function () {
+            var on = $(this).attr("data-value") === st.layout;
+            this.setAttribute("aria-checked", on ? "true" : "false");
+            this.tabIndex = on ? 0 : -1;
+        });
+        $("#hrpMode").prop("hidden", tabs());
+        renderNav();
+        showSection(tabs() ? st.tab : st.section, true);
         updateNote();
     }
 
     function showSection(name, quiet) {
         if (!name) { return; }
-        var sec = SECTIONS.indexOf(name) >= 0 ? name : (LEGACY[name] || "general");
-        st.section = sec;
-        $m().find(".hrp-sec").each(function () { $(this).toggleClass("is-active", $(this).attr("data-hrp-sec") === sec); });
+        var active;
+        if (tabs()) {
+            var known = TABS.some(function (x) { return x.name === name; });
+            active = known ? name : (SEC2TAB[name] || "downstream");
+            st.tab = active;
+            st.section = LEGACY[active] || st.section;
+            // the cards of the open tab, in the order of the old tab; the section wrappers are transparent here
+            $m().find(".hrp-card").each(function () { $(this).toggleClass("is-tab", $(this).attr("data-hrp-tab") === active); });
+            $("#hrpSections").attr("aria-labelledby", "hrpTab-" + active);
+        } else {
+            var sec = SECTIONS.indexOf(name) >= 0 ? name : (LEGACY[name] || "general");
+            active = sec;
+            st.section = sec;
+            st.tab = SEC2TAB[sec] || st.tab;
+            $m().find(".hrp-sec").each(function () { $(this).toggleClass("is-active", $(this).attr("data-hrp-sec") === sec); });
+        }
         $m().find(".hrpedit_menu_item").each(function () {
-            var on = $(this).attr("cfgpage") === sec;
+            var on = $(this).attr("cfgpage") === active;
             $(this).toggleClass("active", on).attr({ "aria-selected": on ? "true" : "false", tabindex: on ? "0" : "-1" });
         });
         if (!quiet) {
             $m().find(".hrp-main").scrollTop(0);
             $m().find(".wrapper_frame").each(function () { try { $(this).contents().scrollTop(0); } catch (e) { /* cross origin */ } });
-            if (typeof hideEditorSideWrapper === "function") { hideEditorSideWrapper(); } //a section change always closes the side editor
+            if (typeof hideEditorSideWrapper === "function") { hideEditorSideWrapper(); } //a tab or section change always closes the side editor
         }
     }
 
     // Open a settings area by its old tab name or a section name. Jumps to Advanced when the area is not part of Easy.
     function show(name, opts) {
         init();
-        var sec = SECTIONS.indexOf(name) >= 0 ? name : (LEGACY[name] || "general");
         if (opts && opts.mode) { setMode(opts.mode, false); }
-        showSection(sec, !(opts && opts.reset === false) ? false : true);
+        showSection(name, !(opts && opts.reset === false) ? false : true);
         if (opts && opts.advanced && st.mode !== "advanced") { setMode("advanced", false); }
     }
 
@@ -271,7 +362,7 @@
 
     function updateNote() {
         var list = st.nd || [];
-        var show = st.mode === "easy" && list.length > 0;
+        var show = effMode() === "easy" && list.length > 0;
         var $note = $("#hrpAdvNote");
         $note.prop("hidden", !show);
         var $ul = $("#hrpAdvNoteList").empty();
@@ -581,6 +672,8 @@
     window.HrpEditor = {
         mode: function () { return st.mode; },
         setMode: function (m) { init(); setMode(m, true); },
+        layout: function () { return st.layout; },
+        setLayout: function (l) { init(); setLayout(l, true); },
         show: show,
         populating: populating,
         populated: populated,

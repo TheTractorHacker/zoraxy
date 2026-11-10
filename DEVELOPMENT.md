@@ -2496,7 +2496,7 @@ What is charged when a call does not end with a parsed answer (`settleKind` in `
 
 ## Site editor and app presets (ux-site-editor)
 
-The proxy rule editor has five sections, an Easy / Advanced switch and one Save bar; see `docs/ux/site-editor.md` for the
+The proxy rule editor has two layouts over the same cards, the classic 11 tabs (default, switch `Tabs (classic) / Sections`, `localStorage` `zoraxy_site_editor_layout`) and five sections with an Easy / Advanced switch, plus one Save bar; see `docs/ux/site-editor.md` for the
 layout, the old tab to new section table, the save model and what is verified.
 
 ### Adding an app preset
@@ -2533,7 +2533,7 @@ WAF source, uptime path, tags, exploit blocking, HSTS, request id); it can never
 
 `tools/ui-smoke/siteeditor_inventory.json` lists every control of the old 11-tab editor with the new section and card; the smoke
 scenario `site_editor_ui` (`--site-editor-only`) fails when one disappears or is duplicated. When you add a control, add a card
-with `data-hrp-card` (and `data-hrp-nd` when it has a default) and, if it is a form field of the rule, nothing else: the Save bar
+with `data-hrp-card`, `data-hrp-tab` and `data-hrp-ord` (its classic tab and position; `src/siteeditor_tabs_test.go` and the `--editor-tabs-only` scenario check them), `data-hrp-nd` when it has a default, and, if it is a form field of the rule, nothing else: the Save bar
 tracks it. A field that saves itself must be marked `data-zx-ignore` (and `data-hrp-selfsave` so the unsaved-changes guard still
 covers it).
 

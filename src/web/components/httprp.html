@@ -218,12 +218,16 @@
 
 <!-- Modal for editing a HTTP Proxy Rule. Layout: docs/ux/site-editor.md. Logic: script/siteeditor.js -->
 <div id="httprpEditModalWrapper">
-    <div id="httprpEditModal" editing-host="" role="dialog" aria-modal="true" aria-labelledby="hrpTitle" data-mode="easy">
+    <div id="httprpEditModal" editing-host="" role="dialog" aria-modal="true" aria-labelledby="hrpTitle" data-mode="advanced" data-layout="tabs">
         <header class="hrp-head">
             <div class="hrp-head__main">
                 <h2 id="hrpTitle" class="hrp-title" tabindex="-1">Edit site <span class="hrp-title__host" id="hrpTitleHost"></span></h2>
             </div>
             <div class="hrp-head__tools">
+                <div class="zx-segmented" id="hrpLayout" aria-label="Editor layout">
+                    <button type="button" class="zx-segmented__item" data-value="tabs" aria-checked="true">Tabs (classic)</button>
+                    <button type="button" class="zx-segmented__item" data-value="sections" aria-checked="false">Sections</button>
+                </div>
                 <div class="zx-segmented" id="hrpMode" aria-label="Editor mode">
                     <button type="button" class="zx-segmented__item" data-value="easy" aria-checked="true">Easy</button>
                     <button type="button" class="zx-segmented__item" data-value="advanced" aria-checked="false">Advanced</button>
@@ -234,13 +238,7 @@
             </div>
         </header>
         <div class="hrp-body">
-            <div class="hrp-nav" id="hrpNav" role="tablist" aria-label="Site settings sections" aria-orientation="vertical">
-                <button type="button" role="tab" class="hrp-nav__item hrpedit_menu_item active" cfgpage="general" id="hrpTab-general" aria-controls="hrpSec-general" aria-selected="true"><i class="home icon"></i><span class="editorSideMenuText">General</span></button>
-                <button type="button" role="tab" class="hrp-nav__item hrpedit_menu_item" cfgpage="routing" id="hrpTab-routing" aria-controls="hrpSec-routing" aria-selected="false" tabindex="-1"><i class="exchange icon"></i><span class="editorSideMenuText">Routing</span></button>
-                <button type="button" role="tab" class="hrp-nav__item hrpedit_menu_item" cfgpage="security" id="hrpTab-security" aria-controls="hrpSec-security" aria-selected="false" tabindex="-1"><i class="shield alternate icon"></i><span class="editorSideMenuText">Security</span></button>
-                <button type="button" role="tab" class="hrp-nav__item hrpedit_menu_item" cfgpage="tls" id="hrpTab-tls" aria-controls="hrpSec-tls" aria-selected="false" tabindex="-1"><i class="lock icon"></i><span class="editorSideMenuText">TLS</span></button>
-                <button type="button" role="tab" class="hrp-nav__item hrpedit_menu_item" cfgpage="advanced" id="hrpTab-advanced" aria-controls="hrpSec-advanced" aria-selected="false" tabindex="-1"><i class="cogs icon"></i><span class="editorSideMenuText">Advanced</span></button>
-            </div>
+            <div class="hrp-nav" id="hrpNav" role="tablist" aria-label="Site settings sections" aria-orientation="vertical"><!-- buttons are rendered by script/siteeditor.js: the classic tabs or the five sections --></div>
             <div class="hrp-main" id="httprpEditModalContentWindow">
                 <div class="zx-callout zx-callout--info hrp-advnote" id="hrpAdvNote" role="note" hidden>
                     <span class="zx-callout__icon"><i class="info circle icon"></i></span>
@@ -249,10 +247,10 @@
                         <ul id="hrpAdvNoteList" class="hrp-advnote__list"></ul>
                     </div>
                 </div>
-                <div class="hrp-sections">
+                <div class="hrp-sections" id="hrpSections">
 <div class="hrp-sec" id="hrpSec-general" data-hrp-sec="general" role="tabpanel" aria-labelledby="hrpTab-general" tabindex="-1">
 <div class="hrp-sec__head"><h3 class="hrp-sec__title">General</h3><p class="hrp-sec__desc">The site and where it points.</p></div>
-<section class="zx-card hrp-card" data-hrp-card="host" rpcfg="downstream" data-easy aria-labelledby="hrpc-host">
+<section class="zx-card hrp-card" data-hrp-card="host" data-hrp-tab="downstream" data-hrp-ord="1" rpcfg="downstream" data-easy aria-labelledby="hrpc-host">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-host">Hostname</h3></div>
 <p class="zx-card__desc">The address visitors type. Rename it here; aliases are other names for the same site.</p>
 <div class="zx-card__body">
@@ -276,7 +274,7 @@
                             </div>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="upstream" rpcfg="upstream" data-easy aria-labelledby="hrpc-upstream">
+<section class="zx-card hrp-card" data-hrp-card="upstream" data-hrp-tab="upstream" data-hrp-ord="1" rpcfg="upstream" data-easy aria-labelledby="hrpc-upstream">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-upstream">Destinations</h3></div>
 <p class="zx-card__desc">The servers this site forwards to. Add several to share the load.</p>
 <div class="zx-card__body">
@@ -286,7 +284,7 @@
                             <button class="ui basic compact button editUpstreamButton" style="margin-left: 0.4em; margin-top: 1em;"><i class="grey server icon"></i> Edit Upstreams</button>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="lb" rpcfg="upstream" data-hrp-nd="lb" aria-labelledby="hrpc-lb">
+<section class="zx-card hrp-card" data-hrp-card="lb" data-hrp-tab="upstream" data-hrp-ord="4" rpcfg="upstream" data-hrp-nd="lb" aria-labelledby="hrpc-lb">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-lb">Load balancing</h3></div>
 <p class="zx-card__desc">Applies when there is more than one destination.</p>
 <div class="zx-card__body">
@@ -297,7 +295,7 @@
                             </div>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="health" rpcfg="upstream" data-hrp-nd="health" aria-labelledby="hrpc-health">
+<section class="zx-card hrp-card" data-hrp-card="health" data-hrp-tab="upstream" data-hrp-ord="2" rpcfg="upstream" data-hrp-nd="health" aria-labelledby="hrpc-health">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-health">Health check</h3></div>
 <p class="zx-card__desc">Zoraxy checks the destinations and stops sending visitors to one that is down.</p>
 <div class="zx-card__body">
@@ -314,14 +312,14 @@
                             <small style="opacity:0.7;">Path appended to the upstream URL when the uptime monitor performs its check (e.g. <code>/identity</code> for Plex, <code>/healthz</code>). Leave empty to use <code>/</code>.</small>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="alias" rpcfg="alias" data-hrp-nd="alias" aria-labelledby="hrpc-alias">
+<section class="zx-card hrp-card" data-hrp-card="alias" data-hrp-tab="alias" data-hrp-ord="1" rpcfg="alias" data-hrp-nd="alias" aria-labelledby="hrpc-alias">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-alias">Aliases</h3></div>
 <p class="zx-card__desc">Extra host names that open this same site. This editor saves by itself.</p>
 <div class="zx-card__body">
 <iframe src="" class="wrapper_frame" style="height:22em" title="Aliases"></iframe>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="tags" rpcfg="tags" data-hrp-nd="tags" aria-labelledby="hrpc-tags">
+<section class="zx-card hrp-card" data-hrp-card="tags" data-hrp-tab="tags" data-hrp-ord="1" rpcfg="tags" data-hrp-nd="tags" aria-labelledby="hrpc-tags">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-tags">Tags</h3></div>
 <p class="zx-card__desc">Labels to group and filter sites. This editor saves by itself.</p>
 <div class="zx-card__body">
@@ -331,7 +329,7 @@
 </div>
 <div class="hrp-sec" id="hrpSec-routing" data-hrp-sec="routing" role="tabpanel" aria-labelledby="hrpTab-routing" tabindex="-1">
 <div class="hrp-sec__head"><h3 class="hrp-sec__title">Routing</h3><p class="hrp-sec__desc">How requests are sent on.</p></div>
-<section class="zx-card hrp-card" data-hrp-card="websocket" rpcfg="websocket" data-easy aria-labelledby="hrpc-websocket">
+<section class="zx-card hrp-card" data-hrp-card="websocket" data-hrp-tab="websocket" data-hrp-ord="1" rpcfg="websocket" data-easy aria-labelledby="hrpc-websocket">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-websocket">WebSocket</h3></div>
 <p class="zx-card__desc">Live connections (chat, dashboards, remote desktops) are forwarded automatically. Turn this off only to refuse them.</p>
 <div class="zx-card__body">
@@ -345,7 +343,7 @@
                             </div>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="wsopts" rpcfg="websocket" data-hrp-nd="wsopts" aria-labelledby="hrpc-wsopts">
+<section class="zx-card hrp-card" data-hrp-card="wsopts" data-hrp-tab="websocket" data-hrp-ord="2" rpcfg="websocket" data-hrp-nd="wsopts" aria-labelledby="hrpc-wsopts">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-wsopts">WebSocket timing</h3></div>
 <p class="zx-card__desc">How long an idle live connection may stay open.</p>
 <div class="zx-card__body">
@@ -363,7 +361,7 @@
                             </div>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="vdirs" rpcfg="vdirs" data-hrp-nd="vdirs" aria-labelledby="hrpc-vdirs">
+<section class="zx-card hrp-card" data-hrp-card="vdirs" data-hrp-tab="vdirs" data-hrp-ord="1" rpcfg="vdirs" data-hrp-nd="vdirs" aria-labelledby="hrpc-vdirs">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-vdirs">Path routes (virtual directories)</h3></div>
 <p class="zx-card__desc">Send part of the site (for example /api) to a different server.</p>
 <div class="zx-card__body">
@@ -376,14 +374,14 @@
                             </button>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="headers" rpcfg="headers" data-hrp-nd="headers" aria-labelledby="hrpc-headers">
+<section class="zx-card hrp-card" data-hrp-card="headers" data-hrp-tab="headers" data-hrp-ord="1" rpcfg="headers" data-hrp-nd="headers" aria-labelledby="hrpc-headers">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-headers">Header rewrite rules</h3></div>
 <p class="zx-card__desc">Add, change or remove request and response headers. This editor saves by itself.</p>
 <div class="zx-card__body">
 <iframe src="" class="wrapper_frame" style="height:34em" title="Header rewrite rules"></iframe>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="pathrules" data-hrp-nd="ops" aria-labelledby="hrpc-pathrules">
+<section class="zx-card hrp-card" data-hrp-card="pathrules" data-hrp-tab="security" data-hrp-ord="2" data-hrp-nd="ops" aria-labelledby="hrpc-pathrules">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-pathrules">Path rules, error pages and responses</h3></div>
 <p class="zx-card__desc">Rules that apply to part of the site, custom error pages, fixed responses, CORS and bandwidth limits.</p>
 <div class="zx-card__body">
@@ -393,7 +391,7 @@
 </div>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="ports" data-hrp-nd="ports" aria-labelledby="hrpc-ports">
+<section class="zx-card hrp-card" data-hrp-card="ports" data-hrp-tab="downstream" data-hrp-ord="5" data-hrp-nd="ports" aria-labelledby="hrpc-ports">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-ports">Extra listening ports</h3></div>
 <p class="zx-card__desc">Also answer on these ports, for example :8080 or 192.168.1.1:8080. Added and removed at once.</p>
 <div class="zx-card__body">
@@ -413,7 +411,7 @@
 </div>
 <div class="hrp-sec" id="hrpSec-security" data-hrp-sec="security" role="tabpanel" aria-labelledby="hrpTab-security" tabindex="-1">
 <div class="hrp-sec__head"><h3 class="hrp-sec__title">Security</h3><p class="hrp-sec__desc">Who gets in and what is blocked.</p></div>
-<section class="zx-card hrp-card" data-hrp-card="protection" data-easy data-hrp-easyonly aria-labelledby="hrpc-protection">
+<section class="zx-card hrp-card" data-hrp-card="protection" data-hrp-tab="waf" data-hrp-ord="0" data-easy data-hrp-easyonly aria-labelledby="hrpc-protection">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-protection">Protection</h3></div>
 <p class="zx-card__desc">A firewall that looks at each request before it reaches your app.</p>
 <div class="zx-card__body">
@@ -440,14 +438,14 @@
 </div>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="accessrule" rpcfg="accessrule" data-hrp-nd="access" aria-labelledby="hrpc-accessrule">
+<section class="zx-card hrp-card" data-hrp-card="accessrule" data-hrp-tab="accessrule" data-hrp-ord="1" rpcfg="accessrule" data-hrp-nd="access" aria-labelledby="hrpc-accessrule">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-accessrule">Access rule</h3></div>
 <p class="zx-card__desc">Pick which access rule (allow list, block list, countries) applies to this site. Picking saves at once.</p>
 <div class="zx-card__body">
 <iframe src="" class="wrapper_frame" style="height:24em" title="Access rule"></iframe>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="auth" rpcfg="security" data-hrp-nd="auth" aria-labelledby="hrpc-auth">
+<section class="zx-card hrp-card" data-hrp-card="auth" data-hrp-tab="security" data-hrp-ord="1" rpcfg="security" data-hrp-nd="auth" aria-labelledby="hrpc-auth">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-auth">Authentication</h3></div>
 <p class="zx-card__desc">Ask visitors to log in before they reach the site.</p>
 <div class="zx-card__body">
@@ -513,7 +511,7 @@
                             <button class="ui basic compact small button editSsoExceptionsBtn" style="margin-left: 0.4em; margin-top: 0.4em;"><i class="ui orange shield alternate icon"></i> Forward Auth / OAuth2 Exceptions</button>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="ratelimit" rpcfg="security" data-hrp-nd="ratelimit" aria-labelledby="hrpc-ratelimit">
+<section class="zx-card hrp-card" data-hrp-card="ratelimit" data-hrp-tab="security" data-hrp-ord="6" rpcfg="security" data-hrp-nd="ratelimit" aria-labelledby="hrpc-ratelimit">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-ratelimit">Rate limit</h3></div>
 <p class="zx-card__desc">Slow down visitors that send too many requests.</p>
 <div class="zx-card__body">
@@ -536,7 +534,7 @@
                             </div>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="captcha" rpcfg="security" data-hrp-nd="captcha" aria-labelledby="hrpc-captcha">
+<section class="zx-card hrp-card" data-hrp-card="captcha" data-hrp-tab="security" data-hrp-ord="7" rpcfg="security" data-hrp-nd="captcha" aria-labelledby="hrpc-captcha">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-captcha">CAPTCHA challenge</h3></div>
 <p class="zx-card__desc">Make visitors prove they are human.</p>
 <div class="zx-card__body">
@@ -760,7 +758,7 @@
                             </div>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="exploits" rpcfg="security" data-hrp-nd="exploits" aria-labelledby="hrpc-exploits">
+<section class="zx-card hrp-card" data-hrp-card="exploits" data-hrp-tab="security" data-hrp-ord="5" rpcfg="security" data-hrp-nd="exploits" aria-labelledby="hrpc-exploits">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-exploits">Exploit and crawler blocking</h3></div>
 <p class="zx-card__desc">Stop common attack patterns and known bots.</p>
 <div class="zx-card__body">
@@ -794,7 +792,7 @@
                              <small style="opacity:0.7;">Select how the system should respond when malicious or automated traffic is detected.</small>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="waf" rpcfg="waf" data-hrp-nd="waf" aria-labelledby="hrpc-waf">
+<section class="zx-card hrp-card" data-hrp-card="waf" data-hrp-tab="waf" data-hrp-ord="1" rpcfg="waf" data-hrp-nd="waf" aria-labelledby="hrpc-waf">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-waf">Web application firewall (this site)</h3></div>
 <p class="zx-card__desc">Where this site takes its firewall settings from, with the challenge band and exclusions.</p>
 <div class="zx-card__body">
@@ -909,7 +907,7 @@
                         </div>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="wafresp" data-hrp-nd="wafresp" aria-labelledby="hrpc-wafresp">
+<section class="zx-card hrp-card" data-hrp-card="wafresp" data-hrp-tab="waf" data-hrp-ord="2" data-hrp-nd="wafresp" aria-labelledby="hrpc-wafresp">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-wafresp">Response protection</h3></div>
 <p class="zx-card__desc">Looks for leaked errors and secrets in what the server sends back. Saved with its own button.</p>
 <div class="zx-card__body">
@@ -925,7 +923,7 @@
                         </div>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="wafapi" data-hrp-nd="wafapi" aria-labelledby="hrpc-wafapi">
+<section class="zx-card hrp-card" data-hrp-card="wafapi" data-hrp-tab="waf" data-hrp-ord="3" data-hrp-nd="wafapi" aria-labelledby="hrpc-wafapi">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-wafapi">API protection</h3></div>
 <p class="zx-card__desc">Limits and allow-lists for JSON, XML and form requests. Saved with its own button.</p>
 <div class="zx-card__body">
@@ -936,7 +934,7 @@
                         </div>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="wafevents" aria-labelledby="hrpc-wafevents">
+<section class="zx-card hrp-card" data-hrp-card="wafevents" data-hrp-tab="waf" data-hrp-ord="4" aria-labelledby="hrpc-wafevents">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-wafevents">Recent firewall events</h3></div>
 <p class="zx-card__desc">What the firewall noticed on this site lately.</p>
 <div class="zx-card__body">
@@ -963,7 +961,7 @@
 <div id="hrpCertStatus" class="hrp-certstatus" role="status" aria-live="polite">Checking the certificate...</div>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="certs" rpcfg="ssl" data-hrp-nd="tls" aria-labelledby="hrpc-certs">
+<section class="zx-card hrp-card" data-hrp-card="certs" data-hrp-tab="ssl" data-hrp-ord="1" rpcfg="ssl" data-hrp-nd="tls" aria-labelledby="hrpc-certs">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-certs">Certificate for each hostname</h3></div>
 <p class="zx-card__desc">Which certificate Zoraxy serves when a visitor asks for each of these names.</p>
 <div class="zx-card__body">
@@ -1009,7 +1007,7 @@
 </div>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="plainhttp" rpcfg="downstream" data-hrp-nd="plainhttp" aria-labelledby="hrpc-plainhttp">
+<section class="zx-card hrp-card" data-hrp-card="plainhttp" data-hrp-tab="downstream" data-hrp-ord="2" rpcfg="downstream" data-hrp-nd="plainhttp" aria-labelledby="hrpc-plainhttp">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-plainhttp">Plain HTTP</h3></div>
 <p class="zx-card__desc">Normally visitors are sent to HTTPS.</p>
 <div class="zx-card__body">
@@ -1020,7 +1018,7 @@
                                 </div>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="clientcerts" data-hrp-nd="net" aria-labelledby="hrpc-clientcerts">
+<section class="zx-card hrp-card" data-hrp-card="clientcerts" data-hrp-tab="security" data-hrp-ord="3" data-hrp-nd="net" aria-labelledby="hrpc-clientcerts">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-clientcerts">Client certificates, peers and secondary TLS</h3></div>
 <p class="zx-card__desc">Require visitors to present a certificate, limit which addresses may connect, secure the extra ports.</p>
 <div class="zx-card__body">
@@ -1032,7 +1030,7 @@
 </div>
 <div class="hrp-sec" id="hrpSec-advanced" data-hrp-sec="advanced" role="tabpanel" aria-labelledby="hrpTab-advanced" tabindex="-1">
 <div class="hrp-sec__head"><h3 class="hrp-sec__title">Advanced</h3><p class="hrp-sec__desc">Compatibility options and rarely used switches.</p></div>
-<section class="zx-card hrp-card" data-hrp-card="compat" rpcfg="upstream" data-hrp-nd="compat" aria-labelledby="hrpc-compat">
+<section class="zx-card hrp-card" data-hrp-card="compat" data-hrp-tab="upstream" data-hrp-ord="5" rpcfg="upstream" data-hrp-nd="compat" aria-labelledby="hrpc-compat">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-compat">Compatibility</h3></div>
 <p class="zx-card__desc">Workarounds for old or unusual servers.</p>
 <div class="zx-card__body">
@@ -1055,7 +1053,7 @@
                             </div>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="forwarding" rpcfg="downstream" data-hrp-nd="forwarding" aria-labelledby="hrpc-forwarding">
+<section class="zx-card hrp-card" data-hrp-card="forwarding" data-hrp-tab="downstream" data-hrp-ord="3" rpcfg="downstream" data-hrp-nd="forwarding" aria-labelledby="hrpc-forwarding">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-forwarding">Tunnels and protocol upgrades</h3></div>
 <p class="zx-card__desc">Only turn these on when an app needs them.</p>
 <div class="zx-card__body">
@@ -1071,7 +1069,7 @@
                                             </div>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="uptimeopts" rpcfg="upstream" data-hrp-nd="uptimeopts" aria-labelledby="hrpc-uptimeopts">
+<section class="zx-card hrp-card" data-hrp-card="uptimeopts" data-hrp-tab="upstream" data-hrp-ord="3" rpcfg="upstream" data-hrp-nd="uptimeopts" aria-labelledby="hrpc-uptimeopts">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-uptimeopts">Uptime monitor options</h3></div>
 <p class="zx-card__desc">What counts as a healthy answer.</p>
 <div class="zx-card__body">
@@ -1082,7 +1080,7 @@
                             <small style="opacity:0.7;">Codes like <code>401</code>, ranges like <code>200-399</code>, classes like <code>2xx</code> or <code>any</code>, comma separated. Leave empty to use the global setting on the Uptime Monitor page.</small>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="logging" rpcfg="downstream" data-hrp-nd="logging" aria-labelledby="hrpc-logging">
+<section class="zx-card hrp-card" data-hrp-card="logging" data-hrp-tab="downstream" data-hrp-ord="4" rpcfg="downstream" data-hrp-nd="logging" aria-labelledby="hrpc-logging">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-logging">Logging and statistics</h3></div>
 <p class="zx-card__desc">These two switches take effect at once.</p>
 <div class="zx-card__body">
@@ -1099,7 +1097,7 @@
                                 </div>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="scripts" data-hrp-nd="scripts" aria-labelledby="hrpc-scripts">
+<section class="zx-card hrp-card" data-hrp-card="scripts" data-hrp-tab="security" data-hrp-ord="4" data-hrp-nd="scripts" aria-labelledby="hrpc-scripts">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-scripts">Scripts and scale to zero</h3></div>
 <p class="zx-card__desc">Run a Lua script for requests, or wake the app up on demand.</p>
 <div class="zx-card__body">
