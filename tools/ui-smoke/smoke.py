@@ -33,6 +33,7 @@ ap.add_argument("--consistency-only", action="store_true", help="run only the co
 ap.add_argument("--sites-only", action="store_true", help="run only the Sites pages audit scenario (Default Site, Stream Proxy, Redirection, hostnames, editor sub views)")
 ap.add_argument("--securityfix-only", action="store_true", help="run only the security-page fixes scenario (Trusted Proxies, Auto-ban, toasts, Access Rules, AI gating, WAF validation, contrast)")
 ap.add_argument("--certs-traffic-only", action="store_true", help="run only the Certificates / ACME / Statistics / Visitors / Uptime scenario (certs_traffic_smoke.py)")
+ap.add_argument("--netsys-only", action="store_true", help="run only the Network / System pages scenario (ux-fix-network-system audit)")
 ap.add_argument("--zrok-fake", default=os.environ.get("SMOKE_ZROK_FAKE", ""), help="path of a fake zrok script; enables the zrok flow (the instance needs -allow_external_tools)")
 ap.add_argument("--allow", action="append", default=[], help="regex of messages whose failure is tolerated")
 args = ap.parse_args()
@@ -2270,6 +2271,553 @@ exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "secu
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "certs_traffic_smoke.py")).read(), "certs_traffic_smoke.py", "exec"))  # defines certs_traffic_ui
 
 
+def network_system_ui(pg, ctx):
+    """Network and System pages: every bug of the ux-fix-network-system audit (docs: PR description) must stay fixed.
+
+    Each block names the audit issue it guards. With NETSYS_AFTER_DIR set the screenshots are written there as
+    ISSUE-<name>-after.png (next to the original audit screenshots); otherwise into the normal output directory.
+    """
+    after = os.environ.get("NETSYS_AFTER_DIR", "")
+
+    def shot(issue, full=False):
+        pg.screenshot(path=os.path.join(after or args.out, f"ISSUE-{issue}-after.png"), full_page=full)
+
+    dialogs = []
+    pg.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
+
+    def api(method, url, data=None):
+        return pg.evaluate("""([m, u, d]) => new Promise(res => $.ajax({url: u, method: m, data: d,
+            headers: {'X-CSRF-Token': document.getElementsByTagName('meta')['zoraxy.csrf.Token'].getAttribute('content')},
+            success: r => res({ok: true, body: r}), error: x => res({ok: false, status: x.status, body: x.responseText})}))""", [method, url, data or {}])
+
+    def toast_text():
+        return pg.evaluate("[...document.querySelectorAll('#messageBox, .zx-toast')].filter(e => getComputedStyle(e).display !== 'none').map(e => e.innerText).join(' | ')")
+
+    def wait_msgbox(sub, timeout=6000):
+        pg.wait_for_function("s => { const b = document.getElementById('messageBox'); return b && getComputedStyle(b).display !== 'none' && b.innerText.toLowerCase().includes(s) }", arg=sub.lower(), timeout=timeout)
+
+    def theme_light():
+        if pg.evaluate("document.body.classList.contains('darkTheme')"):
+            pg.evaluate("toggleTheme()")
+            pg.wait_for_timeout(300)
+
+    def go(tab, ms=900):
+        pg.evaluate("t => openTabById(t)", tab)
+        settle(pg, ms)
+
+    theme_light()
+    pg.set_viewport_size({"width": 1366, "height": 1000})
+    admin_port = pg.evaluate("location.port")
+    try:
+        _network_system_body(pg, ctx, args, after, shot, dialogs, api, toast_text, wait_msgbox, go, admin_port)
+    except Exception as ex:   # a scenario step that timed out is a failure of that step, not a crashed run
+        fail("netsys", f"scenario aborted: {' '.join(str(ex).split()[:40])} | toasts: {toast_text()!r} | page: {pg.evaluate('location.hash')}")
+        pg.screenshot(path=os.path.join(args.out, "netsys-failure.png"))
+    theme_light()
+    pg.set_viewport_size({"width": 1366, "height": 800})
+
+
+def _network_system_body(pg, ctx, args, after, shot, dialogs, api, toast_text, wait_msgbox, go, admin_port):
+
+    # ================= Static Web Server: port change on a fresh install (nil pointer panic) =================
+    current["page"] = "netsys/webserv"
+    go("webserv")
+    for bad in ("0", "99999", "-1", "abc"):
+        r = api("POST", "/api/webserv/setPort", {"port": bad})
+        if not r["ok"] or not isinstance(r["body"], dict) or not r["body"].get("error"):
+            fail("webserv", f"setPort {bad!r} must answer a JSON error, got {r}")
+    original_port = pg.input_value("#webserv_listenPort")
+    pg.fill("#webserv_listenPort", "99999")
+    pg.keyboard.press("Tab")
+    wait_msgbox("invalid port")
+    pg.wait_for_timeout(900)
+    if pg.input_value("#webserv_listenPort") != original_port:
+        fail("webserv", f"the field must go back to the saved port after a refused change, shows {pg.input_value('#webserv_listenPort')!r}")
+    shot("staticwebserver-change-port-fresh-install-empty-response-nil-panic")
+    if "Advance Settings" in pg.inner_text("#webserv") or "that serve html" in pg.inner_text("#webserv") or "do not contains" in pg.inner_text("#webserv"):
+        fail("text", "Static Web Server still has the old wording")
+    r = api("POST", "/api/webserv/setPort", {"port": "29250"})
+    if not r["ok"] or (isinstance(r["body"], dict) and r["body"].get("error") and "panic" in str(r["body"])):
+        fail("webserv", f"a valid port change must not crash: {r}")
+    api("POST", "/api/webserv/setPort", {"port": original_port})
+
+    # ================= Listeners =================
+    current["page"] = "netsys/listeners"
+    go("globalsettings", 1200)
+    # proxy port equal to the management port: refused, not "Saved"
+    r = api("POST", "/api/proxy/setIncoming", {"incoming": admin_port})
+    if not r["ok"] or not isinstance(r["body"], dict) or "management" not in str(r["body"].get("error", "")):
+        fail("listeners", f"the proxy port must be refused when it equals the management port: {r}")
+    pg.fill("#incomingPort", admin_port)
+    pg.click("#globalsettings [data-zx-save]")
+    pg.wait_for_function("document.querySelector('#globalsettings .zx-savebar').classList.contains('is-error')", timeout=8000)
+    if "management interface" not in pg.inner_text("#globalsettings .zx-savebar"):
+        fail("listeners", "save bar must explain that the port belongs to the management interface: " + pg.inner_text("#globalsettings .zx-savebar"))
+    if pg.evaluate("$.get('/api/proxy/status')")["Option"]["Port"] == int(admin_port):
+        fail("listeners", "the proxy port was changed to the management port")
+    shot("listeners-proxy-port-equals-admin-port-says-Saved")
+    pg.click("#globalsettings [data-zx-discard]")
+    pg.wait_for_timeout(300)
+
+    # error toast must not cover the Save bar buttons
+    pg.fill("#incomingPort", "0")
+    pg.click("#globalsettings [data-zx-save]")
+    pg.wait_for_function("document.querySelector('#globalsettings .zx-savebar').classList.contains('is-error')", timeout=5000)
+    wait_msgbox("invalid incoming port")
+    ov = pg.evaluate("""() => { const t = document.getElementById('messageBox').getBoundingClientRect();
+        return [...document.querySelectorAll('#globalsettings .zx-savebar button')].filter(b => b.offsetParent !== null).map(b => {
+            const r = b.getBoundingClientRect(); return !(r.right <= t.left || r.left >= t.right || r.bottom <= t.top || r.top >= t.bottom) }).some(x => x) }""")
+    if ov:
+        fail("layout", "the error toast covers the Save bar buttons")
+    shot("listeners-error-toast-covers-savebar-buttons")
+    pg.click("#globalsettings [data-zx-discard]")
+    pg.wait_for_timeout(300)
+
+    # duplicate identical toasts are replaced, not stacked
+    pg.evaluate("for (let i = 0; i < 3; i++) { ZxUI.toast('Dedup check', {type: 'success'}); }")
+    if pg.locator(".zx-toast:has-text('Dedup check')").count() != 1:
+        fail("toast", f"three identical toasts must show once, found {pg.locator('.zx-toast:has-text(\"Dedup check\")').count()}")
+
+    # timeouts: absurd values and decimals refused (the numeric field keeps what was typed)
+    if not pg.is_visible("#readHeaderTimeoutInput"):
+        pg.click("#statusAdvanceSettings > .title")
+        pg.wait_for_timeout(500)
+    before = pg.evaluate("$.get('/api/proxy/timeouts')")
+    for bad in ("99999999999", "1.5"):
+        pg.fill("#readHeaderTimeoutInput", bad)
+        pg.click("#globalsettings [data-zx-save]")
+        pg.wait_for_function("document.querySelector('#globalsettings .zx-savebar').classList.contains('is-error')", timeout=5000)
+        if "whole seconds" not in pg.inner_text("#globalsettings .zx-savebar"):
+            fail("listeners", f"timeout {bad} must be refused with a clear message: {pg.inner_text('#globalsettings .zx-savebar')!r}")
+        if pg.evaluate("$.get('/api/proxy/timeouts')")["readHeaderTimeout"] != before["readHeaderTimeout"]:
+            fail("listeners", f"timeout {bad} was stored")
+    r = api("POST", "/api/proxy/timeouts", {"readHeaderTimeout": "99999999999", "writeTimeout": "0", "idleTimeout": "0"})
+    if not isinstance(r["body"], dict) or not r["body"].get("error"):
+        fail("listeners", f"the server must refuse an absurd timeout too: {r}")
+    # TLS version applies at once: labelled, and the toast says so while the bar still has unsaved fields
+    pg.fill("#readHeaderTimeoutInput", "1.5")
+    pg.click("#globalsettings [data-zx-save]")
+    pg.wait_for_function("document.querySelector('#globalsettings .zx-savebar').classList.contains('is-error')", timeout=5000)
+    badges = pg.locator("#globalsettings .ingressLiveBadge").all_inner_texts()
+    if sum("immediately" in b for b in badges) < 4 or not any("Save" in b for b in badges):
+        fail("listeners", f"live vs Save bar sections must be labelled: {badges}")
+    tls_before = pg.evaluate("$.get('/api/cert/tlsMinVersion')")
+    pg.locator("#tlsVersionSlider button[data-version='1.0']").click()
+    wait_msgbox("minimum tls version set to 1.0")
+    if "Insecure" not in pg.inner_text("#tlsVersionHint"):
+        fail("listeners", "TLS 1.0 needs a strong warning, got: " + pg.inner_text("#tlsVersionHint"))
+    shot("listeners-TLS-version-applies-immediately-while-savebar-says-Not-saved")
+    pg.locator(f"#tlsVersionSlider button[data-version='{tls_before}']").click()
+    pg.wait_for_timeout(500)
+    shot("listeners-timeout-99999999999-accepted-saved")
+    pg.click("#globalsettings [data-zx-discard]")
+    pg.wait_for_timeout(300)
+    # HTTP listener address: inline validation
+    pg.fill("#httpListenAddrInput", "abc")
+    pg.wait_for_timeout(200)
+    if not pg.is_visible("#httpListenAddrErr"):
+        fail("listeners", "an invalid HTTP listener address needs an inline error")
+    pg.click("#globalsettings [data-zx-discard]")
+    # typo "Advance Settings" on every page that has the accordion
+    for tab in ("globalsettings", "httprp", "redirectset", "access", "vdir", "status", "rules"):
+        go(tab, 500)
+        if re.search(r"Advance\b(?!d)", pg.inner_text("#" + tab)):
+            fail("text", f"{tab}: 'Advance Settings' typo is back")
+    go("globalsettings", 600)
+    pg.click("#statusAdvanceSettings > .title") if not pg.is_visible("#tlsVersionSlider") else None
+    pg.wait_for_timeout(400)
+    shot("listeners-typo-Advance-Settings")
+
+    # ================= Network Tools =================
+    current["page"] = "netsys/networktool"
+    go("networktool")
+    if "cluster nodes" in pg.inner_text("#networktool"):
+        fail("text", "the Network Tools subtitle still talks about cluster nodes")
+    crumb = pg.evaluate("document.querySelector('#networktool .zx-page-header__crumbs').getBoundingClientRect().left")
+    title = pg.evaluate("document.querySelector('#networktool .zx-page-header__title').getBoundingClientRect().left")
+    if abs(crumb - title) > 2:
+        fail("layout", f"Network Tools heading is not aligned with the breadcrumb ({title} vs {crumb})")
+    shot("networktools-misleading-subtitle-cluster-nodes-and-misaligned")
+    # traceroute / ping / whois: no dead buttons
+    pg.click("#networktool button:has-text('Start Tracing')")
+    pg.wait_for_function("document.getElementById('traceroute_domain').closest('.field').classList.contains('error')", timeout=3000)
+    if pg.evaluate("document.activeElement.id") != "traceroute_domain":
+        fail("netools", "an empty traceroute target must focus the field")
+    wait_msgbox("enter a target")
+    shot("networktools-traceroute-empty-target-no-feedback")
+    pg.fill("#traceroute_domain", "no-such-host.invalid")
+    pg.click("#networktool button:has-text('Ping')")
+    pg.wait_for_function("document.getElementById('traceroute_results').value.toLowerCase().includes('cannot resolve')", timeout=20000)
+    if "Reply from :" in pg.input_value("#traceroute_results"):
+        fail("netools", "Ping prints 'Reply from :' with an empty address")
+    pg.fill("#traceroute_domain", "127.0.0.1")
+    pg.click("#networktool button:has-text('Start Tracing')")
+    pg.wait_for_function("v => { const r = document.getElementById('traceroute_results').value; return r && r != 'Loading...' }", timeout=40000)
+    res = pg.input_value("#traceroute_results")
+    if "not permitted" in res and "CAP_NET_RAW" not in res:
+        fail("netools", "the raw ICMP error needs the CAP_NET_RAW hint: " + res)
+    shot("networktools-traceroute-raw-go-ICMP-error-toast")
+    pg.fill("#whoisdomain", "")
+    pg.evaluate("performWhoisLookup()")
+    pg.wait_for_function("document.getElementById('whoisdomain').closest('.ui.input').classList.contains('error')", timeout=3000)
+    # forward proxy port
+    pg.click("#networktool .menu .nettools.item[data-tab=tab2]")
+    pg.wait_for_timeout(400)
+    fwd_before = pg.evaluate("$.get('/api/tools/fwdproxy/port')")
+    for bad in ("99999", admin_port, ""):
+        pg.fill("#forwardProxyPort", bad)
+        pg.click("#networktool button:has-text('Apply')")
+        pg.wait_for_timeout(900)
+        t = toast_text()
+        if "updated" in t.lower() and "invalid" not in t.lower():
+            fail("fwdproxy", f"forward proxy port {bad!r} must not report 'updated': {t!r}")
+        if pg.evaluate("$.get('/api/tools/fwdproxy/port')") != fwd_before:
+            fail("fwdproxy", f"forward proxy port {bad!r} was stored")
+    r = api("POST", "/api/tools/fwdproxy/port", {"port": admin_port})
+    if not isinstance(r["body"], dict) or not r["body"].get("error"):
+        fail("fwdproxy", f"the server must refuse the management port as forward proxy port: {r}")
+    pg.fill("#forwardProxyPort", "99999")
+    pg.click("#networktool button:has-text('Apply')")
+    wait_msgbox("invalid port")
+    shot("networktools-forward-proxy-port-99999-says-updated")
+    # diagnostics
+    pg.click("#networktool .menu .nettools.item[data-tab=tab3]")
+    pg.wait_for_timeout(400)
+    pg.fill("#diagHttpUrl", args.url + "/")
+    pg.click("#networktool button:has-text('Send')")
+    pg.wait_for_selector("#diagHttpResult", state="visible", timeout=15000)
+    pg.fill("#diagHttpUrl", "javascript:alert(1)")
+    pg.click("#networktool button:has-text('Send')")
+    pg.wait_for_timeout(1200)
+    if pg.is_visible("#diagHttpResult"):
+        fail("netools", "a refused URL must not leave the previous HTTP result visible")
+    shot("networktools-diagnostics-http-invalid-url-leaves-stale-result")
+    pg.fill("#diagDnsHost", "")
+    pg.click("#networktool button:has-text('Lookup')")
+    pg.wait_for_function("document.getElementById('diagDnsHost').closest('.field').classList.contains('error')", timeout=3000)
+    if pg.evaluate("document.activeElement.id") != "diagDnsHost":
+        fail("netools", "an empty DNS host must focus the field")
+    shot("networktools-diagnostics-dns-empty-host-no-feedback")
+    pg.fill("#diagDnsHost", "no-such-host.invalid")
+    pg.click("#networktool button:has-text('Lookup')")
+    pg.wait_for_selector("#diagDnsNote, #diagDnsResult:visible", timeout=30000)
+    if pg.is_visible("#diagDnsResult") and pg.locator("#diagDnsResult tbody tr").count() >= 6 and not pg.locator("#diagDnsNote").count():
+        fail("netools", "six 'no records' rows are not an answer")
+    # DNS responder: negative TTL
+    pg.click("#networktool .menu .nettools.item[data-tab=tab5]")
+    pg.wait_for_selector("#dnsrTtl", state="visible", timeout=5000)
+    pg.fill("#dnsrTtl", "-1")
+    pg.click("#dnsrSave")
+    wait_msgbox("must be a whole number")
+    if "valid JSON" in toast_text():
+        fail("dnsresponder", "a negative TTL must not be reported as invalid JSON")
+    cfg = pg.evaluate("$.get('/api/tools/dnsresponder')")["config"]
+    cfg["ttl"] = -1
+    r = api("POST", "/api/tools/dnsresponder", {"config": json.dumps(cfg)})
+    if not isinstance(r["body"], dict) or "valid JSON" in str(r["body"]) or "ttl" not in str(r["body"]).lower():
+        fail("dnsresponder", f"the server must name the ttl field for a negative TTL: {r}")
+    shot("networktools-dnsresponder-negative-ttl-says-not-valid-JSON")
+    pg.fill("#dnsrTtl", "60")
+    # mDNS popup: no missing script, no console error
+    pop = ctx.new_page()
+    popup_bad = []
+    pop.on("response", lambda r: r.status >= 400 and popup_bad.append(f"{r.status} {r.url}"))
+    pop.on("console", lambda m: m.type == "error" and popup_bad.append("console: " + m.text))
+    pop.on("pageerror", lambda e: popup_bad.append("pageerror: " + str(e)))
+    pop.set_viewport_size({"width": 1000, "height": 640})
+    pop.goto(args.url + "/tools/mdns.html", wait_until="networkidle")
+    pop.wait_for_timeout(800)
+    if popup_bad:
+        fail("mdns-popup", f"the mDNS popup raised errors: {popup_bad}")
+    rows = pop.locator("#mdns-hosts tbody tr td:first-child").all_inner_texts()
+    if len(rows) != len(set(rows)):
+        fail("mdns-popup", f"two rows look identical (the port must tell services of one host apart): {rows}")
+    pop.screenshot(path=os.path.join(after or args.out, "ISSUE-networktools-mdns-popup-404-ao_module-after.png"))
+    pop.close()
+    # 390px: tab bars that scroll show a cue
+    pg.set_viewport_size({"width": 390, "height": 800})
+    for tab, label in (("networktool", "Network Tools"), ("utils", "Utilities")):
+        go(tab, 700)
+        cue = pg.evaluate("""t => { const m = document.querySelector('#' + t + ' .ui.tabular.menu'); return {scroll: m.scrollWidth > m.clientWidth + 2, cue: m.classList.contains('zx-scroll-end')} }""", tab)
+        if cue["scroll"] and not cue["cue"]:
+            fail("overflow", f"{label}: the tab bar scrolls sideways but shows no cue at 390px")
+        if not cue["scroll"]:
+            fail("overflow", f"{label}: precondition, the tab bar should overflow at 390px")
+        check_horizontal(pg, f"{label} 390")
+        if tab == "networktool":
+            pg.click("#networktool .menu .nettools.item[data-tab=tab1]")
+            pg.evaluate("$('#messageBox').stop(true, true).hide(); window.scrollTo(0, 0)")
+            pg.wait_for_timeout(300)
+            shot("networktools-390-tabs-cut-off")
+    pg.set_viewport_size({"width": 1366, "height": 1000})
+
+    # ================= Tunnels (zrok) and ECH =================
+    current["page"] = "netsys/zrok"
+    go("zrok", 1200)
+    box = pg.evaluate("""() => { const p = document.querySelector('#zrokPanel').getBoundingClientRect(), c = document.querySelector('#zrokPanel .zkCard').getBoundingClientRect(),
+        pill = document.getElementById('zkPill').getBoundingClientRect(); return {gap: c.left - p.left, pillGap: p.right - pill.right} }""")
+    if box["gap"] < 16 or box["pillGap"] < 16:
+        fail("layout", f"zrok cards/pill are flush to the panel edge: {box}")
+    pg.evaluate("window.scrollTo(0, 0)")
+    shot("zrok-and-ech-cards-flush-to-panel-edge-inconsistent-gutter")
+    if pg.locator("#zkDisable").is_enabled():
+        fail("zrok", "Disable environment must be off while the environment is not enabled")
+    has_token = pg.evaluate("fetch('/api/zrok/status').then(r => r.json()).then(d => !!d.TokenSet)")
+    if pg.locator("#zkClearToken").is_enabled() != has_token:
+        fail("zrok", f"Forget token must be enabled exactly when a token is stored (token stored: {has_token})")
+    if args.zrok_fake:
+        pg.evaluate("document.getElementById('zkAdvanced').open = true")
+        pg.fill("#zkBin", args.zrok_fake)
+        pg.click("#zkSaveSettings")
+        pg.wait_for_function("document.getElementById('zkInstall').style.display == 'none'", timeout=8000)
+        pg.fill("#zkToken", "netsysToken123")
+        pg.click("#zkEnable")
+        pg.wait_for_selector("#zkEnableResult .zkBanner.good", timeout=15000)
+        pg.wait_for_function("!document.getElementById('zkClearToken').disabled", timeout=5000)
+        pg.click("#zkClearToken")
+        pg.wait_for_selector("#zkConfirm", state="visible")
+        pg.click("#zkRefresh")        # doing something else closes the open question
+        pg.wait_for_timeout(300)
+        if pg.is_visible("#zkConfirm"):
+            fail("zrok", "the 'Forget the stored token?' panel stays open after the user moved on")
+        pg.click("#zkClearToken")
+        pg.wait_for_selector("#zkConfirm", state="visible")
+        pg.fill("#zkName", "x")       # typing in the tunnel form closes it too
+        pg.wait_for_timeout(300)
+        if pg.is_visible("#zkConfirm"):
+            fail("zrok", "the confirm panel stays open while the tunnel form is used")
+        shot("zrok-forget-token-confirm-stays-open-after-enable")
+        pg.fill("#zkName", "")
+        pg.click("#zkDisable")
+        pg.click("#zkConfirmYes")
+        pg.wait_for_function("document.getElementById('zkPill').innerText.includes('not enabled')", timeout=15000)
+        pg.click("#zkClearToken")
+        pg.click("#zkConfirmYes")
+        pg.wait_for_function("document.getElementById('zkClearToken').disabled", timeout=8000)
+        pg.evaluate("document.getElementById('zkAdvanced').open = true")
+        pg.fill("#zkBin", "")
+        pg.click("#zkSaveSettings")
+        pg.wait_for_timeout(600)
+        if pg.is_visible("#zkEnableResult"):
+            fail("zrok", "the 'Environment enabled' banner stays after the environment was disabled")
+    current["page"] = "netsys/ech"
+    go("ech", 1200)
+    box = pg.evaluate("""() => { const p = document.querySelector('#echPanel').getBoundingClientRect(), c = document.querySelector('#echPanel .echCard').getBoundingClientRect(),
+        pill = document.getElementById('echStatePill').getBoundingClientRect(); return {gap: c.left - p.left, pillGap: p.right - pill.right} }""")
+    if box["gap"] < 16 or box["pillGap"] < 16:
+        fail("layout", f"ECH cards/pill are flush to the panel edge: {box}")
+    if pg.locator("#echPrereq .echChip.bad:has-text('Public name missing')").count():
+        fail("ech", "'Public name missing' must not be an error while ECH is disabled")
+    pg.fill("#echMaxName", "999")   # refused by the server with the raw lower case message "max name length must be 1-255"
+    pg.click("#echSave")
+    pg.wait_for_function("document.getElementById('echNoticeText').offsetParent !== null && /max name length/i.test(document.getElementById('echNoticeText').innerText)", timeout=8000)
+    notice = pg.inner_text("#echNoticeText").strip()
+    if not notice or not notice[0].isupper():
+        fail("ech", f"the inline notice must start with a capital letter, got {notice!r}")
+    r = api("POST", "/api/ech/settings", {"enabled": "true", "publicname": "münchen.example.com"})
+    if not isinstance(r["body"], dict) or "punycode" not in str(r["body"]):
+        fail("ech", f"a non-ASCII public name must hint at punycode: {r}")
+    shot("ech-inline-notice-lowercase-vs-capitalised-toast")
+    go("ech", 400)
+
+    # ================= Utilities =================
+    current["page"] = "netsys/utils"
+    go("utils", 1000)
+    pg.click("#utils .utils.item[data-tab=utiltab4]")
+    pg.wait_for_timeout(600)
+    boot = pg.inner_text("#zoraxyinfo .boottime")
+    if "1970" in boot or boot.strip() == "":
+        fail("utils", f"Running Since shows epoch zero: {boot!r}")
+    if pg.inner_text("#zoraxyinfo .uuid").strip() == "Unauthorized":
+        fail("utils", "Host UUID says Unauthorized under -noauth")
+    pg.locator("#zoraxyinfo").scroll_into_view_if_needed()
+    shot("utilities-system-running-since-1-Jan-1970")
+    pg.click("#utils .utils.item[data-tab=utiltab3]")
+    pg.wait_for_timeout(400)
+    pg.fill("#startIpInput", "::1")
+    pg.fill("#endIpInput", "::ffff")
+    pg.click("#utils button:has-text('Convert') >> nth=0")
+    pg.wait_for_function("document.getElementById('cidrOutput').innerText.includes('CIDR:')", timeout=5000)
+    txt = pg.inner_text("#cidrOutput")
+    if "0.0.0.0" in txt or "/128" not in txt:
+        fail("utils", f"IPv6 range to CIDR is wrong: {txt!r}")
+    pg.fill("#cidrInput", "::/0")
+    pg.click("#cidrInput + button")
+    pg.wait_for_function("document.getElementById('ipRangeOutput').innerText.includes('End IP')", timeout=5000)
+    txt = pg.inner_text("#ipRangeOutput")
+    if "255.255.255.255" in txt or "ffff" not in txt.lower():
+        fail("utils", f"'::/0' must give an IPv6 range: {txt!r}")
+    for bad in ("abc", "10.0.0.0/33", ""):
+        pg.fill("#cidrInput", bad)
+        pg.click("#cidrInput + button")
+        pg.wait_for_timeout(800)
+        txt = pg.inner_text("#ipRangeOutput")
+        if "false" in txt or "0.0.0.0" in txt or "End IP" in txt:
+            fail("utils", f"CIDR {bad!r} must give an error, not a bogus range: {txt!r}")
+    shot("utilities-toolbox-ipv6-converter-wrong-and-End-IP-false")
+    pg.fill("#geoipInput", "999.1.1.1")
+    pg.click("#geoipInput + button")
+    pg.wait_for_function("document.getElementById('geoipError').offsetParent !== null", timeout=5000)
+    if pg.is_visible("#geoipResult"):
+        fail("utils", "Geo-IP lookup of an invalid address must not show a result table")
+    shot("utilities-toolbox-geoip-invalid-ip-no-error")
+
+    # ================= API tokens =================
+    current["page"] = "netsys/apitokens"
+    go("apitokens")
+    rows_before = pg.locator("#atRows tr").count()
+    pg.fill("#atName", "netsys")
+    pg.fill("#atDays", "-5")
+    pg.click("#apiTokensPage button:has-text('Create token')")
+    pg.wait_for_selector("#atFormError", state="visible", timeout=3000)
+    if pg.evaluate("document.querySelector('#atShowModal').classList.contains('active')") or pg.locator("#atRows tr").count() != rows_before:
+        fail("apitokens", "a negative expiry must not create a token")
+    pg.fill("#atDays", "")
+    pg.fill("#atCidrs", "not-a-cidr")
+    pg.click("#apiTokensPage button:has-text('Create token')")
+    pg.wait_for_function("document.getElementById('atFormError').innerText.includes('not-a-cidr')", timeout=3000)
+    shot("apitokens-invalid-cidr-generic-HTTP-400-message")
+    pg.fill("#atCidrs", "")
+    pg.fill("#atName", "x" * 64)
+    pg.fill("#atDays", "30")
+    pg.click("#apiTokensPage button:has-text('Create token')")
+    pg.wait_for_selector("#atShowModal.active", timeout=8000)
+    pg.click("#atShowModal .positive.button")
+    pg.wait_for_timeout(600)
+    wrap = pg.evaluate("""() => { const w = document.querySelector('#apiTokensPage .zx-table-wrap'), b = [...document.querySelectorAll('#atRows button')].map(x => x.getBoundingClientRect().right);
+        return {sw: w.scrollWidth, cw: w.clientWidth, wr: w.getBoundingClientRect().right, maxBtn: Math.max(...b)} }""")
+    if wrap["maxBtn"] > wrap["wr"] + 1 or wrap["sw"] > wrap["cw"] + 2:
+        fail("apitokens", f"a long unbroken token name pushes Status/Revoke out of view: {wrap}")
+    check_horizontal(pg, "apitokens desktop")
+    shot("apitokens-negative-days-never-huge-days-Invalid-Date-long-name-breaks-table")
+    pg.set_viewport_size({"width": 390, "height": 800})
+    pg.wait_for_timeout(300)
+    lab = pg.evaluate("""() => { const td = document.querySelector('#atRows tr td'); return {disp: getComputedStyle(td).display, before: getComputedStyle(td, '::before').content,
+        head: getComputedStyle(document.querySelector('#apiTokensPage thead')).position} }""")
+    if lab["disp"] != "flex" or "Name" not in lab["before"]:
+        fail("apitokens", f"at 390px every cell must carry its own label: {lab}")
+    check_horizontal(pg, "apitokens 390")
+    pg.locator("#atRows").scroll_into_view_if_needed()
+    shot("apitokens-390-table-headers-stacked-apart-from-rows")
+    pg.set_viewport_size({"width": 1366, "height": 1000})
+    ids = pg.evaluate("$.get('./api/apitoken/list')")
+    for t in ids:
+        if t["name"] == "x" * 64:
+            api("POST", "./api/apitoken/revoke", {"id": t["id"]})
+            api("POST", "./api/apitoken/delete", {"id": t["id"]})
+
+    # ================= Update =================
+    current["page"] = "netsys/updater"
+    go("updater", 1500)
+    col = pg.evaluate("getComputedStyle(document.getElementById('upBtnReasons')).color")
+    if col == "rgb(170, 51, 51)":
+        fail("updater", "the reasons under the buttons are shown in error red")
+    md = pg.evaluate("window.upRenderMarkdown('# Zoraxy fork\\n**bold** and *Listeners*\\n- one\\n- <img src=x onerror=alert(1)>')")
+    if "<strong>bold</strong>" not in md or "<li>one</li>" not in md or "<img" in md or "<em>Listeners</em>" not in md:
+        fail("updater", f"release notes Markdown is not rendered safely: {md!r}")
+    pg.evaluate("md => { $('#upNotesWrap').show(); $('#upNotes').html(md) }", md)
+    pg.locator("#upNotesWrap").scroll_into_view_if_needed()
+    shot("update-release-notes-raw-markdown-and-red-rollback-text")
+
+    # ================= Fleet and Cluster =================
+    current["page"] = "netsys/fleet"
+    go("fleet", 1200)
+    if pg.get_attribute("#flJoinToken", "type") != "password":
+        fail("fleet", "the join token field must be masked")
+    pg.click("#flBecomeHub")
+    pg.wait_for_selector(".zx-dialog", timeout=3000)
+    shot("fleet-join-token-field-not-masked-and-native-confirm-for-hub-role")
+    pg.click(".zx-dialog [data-zx-ok]")
+    pg.wait_for_selector("#flHub", state="visible", timeout=8000)
+    pg.click("#flTabs .item[data-tab=tokens]")
+    pg.fill("#flTokName", "")
+    pg.click("#flTokCreate")
+    pg.wait_for_selector("#flTokShow", state="visible", timeout=8000)
+    pg.fill("#flTokName", "<b>")
+    pg.click("#flTokCreate")
+    pg.wait_for_selector(".zx-toast--error", timeout=5000)
+    if pg.is_visible("#flTokShow"):
+        fail("fleet", "the old join token stays visible next to the error of a new request")
+    if pg.locator("#flMsg").count():
+        fail("fleet", "the error banner above the tiles is back")
+    pg.fill("#flTokName", "")
+    pg.fill("#flTokMin", "-5")
+    pg.click("#flTokCreate")
+    pg.wait_for_function("[...document.querySelectorAll('.zx-toast--error')].some(e => /minutes/i.test(e.innerText))", timeout=5000)
+    shot("fleet-error-banner-and-stale-join-token-both-shown")
+    pg.fill("#flTokMin", "15")
+    pg.click("#flTabs .item[data-tab=groups]")
+    no_group = pg.locator("#flPubGroup option[value='']").count() > 0
+    if pg.locator("#flPublishBtn").is_disabled() != no_group:
+        fail("fleet", f"Publish must be disabled exactly while no group exists (placeholder shown: {no_group})")
+    pg.fill("#flGName", "g1")
+    pg.fill("#flGVars", "o")
+    pg.click("#flGSave")
+    pg.wait_for_function("[...document.querySelectorAll('.zx-toast--error')].some(e => /JSON object/i.test(e.innerText))", timeout=5000)
+    pg.fill("#flGVars", "")
+    pg.click("#flGSave")
+    pg.wait_for_function("[...document.querySelectorAll('.zx-toast--success')].some(e => /group saved/i.test(e.innerText))", timeout=5000)
+    # Cluster page while this node is a hub: the roles look and are locked
+    current["page"] = "netsys/cluster"
+    go("cluster", 1200)
+    if not pg.locator("input[name=clRole]").first.is_disabled() or not pg.is_visible("#clFleetLock"):
+        fail("cluster", "as a Fleet hub the Cluster roles must be locked with an explanation")
+    wraps = pg.evaluate("[...document.querySelectorAll('#clusterPage code.nobreak')].map(c => c.getClientRects().length)")
+    if not wraps or any(n > 1 for n in wraps):
+        fail("cluster", f"a flag like -health_port must not break across lines: {wraps}")
+    pg.evaluate("document.querySelectorAll('.zx-toast').forEach(e => e.remove())")
+    pg.locator("#clHealthUrl").scroll_into_view_if_needed()
+    shot("cluster-health-text-wraps-after-dash-Use-dash-health_port")
+    go("fleet", 800)
+    pg.click("#flTabs .item[data-tab=groups]")
+    pg.fill("#flGName", "")
+    pg.click("#flTabs .item[data-tab=settings]")
+    pg.click("#flBecomeStandalone")
+    pg.wait_for_selector(".zx-dialog", timeout=3000)
+    pg.click(".zx-dialog [data-zx-ok]")
+    pg.wait_for_selector("#flStandalone", state="visible", timeout=8000)
+
+    # ================= App Store and Plugins =================
+    current["page"] = "netsys/appstore"
+    go("appstore", 1500)
+    featured_before = pg.is_visible("#asFeaturedBanner")
+    pg.fill("#asSearchInput", "zzzznotfound")
+    pg.wait_for_timeout(500)
+    if pg.is_visible("#asFeaturedBanner"):
+        fail("appstore", "the featured app must not show above 'No apps match your filters'")
+    shot("appstore-search-no-match-still-shows-featured-app")
+    pg.fill("#asSearchInput", "")
+    pg.wait_for_timeout(300)
+    if featured_before and not pg.is_visible("#asFeaturedBanner"):
+        fail("appstore", "the featured app must come back when the search is cleared")
+    r = api("POST", "/api/plugins/store/sources/add", {"url": "https://example.invalid/index.json"})
+    if not r["ok"] or not isinstance(r["body"], dict) or not r["body"].get("error"):
+        fail("appstore", f"adding an unreachable source must answer a readable JSON error: {r}")
+    pg.evaluate("$('#asNewSourceURL').val('https://example.invalid/index.json'); asAddSource();")
+    pg.wait_for_function("() => { const b = document.getElementById('messageBox'); return b && getComputedStyle(b).display !== 'none' && b.innerText.trim().length > 3 }", timeout=15000)
+    if "HTTP 200" in toast_text():
+        fail("appstore", "the add source failure still says 'Request failed (HTTP 200)': " + toast_text())
+    shot("appstore-add-unreachable-source-says-Request-failed-HTTP-200")
+    current["page"] = "netsys/plugins"
+    go("plugins", 1200)
+    if pg.locator("#plugins i.green.check, #pluginMenu i.green").count():
+        fail("plugins", "an empty state uses a green success check")
+    if pg.locator("#pluginMenu i.grey.info").count() == 0 and pg.locator("#pluginMenu .item").count() == 1:
+        fail("plugins", "the sidebar footer 'No Plugins Installed' lost its neutral icon")
+    warns = []
+    p2 = ctx.new_page()
+    p2.on("console", lambda m: m.type == "warning" and warns.append(m.text))
+    p2.goto(args.url + "/", wait_until="networkidle")
+    p2.wait_for_timeout(1200)
+    p2.close()
+    if any("Unrecognized feature" in w for w in warns):
+        fail("plugins", f"the plugin iframe still raises a permissions policy warning: {warns}")
+    shot("plugins-green-check-icons-on-empty-states-and-iframe-console-warnings")
+
+    if dialogs:
+        fail("dialog", f"native dialogs used on the Network / System pages: {dialogs}")
+
+
 def main():
     with sync_playwright() as p:
         b = p.chromium.launch()
@@ -2304,6 +2852,10 @@ def main():
             return
         if args.i18n_only:
             i18n_checks(pg, ctx)
+            b.close()
+            return
+        if args.netsys_only:
+            network_system_ui(pg, ctx)
             b.close()
             return
         if args.ai_only:
@@ -3211,6 +3763,7 @@ def main():
         rules_scenario(pg, ctx)
 
         securityfix_ui(pg, ctx)
+        network_system_ui(pg, ctx)
 
         # ---- narrow / mobile layout ----
         current["page"] = "mobile"

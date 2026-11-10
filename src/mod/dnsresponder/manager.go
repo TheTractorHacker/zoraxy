@@ -2,6 +2,7 @@ package dnsresponder
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sync"
 )
@@ -133,6 +134,12 @@ func (m *Manager) HandleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		cfg := DefaultConfig()
 		if err := json.Unmarshal([]byte(r.PostFormValue("config")), &cfg); err != nil {
+			var typeErr *json.UnmarshalTypeError
+			if errors.As(err, &typeErr) && typeErr.Field != "" {
+				//e.g. a negative number for an unsigned field: name the field instead of blaming the JSON
+				fail(typeErr.Field + " has an invalid value (a whole number inside the allowed range is expected)")
+				return
+			}
 			fail("config is not valid JSON")
 			return
 		}

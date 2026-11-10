@@ -55,7 +55,7 @@
     #echPanel ul.echHelp li { margin-bottom: .4em; }
     @media (max-width: 600px) { #echPanel .echCard { padding: .8em .8em 1em; } #echPanel .echPill { white-space: normal; } }
 </style>
-<div id="echPanel">
+<div id="echPanel" class="standardContainer">
     <div class="echHero">
         <div style="min-width:0; flex:1 1 30em">
             <h2 class="ui header" style="margin-bottom:.35em"><i class="user secret icon"></i><div class="content">Encrypted Client Hello (ECH)</div></h2>
@@ -222,8 +222,10 @@
         var el = b[0]; if (el && el.scrollIntoView) { try { el.scrollIntoView({block: "nearest"}); } catch(e){} }
     }
     // Friendly text for anything the API or the network returns
+    //Backend messages start lower case ("public name is required"): show them like the toast does
+    function cap(t){ t = String(t); return t.charAt(0).toUpperCase() + t.slice(1); }
     function errText(r, xhr){
-        if (r && typeof r === "object" && r.error != undefined) { return String(r.error); }
+        if (r && typeof r === "object" && r.error != undefined) { return cap(String(r.error)); }
         if (xhr && xhr.status === 401) { return "Your session has expired. Sign in again."; }
         if (xhr && xhr.status === 403) { return "You are not allowed to do this."; }
         if (xhr && xhr.status >= 500) { return "Zoraxy returned a server error. Check the system log."; }
@@ -290,7 +292,7 @@
         // prerequisites
         var pr = $id("echPrereq").empty();
         pr.append(chip(d.TLSEnabled ? true : false, d.TLSEnabled ? "HTTPS listener in TLS mode (TLS 1.3 available)" : "HTTPS listener is not in TLS mode"));
-        pr.append(chip(s.PublicName ? true : false, s.PublicName ? "Public name set" : "Public name missing"));
+        pr.append(chip(s.PublicName ? true : (s.Enabled ? false : null), s.PublicName ? "Public name set" : "Public name missing")); //only an error once ECH is on
         pr.append(chip(s.PublicName ? (cert.Valid ? true : (cert.State == "selfsigned" ? "warn" : false)) : null, "Certificate for the public name: " + (s.PublicName ? certLabel(cert) : "unknown")));
         pr.append(chip(null, "HTTPS DNS record published: check in step 3"));
         if (d.HTTP3Enabled) { pr.append(chip("warn", "HTTP/3 on: put h3 in the record's alpn")); }
@@ -431,7 +433,7 @@
     $id("echSelfRun").on("click", function(){
         var btn = $(this).addClass("loading disabled"), box = $id("echSelfResult").show().empty();
         $.ajax({url: "/api/ech/selfcheck", data: {host: $id("echSelfHost").val()}, dataType: "json", cache: false}).done(function(r){
-            if (r && r.error != undefined) { box.append(banner("warn", "exclamation triangle", "Could not run the check", " " + r.error)); return; }
+            if (r && r.error != undefined) { box.append(banner("warn", "exclamation triangle", "Could not run the check", " " + cap(r.error))); return; }
             var ok = r.Accepted;
             box.append(banner(ok ? "good" : "bad", ok ? "check circle" : "times circle", ok ? "The server decrypted the ECH handshake" : "ECH was not accepted by the listener", " " + r.Advice +
                 (r.Attempted ? " (" + (r.TLSVersion || "no TLS") + ", " + r.ElapsedMs + " ms, inner name " + r.InnerName + ")" : "")));
@@ -458,7 +460,7 @@
         $id("echForeignHelp").hide();
         $.ajax({url: "/api/ech/domains", dataType: "json", cache: false}).done(function(r){
             box.empty();
-            if (r && r.error != undefined) { box.append(banner("warn", "exclamation triangle", "Could not run the check", " " + r.error)); return; }
+            if (r && r.error != undefined) { box.append(banner("warn", "exclamation triangle", "Could not run the check", " " + cap(r.error))); return; }
             if (!r || !r.length) { box.text("No proxy rule has a concrete host name to check. Use \"Check one other host\" below."); return; }
             var wrap = $("<div class='echTableWrap'>"), t = $("<table class='ui compact table'><thead><tr><th>Host</th><th>This server's resolver</th><th>Public resolver (1.1.1.1)</th><th>What to do</th></tr></thead><tbody></tbody></table>");
             var problems = 0, foreignNames = {};
@@ -490,7 +492,7 @@
         var box = $id("echDnsResult").show().empty();
         if (!host) { box.append(banner("warn", "exclamation triangle", "Enter a host name", "")); return; }
         $.ajax({url: "/api/ech/dnscheck", data: {host: host, resolver: $id("echDnsResolver").val().trim()}, dataType: "json", cache: false}).done(function(r){
-            if (r && r.error != undefined) { box.append(banner("warn", "exclamation triangle", "Lookup failed", " " + r.error)); return; }
+            if (r && r.error != undefined) { box.append(banner("warn", "exclamation triangle", "Lookup failed", " " + cap(r.error))); return; }
             box.append(banner(r.Match ? "good" : (r.HasECH ? "warn" : "bad"), r.Match ? "check circle" : "exclamation triangle", r.Advice, " Resolver " + r.Resolver + ". HTTPS record: " + (r.HasHTTPS ? "yes" : "no") + ", ech parameter: " + (r.HasECH ? "yes" : "no") + "."));
         }).fail(function(x){ box.append(banner("bad", "times circle", "Lookup failed", " " + errText(null, x))); });
     });

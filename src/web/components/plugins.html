@@ -166,7 +166,7 @@
         <div class="selectColTitle">Unassigned Plugins</div>
         <div id="selectablePluginList" class="ui relaxed divided list" style="border: 1px solid var(--divider_color);">
           <div class="item" style="pointer-events: none; user-select: none; opacity: 0.6;">
-            <i class="ui green check circle icon"></i> No selected tag
+            <i class="ui grey info circle icon"></i> No selected tag
           </div>
         </div>
       </div>
@@ -331,7 +331,7 @@ function loadPluginsForTag(tag) {
     if (selectablePluginCount == 0){
       $("#selectablePluginList").append(`
         <div class="item" style="pointer-events: none; user-select: none; opacity: 0.6;">
-          <i class="ui green circle check icon"></i> No plugins available to assign
+          <i class="ui grey info circle icon"></i> No plugins available to assign
         </div>
       `);
     }
@@ -362,7 +362,7 @@ loadTags();
 //This is used as a dummy function to initialize the selectable plugin list
 function initSelectablePluginList(){
   $("#selectablePluginList").html(`<div class="item" style="pointer-events: none; user-select: none; opacity: 0.6;">
-            <i class="ui green check circle icon"></i> No selected tag
+            <i class="ui grey info circle icon"></i> No selected tag
           </div>`);
   $.get(`/api/plugins/list`, function(data){
       data.forEach(plugin => {
@@ -385,7 +385,7 @@ function initSelectablePluginList(){
     if (data.length == 0){
       $("#selectablePluginList").append(`
         <div class="item" style="pointer-events: none; user-select: none; opacity: 0.6;">
-          <p><i class="ui green circle check icon"></i> No plugins available to assign</p>
+          <p><i class="ui grey info circle icon"></i> No plugins available to assign</p>
           <p>Plugins can be installed to Zoraxy by placing the plugin files in the plugins directory.</p>
         </div>
       `);
@@ -494,7 +494,7 @@ function initPluginSideMenu(){
     if (enabledPluginCount == 0){
       $("#pluginMenu").append(`
          <a class="item" style="pointer-events: none; user-select: none; opacity: 0.6;">
-            <i class="green circle check icon"></i> No Plugins Installed
+            <i class="grey info circle icon"></i> No Plugins Installed
         </a>
       `);
     }
@@ -631,7 +631,7 @@ function initiatePluginList(){
     if (data.length == 0){
       $("#pluginTable").append(`
         <tr>
-          <td colspan="4" style="text-align: center;"><i class="ui green circle check icon"></i> No plugins installed</td>
+          <td colspan="4" style="text-align: center;"><i class="ui grey info circle icon"></i> No plugins installed</td>
         </tr>
       `);
     }

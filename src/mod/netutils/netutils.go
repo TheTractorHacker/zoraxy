@@ -115,6 +115,12 @@ func HandlePing(w http.ResponseWriter, r *http.Request) {
 		UDP:  []string{},
 	}
 
+	//Refuse an unresolvable name up front instead of printing "Reply from : ..." twelve times
+	if _, err := net.ResolveIPAddr("ip", targetIpOrDomain); err != nil {
+		utils.SendErrorResponse(w, "cannot resolve "+targetIpOrDomain+": the name does not exist or the DNS server did not answer")
+		return
+	}
+
 	//Ping ICMP
 	for i := 0; i < 4; i++ {
 		realIP, pingTime, ttl, err := PingIP(targetIpOrDomain)

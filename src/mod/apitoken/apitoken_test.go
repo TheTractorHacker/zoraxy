@@ -319,3 +319,14 @@ func TestLastUsed(t *testing.T) {
 		t.Fatal("last used not recorded")
 	}
 }
+
+// A lifetime far beyond 10 years became "Invalid Date" in the UI: refused at creation.
+func TestExpiryTooFarRefused(t *testing.T) {
+	m, _, _, clk, _ := setup(t)
+	if _, _, err := m.Create("far", ScopeRead, clk.now().Unix()+MaxExpirySeconds+10, nil); err == nil {
+		t.Fatal("expiry beyond the maximum lifetime must be rejected")
+	}
+	if _, _, err := m.Create("ok", ScopeRead, clk.now().Unix()+MaxExpirySeconds-10, nil); err != nil {
+		t.Fatalf("expiry inside the maximum lifetime must work: %v", err)
+	}
+}

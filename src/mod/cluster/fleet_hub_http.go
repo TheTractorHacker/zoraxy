@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"sort"
@@ -436,7 +437,8 @@ func formVars(r *http.Request, key string) (map[string]string, error) {
 		return v, nil
 	}
 	if err := json.Unmarshal([]byte(raw), &v); err != nil {
-		return nil, err
+		//the encoding/json messages ("invalid character 'o' in literal null") mean nothing to the user
+		return nil, errors.New(`variables must be a JSON object with text values, for example {"upstream_ip": "10.0.0.5"}`)
 	}
 	return v, nil
 }
@@ -493,7 +495,14 @@ func (m *Manager) HandleFleetHub(w http.ResponseWriter, r *http.Request) {
 	id := r.PostFormValue("id")
 	switch action {
 	case "tokenCreate":
-		mins, _ := strconv.Atoi(r.PostFormValue("minutes"))
+		mins := 0
+		if raw := strings.TrimSpace(r.PostFormValue("minutes")); raw != "" {
+			var convErr error
+			if mins, convErr = strconv.Atoi(raw); convErr != nil || mins < 1 || mins > 1440 {
+				writeErr(w, "valid for must be a whole number of minutes between 1 and 1440")
+				return
+			}
+		}
 		tok, t, err := h.CreateJoinToken(by, time.Duration(mins)*time.Minute, strings.TrimSpace(r.PostFormValue("name")), strings.TrimSpace(r.PostFormValue("group")))
 		if err != nil {
 			writeErr(w, err.Error())

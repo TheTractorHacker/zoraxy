@@ -2,6 +2,7 @@ package mdns
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 	"strings"
@@ -158,7 +159,7 @@ func (m *MDNSHost) Scan(timeout int, domainFilter string) []*NetworkHost {
 				}
 
 				//log.Println(properties)
-				discoveredHost = append(discoveredHost, &NetworkHost{
+				discoveredHost = appendUniqueHost(discoveredHost, &NetworkHost{
 					HostName:     entry.HostName,
 					Port:         entry.Port,
 					IPv4:         entry.AddrIPv4,
@@ -194,7 +195,7 @@ func (m *MDNSHost) Scan(timeout int, domainFilter string) []*NetworkHost {
 					}
 
 					//log.Println(properties)
-					discoveredHost = append(discoveredHost, &NetworkHost{
+					discoveredHost = appendUniqueHost(discoveredHost, &NetworkHost{
 						HostName:     entry.HostName,
 						Port:         entry.Port,
 						IPv4:         entry.AddrIPv4,
@@ -224,6 +225,21 @@ func (m *MDNSHost) Scan(timeout int, domainFilter string) []*NetworkHost {
 	//Update the master scan record
 	<-ctx.Done()
 	return discoveredHost
+}
+
+// appendUniqueHost adds a host unless the same service (name, port, addresses, MAC) was already found.
+// The resolver reports one answer per interface, which listed the same host several times.
+func appendUniqueHost(list []*NetworkHost, h *NetworkHost) []*NetworkHost {
+	key := func(n *NetworkHost) string {
+		return fmt.Sprintf("%s|%d|%v|%v", n.HostName, n.Port, n.IPv4, n.MacAddr)
+	}
+	k := key(h)
+	for _, e := range list {
+		if key(e) == k {
+			return list
+		}
+	}
+	return append(list, h)
 }
 
 // Get all mac address of all interfaces

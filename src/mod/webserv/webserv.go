@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 
 	"imuslab.com/zoraxy/mod/auth"
@@ -143,21 +144,26 @@ func (ws *WebServer) RestorePreviousState() {
 
 // ChangePort changes the server's port.
 func (ws *WebServer) ChangePort(port string) error {
+	portNum, convErr := strconv.Atoi(port)
+	if convErr != nil || portNum < 1 || portNum > 65535 {
+		return errors.New("invalid port number, use a port between 1 and 65535")
+	}
 	if isPortInUse(port) {
 		return errors.New("selected port is used by another process")
 	}
 
-	if ws.isRunning {
+	if ws.IsRunning() {
 		if err := ws.Stop(); err != nil {
 			return err
 		}
 	}
 
+	//The server object only exists after the first Start(), Start() builds the listener from option.Port
+	oldPort := ws.option.Port
 	ws.option.Port = port
-	ws.server.Addr = ":" + port
-
 	err := ws.Start()
 	if err != nil {
+		ws.option.Port = oldPort
 		return err
 	}
 
@@ -325,19 +331,18 @@ func (ws *WebServer) Close() {
 func (ws *WebServer) SetCustomCredentials(username, password string) error {
 	// Hash the password
 	hashedPassword := auth.HashPasswordWithProfile(password, auth.ProfileBasicAuth)
-	
+
 	// Save username and hashed password to database
 	err := ws.option.Sysdb.Write("webserv", "webdavCustomUsername", username)
 	if err != nil {
 		return err
 	}
-	
+
 	err = ws.option.Sysdb.Write("webserv", "webdavCustomPasswordHash", hashedPassword)
 	if err != nil {
 		return err
 	}
-	
+
 	ws.option.Logger.PrintAndLog("webdav", "Custom credentials updated for user: "+username, nil)
 	return nil
 }
-

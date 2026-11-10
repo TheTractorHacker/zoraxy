@@ -93,7 +93,25 @@
     }
     $("#dnsrPanel .checkbox").checkbox();
     $("#dnsrReload").on("click", load);
+    //Numeric fields: empty = default, otherwise a whole number inside the min/max of the field
+    function numericFieldError(){
+        var bad = "";
+        $("#dnsrPanel input[type=number]").each(function(){
+            var v = String($(this).val()).trim();
+            if (v === ""){ $(this).closest(".field").removeClass("error"); return; }
+            var min = Number($(this).attr("min")), max = Number($(this).attr("max"));
+            var ok = /^\d+$/.test(v) && Number(v) >= min && Number(v) <= max;
+            $(this).closest(".field").toggleClass("error", !ok);
+            if (!ok && !bad){
+                bad = tf("{0} must be a whole number between {1} and {2}", $(this).closest(".field").find("label").first().text().trim(), min, max);
+                $(this).trigger("focus");
+            }
+        });
+        return bad;
+    }
     $("#dnsrSave").on("click", function(){
+        var numErr = numericFieldError();
+        if (numErr){ msgbox(numErr, false, 6000); return; }
         var cfg = {
             enabled: $("#dnsrEnabled").checkbox("is checked"),
             listenAddr: $("#dnsrListen").val().trim(),

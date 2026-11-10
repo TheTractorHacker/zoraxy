@@ -1169,6 +1169,21 @@ a:focus-visible,
     z-index: 1001;
 }
 /* While a Save bar is showing, the toast sits above it instead of covering its buttons */
+/* Scroll cue on tab bars that are cut off (class set by script/uxkit.js) */
+.zx-scroll-end:not(.zx-scroll-start) {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+}
+.zx-scroll-start:not(.zx-scroll-end) {
+    -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 2.5rem), transparent);
+    mask-image: linear-gradient(to left, #000 calc(100% - 2.5rem), transparent);
+}
+.zx-scroll-start.zx-scroll-end {
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent);
+    mask-image: linear-gradient(to right, transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent);
+}
+
+/* Keep the toast above a visible Save bar instead of covering its buttons (same offset as .zx-toasts) */
 body.zx-has-savebar #messageBox { bottom: 6.5rem; }
 @media (prefers-reduced-motion: reduce) {
     * { scroll-behavior: auto !important; }

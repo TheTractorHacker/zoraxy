@@ -10,7 +10,6 @@
         <title>mDNS Discovery | Zoraxy</title>
         <link rel="stylesheet" href="../script/semantic/semantic.min.css">
         <script src="../script/jquery-3.6.0.min.js"></script>
-        <script src="../../script/ao_module.js"></script>
         <script src="../script/semantic/semantic.min.js"></script>
         <script src="../script/tablesort.js"></script>
         <link rel="stylesheet" href="../main.css">
@@ -89,6 +88,10 @@
                 }, 1000);
             }
 
+            function esc(text){
+                return String(text === undefined || text === null ? "" : text).replace(/[&<>"']/g, function(c){ return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]; });
+            }
+
             function renderMDNSHosts(data) {
                 // Create table header
                 var tableHeader = $('<thead>').append(
@@ -103,7 +106,7 @@
 
                 if (data.error != undefined){
                     $('#mdns-hosts').html(`<table class="ui celled unstackable table"><tbody></tbody></table>`);
-                    $('#mdns-hosts').find("tbody").append(`<tr><td colspan="5"><i class="ui red circle times icon"></i> ${data.error}</td></tr>`);
+                    $('#mdns-hosts').find("tbody").append($('<tr>').append($('<td colspan="5">').append('<i class="ui red circle times icon"></i> ', document.createTextNode(String(data.error)))));
                     $("#discover").addClass("disabled");
                     return;
                 }
@@ -112,13 +115,13 @@
                 var tableBody = $('<tbody>');
                 for (var i = 0; i < data.length; i++) {
                     var host = data[i];
-                    var ipAddresses = host.IPv4.join('<br> ');
-                    var macAddresses = host.MacAddr.join('<br> ');
+                    var ipAddresses = (host.IPv4 || []).map(esc).join('<br> ');
+                    var macAddresses = (host.MacAddr || []).map(esc).join('<br> ');
                     if (macAddresses.trim() == ""){
                         macAddresses = '<i class="ui red remove icon"></i> Not Supported'
                     }
                     var row = $('<tr>').append(
-                    $('<td>').html(`<a target="_blank" href="//${host.HostName}:${host.Port}">${host.HostName}</a>`),
+                    $('<td>').html(`<a target="_blank" rel="noopener" href="//${esc(host.HostName)}:${esc(host.Port)}">${esc(host.HostName)}:${esc(host.Port)}</a>`), //the port tells several services of one host apart
                     $('<td>').html(ipAddresses),
                     $('<td>').html(macAddresses),
                     $('<td>').text(host.Model),

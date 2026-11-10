@@ -3,8 +3,8 @@
   "language": "Japanese",
   "reviewed": false,
   "author": "machine-assisted (Claude)",
-  "coverage": 20.5,
-  "coreCoverage": 40.8
+  "coverage": 20.4,
+  "coreCoverage": 40.7
  },
  "strings": {
   "\"Add Redirection Rule\"": "「リダイレクトルールを追加」",
@@ -73,7 +73,6 @@
   "5xx rate": "5xx率",
   "A list of installed plugins and their enable state": "インストール済みプラグインとその有効状態の一覧",
   "A list of TCP / UDP proxy rules created on this host.": "このホストで作成されたTCP/UDPプロキシルールの一覧。",
-  "A simple static web server that serve html css and js files": "HTML、CSS、JSファイルを配信するシンプルな静的Webサーバー",
   "Abort": "中止",
   "Accent colour": "アクセントカラー",
   "Accept HTTP requests even if you are using HTTPS mode": "HTTPSモード使用時でもHTTPリクエストを受け付ける",
@@ -140,7 +139,7 @@
   "Address": "アドレス",
   "admin": "管理者",
   "Admin accounts": "管理者アカウント",
-  "Advance Settings": "詳細設定",
+  "Advanced Settings": "詳細設定",
   "Advanced": "詳細",
   "Advanced Options": "詳細オプション",
   "Advanced regex engine (experimental)": "高度な正規表現エンジン (実験的)",
@@ -352,7 +351,6 @@
   "burst (0 = same as rate)": "バースト (0 = レートと同じ)",
   "Burundi": "ブルンジ",
   "button that fills them in.": "ボタンで自動入力できます。",
-  "bytes": "バイト",
   "Caicos Islands": "タークス・カイコス諸島",
   "Calculate": "計算",
   "Calculators": "計算ツール",
@@ -615,7 +613,6 @@
   "Disabled:": "無効:",
   "Discard changes": "変更を破棄",
   "Discard the unsaved changes?": "保存されていない変更を破棄しますか?",
-  "Discovery": "ディスカバリー",
   "Discovery failed: {0}": "ディスカバリーに失敗しました: {0}",
   "Discovery URL": "ディスカバリーURL",
   "Disk Usage": "ディスク使用率",

@@ -106,6 +106,12 @@
         outline-offset: 2px;
     }
 
+    #globalsettings .ingressLiveBadge{
+        margin-left: 0.6em;
+        text-transform: none;
+        letter-spacing: 0;
+    }
+
     /* Timeout inputs, fixed width so browsers render them the same size */
     #globalsettings .ingressTimeoutGrid .ui.input > input{
         width: 8em;
@@ -146,11 +152,12 @@
         <i class="warning icon"></i>
         Port 80 is occupied by another service and might not be working properly
     </div>
-    <div id="httpListenAddrBox" class="notloopbackOnly tlsEnabledOnly" style="margin: 0.5em 0 0.8em 0;">
+    <div id="httpListenAddrBox" class="zx-field notloopbackOnly tlsEnabledOnly" style="margin: 0.5em 0 0.8em 0;">
         <label class="zx-field__label" for="httpListenAddrInput" data-zx-label="HTTP listener address">HTTP listener address</label>
         <div class="ui fluid input" style="max-width: 360px; margin-top: 0.3em;">
             <input type="text" id="httpListenAddrInput" placeholder=":80" value=":80">
         </div>
+        <p id="httpListenAddrErr" class="zx-error" role="alert"></p>
         <small>Address of the plain HTTP listener, as <code>:port</code> or <code>ip:port</code> (default <code>:80</code>). Useful when port 80 is taken or you sit behind a port forward (e.g. <code>:8080</code>). Cannot be the management interface port or the proxy (HTTPS) port. Applying restarts the proxy service. Let's Encrypt HTTP-01 validation still requires this to be reachable from the internet on public port 80.</small>
         <div id="httpListenAddrRuntime" style="display:none;"><small></small></div>
     </div>
@@ -166,11 +173,12 @@
         <div id="statusAdvanceSettings" class="ui accordion advanceSettings">
             <div class="title">
               <i class="dropdown icon"></i>
-                Advance Settings
+                Advanced Settings
             </div>
             <div class="content">
                 <!-- TLS -->
                 <div class="ingressSettingGroup">
+                    <div class="ingressGroupTitle">TLS <span class="zx-badge zx-badge--info ingressLiveBadge">Applies immediately</span></div>
                     <div id="tlsMinVer" class="notloopbackOnly tlsEnabledOnly">
                         <span class="ingressFieldLabel">Minimum TLS Version</span>
                         <small class="ingressFieldHint">Clients that only support older versions will be rejected</small>
@@ -198,7 +206,7 @@
 
                 <!-- Protocols -->
                 <div class="ingressSettingGroup">
-                    <div class="ingressGroupTitle">Protocols</div>
+                    <div class="ingressGroupTitle">Protocols <span class="zx-badge zx-badge--info ingressLiveBadge">Applies immediately</span></div>
                     <small class="ingressGroupNote">PROXY protocol and HTTP/3 are mutually exclusive. Enabling one turns off the other.</small>
                     <div id="proxyProtocol" class="ui toggle notloopbackOnly tlsEnabledOnly checkbox">
                         <input type="checkbox">
@@ -215,7 +223,7 @@
 
                 <!-- Timeouts -->
                 <div class="ingressSettingGroup notloopbackOnly">
-                    <div class="ingressGroupTitle">Timeouts</div>
+                    <div class="ingressGroupTitle">Timeouts <span class="zx-badge ingressLiveBadge">Applied with Save changes</span></div>
                     <small class="ingressGroupNote">In seconds, 0 disables the timeout. Applying restarts the proxy if it is running.</small>
                     <div class="ui middle aligned stackable grid ingressTimeoutGrid">
                         <div class="row">
@@ -225,7 +233,7 @@
                             </div>
                             <div class="six wide column">
                                 <div class="ui right fluid labeled input">
-                                    <input type="number" id="readHeaderTimeoutInput" min="0" step="1" placeholder="30">
+                                    <input type="number" id="readHeaderTimeoutInput" min="0" max="604800" step="1" placeholder="30">
                                     <div class="ui basic label">sec</div>
                                 </div>
                             </div>
@@ -237,7 +245,7 @@
                             </div>
                             <div class="six wide column">
                                 <div class="ui right fluid labeled input">
-                                    <input type="number" id="writeTimeoutInput" min="0" step="1" placeholder="0">
+                                    <input type="number" id="writeTimeoutInput" min="0" max="604800" step="1" placeholder="0">
                                     <div class="ui basic label">sec</div>
                                 </div>
                             </div>
@@ -249,7 +257,7 @@
                             </div>
                             <div class="six wide column">
                                 <div class="ui right fluid labeled input">
-                                    <input type="number" id="idleTimeoutInput" min="0" step="1" placeholder="300">
+                                    <input type="number" id="idleTimeoutInput" min="0" max="604800" step="1" placeholder="300">
                                     <div class="ui basic label">sec</div>
                                 </div>
                             </div>
@@ -259,7 +267,7 @@
 
                 <!-- Client IP headers -->
                 <div class="ingressSettingGroup">
-                    <div class="ingressGroupTitle">Client IP headers</div>
+                    <div class="ingressGroupTitle">Client IP headers <span class="zx-badge zx-badge--info ingressLiveBadge">Applies immediately</span></div>
                     <div id="sanitiseClientIP" class="ui toggle checkbox">
                         <input type="checkbox">
                         <label>Sanitise client IP headers on all hosts<br>
@@ -269,7 +277,7 @@
 
                 <!-- Development -->
                 <div class="ingressSettingGroup">
-                    <div class="ingressGroupTitle">Development</div>
+                    <div class="ingressGroupTitle">Development <span class="zx-badge zx-badge--info ingressLiveBadge">Applies immediately</span></div>
                     <div id="developmentMode" class="ui toggle checkbox">
                         <input type="checkbox">
                         <label>Development Mode<br>
@@ -335,7 +343,7 @@
     function handlePortChange(){
         var done = $.Deferred();
         var newPortValue = $("#incomingPort").val();
-        if (isNaN(newPortValue - 1) || newPortValue < 1 || newPortValue > 65535){
+        if (!/^\d+$/.test(String(newPortValue).trim()) || Number(newPortValue) < 1 || Number(newPortValue) > 65535){
             msgbox("Invalid incoming port value", false, 5000);
             return done.reject("Invalid incoming port value").promise();
         }
@@ -425,9 +433,30 @@
             }
         });
     }
+    //Client side check of ":port" / "ip:port" / "[ipv6]:port" (empty = default). Returns an error text or "".
+    function httpListenAddrError(value){
+        value = String(value).trim();
+        if (value === ""){ return ""; }
+        var m = /^(\[[0-9a-fA-F:.]+\]|[^\s:\[\]]*):(\d+)$/.exec(value);
+        if (!m || Number(m[2]) < 1 || Number(m[2]) > 65535){
+            return "Use :port or ip:port with a port between 1 and 65535, for example :80 or 127.0.0.1:8080";
+        }
+        return "";
+    }
+    $("#httpListenAddrInput").on("input", function(){
+        var err = httpListenAddrError($(this).val());
+        if (err){ ZxUI.field(this).setError(err); }else{ ZxUI.field(this).clearError(); }
+    });
+
     //Apply the HTTP listener address (promise, see handlePortChange)
     function applyHttpListenAddr(){
         var done = $.Deferred();
+        var addrErr = httpListenAddrError($("#httpListenAddrInput").val());
+        if (addrErr){
+            ZxUI.field("#httpListenAddrInput").setError(addrErr);
+            msgbox(addrErr, false, 5000);
+            return done.reject(addrErr).promise();
+        }
         $.cjax({
             url: "/api/proxy/httpListenAddr",
             method: "POST",
@@ -487,8 +516,8 @@
     initHTTPtoHTTPSRedirectSetting();
 
     const tlsVersionHints = {
-        "1.0": "Legacy. Deprecated by RFC 8996, only for very old clients.",
-        "1.1": "Legacy. Deprecated by RFC 8996, only for very old clients.",
+        "1.0": "Insecure and deprecated (RFC 8996). Only choose this for very old clients you cannot upgrade.",
+        "1.1": "Insecure and deprecated (RFC 8996). Only choose this for very old clients you cannot upgrade.",
         "1.2": "Recommended. Supported by all modern browsers.",
         "1.3": "Strictest. Rejects clients without TLS 1.3 support."
     };
@@ -504,7 +533,7 @@
         buttons.eq(index).addClass("active").attr("aria-checked", "true").attr("tabindex", "0");
         $("#tlsVersionSlider .tlsVersionThumb").css("transform", `translateX(${index * 100}%)`);
         $("#tlsVersionSlider").addClass("ready");
-        $("#tlsVersionHint").text(tlsVersionHints[version] || "");
+        $("#tlsVersionHint").text(tlsVersionHints[version] || "").css({"color": (version == "1.0" || version == "1.1") ? "var(--zx-danger-text)" : "", "font-weight": (version == "1.0" || version == "1.1") ? "600" : ""});
     }
 
     function setTlsMinVersion(version, previousVersion){
@@ -731,14 +760,13 @@
     //Apply the three timeouts (promise, see handlePortChange)
     function saveProxyTimeoutSettings(){
         var done = $.Deferred();
-        const readHeaderTimeout = parseInt($("#readHeaderTimeoutInput").val(), 10);
-        const writeTimeout = parseInt($("#writeTimeoutInput").val(), 10);
-        const idleTimeout = parseInt($("#idleTimeoutInput").val(), 10);
-
-        if ([readHeaderTimeout, writeTimeout, idleTimeout].some(value => Number.isNaN(value) || value < 0)){
-            msgbox("Timeout values must be non-negative integers", false, 5000);
-            return done.reject("Timeout values must be non-negative integers").promise();
+        const raw = ["#readHeaderTimeoutInput", "#writeTimeoutInput", "#idleTimeoutInput"].map(sel => String($(sel).val()).trim());
+        //Whole seconds only: "1.5" must not be silently cut to 1, and a typo like 99999999999 is refused
+        if (raw.some(value => !/^\d+$/.test(value) || Number(value) > 604800)){
+            msgbox("Timeout values must be whole seconds between 0 and 604800", false, 5000);
+            return done.reject("Timeout values must be whole seconds between 0 and 604800").promise();
         }
+        const [readHeaderTimeout, writeTimeout, idleTimeout] = raw.map(value => parseInt(value, 10));
 
         $.cjax({
             url: "/api/proxy/timeouts",

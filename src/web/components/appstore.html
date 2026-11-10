@@ -1011,6 +1011,11 @@
     const grid = $("#asAppGrid");
     grid.empty();
 
+    //The featured banner is for browsing: while a search or a category filter is active it would show an app
+    //that has nothing to do with the result (or sit above "No apps match your filters")
+    const filtering = $("#asSearchInput").val().trim() != "" || asActiveCategory != "all";
+    $("#asFeaturedBanner").toggle(!filtering && asFeaturedApps.length > 0);
+
     if (apps.length == 0) {
       $("#asNoResult").show();
       $("#asLoadMoreWrapper").hide();

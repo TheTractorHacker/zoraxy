@@ -1,3 +1,4 @@
+<style>#clusterPage code.nobreak { white-space: nowrap; }</style>
 <div class="standardContainer" id="clusterPage">
     <div class="ui basic segment">
         <h2>Cluster / HA</h2>
@@ -11,11 +12,10 @@
         <span id="clFleetRole" style="display:none;"></span></div>
     <div class="ui divider" style="margin:1em 14px;"></div>
 
-    <div id="clMsg" class="ui small message" style="display:none; margin:1em 14px;"></div>
-
     <!-- Role -->
     <div class="ui basic segment">
         <h3>Role</h3>
+        <div id="clFleetLock" class="ui small warning message" style="display:none;"><i class="lock icon"></i> <span id="clFleetLockText"></span></div>
         <div class="ui form">
             <div class="inline fields">
                 <div class="field"><div class="ui radio checkbox"><input type="radio" name="clRole" value="standalone"><label>Standalone</label></div></div>
@@ -47,7 +47,7 @@
         <div id="clReadOnly" class="ui small warning message" style="display:none; margin-top:1em;">
             This node is a follower. Proxy rules, redirects, access rules, stream proxies, path rules, trusted proxies and ACME
             settings are managed by the primary and read-only here. Other changes made here are overwritten by the next primary change
-            (primary wins). Start with <code>-cluster_allow_local_edits</code> to lift the restriction.
+            (primary wins). Start with <code class="nobreak">-cluster_allow_local_edits</code> to lift the restriction.
         </div>
     </div>
 
@@ -100,7 +100,7 @@
         <p>For external load balancers and keepalived scripts. Served on the proxy listeners (HTTP and HTTPS) before host routing:
             <code id="clHealthUrl"></code><br>
             Returns 200 with <code>{status, version, uptimeSeconds, proxyRunning, activeEndpoints}</code>, or 503 if the proxy is not running.
-            It exposes no secrets. Use <code>-health_port</code> for a separate listener.</p>
+            It exposes no secrets. Use <code class="nobreak">-health_port</code> for a separate listener.</p>
         <div class="ui form">
             <div class="field">
                 <label>Allowed clients (comma or newline separated IPs/CIDRs, empty = everyone)</label>
@@ -122,11 +122,10 @@
         return (xhr && xhr.statusText) || "request failed";
     }
     function ts(u){ return u ? new Date(u * 1000).toLocaleString() : "-"; }
-    function msg(text, bad){
-        $("#clMsg").removeClass("positive negative").addClass(bad ? "negative" : "positive").text(text).show();
-        setTimeout(function(){ $("#clMsg").fadeOut(); }, 6000);
-    }
-    function fail(xhr){ msg(errText(xhr), true); }
+    //Results are toasts (visible wherever the page is scrolled). Backend messages start lower case: show them capitalised.
+    function msg(text, bad){ text = String(text); ZxUI.toast(text.charAt(0).toUpperCase() + text.slice(1), {type: bad ? "error" : "success"}); }
+    //HTTP failures are already reported by the global ajax error toast (script/uxkit.js) with the server's reason
+    function fail(xhr){}
     // API errors come back as 200 + {error}, see utils.SendErrorResponse style
     function post(url, data, ok){
         $.cjax({method: "POST", url: url, data: data, success: function(d){
@@ -145,7 +144,12 @@
         if (s.role == "hub" || s.role == "node") {
             $("#clFleetRole").show().text(" This node is a Fleet " + s.role + "; the roles below do not apply.");
         } else $("#clFleetRole").hide();
-        $("#clSaveBtn").prop("disabled", s.role == "hub" || s.role == "node");
+        let fleetManaged = s.role == "hub" || s.role == "node";
+        $("#clSaveBtn").prop("disabled", fleetManaged);
+        //Fleet owns the role: the radios and fields must not look editable
+        $("input[name=clRole], #clPrimaryUrl, #clPrimaryFp, #clInterval, #clSyncCerts").prop("disabled", fleetManaged);
+        $("#clFleetLock").toggle(fleetManaged);
+        $("#clFleetLockText").text(fleetManaged ? tf("This node is a Fleet {0}. Its role is managed on the Fleet page and cannot be changed here.", s.role) : "");
         if (!dirty) {
         $("input[name=clRole][value=" + s.role + "]").prop("checked", true);
         showRoleFields();
@@ -208,12 +212,15 @@
     });
 
     $("#clGenBtn").on("click", function(){
-        if (st && st.secretSet && !confirm("Replace the current cluster secret? Every other node must be given the new one.")) return;
-        post("./api/cluster/generateSecret", {}, function(d){
-            $("#clSecretOnce").text(d.secret);
-            $("#clShowOnce").show();
-            load();
-        });
+        function gen(){
+            post("./api/cluster/generateSecret", {}, function(d){
+                $("#clSecretOnce").text(d.secret);
+                $("#clShowOnce").show();
+                load();
+            });
+        }
+        if (!(st && st.secretSet)) { gen(); return; }
+        ZxUI.confirm({title: "Replace the current cluster secret?", message: "Every other node must be given the new one.", confirmLabel: "Generate new secret", danger: true}).then(function(ok){ if (ok) gen(); });
     });
     $("#clCopyBtn").on("click", function(){
         let t = $("#clSecretOnce").text();
@@ -235,7 +242,7 @@
     }
     $("#clSyncBtn").on("click", function(){ syncNow(false); });
     $("#clForceBtn").on("click", function(){
-        if (confirm("Accept the primary's snapshot even if its version is older than the one applied here?")) syncNow(true);
+        ZxUI.confirm({title: "Force sync?", message: "Accept the primary's snapshot even if its version is older than the one applied here.", confirmLabel: "Force sync", danger: true}).then(function(ok){ if (ok) syncNow(true); });
     });
 
     $("#clHealthSave").on("click", function(){
