@@ -85,11 +85,11 @@ func evalNode(n *Node, e *Env, b *budget, tr *trace, path string, depth int) boo
 			tr.entries[idx].Actual = actual
 		}
 	case NNot:
-		res = !evalNode(n.Kids[0], e, b, tr, path+".0", depth+1)
+		res = !evalNode(n.Kids[0], e, b, tr, childPath(tr, path, 0), depth+1)
 	case NAnd:
 		res = true
 		for i, k := range n.Kids {
-			if !evalNode(k, e, b, tr, fmt.Sprintf("%s.%d", path, i), depth+1) {
+			if !evalNode(k, e, b, tr, childPath(tr, path, i), depth+1) {
 				res = false
 				if tr == nil {
 					break
@@ -98,7 +98,7 @@ func evalNode(n *Node, e *Env, b *budget, tr *trace, path string, depth int) boo
 		}
 	case NOr:
 		for i, k := range n.Kids {
-			if evalNode(k, e, b, tr, fmt.Sprintf("%s.%d", path, i), depth+1) {
+			if evalNode(k, e, b, tr, childPath(tr, path, i), depth+1) {
 				res = true
 				if tr == nil {
 					break
@@ -249,4 +249,13 @@ func presentText(p bool) string {
 func (x *Expr) Eval(e *Env) bool {
 	b := &budget{left: RuleBudget}
 	return evalExpr(x.Root, e, b, nil) && !b.exceeded
+}
+
+// childPath builds a node path only when a trace is being recorded; the request
+// path (tr == nil) must not allocate a string per child.
+func childPath(tr *trace, path string, i int) string {
+	if tr == nil {
+		return ""
+	}
+	return fmt.Sprintf("%s.%d", path, i)
 }
