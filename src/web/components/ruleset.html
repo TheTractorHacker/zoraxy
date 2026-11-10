@@ -1,0 +1,195 @@
+<!--
+    Security rules: WHEN expression THEN action, built visually. Page logic: script/rulesbuilder.js (list, lists, import, tester)
+    and script/rulesedit.js (the editor); data: script/rulesdata.js; model: script/rulesmodel.js. API: /api/ruleset/*.
+    Built from the component kit (ui/zxui.css); the styles below only add layout, never colours of their own.
+    User guide: docs/ux/rules-builder.md
+-->
+<div class="standardContainer zx-root" id="rbPage">
+    <header class="zx-page-header">
+        <div class="zx-page-header__main">
+            <div class="zx-page-header__crumbs" data-zx-crumbs></div>
+            <h2 class="zx-page-header__title">Security rules</h2>
+            <p class="zx-page-header__sub">Decide what happens to a request: <b>when</b> it looks a certain way, <b>then</b> block it, redirect it, challenge it and more. New rules start in log-only mode, so you see what they would do before they act.</p>
+        </div>
+    </header>
+
+    <div id="rbMain">
+        <div class="zx-tabs" id="rbTabs" aria-label="Security rules sections">
+            <button type="button" class="zx-tab" data-zx-panel="rbPanelRules" aria-selected="true">Rules</button>
+            <button type="button" class="zx-tab" data-zx-panel="rbPanelTest">Request tester</button>
+            <button type="button" class="zx-tab" data-zx-panel="rbPanelLists">Lists</button>
+            <button type="button" class="zx-tab" data-zx-panel="rbPanelImport">Import</button>
+        </div>
+
+        <div id="rbPanelRules" class="zx-tabpanel">
+            <div class="rb-toolbar">
+                <div class="zx-field rb-scope">
+                    <div class="zx-field__label-row"><label class="zx-field__label" for="rbScope">Rules of</label></div>
+                    <select id="rbScope" class="zx-select"></select>
+                </div>
+                <div class="zx-field rb-search">
+                    <div class="zx-field__label-row"><label class="zx-field__label" for="rbSearch">Search</label></div>
+                    <input id="rbSearch" class="zx-input" type="search" autocomplete="off" placeholder="Name, description or expression">
+                </div>
+                <div class="rb-toolbtns">
+                    <button type="button" class="zx-btn zx-btn--primary" id="rbNew"><i class="plus icon" aria-hidden="true"></i>New rule</button>
+                    <button type="button" class="zx-btn zx-btn--secondary" id="rbToggleTpl" aria-expanded="false" aria-controls="rbTemplatesCard">Templates</button>
+                    <button type="button" class="zx-btn zx-btn--ghost zx-btn--icon" id="rbRefresh" aria-label="Refresh" title="Refresh"><i class="sync alternate icon" aria-hidden="true"></i></button>
+                </div>
+            </div>
+            <p class="zx-muted" id="rbOverview"></p>
+            <div class="zx-sr-only" id="rbLive" role="status" aria-live="polite"></div>
+            <div id="rbList" aria-live="off"></div>
+            <p class="zx-muted" id="rbCount"></p>
+
+            <section class="zx-card" id="rbTemplatesCard">
+                <div class="zx-card__head">
+                    <h3 class="zx-card__title">Quick-start templates</h3>
+                    <p class="zx-card__desc">Each one opens the builder with the conditions filled in, in log-only mode. Complete the empty parts, test it and create it.</p>
+                </div>
+                <div class="zx-card__body"><div class="rb-tpls" id="rbTemplates"></div></div>
+            </section>
+        </div>
+
+        <div id="rbPanelTest" class="zx-tabpanel" hidden>
+            <section class="zx-card">
+                <div class="zx-card__head">
+                    <h3 class="zx-card__title">Request tester</h3>
+                    <p class="zx-card__desc">Describe a request and see which rules would match it, in order, and what would happen. It only simulates: nothing is performed, counted or sent.</p>
+                </div>
+                <div class="zx-card__body zx-stack">
+                    <div class="zx-field">
+                        <div class="zx-field__label-row"><label class="zx-field__label" for="rbTestSite">Test against the rules of</label></div>
+                        <select id="rbTestSite" class="zx-select"></select>
+                        <p class="zx-help">The global rules run first, then the rules of this site.</p>
+                    </div>
+                    <div id="rbTesterMount"></div>
+                </div>
+            </section>
+        </div>
+
+        <div id="rbPanelLists" class="zx-tabpanel" hidden>
+            <div class="rb-toolbar">
+                <p class="zx-muted rb-grow">Named lists of addresses, countries or words. A rule uses a list by name (<span class="zx-mono">$office</span>), so you maintain it in one place. A list that a rule uses cannot be deleted.</p>
+                <button type="button" class="zx-btn zx-btn--primary" id="rbNewList"><i class="plus icon" aria-hidden="true"></i>New list</button>
+            </div>
+            <div id="rbListForm"></div>
+            <div id="rbListsBody"></div>
+        </div>
+
+        <div id="rbPanelImport" class="zx-tabpanel" hidden>
+            <section class="zx-card">
+                <div class="zx-card__head">
+                    <h3 class="zx-card__title">Import from your existing rules</h3>
+                    <p class="zx-card__desc">Looks at your path rules, header rules, bot rules and access lists and proposes the same thing as security rules. Nothing is created until you choose, and imported rules start in log-only mode.</p>
+                </div>
+                <div class="zx-card__body zx-stack">
+                    <div class="zx-row"><button type="button" class="zx-btn zx-btn--secondary" id="rbImportScan">Look for rules to import</button></div>
+                    <div id="rbImportBody" aria-live="polite"></div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <div id="rbEditor" hidden></div>
+</div>
+
+<style>
+    #rbPage .rb-toolbar { display: flex; flex-wrap: wrap; gap: var(--zx-space-3); align-items: flex-end; margin-bottom: var(--zx-space-3); }
+    #rbPage .rb-toolbar .zx-field { margin: 0; }
+    #rbPage .rb-search { flex: 1 1 14rem; max-width: 26rem; }
+    #rbPage .rb-scope { flex: 0 1 18rem; min-width: 0; }
+    #rbPage .rb-scope .zx-select { max-width: 100%; }
+    #rbPage .rb-grow { flex: 1 1 18rem; margin: 0; }
+    #rbPage .rb-toolbtns { display: flex; flex-wrap: wrap; gap: var(--zx-space-2); margin-left: auto; }
+    #rbPage .zx-tabpanel { min-width: 0; }
+    #rbPage .rb-name { overflow-wrap: anywhere; }
+    /* stacked (phone) layout: the rule cell is a full-width block, not a label/value row, so the name keeps its width */
+    @media (max-width: 480px) {
+        #rbPage td.rb-namecell { display: block; text-align: left; }
+        #rbPage td.rb-namecell::before { display: block; margin-bottom: 2px; }
+    }
+    #rbPage .rb-sum { font-size: var(--zx-fs-sm); margin-top: 2px; overflow-wrap: anywhere; max-width: 60ch; }
+    #rbPage tr.rb-off .rb-namecell { opacity: .65; }
+    #rbPage .rb-modebtn { cursor: pointer; font: inherit; font-size: var(--zx-fs-xs); font-weight: 600; }
+    #rbPage .rb-modebtn:focus-visible { outline: none; box-shadow: var(--zx-focus-ring); }
+    #rbPage .rb-spark { color: var(--zx-primary); display: block; }
+    #rbPage .rb-sparkbox { margin-top: 2px; }
+    #rbPage .rb-more { text-align: center; margin: var(--zx-space-3) 0; }
+    #rbPage .rb-tpls { display: grid; gap: var(--zx-space-3); grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
+    #rbPage .rb-tpl { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; padding: var(--zx-space-3) var(--zx-space-4); background: var(--zx-surface); color: var(--zx-text);
+        border: 1px solid var(--zx-border-strong); border-radius: var(--zx-radius-md); font: inherit; cursor: pointer; }
+    #rbPage .rb-tpl:hover { background: var(--zx-surface-2); }
+    #rbPage .rb-tpl:focus-visible { outline: none; box-shadow: var(--zx-focus-ring); }
+    #rbPage .rb-tpl i.icon { color: var(--zx-primary); margin: 0 0 2px; font-size: 1.3em; }
+
+    /* editor */
+    #rbPage .zx-page-header__main .zx-btn { margin-bottom: var(--zx-space-2); padding-left: 0; }
+    #rbPage #rbEditor > .zx-card, #rbPage #rbEditor > .rb-sumcard { margin-bottom: var(--zx-space-4); }
+    #rbPage .rb-sumcard { position: sticky; top: 0; z-index: 3; background: var(--zx-primary-soft); color: var(--zx-primary-soft-text); border: 1px solid var(--zx-border); border-radius: var(--zx-radius-md); padding: var(--zx-space-3) var(--zx-space-4); }
+    #rbPage .rb-sumlabel { font-size: var(--zx-fs-xs); text-transform: uppercase; letter-spacing: .04em; color: inherit; opacity: .85; }
+    #rbPage .rb-sentence { font-size: var(--zx-fs-lg); line-height: 1.45; overflow-wrap: anywhere; }
+    #rbPage .rb-group { border: 1px solid var(--zx-border-strong); border-radius: var(--zx-radius-md); padding: var(--zx-space-3); background: var(--zx-surface); min-width: 0; }
+    #rbPage .rb-group .rb-group { margin-left: var(--zx-space-3); background: var(--zx-surface-2); border-left: 4px solid var(--zx-primary); }
+    #rbPage .rb-ghead { display: flex; flex-wrap: wrap; gap: var(--zx-space-2); align-items: center; margin-bottom: var(--zx-space-2); }
+    #rbPage .rb-gkids { display: flex; flex-direction: column; gap: var(--zx-space-2); min-width: 0; }
+    #rbPage .rb-row { background: var(--zx-surface); border: 1px solid var(--zx-border); border-radius: var(--zx-radius-md); padding: var(--zx-space-2) var(--zx-space-3); min-width: 0; }
+    #rbPage .rb-line { display: flex; flex-wrap: wrap; gap: var(--zx-space-2); align-items: flex-start; }
+    #rbPage .rb-line > * { min-width: 0; }
+    #rbPage .rb-line .rb-field { flex: 0 1 15rem; }
+    #rbPage .rb-line .rb-op { flex: 0 1 12rem; }
+    #rbPage .rb-line .rb-key { flex: 0 1 11rem; }
+    #rbPage .rb-val { flex: 1 1 14rem; min-width: 0; display: flex; flex-direction: column; gap: var(--zx-space-1); }
+    #rbPage .rb-val .zx-input, #rbPage .rb-val .zx-select, #rbPage .rb-val .zx-textarea { width: 100%; }
+    #rbPage .rb-ctl { margin-left: auto; }
+    #rbPage .zx-error { display: block; }
+    #rbPage .zx-error[hidden], #rbPage .zx-error:empty { display: none; }
+    #rbPage .rb-swlabel { display: inline-flex; align-items: center; gap: var(--zx-space-2); cursor: pointer; font-weight: 600; }
+    #rbPage input.zx-switch { flex: 0 0 auto; width: 42px; height: 24px; min-width: 42px; }
+    @media (max-width: 748px) { #rbPage input.zx-switch { width: 48px; height: 28px; min-width: 48px; } }
+    #rbPage .rb-ghead .rb-gop { width: auto; max-width: 100%; }
+    #rbPage .rb-not { padding-top: 8px; }
+    #rbPage .rb-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+    #rbPage .rb-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; min-height: 28px; font: inherit; font-size: var(--zx-fs-sm); background: var(--zx-primary-soft); color: var(--zx-primary-soft-text); border: 1px solid var(--zx-border-strong); border-radius: var(--zx-radius-pill); cursor: pointer; }
+    #rbPage .rb-chip:hover { background: var(--zx-surface-3); }
+    #rbPage .rb-chip:focus-visible { outline: none; box-shadow: var(--zx-focus-ring); }
+    #rbPage .rb-chip i.icon { margin: 0; font-size: .85em; }
+    #rbPage .rb-picker, #rbPage .rb-listw, #rbPage .rb-regex { display: flex; flex-direction: column; gap: var(--zx-space-1); }
+    #rbPage .rb-checks { display: flex; flex-wrap: wrap; gap: var(--zx-space-2) var(--zx-space-4); }
+    #rbPage .rb-lines { min-height: 4.5em; }
+    #rbPage .rb-noval { padding-top: 8px; }
+    #rbPage .rb-rowerr { margin-top: 4px; }
+    #rbPage .rb-exprbox { border-top: 1px solid var(--zx-border); padding-top: var(--zx-space-3); }
+    #rbPage .rb-expr { margin: var(--zx-space-2) 0 0; padding: var(--zx-space-3); background: var(--zx-surface-2); border: 1px solid var(--zx-border); border-radius: var(--zx-radius-md); white-space: pre-wrap; overflow-wrap: anywhere; min-height: 2.6em; max-height: 14rem; overflow: auto; color: var(--zx-text); }
+    #rbPage .rb-expr.is-stale { color: var(--zx-text-muted); }
+    #rbPage .rb-status { font-size: var(--zx-fs-sm); color: var(--zx-text-muted); }
+    #rbPage .rb-status.is-ok { color: var(--zx-ok-text); }
+    #rbPage .rb-status.is-bad { color: var(--zx-danger-text); }
+    #rbPage .rb-caret { margin: 2px 0 0; padding: 4px 8px; background: var(--zx-surface-2); border-radius: var(--zx-radius-sm); font-family: var(--zx-font-mono); font-size: var(--zx-fs-sm); overflow-x: auto; color: var(--zx-danger-text); }
+    #rbPage .rb-text { width: 100%; }
+    #rbPage .rb-params { margin-top: var(--zx-space-2); }
+    #rbPage .rb-then .zx-select { max-width: 100%; }
+    #rbPage .rb-tform .rb-trow { display: grid; gap: var(--zx-space-3); grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); }
+    #rbPage .rb-verdict { margin: var(--zx-space-3) 0 var(--zx-space-2); }
+    #rbPage .rb-trace { border: 1px solid var(--zx-border); border-radius: var(--zx-radius-md); padding: var(--zx-space-2) var(--zx-space-3); margin: var(--zx-space-2) 0; }
+    #rbPage .rb-trace summary { cursor: pointer; }
+    #rbPage .rb-trlist { list-style: none; margin: var(--zx-space-2) 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+    #rbPage .rb-fields { margin-top: var(--zx-space-3); }
+    #rbPage .rb-prop { border: 1px solid var(--zx-border); border-radius: var(--zx-radius-md); padding: var(--zx-space-3); margin-bottom: var(--zx-space-3); background: var(--zx-surface); }
+    #rbPage .rb-prop.is-bad { background: var(--zx-surface-2); }
+    #rbPage .rb-prop .rb-expr { margin-top: var(--zx-space-2); max-height: 7rem; padding: var(--zx-space-2); }
+    #rbPage .rb-importgo { margin: var(--zx-space-3) 0; }
+    #rbPage .rb-items { font-family: var(--zx-font-mono); width: 100%; }
+    @media (max-width: 748px) {
+        #rbPage .rb-group .rb-group { margin-left: var(--zx-space-1); }
+        #rbPage .rb-line .rb-field, #rbPage .rb-line .rb-op, #rbPage .rb-line .rb-key, #rbPage .rb-val { flex: 1 1 100%; }
+        #rbPage .rb-ctl { margin-left: 0; }
+        #rbPage .rb-search, #rbPage .rb-scope { flex: 1 1 100%; max-width: none; }
+        #rbPage .rb-toolbtns { margin-left: 0; }
+    }
+</style>
+
+<script src="script/rulesdata.js"></script>
+<script src="script/rulesmodel.js"></script>
+<script src="script/rulesbuilder.js"></script>
+<script src="script/rulesedit.js"></script>

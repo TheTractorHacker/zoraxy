@@ -142,7 +142,10 @@ func rsDecode(w http.ResponseWriter, r *http.Request, v interface{}) bool {
 func rsFail(w http.ResponseWriter, err error) {
 	var ve ruleset.ValidationError
 	var nf ruleset.ErrNotFound
+	var cf ruleset.ErrConflict
 	switch {
+	case errors.As(err, &cf):
+		rsErr(w, http.StatusConflict, cf.Error())
 	case errors.As(err, &ve):
 		body := map[string]interface{}{"error": ve.Msg}
 		if ve.Err != nil {
@@ -369,7 +372,10 @@ func HandleRulesetReorder(w http.ResponseWriter, r *http.Request) {
 
 func HandleRulesetEnable(on bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req siteID
+		var req struct {
+			siteID
+			IfUpdated *int64 `json:"if_updated"`
+		}
 		if !rsDecode(w, r, &req) {
 			return
 		}
@@ -377,7 +383,7 @@ func HandleRulesetEnable(on bool) http.HandlerFunc {
 		if e == nil {
 			return
 		}
-		ri, err := e.SetEnabled(req.Site, req.ID, on)
+		ri, err := e.SetEnabledIf(req.Site, req.ID, on, req.IfUpdated)
 		if err != nil {
 			rsFail(w, err)
 			return

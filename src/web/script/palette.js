@@ -80,7 +80,13 @@
         { label: N_("GeoIP database update"), page: "utils", at: "#geodbUpdateNowBtn", kw: "country database maxmind" },
         { label: N_("Backup and restore"), page: "utils", text: "System Backup & Restore", kw: "export import config" },
         { label: N_("Cluster primary URL"), page: "cluster", at: "#clPrimaryUrl", kw: "follower ha high availability" },
-        { label: N_("Cluster secret"), page: "cluster", at: "#clGenBtn", kw: "ha shared key generate" }
+        { label: N_("Cluster secret"), page: "cluster", at: "#clGenBtn", kw: "ha shared key generate" },
+        // Security > Rules (RULES-BUILDER)
+        { label: N_("Create a security rule"), page: "ruleset", at: "#rbNew", kw: "rule builder when then block allow redirect log only condition" },
+        { label: N_("Rule templates"), page: "ruleset", at: "#rbToggleTpl", kw: "quick start block country admin ip user agent rate limit redirect header" },
+        { label: N_("Test a request against the rules"), page: "ruleset", pre: "#rbTabs .zx-tab[data-zx-panel='rbPanelTest']", at: "#rbTesterMount", kw: "request tester simulate dry run which rules match" },
+        { label: N_("Named lists (IP, country, text)"), page: "ruleset", pre: "#rbTabs .zx-tab[data-zx-panel='rbPanelLists']", at: "#rbNewList", kw: "list office networks cidr countries allowlist blocklist" },
+        { label: N_("Import existing rules as security rules"), page: "ruleset", pre: "#rbTabs .zx-tab[data-zx-panel='rbPanelImport']", at: "#rbImportScan", kw: "migrate convert path rules header rules bot rules access" }
     ];
 
     /* ----------------------------------------------------------------- actions */
@@ -94,6 +100,8 @@
           run: function () { goPage("httprp", function () { if (typeof window.openNewRuleDialog === "function") { window.openNewRuleDialog(); } }); } },
         { id: "waf", label: N_("Enable WAF"), kw: "firewall protect start safely detection", icon: "shield alternate",
           run: function () { goPage("waf", function () { reveal("#wafQuickStart, #wafModeCards"); }); } },
+        { id: "newsecrule", label: N_("New security rule"), kw: "add create rule builder when then block allow log only", icon: "filter",
+          run: function () { goPage("ruleset", function () { var b = document.getElementById("rbNew"); if (b) { b.click(); } }); } },
         { id: "update", label: N_("Check for updates"), kw: "upgrade new version release", icon: "download",
           run: function () { goPage("updater", function () { if (typeof window.upCheck === "function") { window.upCheck(true); } }); } },
         { id: "theme", label: N_("Toggle dark mode"), kw: "light theme night appearance", icon: "adjust",

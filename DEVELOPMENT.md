@@ -602,6 +602,10 @@ on top of the `/api/ruleset/` API later.
 Code: `src/mod/ruleset` (language, engine, storage), `src/mod/dynamicproxy/ruleset_hook.go` (the pipeline
 glue), `src/rulesetapi.go` (admin API), `src/rulesetmigrate.go` (read-only migration proposals).
 
+### Visual builder
+
+The admin UI page **Security > Rules** (`src/web/components/ruleset.html`, `script/rules*.js`) is the visual builder on top of this API: rule list per scope, condition / group editor with a plain-English summary, text view, tester, lists, import from `/api/ruleset/migrate`, quick-start templates, AI proposals as log-only rules. Guide, keyboard model and test coverage: `docs/ux/rules-builder.md`. `src/aiassist_rules.go` connects the AI assistant to this engine (`aiassist.ValidateProposal`, grammar hint). Browser test: `tools/ui-smoke/smoke.py --rules-only` (`rules_smoke.py`).
+
 ### Language reference
 
 ```

@@ -224,6 +224,47 @@
     });
     $(P + "#aiRuleText").on("input", function(){ $(P + "#aiRuleCount").text($(this).val().length); });
 
+    /* ---- rules builder wiring (RULES-BUILDER): a proposal becomes a rule only by an explicit click, always log-only ---- */
+    var AI_MARK = "[AI proposal] ";
+    // the action a proposal stands for; the parameters are fixed here and shown before anything is created (same as aiassist_rules.go)
+    function proposalAction(a){ return a == "rate_limit" ? {type: "rate_limit", rate: 10, burst: 20} : {type: a}; }
+    function proposalRule(p){
+        var desc = AI_MARK + (p.description || "") + (p.reason ? " Reason given: " + p.reason : "");
+        return {name: String(p.name).slice(0, 80), description: desc.slice(0, 500), enabled: true, dry_run: true, expression: p.expression, action: proposalAction(p.action)};
+    }
+    function actionText(a){
+        if (a.type == "rate_limit") return tf("limit each client to {0} requests per second (burst {1})", a.rate, a.burst);
+        if (a.type == "block") return t("block with status 403");
+        if (a.type == "challenge") return t("require a CAPTCHA challenge");
+        return t("only log the match");
+    }
+    function addAsRule(p){
+        var rule = proposalRule(p), sel = $('<select class="ui fluid dropdown" id="aiRuleScope" aria-label="Scope"></select>');
+        sel.append($("<option></option>").attr("value", "").text(t("All sites (global rules)")));
+        zrAI.api("./api/ruleset/meta", null, function(m){
+            sel.append($("<option></option>").attr("value", m.default_site_key).text(t("Default site")));
+            (m.sites || []).forEach(function(k){ sel.append($("<option></option>").attr("value", k).text(k)); });
+        });
+        var body = $("<div></div>");
+        body.append($("<p></p>").text(t("This creates the following rule through the normal rules API. It starts in log-only mode: it is checked and counted, but never blocks, redirects or changes anything. You can review it on the Rules page and enforce it later yourself.")));
+        body.append($("<div class='zrAIChange'></div>").append($("<b></b>").text(rule.name)));
+        body.append($("<pre class='zrAIPre'></pre>").text(p.expression));
+        body.append($("<p></p>").text(tf("If it were enforced it would: {0}.", actionText(rule.action))));
+        body.append($("<label for='aiRuleScope'></label>").text(t("Applies to")), sel);
+        body.append($("<p class='zrAIMuted'></p>").text(t("The rule was suggested by the AI and is checked by the rules engine, but it is not trusted: it is marked as an AI proposal in the list.")));
+        zrAI.modal({title: t("Add as log-only rule"), node: body, ok: t("Create log-only rule"), onOk: function(){
+            $.cjax({url: "./api/ruleset/rule/create", method: "POST", contentType: "application/json", dataType: "json",
+                data: JSON.stringify({site: sel.val() || "", rule: rule}),
+                success: function(d){ if (d && d.error) { zrAI.note(d.error, false); return; } zrAI.note(tf("Rule “{0}” created in log-only mode. Review it on the Rules page.", rule.name)); },
+                error: function(x){ var e = x.responseJSON && x.responseJSON.error; zrAI.note(e || t("Request failed"), false); }});
+        }});
+    }
+    function openInBuilder(p){
+        if (!window.RulesUI) { zrAI.note(t("The rules builder is not available"), false); return; }
+        var r = proposalRule(p);
+        RulesUI.openDraft({site: "", name: r.name, description: r.description, expression: r.expression, action: r.action, fromProposal: true});
+    }
+
     function proposals(list, appliable){
         var box = $(P + "#aiResult").empty();
         if (!list.length) { box.append($('<p class="aiHint"></p>').text(t("Nothing worth a rule was found."))); return; }
@@ -233,13 +274,17 @@
             c.append($("<div></div>").text(p.description));
             c.append($("<code></code>").text(p.expression));
             c.append($('<div class="aiHint"></div>').text(tf("Why: {0}", p.reason)));
+            if (appliable) {
+                c.append($('<button type="button" class="ui mini primary button aiAddRule">Add as log-only rule</button>').on("click", function(){ addAsRule(p); }));
+                c.append($('<button type="button" class="ui mini basic button aiOpenBuilder">Open in builder</button>').on("click", function(){ openInBuilder(p); }));
+            }
             c.append($('<button type="button" class="ui mini basic button"><i class="copy icon"></i> Copy expression</button>').on("click", function(){
                 if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(p.expression).then(function(){ zrAI.note(t("Copied")); }, function(){ zrAI.note(t("Copy is not available in this context"), false); });
                 else zrAI.note(t("Copy is not available in this context"), false);
             }));
             box.append(c);
         });
-        box.append($('<p class="aiHint"></p>').text(appliable ? "These are proposals only. Create them in the rule builder; they start in log-only mode." : "The rule builder is not connected yet: proposals are shown for you to read and copy. Nothing was created."));
+        box.append($('<p class="aiHint"></p>').text(appliable ? "These are proposals only. Nothing is created until you click \"Add as log-only rule\" (or build it yourself with \"Open in builder\"); rules created here start in log-only mode and never enforce on their own." : "The rule builder is not connected yet: proposals are shown for you to read and copy. Nothing was created."));
     }
 
     function run(btn, feature, params, call, render){
