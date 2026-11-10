@@ -304,6 +304,11 @@ func (h *ProxyHandler) hostWebSocketRequest(w http.ResponseWriter, r *http.Reque
 	if selectedUpstream.RequireTLS {
 		u, _ = url.Parse("wss://" + wsRedirectionEndpoint + requestURL)
 	}
+	release, ok := h.wsAcquire(w, r, target) //per client WebSocket connection cap (off unless set)
+	if !ok {
+		return
+	}
+	defer release()
 	h.Parent.logRequest(r, true, 101, "host-websocket", r.Host, selectedUpstream.OriginIpOrDomain, target)
 
 	if target.HeaderRewriteRules == nil {
@@ -356,6 +361,11 @@ func (h *ProxyHandler) vdirRequest(w http.ResponseWriter, r *http.Request, targe
 			target.parent.HeaderRewriteRules = GetDefaultHeaderRewriteRules()
 		}
 
+		release, ok := h.wsAcquire(w, r, target.parent)
+		if !ok {
+			return
+		}
+		defer release()
 		h.Parent.logRequest(r, true, 101, "vdir-websocket", r.Host, target.Domain, target.parent)
 		wspHandler := websocketproxy.NewProxy(u, websocketproxy.Options{
 			SkipTLSValidation:              target.SkipCertValidations,

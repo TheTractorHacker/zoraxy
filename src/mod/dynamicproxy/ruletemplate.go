@@ -25,20 +25,26 @@ type RuleTemplate struct {
 	Description string
 	Builtin     bool `json:",omitempty"` //Built in templates are read only
 
-	HSTSMaxAge       *int64                      `json:",omitempty"` //Seconds, 0 turns HSTS off
-	SecurityHeaders  bool                        `json:",omitempty"` //Add the standard browser hardening response headers
-	Headers          []rewrite.UserDefinedHeader `json:",omitempty"` //Extra headers, merged by direction + name
-	UptimeMonitor    *bool                       `json:",omitempty"`
-	UptimeMonitorURI *string                     `json:",omitempty"`
-	WAFSource        *string                     `json:",omitempty"` //inherit, off, detection_only, block, profile
-	WAFProfile       *string                     `json:",omitempty"`
-	RateLimit        *int64                      `json:",omitempty"` //Requests per second, 0 turns the limit off
-	RateLimitBurst   *int64                      `json:",omitempty"`
-	Tags             []string                    `json:",omitempty"` //Added to the rule's tags
-	BlockExploits    *bool                       `json:",omitempty"`
-	DisableWebSocket *bool                       `json:",omitempty"`
-	WebsocketTimeout *int64                      `json:",omitempty"`
-	ExposeRequestID  *bool                       `json:",omitempty"`
+	HSTSMaxAge            *int64                      `json:",omitempty"` //Seconds, 0 turns HSTS off
+	SecurityHeaders       bool                        `json:",omitempty"` //Add the standard browser hardening response headers
+	Headers               []rewrite.UserDefinedHeader `json:",omitempty"` //Extra headers, merged by direction + name
+	UptimeMonitor         *bool                       `json:",omitempty"`
+	UptimeMonitorURI      *string                     `json:",omitempty"`
+	WAFSource             *string                     `json:",omitempty"` //inherit, off, detection_only, block, profile
+	WAFProfile            *string                     `json:",omitempty"`
+	RateLimit             *int64                      `json:",omitempty"` //Requests per second, 0 turns the limit off
+	RateLimitBurst        *int64                      `json:",omitempty"`
+	RateUnit              *string                     `json:",omitempty"` //What RateLimit is per: second (default) or minute
+	RateKeyBy             *string                     `json:",omitempty"` //ip, authorization or header (needs RateLimit)
+	RateKeyHeader         *string                     `json:",omitempty"`
+	PathRateLimits        []PathRateLimit             `json:",omitempty"` //Path scoped limits, added to the rule's path rules (ratelimit_template.go)
+	WSMaxConnsPerIP       *int64                      `json:",omitempty"` //Concurrent WebSocket connections per client address
+	WSExemptFromRateLimit *bool                       `json:",omitempty"` //WebSocket handshakes are not counted in the request limit (needs WSMaxConnsPerIP)
+	Tags                  []string                    `json:",omitempty"` //Added to the rule's tags
+	BlockExploits         *bool                       `json:",omitempty"`
+	DisableWebSocket      *bool                       `json:",omitempty"`
+	WebsocketTimeout      *int64                      `json:",omitempty"`
+	ExposeRequestID       *bool                       `json:",omitempty"`
 
 	// App preset metadata (see ruletemplate_presets.go). Category "app" templates are shown as presets.
 	Category     string `json:",omitempty"`
@@ -91,7 +97,7 @@ func (t *RuleTemplate) Validate() error {
 	if t == nil || !templateNameRe.MatchString(t.Name) {
 		return errors.New("template name must be 1-64 characters: letters, digits, space, _ . -")
 	}
-	if len(t.Description) > 500 || len(t.Note) > 500 {
+	if len(t.Description) > 500 || len(t.Note) > 800 {
 		return errors.New("description too long")
 	}
 	if t.Category != "" && t.Category != "app" {
@@ -105,6 +111,9 @@ func (t *RuleTemplate) Validate() error {
 	}
 	if t.RateLimitBurst != nil && (*t.RateLimitBurst < 0 || *t.RateLimitBurst > 10000000) {
 		return errors.New("invalid rate limit burst")
+	}
+	if err := t.validateRateParts(); err != nil {
+		return err
 	}
 	if t.WebsocketTimeout != nil && (*t.WebsocketTimeout < 0 || *t.WebsocketTimeout > 604800) {
 		return errors.New("invalid WebSocket timeout")
@@ -215,19 +224,7 @@ func ApplyRuleTemplateIn(ep *ProxyEndpoint, t *RuleTemplate, inheritedWAF string
 			ep.WAFProfile = *t.WAFProfile
 		}
 	}
-	rateApplied := t.RateLimit != nil
-	if t.RateLimit != nil && t.NoDowngrade && (*t.RateLimit <= 0 || (ep.RequireRateLimit && ep.RateLimit > 0 && ep.RateLimit <= *t.RateLimit)) {
-		rateApplied = false //an equal or stricter limit is already there
-	}
-	if rateApplied {
-		add("Rate limit (req/s)", rateString(ep), fmt.Sprint(*t.RateLimit))
-		ep.RequireRateLimit = *t.RateLimit > 0
-		ep.RateLimit = *t.RateLimit
-	}
-	if t.RateLimitBurst != nil && (!t.NoDowngrade || rateApplied) {
-		add("Rate limit burst", fmt.Sprint(ep.RateLimitBurst), fmt.Sprint(*t.RateLimitBurst))
-		ep.RateLimitBurst = *t.RateLimitBurst
-	}
+	applyRateTemplate(ep, t, add)
 	if t.BlockExploits != nil && !(t.NoDowngrade && !*t.BlockExploits) {
 		add("Block common exploits", yesNo(ep.BlockCommonExploits), yesNo(*t.BlockExploits))
 		ep.BlockCommonExploits = *t.BlockExploits
@@ -297,6 +294,9 @@ func wafRank(ep *ProxyEndpoint, inheritedWAF string) int {
 func rateString(ep *ProxyEndpoint) string {
 	if !ep.RequireRateLimit {
 		return "off"
+	}
+	if ep.RateUnit == RateUnitMinute {
+		return FormatRate(ep.RateLimit, ep.RateUnit)
 	}
 	return fmt.Sprint(ep.RateLimit)
 }

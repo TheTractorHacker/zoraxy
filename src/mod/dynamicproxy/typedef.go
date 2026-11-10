@@ -170,6 +170,7 @@ type Router struct {
 
 	rateLimterStop   chan bool                                                     //Stop channel for rate limiter
 	pluginRouteHook  func(http.ResponseWriter, *http.Request, *ProxyEndpoint) bool //test seam, nil in production
+	wsConns          wsConnTable                                                   //Open WebSocket connections per (endpoint, client), ratelimit_policy.go
 	rateLimitCounter RequestCountPerIpTable                                        //Request counter for rate limter
 
 	captchaSessionStore *captcha.SessionStore //CAPTCHA session store for tracking verified sessions
@@ -361,8 +362,10 @@ type ProxyEndpoint struct {
 
 	// Rate Limiting
 	RequireRateLimit bool
-	RateLimit        int64 // Rate limit in requests per second (token refill rate)
-	RateLimitBurst   int64 // Max burst size in requests, 0 = same as RateLimit
+	RateLimit        int64             // Rate limit in requests per second (token refill rate)
+	RateLimitBurst   int64             // Max burst size in requests, 0 = same as RateLimit
+	RateUnit         string            `json:",omitempty"` // What RateLimit is per: "" = second (default, old configs), "minute" (ratelimit_policy.go)
+	RateOptions      *RateLimitOptions `json:",omitempty"` // Keying, trusted monitoring exemption, WebSocket accounting; nil = none
 
 	// CAPTCHA Gating
 	RequireCaptcha bool           // Enable CAPTCHA gating for this endpoint
@@ -419,6 +422,7 @@ type ProxyEndpoint struct {
 
 	clientCert     *clientCertRuntime    `json:"-"` //Compiled client certificate policy
 	clientCertErr  error                 `json:"-"` //Compile error, the endpoint then fails closed
+	rateOpts       *compiledRateOptions  `json:"-"` //Compiled rate limit options
 	pathRules      []*compiledPathRule   `json:"-"` //Compiled path rules
 	pathRulesErr   error                 `json:"-"`
 	peerSet        []netip.Prefix        `json:"-"` //Compiled allowed peer set

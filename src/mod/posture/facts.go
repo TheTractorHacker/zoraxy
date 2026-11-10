@@ -36,13 +36,15 @@ type AdminFacts struct {
 
 // RuleFacts: one proxy rule (host rule) or the default site
 type RuleFacts struct {
-	Name       string
-	Disabled   bool
-	IsDefault  bool   // the default site (root), excluded from per rule counts
-	WAFMode    string // off | detection_only | block
-	WAFOrigin  string // where the mode comes from: inherit (central policy), off, detection_only, block, profile, custom
-	RateLimit  bool
-	AuthMethod string // none | basic | forward | oauth2 | zorxauth
+	Name      string
+	Disabled  bool
+	IsDefault bool   // the default site (root), excluded from per rule counts
+	WAFMode   string // off | detection_only | block
+	WAFOrigin string // where the mode comes from: inherit (central policy), off, detection_only, block, profile, custom
+	RateLimit bool
+	// PathRateLimits are the path patterns of the rule's path scoped rate limits (rate_limit path rules)
+	PathRateLimits []string
+	AuthMethod     string // none | basic | forward | oauth2 | zorxauth
 	// AccessLimited is true when the access rule of this proxy rule has an IP/country allow list switched on
 	AccessLimited  bool
 	UptimeMonitor  bool

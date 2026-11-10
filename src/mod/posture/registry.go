@@ -83,7 +83,7 @@ func runSafely(c Check, f *Facts) (res Result) {
 	}()
 	res = c.Run(f)
 	switch res.Status {
-	case StatusOK, StatusWarn, StatusFail, StatusNA, StatusUnknown:
+	case StatusOK, StatusWarn, StatusFail, StatusNA, StatusUnknown, StatusInfo:
 	default:
 		res = Result{Status: StatusUnknown, Evidence: []string{"the check returned an invalid status"}}
 	}
