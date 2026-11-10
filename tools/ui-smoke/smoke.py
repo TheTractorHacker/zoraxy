@@ -2816,7 +2816,6 @@ def _network_system_body(pg, ctx, args, after, shot, dialogs, api, toast_text, w
 
     if dialogs:
         fail("dialog", f"native dialogs used on the Network / System pages: {dialogs}")
-=======
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "overview_smoke.py")).read(), "overview_smoke.py", "exec"))  # defines overview_ui
 
 
