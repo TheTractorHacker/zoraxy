@@ -135,7 +135,7 @@
                     case 'deny': return 'Deny';
                     case 'allow': return 'Allow';
                     case 'require_auth': return 'Require login';
-                    case 'rate_limit': return 'Rate limit ' + rule.RateLimit + '/s' + (rule.RateBurst ? ' burst ' + rule.RateBurst : '');
+                    case 'rate_limit': return 'Rate limit ' + rule.RateLimit + (rule.RateUnit === 'minute' ? '/min' : '/s') + (rule.RateBurst ? ' burst ' + rule.RateBurst : '') + (rule.KeyBy ? ' per ' + rule.KeyBy + (rule.KeyHeader ? ' ' + rule.KeyHeader : '') : '');
                 }
                 return rule.Action;
             }

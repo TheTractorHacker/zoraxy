@@ -181,6 +181,7 @@ uptime path, tags, exploit blocking, HSTS, request id header. Each has a plain-l
 | JSON API | rate limit 100 / burst 200, request id header, WAF detection only, WebSocket off |
 | Static website | hardening headers, exploit blocking, rate limit 50 / burst 100, WebSocket off |
 | Strict admin panel | rate limit 10 / burst 20, WAF **block**, exploit blocking, hardening headers |
+| Public website, Login page, Admin dashboard, Odoo ERP, REST API per key, Webhook receiver, File upload, WebSocket app limits, Monitoring-friendly | per-minute limits, path limits, keying and WebSocket caps from the rate limit guidance table; see [rate-limits.md](rate-limits.md) |
 
 What the presets deliberately do **not** do:
 

@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <!-- Notes: This should be opened in its original path. Self-contained editor for the extras of a rule's rate limit
+             (guidance, key, trusted monitoring, WebSockets, path limits). It saves by itself; the limit, its unit and burst
+             are fields of the site editor. Docs: docs/ux/rate-limits.md -->
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="zoraxy.csrf.Token" content="{{.csrfToken}}">
+        <link rel="stylesheet" href="../script/semantic/semantic.min.css">
+        <link rel="stylesheet" href="../ui/zxui.css">
+        <script src="../script/jquery-3.6.0.min.js"></script>
+        <script src="../script/semantic/semantic.min.js"></script>
+        <script src="../script/utils.js"></script>
+        <script src="../script/zxui.js"></script>
+        <style>
+            body { margin: 0; padding: var(--zx-space-3) var(--zx-space-4); background: var(--zx-bg); color: var(--zx-text); font-size: var(--zx-fs-md); }
+            .rl-stack > * + * { margin-top: var(--zx-space-4); }
+            .rl-row { display: flex; flex-wrap: wrap; gap: var(--zx-space-3); align-items: flex-end; }
+            .rl-row > .zx-field { flex: 1 1 12em; min-width: 0; }
+            .rl-row .zx-input, .rl-row .zx-select { width: 100%; }
+            .rl-actions { display: flex; flex-wrap: wrap; gap: var(--zx-space-2); align-items: center; margin-top: var(--zx-space-3); }
+            .rl-dirty { color: var(--zx-warn-text); font-size: var(--zx-fs-sm); }
+            textarea.zx-input { width: 100%; min-height: 5em; font-family: var(--zx-font-mono); }
+            .rl-secret { display: flex; gap: var(--zx-space-2); }
+            .rl-secret .zx-input { flex: 1 1 auto; min-width: 0; }
+            .zx-table-wrap { position: relative; overflow-x: auto; } /* position: the screen reader only header text must not escape the scroll box */
+            .rl-wrap { overflow-wrap: anywhere; }
+        </style>
+    </head>
+    <body class="zx-root">
+        <link rel="stylesheet" href="../darktheme.css">
+        <script src="../script/darktheme.js"></script>
+        <div class="rl-stack" id="rlRoot">
+
+            <div class="zx-callout" role="note"><div class="zx-callout__body">
+                <b>Rate limiting protects availability.</b> It keeps one client from flooding a site. It is <b>not account protection</b>:
+                a login still needs lockout or multi-factor sign-in in the application, and the numbers below are starting points to adjust from the 429 count in the statistics.
+                Everything on this page is off until you set it.
+            </div></div>
+
+            <section class="zx-card" id="rlGuide">
+                <div class="zx-card__head">
+                    <h3 class="zx-card__title">Starting points by service type</h3>
+                    <p class="zx-card__desc">Use <b>Apply preset</b> at the top of the site editor to start from one of these. You see a before and after comparison first, and a preset never lowers a stricter limit you already have.</p>
+                </div>
+                <div class="zx-card__body">
+                    <div class="zx-table-wrap zx-table-wrap--tall" tabindex="0" role="region" aria-label="Rate limit guidance by service type">
+                        <table class="zx-table zx-table--compact">
+                            <thead><tr><th>Service</th><th>Starting point</th><th>Recommendation</th></tr></thead>
+                            <tbody>
+                                <tr><td data-label="Service">Public website</td><td data-label="Starting point">120 req/min per IP</td><td data-label="Recommendation">Enable it.</td></tr>
+                                <tr><td data-label="Service">Login page</td><td data-label="Starting point">5 to 10 attempts/min per IP</td><td data-label="Recommendation">Strict, and add account-level protection in the application.</td></tr>
+                                <tr><td data-label="Service">Admin dashboard</td><td data-label="Starting point">60 req/min per IP</td><td data-label="Recommendation">Prefer a VPN or an IP restriction.</td></tr>
+                                <tr><td data-label="Service">Odoo ERP</td><td data-label="Starting point">300 req/min per IP</td><td data-label="Recommendation">Allow bursts, tune by endpoint.</td></tr>
+                                <tr><td data-label="Service">REST API</td><td data-label="Starting point">120 req/min per client</td><td data-label="Recommendation">Prefer limits per API key.</td></tr>
+                                <tr><td data-label="Service">Webhook receiver</td><td data-label="Starting point">120 req/min per source</td><td data-label="Recommendation">Authenticate webhooks, allow bursts.</td></tr>
+                                <tr><td data-label="Service">File upload</td><td data-label="Starting point">10 to 20 req/min per user</td><td data-label="Recommendation">Keep separate from the general limit.</td></tr>
+                                <tr><td data-label="Service">WebSocket app</td><td data-label="Starting point">connection limits</td><td data-label="Recommendation">Avoid normal HTTP request throttling.</td></tr>
+                                <tr><td data-label="Service">Monitoring endpoint</td><td data-label="Starting point">depends on the polling</td><td data-label="Recommendation">Exempt trusted monitoring where appropriate.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section class="zx-card" id="rlKeyCard">
+                <div class="zx-card__head">
+                    <h3 class="zx-card__title">Who counts as one client</h3>
+                    <p class="zx-card__desc">By default every client IP address has its own budget. An API can count per key instead.</p>
+                </div>
+                <div class="zx-card__body">
+                    <div class="rl-row">
+                        <div class="zx-field">
+                            <div class="zx-field__label-row"><label class="zx-field__label" for="rlKeyBy">Count requests per</label></div>
+                            <select id="rlKeyBy" class="zx-select">
+                                <option value="">Client IP address (default)</option>
+                                <option value="authorization">Authorization header (API key or token)</option>
+                                <option value="header">A named header</option>
+                            </select>
+                        </div>
+                        <div class="zx-field" id="rlKeyHeaderField" hidden>
+                            <div class="zx-field__label-row"><label class="zx-field__label" for="rlKeyHeader">Header name</label></div>
+                            <input id="rlKeyHeader" class="zx-input" type="text" autocomplete="off" placeholder="X-API-Key" maxlength="100">
+                        </div>
+                    </div>
+                    <p class="zx-help">The header value is hashed in memory and never written to a log or a file. A request without the header is counted per IP address. To stop clients from inventing keys, each IP address also has a looser guard of 10 times the limit.</p>
+                </div>
+            </section>
+
+            <section class="zx-card" id="rlExemptCard">
+                <div class="zx-card__head">
+                    <h3 class="zx-card__title">Trusted monitoring (never limited)</h3>
+                    <p class="zx-card__desc">Requests from these addresses, or carrying the secret header, skip every rate limit of this rule.</p>
+                </div>
+                <div class="zx-card__body">
+                    <div class="zx-field">
+                        <div class="zx-field__label-row"><label class="zx-field__label" for="rlExemptCidrs">IP addresses or CIDR ranges</label></div>
+                        <textarea id="rlExemptCidrs" class="zx-input" spellcheck="false" placeholder="192.0.2.10&#10;10.0.0.0/8"></textarea>
+                        <p class="zx-help">One per line or separated by commas. The address is the real client address, so a forwarded header from an untrusted peer does not count.</p>
+                    </div>
+                    <div class="rl-row">
+                        <div class="zx-field">
+                            <div class="zx-field__label-row"><label class="zx-field__label" for="rlExemptHeader">Optional header name</label></div>
+                            <input id="rlExemptHeader" class="zx-input" type="text" autocomplete="off" placeholder="X-Monitor-Token" maxlength="100">
+                        </div>
+                        <div class="zx-field">
+                            <div class="zx-field__label-row"><label class="zx-field__label" for="rlExemptValue">Secret value</label></div>
+                            <div class="rl-secret">
+                                <input id="rlExemptValue" class="zx-input" type="password" autocomplete="new-password" placeholder="at least 8 characters" maxlength="256">
+                                <button type="button" class="zx-btn zx-btn--secondary zx-btn--sm" id="rlShowSecret" aria-pressed="false">Show</button>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="zx-help">Anyone who knows the header and value skips the limit, so treat it like a password and only send it over HTTPS.</p>
+                </div>
+            </section>
+
+            <section class="zx-card" id="rlWsCard">
+                <div class="zx-card__head">
+                    <h3 class="zx-card__title">WebSockets</h3>
+                    <p class="zx-card__desc">A WebSocket starts with one HTTP request (the handshake). Today that request is counted like any other; the messages inside the open connection are never counted.</p>
+                </div>
+                <div class="zx-card__body">
+                    <label class="zx-toggle-row">
+                        <input type="checkbox" class="zx-switch" role="switch" id="rlWsExempt">
+                        <span class="zx-toggle-row__text"><span class="zx-toggle-row__title">Do not count WebSocket handshakes</span><span class="zx-toggle-row__desc">Handshakes skip the request limit and the path limits of this rule. They are limited by the connection cap below instead.</span></span>
+                    </label>
+                    <div class="zx-field" style="margin-top: var(--zx-space-3);">
+                        <div class="zx-field__label-row"><label class="zx-field__label" for="rlWsMax">Concurrent WebSocket connections per IP</label></div>
+                        <input id="rlWsMax" class="zx-input" type="number" min="0" max="100000" value="0" style="max-width: 12em;">
+                        <p class="zx-help">0 means no cap. Required when handshakes are not counted. Raise it when many users share one address.</p>
+                    </div>
+                </div>
+            </section>
+
+            <div class="rl-actions">
+                <button type="button" class="zx-btn zx-btn--primary" id="rlSaveOptions">Save these settings</button>
+                <span class="rl-dirty" id="rlOptDirty" hidden>Unsaved changes</span>
+                <span class="zx-error" id="rlOptError" role="alert" hidden></span>
+            </div>
+
+            <section class="zx-card" id="rlPathCard">
+                <div class="zx-card__head">
+                    <h3 class="zx-card__title">Limits for parts of the site</h3>
+                    <p class="zx-card__desc">A separate budget for a path such as a login page, an API or an upload. These are the rate limit rules of the path rules of this site.</p>
+                </div>
+                <div class="zx-card__body">
+                    <div class="zx-table-wrap zx-table-wrap--tall" tabindex="0" role="region" aria-label="Path limits">
+                        <table class="zx-table zx-table--compact">
+                            <thead><tr><th>Path</th><th>Methods</th><th>Limit</th><th>Counted per</th><th><span class="zx-sr-only">Remove</span></th></tr></thead>
+                            <tbody id="rlPathList"></tbody>
+                        </table>
+                    </div>
+                    <h4 style="margin: var(--zx-space-4) 0 var(--zx-space-2);">Add a path limit</h4>
+                    <div class="rl-row">
+                        <div class="zx-field">
+                            <div class="zx-field__label-row"><label class="zx-field__label" for="rlPPath">Path starts with</label></div>
+                            <input id="rlPPath" class="zx-input" type="text" autocomplete="off" placeholder="/login" maxlength="512">
+                        </div>
+                        <div class="zx-field">
+                            <div class="zx-field__label-row"><label class="zx-field__label" for="rlPMethods">Methods (optional)</label></div>
+                            <input id="rlPMethods" class="zx-input" type="text" autocomplete="off" placeholder="POST, PUT">
+                        </div>
+                    </div>
+                    <div class="rl-row">
+                        <div class="zx-field">
+                            <div class="zx-field__label-row"><label class="zx-field__label" for="rlPRate">Requests</label></div>
+                            <input id="rlPRate" class="zx-input" type="number" min="1" value="10">
+                        </div>
+                        <div class="zx-field">
+                            <div class="zx-field__label-row"><label class="zx-field__label" for="rlPUnit">Per</label></div>
+                            <select id="rlPUnit" class="zx-select">
+                                <option value="minute">minute</option>
+                                <option value="">second</option>
+                            </select>
+                        </div>
+                        <div class="zx-field">
+                            <div class="zx-field__label-row"><label class="zx-field__label" for="rlPBurst">Burst (0 = same as requests)</label></div>
+                            <input id="rlPBurst" class="zx-input" type="number" min="0" value="0">
+                        </div>
+                        <div class="zx-field">
+                            <div class="zx-field__label-row"><label class="zx-field__label" for="rlPKey">Counted per</label></div>
+                            <select id="rlPKey" class="zx-select">
+                                <option value="">Client IP address</option>
+                                <option value="authorization">Authorization header</option>
+                                <option value="header">A named header</option>
+                            </select>
+                        </div>
+                        <div class="zx-field" id="rlPKeyHeaderField" hidden>
+                            <div class="zx-field__label-row"><label class="zx-field__label" for="rlPKeyHeader">Header name</label></div>
+                            <input id="rlPKeyHeader" class="zx-input" type="text" autocomplete="off" placeholder="X-API-Key" maxlength="100">
+                        </div>
+                    </div>
+                    <div class="rl-actions">
+                        <button type="button" class="zx-btn zx-btn--secondary" id="rlPAdd">Add to the list</button>
+                        <button type="button" class="zx-btn zx-btn--primary" id="rlPSave">Save path limits</button>
+                        <span class="rl-dirty" id="rlPathDirty" hidden>Unsaved changes</span>
+                        <span class="zx-error" id="rlPathError" role="alert" hidden></span>
+                    </div>
+                    <p class="zx-help">Path rules run in order and the first match decides. New limits are added at the end, so they never override a deny or allow rule you already have. Other kinds of path rules are edited under Routing, Path rules.</p>
+                </div>
+            </section>
+        </div>
+
+        <script>
+            (function () {
+                "use strict";
+                var esc = ZxUI.esc;
+                var ep = {};
+                if (window.location.hash.length > 1) {
+                    try { ep = JSON.parse(decodeURIComponent(window.location.hash.substr(1))); } catch (e) { ep = {}; }
+                }
+                var S = { rules: [], loadedRules: [], added: [], removed: {}, optDirty: false, pathDirty: false };
+
+                function toast(msg, type) {
+                    var Z = (window.parent && window.parent.ZxUI) || ZxUI;
+                    try { Z.toast(msg, { type: type || "success" }); } catch (e) { /* the page still shows the message inline */ }
+                }
+                function splitList(s) { return s.split(/[\n,]/).map(function (x) { return x.trim(); }).filter(function (x) { return x.length > 0; }); }
+                function setErr(id, text) { var el = document.getElementById(id); el.textContent = text || ""; el.hidden = !text; }
+                function markOpt(d) { S.optDirty = d; document.getElementById("rlOptDirty").hidden = !d; }
+                function markPath(d) { S.pathDirty = d; document.getElementById("rlPathDirty").hidden = !d; }
+                function syncKeyFields() {
+                    document.getElementById("rlKeyHeaderField").hidden = document.getElementById("rlKeyBy").value !== "header";
+                    document.getElementById("rlPKeyHeaderField").hidden = document.getElementById("rlPKey").value !== "header";
+                }
+
+                /* ---------- options ---------- */
+                function fillOptions(o) {
+                    o = o || {};
+                    document.getElementById("rlKeyBy").value = o.KeyBy || "";
+                    document.getElementById("rlKeyHeader").value = o.KeyHeader || "";
+                    document.getElementById("rlExemptCidrs").value = (o.ExemptCIDRs || []).join("\n");
+                    document.getElementById("rlExemptHeader").value = o.ExemptHeader || "";
+                    document.getElementById("rlExemptValue").value = o.ExemptHeaderValue || "";
+                    document.getElementById("rlWsExempt").checked = !!o.WSExempt;
+                    document.getElementById("rlWsMax").value = o.WSMaxConnsPerIP || 0;
+                    syncKeyFields();
+                    markOpt(false);
+                }
+                function readOptions() {
+                    var o = {
+                        KeyBy: document.getElementById("rlKeyBy").value,
+                        KeyHeader: document.getElementById("rlKeyBy").value === "header" ? document.getElementById("rlKeyHeader").value.trim() : "",
+                        ExemptCIDRs: splitList(document.getElementById("rlExemptCidrs").value),
+                        ExemptHeader: document.getElementById("rlExemptHeader").value.trim(),
+                        ExemptHeaderValue: document.getElementById("rlExemptValue").value,
+                        WSExempt: document.getElementById("rlWsExempt").checked,
+                        WSMaxConnsPerIP: parseInt(document.getElementById("rlWsMax").value, 10) || 0
+                    };
+                    return o;
+                }
+                function checkOptions(o) {
+                    if (o.KeyBy === "header" && !o.KeyHeader) { return "Enter the name of the header to count requests by."; }
+                    if (!!o.ExemptHeader !== !!o.ExemptHeaderValue) { return "The exempt header needs both a name and a secret value."; }
+                    if (o.ExemptHeaderValue && o.ExemptHeaderValue.length < 8) { return "The secret value must be at least 8 characters."; }
+                    if (o.WSExempt && o.WSMaxConnsPerIP < 1) { return "Set a connection cap when WebSocket handshakes are not counted."; }
+                    return "";
+                }
+                function saveOptions() {
+                    var o = readOptions(), bad = checkOptions(o);
+                    setErr("rlOptError", bad);
+                    if (bad) { return; }
+                    var btn = document.getElementById("rlSaveOptions");
+                    ZxUI.setLoading(btn, true);
+                    $.cjax({
+                        url: "/api/proxy/networking/ratelimit", method: "POST",
+                        data: { ep: ep.ep, options: JSON.stringify(o) },
+                        success: function (resp) {
+                            ZxUI.setLoading(btn, false);
+                            if (resp && resp.error) { setErr("rlOptError", resp.error); return; }
+                            markOpt(false);
+                            toast("Rate limit settings saved");
+                        },
+                        error: function () { ZxUI.setLoading(btn, false); setErr("rlOptError", "The request failed."); }
+                    });
+                }
+
+                /* ---------- path limits ---------- */
+                function isLimit(r) { return r && r.Action === "rate_limit"; }
+                function describeRate(r) {
+                    var s = r.RateLimit + (r.RateUnit === "minute" ? " per minute" : " per second");
+                    if (r.RateBurst) { s += ", burst " + r.RateBurst; }
+                    return s;
+                }
+                function describeKey(r) {
+                    if (r.KeyBy === "authorization") { return "Authorization header"; }
+                    if (r.KeyBy === "header") { return "Header " + (r.KeyHeader || ""); }
+                    return "Client IP address";
+                }
+                function renderPaths() {
+                    var tb = document.getElementById("rlPathList");
+                    var list = S.rules.filter(isLimit);
+                    if (!list.length) {
+                        tb.innerHTML = '<tr><td colspan="5">No path limits. Only the limit of the whole site applies.</td></tr>';
+                        return;
+                    }
+                    tb.innerHTML = list.map(function (r, i) {
+                        var scope = (r.CIDRs && r.CIDRs.length) || (r.Countries && r.Countries.length) ? ' <span class="zx-muted">(only for some clients)</span>' : "";
+                        return "<tr>" +
+                            '<td data-label="Path" class="rl-wrap"><code>' + esc(r.Pattern) + "</code> <span class=\"zx-muted\">" + esc(r.MatchMode || "prefix") + "</span></td>" +
+                            '<td data-label="Methods">' + esc((r.Methods && r.Methods.length) ? r.Methods.join(", ") : "all") + "</td>" +
+                            '<td data-label="Limit">' + esc(describeRate(r)) + scope + "</td>" +
+                            '<td data-label="Counted per" class="rl-wrap">' + esc(describeKey(r)) + "</td>" +
+                            '<td class="zx-actions"><button type="button" class="zx-btn zx-btn--ghost zx-btn--sm rlDel" data-i="' + i + '" aria-label="' + esc("Remove the limit for " + r.Pattern) + '">Remove</button></td></tr>';
+                    }).join("");
+                }
+                function addPath() {
+                    var pattern = document.getElementById("rlPPath").value.trim();
+                    var rate = parseInt(document.getElementById("rlPRate").value, 10) || 0;
+                    var rule = {
+                        Name: "", MatchMode: "prefix", Pattern: pattern, CaseInsensitive: false,
+                        Methods: splitList(document.getElementById("rlPMethods").value).map(function (m) { return m.toUpperCase(); }),
+                        Action: "rate_limit", RateLimit: rate, RateBurst: parseInt(document.getElementById("rlPBurst").value, 10) || 0
+                    };
+                    var unit = document.getElementById("rlPUnit").value;
+                    if (unit) { rule.RateUnit = unit; }
+                    var key = document.getElementById("rlPKey").value;
+                    if (key) { rule.KeyBy = key; }
+                    if (key === "header") { rule.KeyHeader = document.getElementById("rlPKeyHeader").value.trim(); }
+                    var bad = "";
+                    if (!pattern || pattern.charAt(0) !== "/") { bad = "The path must start with /."; }
+                    else if (rate < 1) { bad = "Enter at least 1 request."; }
+                    else if (key === "header" && !rule.KeyHeader) { bad = "Enter the name of the header to count requests by."; }
+                    setErr("rlPathError", bad);
+                    if (bad) { return; }
+                    S.rules.push(rule);
+                    S.added.push(rule);
+                    document.getElementById("rlPPath").value = "";
+                    markPath(true);
+                    renderPaths();
+                }
+                function removePath(i) {
+                    var list = S.rules.filter(isLimit), r = list[i];
+                    if (!r) { return; }
+                    var at = S.added.indexOf(r);
+                    if (at >= 0) { S.added.splice(at, 1); } else { S.removed[JSON.stringify(r)] = true; }
+                    S.rules.splice(S.rules.indexOf(r), 1);
+                    markPath(true);
+                    renderPaths();
+                }
+                function savePaths() {
+                    var btn = document.getElementById("rlPSave");
+                    ZxUI.setLoading(btn, true);
+                    //Merge onto the latest stored list, so path rules edited elsewhere in the meantime are not lost
+                    $.get("/api/proxy/networking/get?ep=" + encodeURIComponent(ep.ep), function (data) {
+                        if (!data || data.error) { ZxUI.setLoading(btn, false); setErr("rlPathError", (data && data.error) || "Could not read the path rules."); return; }
+                        var latest = (data.PathRules || []).filter(function (r) { return !S.removed[JSON.stringify(r)]; });
+                        var merged = latest.concat(S.added);
+                        $.cjax({
+                            url: "/api/proxy/networking/pathrules", method: "POST",
+                            data: { ep: ep.ep, rules: JSON.stringify(merged) },
+                            success: function (resp) {
+                                ZxUI.setLoading(btn, false);
+                                if (resp && resp.error) { setErr("rlPathError", resp.error); return; }
+                                setErr("rlPathError", "");
+                                toast("Path limits saved");
+                                loadPaths();
+                            },
+                            error: function () { ZxUI.setLoading(btn, false); setErr("rlPathError", "The request failed."); }
+                        });
+                    });
+                }
+                function loadPaths() {
+                    $.get("/api/proxy/networking/get?ep=" + encodeURIComponent(ep.ep), function (data) {
+                        if (!data || data.error) { setErr("rlPathError", (data && data.error) || "Could not read the path rules."); return; }
+                        S.rules = (data.PathRules || []).slice();
+                        S.added = []; S.removed = {};
+                        markPath(false);
+                        renderPaths();
+                    });
+                }
+                function load() {
+                    if (!ep.ep) { return; }
+                    $.get("/api/proxy/networking/get?ep=" + encodeURIComponent(ep.ep), function (data) {
+                        if (!data || data.error) { setErr("rlOptError", (data && data.error) || "Could not read the settings."); return; }
+                        fillOptions(data.RateOptions);
+                        S.rules = (data.PathRules || []).slice();
+                        renderPaths();
+                    });
+                }
+
+                document.getElementById("rlKeyBy").addEventListener("change", function () { syncKeyFields(); markOpt(true); });
+                document.getElementById("rlPKey").addEventListener("change", syncKeyFields);
+                ["rlKeyHeader", "rlExemptCidrs", "rlExemptHeader", "rlExemptValue", "rlWsExempt", "rlWsMax"].forEach(function (id) {
+                    var el = document.getElementById(id);
+                    el.addEventListener("input", function () { markOpt(true); });
+                    el.addEventListener("change", function () { markOpt(true); });
+                });
+                document.getElementById("rlShowSecret").addEventListener("click", function () {
+                    var inp = document.getElementById("rlExemptValue"), show = inp.type === "password";
+                    inp.type = show ? "text" : "password";
+                    this.textContent = show ? "Hide" : "Show";
+                    this.setAttribute("aria-pressed", show ? "true" : "false");
+                });
+                document.getElementById("rlSaveOptions").addEventListener("click", saveOptions);
+                document.getElementById("rlPAdd").addEventListener("click", addPath);
+                document.getElementById("rlPSave").addEventListener("click", savePaths);
+                document.getElementById("rlPathList").addEventListener("click", function (e) {
+                    var b = e.target.closest ? e.target.closest(".rlDel") : null;
+                    if (b) { removePath(parseInt(b.getAttribute("data-i"), 10)); }
+                });
+                load();
+            })();
+        </script>
+    </body>
+</html>

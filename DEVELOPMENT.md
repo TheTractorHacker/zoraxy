@@ -110,6 +110,7 @@ tests that its verifier accepts the tool's output (`go test ./mod/updater`).
    exec but is killed if the unit is stopped/restarted by systemd; the in-process guard and crash-loop counter then
    still protect the next start. If the watchdog has to kill a hung process under systemd, the unit needs
    `Restart=always` to come back up.
+   Note: a rollback runs an older binary on the newer config. Fields it does not know are ignored; in particular `RateUnit` (per minute rate limits) is read as per second by builds that predate it, which is looser (see `docs/ux/rate-limits.md`).
 8. State files live in `conf/updater/`: `settings.json` (channel, backup-first), `installed.json`, `pending.json`,
    `history.json` (update history), `audit.log` (one line per action).
 
@@ -2543,3 +2544,23 @@ User-visible summary in `docs/ux/changes.md`; patterns in `docs/ux/components.md
 * AI audit: `aiassist_glue.go` passes `aiPosture` (reads the cached `posture.Engine.Overview(false)`, never previews or applies a fix) as `Deps.Posture`; `aiassist_posture_test.go` covers the mapping with a fake.
 * History hook: `ZxHistory.view` / `ZxHistory.savedToast`, `ZxUI.toast({action})`, `ZxUI.saveBar({historyObject})`.
 * Smoke: `tools/ui-smoke/consistency_smoke.py` (`--consistency-only`) covers Certificates sections, Related boxes, the Auto-ban save bar, the View history toast action, a hostile host name and the deep links of renamed pages.
+
+## Rate limit guidance and presets (`ux-ratelimit`)
+
+User-facing description, semantics and the verified / not verified list: `docs/ux/rate-limits.md`. Rate limiting protects availability; it is
+not account protection, and every number is a starting point. Everything is additive and off by default.
+
+* **Code.** `mod/dynamicproxy/ratelimit_policy.go` (unit, keying, exemption, WebSocket connection table, `RateLimitOptions`), `ratelimit_template.go`
+  (the rate parts of a template: unit, key, path limits, WebSocket options, no-downgrade merge), `ratelimit.go` (`AllowRate`: the same token bucket with a
+  fractional refill; `Allow` is unchanged and calls it), `pathrules.go` (`PathRule.RateUnit/KeyBy/KeyHeader`), `proxyRequestHandler.go` (`wsAcquire` around the
+  WebSocket proxy), API `POST /api/proxy/networking/ratelimit` (options) and `rateunit` on `/api/proxy/edit|add`.
+* **Why path rules and not the rules engine.** Per-site path limits already exist as the `rate_limit` path rule; extending it needs two optional fields. The
+  engine's `rate_limit` action would need a schema change in the parser, the AI assist, the migration and the tester for no gain, so it stays per second.
+* **Compatibility rules to keep.** `RateUnit` empty means per second. A client that sends `ratenum` without `rateunit` means per second. New JSON fields are
+  `omitempty`, so a config that does not use them is byte-identical after a save. `TestOldConfigsKeepMeaning` pins this.
+* **Adding a preset with a path limit.** Use `PathRateLimits` in `ruletemplate_presets.json`; the limits are appended at the end of the path rules (the first
+  matching rule decides, so appending can never shadow an existing deny). Add the texts to `tools/i18n/extra_keys.txt` and the name to `TestAppPresetsCatalogue`.
+* **UI.** The Rate limit card of the site editor has the unit select (a normal form field) and one iframe, `snippet/rateLimitEditor.html`, mounted by six lines in
+  `components/httprp.html` (like the alias editor); it saves by itself. `siteeditor.js` only got `|| s.RateOptions` in `nonDefaults`.
+* **Posture.** `abuse.ratelimit_login_paths` returns the new status `info` (not scored, no fix, heuristic by path name).
+* **Smoke.** `tools/ui-smoke/ratelimit_smoke.py` (`--ratelimit-only`).

@@ -310,3 +310,29 @@ func TestRulesetMigrationProposals(t *testing.T) {
 	}
 	_ = botrules.ActionBlock
 }
+
+// A per-minute or keyed path limit has no exact engine equivalent (the engine counts per second, per client
+// address): it must be skipped, never proposed as a looser per-second rule.
+func TestRulesetMigrationSkipsMinuteAndKeyedLimits(t *testing.T) {
+	e := withTestRulesEngine(t)
+	ep := &dynamicproxy.ProxyEndpoint{RootOrMatchingDomain: "rl.example.com", PathRules: []*dynamicproxy.PathRule{
+		{Name: "login", MatchMode: "prefix", Pattern: "/login", Action: dynamicproxy.PathRuleRateLimit, RateLimit: 5, RateUnit: "minute", RateBurst: 5},
+		{Name: "keyed", MatchMode: "prefix", Pattern: "/api", Action: dynamicproxy.PathRuleRateLimit, RateLimit: 5, KeyBy: "authorization"},
+		{Name: "plain", MatchMode: "prefix", Pattern: "/x", Action: dynamicproxy.PathRuleRateLimit, RateLimit: 5},
+	}}
+	dynamicProxyRouter.ProxyEndpoints.Store("rl.example.com", ep)
+	defer dynamicProxyRouter.ProxyEndpoints.Delete("rl.example.com")
+	res := buildRulesetMigration(e)
+	found := false
+	for _, p := range res.Proposals {
+		if strings.Contains(p.SourceRef, "(login)") || strings.Contains(p.SourceRef, "(keyed)") {
+			t.Errorf("%q must not be proposed: %+v", p.SourceRef, p)
+		}
+		if p.SourceRef == "rl.example.com, path rule 3 (plain)" && p.Rule.Action.Rate == 5 {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the plain per-second limit is still proposed")
+	}
+}

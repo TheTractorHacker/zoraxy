@@ -21,6 +21,7 @@
     #secOvPage .soTile small { opacity: .75; text-transform: uppercase; letter-spacing: .04em; font-size: .72em; }
     #secOvPage .soTile.t-ok { border-left-color: var(--ok); } #secOvPage .soTile.t-warn { border-left-color: var(--warn); }
     #secOvPage .soTile.t-fail { border-left-color: var(--bad); } #secOvPage .soTile.t-unknown { border-left-color: var(--unk); }
+    #secOvPage .soTile.t-info { border-left-color: var(--zx-info-solid); }
     #secOvPage .soTile.t-na { border-left-color: rgba(128,128,128,.4); }
     #secOvPage .soNote { border-left: 4px solid #2185d0; background: rgba(33,133,208,.1); padding: .55em .9em; border-radius: 0 4px 4px 0; margin: .7em 0 0; }
     #secOvPage .soNote.warn { border-left-color: var(--warn); background: rgba(242,113,28,.1); }
@@ -67,6 +68,8 @@
     #secOvPage .soDot.s-ok { background: var(--zx-ok-solid); } #secOvPage .soDot.s-warn { background: var(--zx-warn-solid); } #secOvPage .soDot.s-fail { background: var(--zx-danger-solid); }
     #secOvPage .soDot.s-unknown { background: var(--zx-text-muted); color: var(--zx-bg); }
     #secOvPage .soDot.s-not-applicable { color: transparent; }
+    #secOvPage .soDot.s-info { background: var(--zx-info-solid); }
+    #secOvPage .soPill.s-info { background: var(--zx-info-bg); color: var(--zx-info-text); }
     #secOvPage .soPill { display: inline-block; padding: 0 .55em; border-radius: 999px; font-size: .78em; font-weight: 700; line-height: 1.8; white-space: nowrap; background: rgba(128,128,128,.2); }
     #secOvPage .soPill.s-ok { background: #21ba4533; color: #1a7a32; } #secOvPage .soPill.s-warn { background: #f2711c33; color: #a14a0a; }
     #secOvPage .soPill.s-fail { background: #db282833; color: #b01e1e; } #secOvPage .soPill.s-unknown { background: rgba(138,143,152,.25); }
@@ -143,8 +146,8 @@
     var S = { data: null, openCats: null, openRows: {}, loading: false };
     function esc(t){ return $("<div>").text(t == null ? "" : String(t)).html(); }
     function plural(n, a, b){ return n === 1 ? a : b; }
-    var ICON = { ok: "&#10003;", warn: "!", fail: "&#10005;", unknown: "?", "not-applicable": "-" };
-    var STATUS_TXT = { ok: "OK", warn: "Warning", fail: "Failing", unknown: "Unknown", "not-applicable": "Not applicable" };
+    var ICON = { ok: "&#10003;", warn: "!", fail: "&#10005;", unknown: "?", info: "i", "not-applicable": "-" };
+    var STATUS_TXT = { ok: "OK", warn: "Warning", fail: "Failing", unknown: "Unknown", info: "Info", "not-applicable": "Not applicable" };
     var COLORS = { A: "#21ba45", B: "#6cc24a", C: "#f2b01e", D: "#f2711c", F: "#db2828", "?": "#8a8f98" };
 
     function dot(st){ return '<span class="soDot s-' + st + '" aria-hidden="true">' + ICON[st] + '</span>'; }
@@ -161,7 +164,7 @@
 
     function renderScore(d){
         var sc = d.score, c = sc.counts || {};
-        var tiles = [["ok", "Passed", c.ok], ["warn", "Warnings", c.warn], ["fail", "Failing", c.fail], ["unknown", "Unknown", c.unknown], ["na", "Not applicable", c["not-applicable"]]];
+        var tiles = [["ok", "Passed", c.ok], ["warn", "Warnings", c.warn], ["fail", "Failing", c.fail], ["unknown", "Unknown", c.unknown], ["info", "Info", c.info], ["na", "Not applicable", c["not-applicable"]]];
         var h = '<div class="soScore">' + ring(sc) + '<div class="soScoreSide"><h3>' + esc(sc.label) + (sc.grade && sc.grade !== "?" ? ' <span class="soMuted">(grade ' + esc(sc.grade) + ')</span>' : '') + '</h3>';
         h += '<div class="soMuted">' + (sc.lost > 0 ? esc(sc.lost) + ' points lost' : 'No points lost') + ' &middot; ' + sc.applicableWeight + ' points of weight are in scope</div>';
         h += '<div class="soTiles">' + tiles.map(function(t){ return '<div class="soTile t-' + t[0] + '"><b>' + (t[2] || 0) + '</b><small>' + t[1] + '</small></div>'; }).join("") + '</div>';
@@ -220,12 +223,12 @@
     function renderCats(d){
         var cats = {}, order = [];
         d.checks.forEach(function(c){ if (!cats[c.category]) { cats[c.category] = []; order.push(c.category); } cats[c.category].push(c); });
-        var rank = { fail: 0, warn: 1, unknown: 2, ok: 3, "not-applicable": 4 };
+        var rank = { fail: 0, warn: 1, unknown: 2, info: 3, ok: 4, "not-applicable": 5 };
         if (S.openCats === null) { S.openCats = {}; order.forEach(function(k){ S.openCats[k] = cats[k].some(function(c){ return c.status === "fail" || c.status === "warn" || c.status === "unknown"; }); }); }
         $("#soCats").html(order.map(function(name){
             var list = cats[name].slice().sort(function(a, b){ return rank[a.status] - rank[b.status] || b.weight - a.weight; });
             var n = {}; list.forEach(function(c){ n[c.status] = (n[c.status] || 0) + 1; });
-            var sum = ["fail", "warn", "unknown", "ok"].filter(function(s){ return n[s]; }).map(function(s){ return '<span class="soPill s-' + s + '">' + n[s] + ' ' + STATUS_TXT[s].toLowerCase() + '</span>'; }).join("");
+            var sum = ["fail", "warn", "unknown", "info", "ok"].filter(function(s){ return n[s]; }).map(function(s){ return '<span class="soPill s-' + s + '">' + n[s] + ' ' + STATUS_TXT[s].toLowerCase() + '</span>'; }).join("");
             var open = S.openCats[name];
             return '<div class="soCat' + (open ? " open" : "") + '" data-cat="' + esc(name) + '"><div class="soCatHead" tabindex="0" role="button" aria-expanded="' + !!open + '"><i class="angle right icon chev"></i><b>' + esc(name) + '</b><span class="sum">' + sum + '</span></div>' +
                 '<div class="soCatBody">' + list.map(function(c){

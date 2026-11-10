@@ -10,7 +10,7 @@ import (
 	Score
 
 	  applicable = sum of the weights of the checks whose status is ok, warn, fail or unknown
-	               (not-applicable checks are left out of everything)
+	               (not-applicable and info checks are left out of everything)
 	  cost       = ok 0, warn 0.5, unknown 0.5, fail 1  (of the check's weight)
 	  lost(c)    = cost(c) * weight(c) / applicable * 100        points
 	  raw        = 100 - sum(lost)
@@ -81,7 +81,7 @@ func Compute(results []CheckResult) Score {
 	for _, r := range results {
 		s.Counts[r.Status]++
 		switch r.Status {
-		case StatusNA:
+		case StatusNA, StatusInfo:
 		default:
 			applicable += r.Weight
 			if r.Status == StatusUnknown {
@@ -101,7 +101,7 @@ func Compute(results []CheckResult) Score {
 	for i := range results {
 		r := &results[i]
 		r.LostPoints = 0
-		if r.Status == StatusNA {
+		if r.Status == StatusNA || r.Status == StatusInfo {
 			continue
 		}
 		if c := cost(r.Status); c > 0 {

@@ -21,6 +21,7 @@ const (
 	StatusFail    Status = "fail"
 	StatusNA      Status = "not-applicable" // nothing to inspect (e.g. no proxy rules); not counted
 	StatusUnknown Status = "unknown"        // the state could not be determined; never treated as ok
+	StatusInfo    Status = "info"           // a hint with no pass / fail verdict and no fix; not counted in the score
 )
 
 // Category groups checks in the UI

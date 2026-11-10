@@ -592,6 +592,14 @@ func ReverseProxyHandleAddEndpoint(w http.ResponseWriter, r *http.Request) {
 		utils.SendErrorResponse(w, err.Error())
 		return
 	}
+	proxyRateUnit := dynamicproxy.RateUnitSecond
+	if raw, _ := utils.PostPara(r, "rateunit"); raw != "" {
+		proxyRateUnit, err = dynamicproxy.NormalizeRateUnit(raw)
+		if err != nil {
+			utils.SendErrorResponse(w, err.Error())
+			return
+		}
+	}
 
 	// CAPTCHA Gating
 	captchaConfig, err := parseCaptchaConfigFromRequest(r)
@@ -762,6 +770,7 @@ func ReverseProxyHandleAddEndpoint(w http.ResponseWriter, r *http.Request) {
 			RequireRateLimit: requireRateLimit,
 			RateLimit:        int64(proxyRateLimit),
 			RateLimitBurst:   proxyRateLimitBurst,
+			RateUnit:         proxyRateUnit,
 			// CAPTCHA Gating
 			RequireCaptcha: requireCaptcha,
 			CaptchaConfig:  captchaConfig,
@@ -1026,6 +1035,19 @@ func ReverseProxyHandleEditEndpoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	//The unit of the number. Without "rateunit" the number is per second, exactly as before units existed
+	//(an old client that sends only ratenum must not have it read as per minute); without either the stored unit stays.
+	proxyRateUnit := cur.RateUnit
+	if raw, _ := utils.PostPara(r, "rateunit"); formHas(r, "rateunit") {
+		proxyRateUnit, err = dynamicproxy.NormalizeRateUnit(raw)
+		if err != nil {
+			utils.SendErrorResponse(w, err.Error())
+			return
+		}
+	} else if formHas(r, "ratenum") {
+		proxyRateUnit = dynamicproxy.RateUnitSecond
+	}
+
 	// CAPTCHA Gating
 	captchaConfig, requireCaptcha := cur.CaptchaConfig, cur.RequireCaptcha
 	if formHas(r, "captcha") {
@@ -1112,6 +1134,7 @@ func ReverseProxyHandleEditEndpoint(w http.ResponseWriter, r *http.Request) {
 
 	newProxyEndpoint.RequireRateLimit = requireRateLimit
 	newProxyEndpoint.RateLimit = proxyRateLimit
+	newProxyEndpoint.RateUnit = proxyRateUnit
 	if proxyRateLimitBurst >= 0 {
 		newProxyEndpoint.RateLimitBurst = proxyRateLimitBurst
 	}

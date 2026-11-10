@@ -356,6 +356,46 @@ func builtinChecks() []Check {
 			},
 		},
 		{
+			// Informational only: it never changes the score and offers no fix. Rate limit numbers depend on the app.
+			ID: "abuse.ratelimit_login_paths", Title: "Login and admin paths have a rate limit", Category: CatAbuse, Weight: 1, Heuristic: true,
+			Why:         "Password guessing happens on login and admin pages. A per IP rate limit slows it down, but it is not account protection: the application still needs lockout or multi-factor sign-in, and admin interfaces are better behind a VPN or an IP restriction. Zoraxy cannot see which paths your applications use, so this is a hint, not a verdict.",
+			Remediation: Remediation{Label: "Open HTTP Proxy", Page: "httprp", Hint: "Pick the Login page, Admin dashboard or Odoo ERP preset for a site (Apply preset), or add a rate limit path rule for the login path. Nothing is changed automatically."},
+			Run: func(f *Facts) Result {
+				rules, early := hostRulesOrNA(f, "rate limiting of login paths")
+				if early != nil {
+					return *early
+				}
+				var bare, siteOnly []string
+				for _, r := range rules {
+					pathLimited := false
+					for _, p := range r.PathRateLimits {
+						if LooksLikeLoginPath(p) {
+							pathLimited = true
+						}
+					}
+					switch {
+					case pathLimited:
+					case r.RateLimit:
+						siteOnly = append(siteOnly, r.Name)
+					default:
+						bare = append(bare, r.Name)
+					}
+				}
+				if len(bare) == 0 {
+					ev := fmt.Sprintf("all %d proxy %s have a rate limit that covers login and admin paths", len(rules), plural(len(rules), "rule", "rules"))
+					if len(siteOnly) > 0 {
+						ev += fmt.Sprintf("; %d only through the site wide limit (a stricter limit on the login path is common): %s", len(siteOnly), listNames(siteOnly, 6))
+					}
+					return Result{Status: StatusOK, Evidence: []string{ev}}
+				}
+				ev := []string{fmt.Sprintf("no rate limit at all for %d of %d proxy %s: %s", len(bare), len(rules), plural(len(rules), "rule", "rules"), listNames(bare, 8))}
+				if len(siteOnly) > 0 {
+					ev = append(ev, fmt.Sprintf("%d more have only a site wide limit: %s", len(siteOnly), listNames(siteOnly, 6)))
+				}
+				return Result{Status: StatusInfo, Evidence: ev}
+			},
+		},
+		{
 			ID: "access.trusted_proxy_gating", Title: "Client address headers are only trusted from known proxies", Category: CatAbuse, Weight: 3,
 			Why:         "Behind a CDN, the real visitor address comes in a header. If Zoraxy trusts that header from anyone, an attacker can forge it to dodge blocklists and rate limits.",
 			Remediation: Remediation{Label: "Open Access Rules", Page: "access"},

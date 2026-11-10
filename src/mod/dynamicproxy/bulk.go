@@ -41,9 +41,10 @@ type BulkParams struct {
 	WAFSource  string `json:",omitempty"`
 	WAFProfile string `json:",omitempty"`
 
-	RateLimitEnabled bool  `json:",omitempty"`
-	RateLimit        int64 `json:",omitempty"`
-	RateLimitBurst   int64 `json:",omitempty"`
+	RateLimitEnabled bool   `json:",omitempty"`
+	RateLimit        int64  `json:",omitempty"`
+	RateLimitBurst   int64  `json:",omitempty"`
+	RateUnit         string `json:",omitempty"` //"" = second (default), "minute"
 
 	AuthMethod string `json:",omitempty"` //"none", "oauth2" or "zorxauth"; basic and forward auth need per rule data and are refused
 
@@ -113,6 +114,9 @@ func (r *BulkRequest) Validate() error {
 	case BulkSetRateLimit:
 		if p.RateLimitEnabled && p.RateLimit <= 0 {
 			return errors.New("rate limit must be above 0")
+		}
+		if _, err := NormalizeRateUnit(p.RateUnit); err != nil {
+			return err
 		}
 		if p.RateLimit < 0 || p.RateLimitBurst < 0 || p.RateLimit > 1000000 || p.RateLimitBurst > 10000000 {
 			return errors.New("invalid rate limit values")
@@ -271,15 +275,21 @@ func (router *Router) bulkOne(name string, req *BulkRequest, hooks BulkHooks) ([
 			}
 		}
 	case BulkSetRateLimit:
-		note("Rate limit (req/s)", rateString(updated), func() string {
-			if !p.RateLimitEnabled {
-				return "off"
-			}
-			return fmt.Sprint(p.RateLimit)
-		}())
+		unit, _ := NormalizeRateUnit(p.RateUnit)
+		if unit == RateUnitSecond && updated.RateUnit == RateUnitSecond {
+			note("Rate limit (req/s)", rateString(updated), func() string {
+				if !p.RateLimitEnabled {
+					return "off"
+				}
+				return fmt.Sprint(p.RateLimit)
+			}())
+		} else {
+			note("Rate limit", rateStringU(updated.RateLimit, updated.RateUnit, updated.RequireRateLimit), rateStringU(p.RateLimit, unit, p.RateLimitEnabled))
+		}
 		updated.RequireRateLimit = p.RateLimitEnabled
 		if p.RateLimitEnabled {
-			updated.RateLimit, updated.RateLimitBurst = p.RateLimit, p.RateLimitBurst
+			//a bulk limit without a unit means per second, exactly as before units existed
+			updated.RateLimit, updated.RateLimitBurst, updated.RateUnit = p.RateLimit, p.RateLimitBurst, unit
 		}
 	case BulkSetAuth:
 		if updated.AuthenticationProvider == nil {
