@@ -266,6 +266,13 @@ func (pe *ProxyEndpoint) initPathRules() {
 	}
 	out := make([]*compiledPathRule, 0, len(pe.PathRules))
 	for i, r := range pe.PathRules {
+		if r != nil && r.Action == PathRuleRateLimit && r.RateLimit > maxProxyRateLimitPerUnit {
+			// a rule stored by an earlier build (no upper bound then) keeps working as "practically unlimited"
+			// instead of turning the whole site into a 503; new input is still refused by the validation on save
+			cp := *r
+			cp.RateLimit = maxProxyRateLimitPerUnit
+			r = &cp
+		}
 		c, err := compilePathRule(r)
 		if err != nil {
 			pe.pathRulesErr = fmt.Errorf("path rule %d: %w", i+1, err)

@@ -92,6 +92,9 @@ func otherAISignature(uas []string) bool {
 		}
 	})
 	for _, ua := range uas {
+		if len(ua) > 512 { // the matcher caps the header the same way; padding must not multiply the regexp work
+			ua = ua[:512]
+		}
 		rest := strings.ToLower(ua)
 		for _, m := range aicrawler.MatchAll(ua) {
 			rest = strings.ReplaceAll(rest, m.UA, " ")

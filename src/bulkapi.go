@@ -59,7 +59,21 @@ func listRuleTemplates() []*dynamicproxy.RuleTemplate {
 		}
 	}
 	sort.Slice(custom, func(i, j int) bool { return custom[i].Name < custom[j].Name })
-	return append(out, custom...)
+	// a template the user saved under an earlier build wins over a built-in preset added later with the same name
+	kept := out[:0:0]
+	for _, b := range out {
+		shadowed := false
+		for _, c := range custom {
+			if strings.EqualFold(c.Name, b.Name) {
+				shadowed = true
+				break
+			}
+		}
+		if !shadowed {
+			kept = append(kept, b)
+		}
+	}
+	return append(kept, custom...)
 }
 
 func findRuleTemplate(name string) (*dynamicproxy.RuleTemplate, error) {
@@ -170,13 +184,15 @@ func HandleRuleTemplateDelete(w http.ResponseWriter, r *http.Request) {
 		utils.SendErrorResponse(w, "name not given")
 		return
 	}
-	for _, b := range dynamicproxy.BuiltinRuleTemplates() {
-		if strings.EqualFold(b.Name, name) {
-			utils.SendErrorResponse(w, "built in templates cannot be deleted")
-			return
+	sysdb.NewTable(ruleTemplateTable)
+	if !sysdb.KeyExists(ruleTemplateTable, name) {
+		for _, b := range dynamicproxy.BuiltinRuleTemplates() {
+			if strings.EqualFold(b.Name, name) {
+				utils.SendErrorResponse(w, "built in templates cannot be deleted")
+				return
+			}
 		}
 	}
-	sysdb.NewTable(ruleTemplateTable)
 	sysdb.Delete(ruleTemplateTable, name)
 	utils.SendOK(w)
 }

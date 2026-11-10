@@ -374,3 +374,19 @@ func TestAICrawlerRegistryTokensPassTheirOwnAllow(t *testing.T) {
 		}
 	}
 }
+
+// A huge padded User-Agent must not multiply the signature scan: the header is cut like the matcher cuts it.
+func TestOtherAISignatureIgnoresPadding(t *testing.T) {
+	pad := strings.Repeat("a", 2<<20)
+	if otherAISignature([]string{"GPTBot/1.0 " + pad}) {
+		t.Fatal("padding must not create a signature")
+	}
+	if !otherAISignature([]string{"GPTBot/1.0 anthropic-research/1.0"}) {
+		t.Fatal("a second AI signature must still be found")
+	}
+	start := time.Now()
+	otherAISignature([]string{"GPTBot/1.0 " + pad})
+	if time.Since(start) > 200*time.Millisecond {
+		t.Fatalf("scan of a padded header took %s", time.Since(start))
+	}
+}

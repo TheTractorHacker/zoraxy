@@ -305,3 +305,15 @@ func TestPathRule_OffByDefaultAndFailClosed(t *testing.T) {
 }
 
 var _ = http.StatusOK
+
+// A stored rate above the new bound (an earlier build had none) keeps the site up as "practically unlimited".
+func TestStoredHugePathRateDoesNotTakeSiteDown(t *testing.T) {
+	pe := &ProxyEndpoint{PathRules: []*PathRule{{Pattern: "/api/", Action: PathRuleRateLimit, RateLimit: 5000000, RateBurst: 10}}}
+	pe.initPathRules()
+	if pe.pathRulesErr != nil {
+		t.Fatalf("a stored rule must load: %v", pe.pathRulesErr)
+	}
+	if _, err := compilePathRule(&PathRule{Pattern: "/x", Action: PathRuleRateLimit, RateLimit: 5000000}); err == nil {
+		t.Fatal("new input above the bound must still be refused")
+	}
+}
