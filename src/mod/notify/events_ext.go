@@ -223,6 +223,11 @@ func Describe(ev Event) (title string, lines []string) {
 		if x("url") != "" {
 			lines = append(lines, x("url"))
 		}
+	case EventPosture:
+		title = subj
+		if x("detail") != "" {
+			lines = append(lines, x("detail"))
+		}
 	case EventDigest:
 		title = "Zoraxy digest: " + x("count") + " event(s)"
 		for _, l := range strings.Split(ev.Extra["lines"], "\n") {

@@ -78,6 +78,7 @@ type v1Backend struct {
 	ProxyList, ProxyAdd, ProxyEdit, ProxyDelete, ProxyToggle http.HandlerFunc
 	AccessList, RedirectList, CertList, StatsSummary, WAF    http.HandlerFunc
 	StatsBlocked                                             http.HandlerFunc
+	Posture                                                  http.HandlerFunc
 }
 
 func defaultV1Backend() v1Backend {
@@ -93,6 +94,7 @@ func defaultV1Backend() v1Backend {
 		StatsSummary: func(w http.ResponseWriter, r *http.Request) { statisticCollector.HandleTodayStatLoad(w, r) },
 		WAF:          func(w http.ResponseWriter, r *http.Request) { HandleWAFCoverage(w, r) },
 		StatsBlocked: func(w http.ResponseWriter, r *http.Request) { HandleBlockedOverview(w, r) },
+		Posture:      func(w http.ResponseWriter, r *http.Request) { HandlePostureGet(w, r) },
 	}
 }
 
@@ -248,6 +250,7 @@ func v1Routes(b v1Backend, guard func(http.Handler) http.Handler) []v1Route {
 		{"GET /api/v1/stats/summary", read("/api/stats/summary", b.StatsSummary, nil)},
 		{"GET /api/v1/stats/blocked", read("/api/blocked/overview", b.StatsBlocked, nil)},
 		{"GET /api/v1/waf/coverage", read("/api/waf/coverage", b.WAF, nil)},
+		{"GET /api/v1/security/posture", read("/api/security/posture", b.Posture, nil)},
 	}
 }
 

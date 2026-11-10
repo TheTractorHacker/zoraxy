@@ -1,0 +1,359 @@
+<style>
+    /* Security overview. Self-contained: every rule is scoped to #secOvPage / #secOvDlg so the page can be restyled later. */
+    #secOvPage { --ok: #21ba45; --warn: #f2711c; --bad: #db2828; --unk: #8a8f98; --line: rgba(128,128,128,.35); --soft: rgba(128,128,128,.07); }
+    #secOvPage .soMuted { opacity: .75; font-size: .92em; }
+    #secOvPage .soHero { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: .8em 1.5em; }
+    #secOvPage .soHero h2 { margin: 0 0 .35em; }
+    #secOvPage .soLead { max-width: 60em; margin: 0; opacity: .85; line-height: 1.55; }
+    #secOvPage .soBar { display: flex; flex-wrap: wrap; align-items: center; gap: .5em .9em; }
+    #secOvPage .soScore { display: grid; grid-template-columns: auto 1fr; gap: 1.2em 1.8em; align-items: center; border: 1px solid var(--line); border-radius: 10px; padding: 1.1em 1.3em; background: var(--soft); }
+    #secOvPage .soRing { position: relative; width: 150px; height: 150px; flex: 0 0 auto; }
+    #secOvPage .soRing svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+    #secOvPage .soRing .track { fill: none; stroke: rgba(128,128,128,.25); stroke-width: 12; }
+    #secOvPage .soRing .arc { fill: none; stroke-width: 12; stroke-linecap: round; transition: stroke-dasharray .5s; }
+    #secOvPage .soRing .num { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.05; }
+    #secOvPage .soRing .num b { font-size: 2.6em; font-weight: 700; }
+    #secOvPage .soRing .num span { font-size: .85em; opacity: .75; margin-top: .15em; }
+    #secOvPage .soScoreSide h3 { margin: 0 0 .15em; font-size: 1.5em; }
+    #secOvPage .soTiles { display: flex; flex-wrap: wrap; gap: .5em; margin: .8em 0 .2em; }
+    #secOvPage .soTile { border: 1px solid var(--line); border-left-width: 4px; border-radius: 6px; padding: .3em .8em; min-width: 5.5em; background: rgba(128,128,128,.05); }
+    #secOvPage .soTile b { display: block; font-size: 1.35em; line-height: 1.2; }
+    #secOvPage .soTile small { opacity: .75; text-transform: uppercase; letter-spacing: .04em; font-size: .72em; }
+    #secOvPage .soTile.t-ok { border-left-color: var(--ok); } #secOvPage .soTile.t-warn { border-left-color: var(--warn); }
+    #secOvPage .soTile.t-fail { border-left-color: var(--bad); } #secOvPage .soTile.t-unknown { border-left-color: var(--unk); }
+    #secOvPage .soTile.t-na { border-left-color: rgba(128,128,128,.4); }
+    #secOvPage .soNote { border-left: 4px solid #2185d0; background: rgba(33,133,208,.1); padding: .55em .9em; border-radius: 0 4px 4px 0; margin: .7em 0 0; }
+    #secOvPage .soNote.warn { border-left-color: var(--warn); background: rgba(242,113,28,.1); }
+    #secOvPage details.soWhy { margin-top: .8em; }
+    #secOvPage details.soWhy summary { cursor: pointer; font-weight: 600; }
+    #secOvPage .soLoss { display: grid; grid-template-columns: 1fr auto; gap: .15em 1em; margin: .5em 0; font-size: .95em; }
+    #secOvPage .soLoss span:nth-child(even) { text-align: right; font-variant-numeric: tabular-nums; }
+    #secOvPage .soFormula { opacity: .8; font-size: .92em; line-height: 1.5; margin: .4em 0 0; }
+    #secOvPage .soRec { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .7em 1.5em; border: 1px solid var(--line); border-radius: 10px; padding: .9em 1.2em; margin: 1em 0; }
+    #secOvPage .soRec .txt { flex: 1 1 26em; min-width: 0; }
+    #secOvPage .soRec .txt p { margin: .2em 0 0; opacity: .85; }
+    #secOvPage h3.soH { margin: 1.4em 0 .5em; }
+    #secOvPage .soFirst .soItem { display: flex; flex-wrap: wrap; align-items: center; gap: .4em 1em; border: 1px solid var(--line); border-left-width: 5px; border-radius: 6px; padding: .6em .9em; margin: 0 0 .5em; background: rgba(128,128,128,.04); }
+    #secOvPage .soItem.s-fail { border-left-color: var(--bad); } #secOvPage .soItem.s-warn { border-left-color: var(--warn); } #secOvPage .soItem.s-unknown { border-left-color: var(--unk); }
+    #secOvPage .soItem .txt { flex: 1 1 22em; min-width: 0; overflow-wrap: anywhere; }
+    #secOvPage .soItem .txt small { display: block; opacity: .8; margin-top: .15em; }
+    #secOvPage .soItem .acts { display: flex; flex-wrap: wrap; gap: .4em; }
+    #secOvPage .soItem .acts .button { margin: 0; }
+    #secOvPage .soCat { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 .8em; overflow: hidden; }
+    #secOvPage .soCatHead { display: flex; flex-wrap: wrap; align-items: center; gap: .3em .9em; padding: .65em 1em; cursor: pointer; background: var(--soft); user-select: none; }
+    #secOvPage .soCatHead:focus-visible { outline: 2px solid #2185d0; outline-offset: -2px; }
+    #secOvPage .soCatHead b { font-size: 1.05em; }
+    #secOvPage .soCatHead .sum { margin-left: auto; display: flex; gap: .35em; flex-wrap: wrap; }
+    #secOvPage .soCatBody { display: none; }
+    #secOvPage .soCat.open .soCatBody { display: block; }
+    #secOvPage .soCat .chev { transition: transform .15s; } #secOvPage .soCat.open .chev { transform: rotate(90deg); }
+    #secOvPage .soRow { border-top: 1px solid rgba(128,128,128,.22); }
+    #secOvPage .soRowHead { display: flex; flex-wrap: wrap; align-items: center; gap: .25em .8em; padding: .55em 1em; cursor: pointer; }
+    #secOvPage .soRowHead:hover { background: rgba(128,128,128,.07); }
+    #secOvPage .soRowHead:focus-visible { outline: 2px solid #2185d0; outline-offset: -2px; }
+    #secOvPage .soRowHead .ttl { flex: 1 1 16em; min-width: 0; overflow-wrap: anywhere; }
+    #secOvPage .soRowBody { display: none; padding: .2em 1em .9em 2.6em; }
+    #secOvPage .soRow.open .soRowBody { display: block; }
+    #secOvPage .soRowBody ul { margin: .2em 0 .6em 1.1em; padding: 0; }
+    #secOvPage .soRowBody li { margin: .15em 0; overflow-wrap: anywhere; }
+    #secOvPage .soRowBody .acts { display: flex; flex-wrap: wrap; gap: .4em; margin-top: .5em; }
+    #secOvPage .soRowBody .acts .button { margin: 0; }
+    #secOvPage .soRowBody .lbl { text-transform: uppercase; letter-spacing: .04em; font-size: .74em; opacity: .7; margin-top: .6em; }
+    #secOvPage .soDot { flex: 0 0 auto; width: 1.15em; height: 1.15em; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: .75em; font-weight: 700; }
+    #secOvPage .soDot.s-ok { background: var(--ok); } #secOvPage .soDot.s-warn { background: var(--warn); } #secOvPage .soDot.s-fail { background: var(--bad); }
+    #secOvPage .soDot.s-unknown { background: var(--unk); } #secOvPage .soDot.s-not-applicable { background: transparent; border: 2px solid rgba(128,128,128,.5); color: transparent; }
+    #secOvPage .soPill { display: inline-block; padding: 0 .55em; border-radius: 999px; font-size: .78em; font-weight: 700; line-height: 1.8; white-space: nowrap; background: rgba(128,128,128,.2); }
+    #secOvPage .soPill.s-ok { background: #21ba4533; color: #1a7a32; } #secOvPage .soPill.s-warn { background: #f2711c33; color: #a14a0a; }
+    #secOvPage .soPill.s-fail { background: #db282833; color: #b01e1e; } #secOvPage .soPill.s-unknown { background: rgba(138,143,152,.25); }
+    body.darkTheme #secOvPage .soPill.s-ok { color: #6fe08a; } body.darkTheme #secOvPage .soPill.s-warn { color: #ffa86b; } body.darkTheme #secOvPage .soPill.s-fail { color: #ff8a8a; }
+    #secOvPage .soSev { font-size: .74em; text-transform: uppercase; letter-spacing: .04em; opacity: .7; }
+    #secOvPage .soHeur { font-size: .74em; border: 1px dashed var(--line); border-radius: 4px; padding: 0 .4em; opacity: .85; }
+    #secOvPage .soLost { font-variant-numeric: tabular-nums; font-size: .88em; opacity: .85; min-width: 4em; text-align: right; }
+    #secOvPage .soEmpty { text-align: center; padding: 2em 1em; opacity: .85; }
+    #secOvPage .soSkel { height: 150px; border-radius: 10px; background: linear-gradient(90deg, rgba(128,128,128,.1), rgba(128,128,128,.2), rgba(128,128,128,.1)); background-size: 200% 100%; animation: soSk 1.2s infinite; }
+    @keyframes soSk { from { background-position: 0 0; } to { background-position: -200% 0; } }
+    @media (max-width: 560px) {
+        #secOvPage .soScore { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+        #secOvPage .soTiles { justify-content: center; }
+        #secOvPage .soRowBody { padding-left: 1em; }
+        #secOvPage .soLoss { grid-template-columns: 1fr auto; text-align: left; }
+    }
+    /* preview dialog */
+    #secOvDlgBg { position: fixed; inset: 0; z-index: 1100; background: rgba(0,0,0,.55); display: none; align-items: center; justify-content: center; padding: 1em; }
+    #secOvDlg { width: min(720px, 100%); max-height: calc(100vh - 2em); overflow-y: auto; padding: 1.2em 1.4em; border-radius: 8px; background: #fff; color: #222; box-shadow: 0 8px 32px rgba(0,0,0,.4); }
+    body.darkTheme #secOvDlg { background: #1b1c1d; color: #ddd; }
+    #secOvDlg h3 { margin-top: 0; }
+    #secOvDlg .sdAct { border: 1px solid rgba(128,128,128,.4); border-radius: 6px; padding: .6em .9em; margin: 0 0 .7em; }
+    #secOvDlg .sdAct.refused { opacity: .75; }
+    #secOvDlg .sdAct label { font-weight: 700; cursor: pointer; display: flex; gap: .55em; align-items: baseline; }
+    #secOvDlg .sdAct label input { flex: 0 0 auto; }
+    #secOvDlg .sdAct p { margin: .3em 0 .3em 1.7em; opacity: .85; font-size: .94em; }
+    #secOvDlg table { width: 100%; border-collapse: collapse; margin: .3em 0 .2em 1.7em; width: calc(100% - 1.7em); font-size: .92em; }
+    #secOvDlg th, #secOvDlg td { text-align: left; padding: .2em .5em; border-bottom: 1px solid rgba(128,128,128,.25); vertical-align: top; overflow-wrap: anywhere; }
+    #secOvDlg .sdBadge { display: inline-block; padding: 0 .55em; border-radius: 999px; font-size: .78em; font-weight: 700; line-height: 1.8; margin-left: .3em; white-space: nowrap; }
+    #secOvDlg .sdBadge.safe { background: #21ba4533; color: #1a7a32; } #secOvDlg .sdBadge.risk { background: #db282833; color: #b01e1e; } #secOvDlg .sdBadge.sticky { background: #f2711c33; color: #a14a0a; }
+    body.darkTheme #secOvDlg .sdBadge.safe { color: #6fe08a; } body.darkTheme #secOvDlg .sdBadge.risk { color: #ff8a8a; } body.darkTheme #secOvDlg .sdBadge.sticky { color: #ffa86b; }
+    #secOvDlg .sdWarn { border-left: 4px solid #db2828; background: rgba(219,40,40,.1); padding: .4em .7em; margin: .4em 0 .3em 1.7em; border-radius: 3px; font-size: .92em; }
+    #secOvDlg .sdNote { border-left: 4px solid #2185d0; background: rgba(33,133,208,.1); padding: .4em .7em; margin: .4em 0 .3em 1.7em; border-radius: 3px; font-size: .92em; }
+    #secOvDlg .sdBtns { display: flex; flex-wrap: wrap; gap: .5em; justify-content: flex-end; margin-top: 1em; }
+    #secOvDlg .sdRes { padding: .35em 0; border-bottom: 1px solid rgba(128,128,128,.25); }
+</style>
+
+<div class="standardContainer" id="secOvPage">
+    <div class="ui basic segment">
+        <div class="soHero">
+            <div style="flex:1 1 30em; min-width:0">
+                <h2><i class="shield alternate icon"></i> Security overview</h2>
+                <p class="soLead">How well this Zoraxy is protected, based on what it is configured to do. Each finding shows the facts it looked at, why it matters and where to fix it.
+                    Nothing here changes by itself: every fix is previewed first and only runs when you confirm it.</p>
+            </div>
+            <div class="soBar">
+                <span class="soMuted" id="soChecked" aria-live="polite"></span>
+                <button class="ui small basic button" id="soRecheck"><i class="sync alternate icon"></i> Re-check</button>
+            </div>
+        </div>
+    </div>
+
+    <div style="margin: 0 1em">
+        <div id="soScoreBox"><div class="soSkel"></div></div>
+        <div id="soBanner"></div>
+        <div id="soRec"></div>
+        <div id="soFirstBox"></div>
+        <h3 class="soH">All checks</h3>
+        <div id="soCats"></div>
+        <div class="ui segment" style="margin-top:1.2em">
+            <div class="ui checkbox" id="soNotifyBox">
+                <input type="checkbox" id="soNotify"><label for="soNotify">Tell me through the notification centre when the score drops by 10 points or a check starts failing (at most one message per 6 hours)</label>
+            </div>
+            <div class="soMuted" style="margin-top:.4em">Needs a channel in <a href="snippet/notifications.html" target="_blank">Notifications</a>. Off by default.</div>
+        </div>
+        <p class="soMuted" id="soDisclaimer" style="margin:1em 0 2em"></p>
+    </div>
+
+    <div id="secOvDlgBg" role="dialog" aria-modal="true" aria-labelledby="sdTitle"><div id="secOvDlg"></div></div>
+</div>
+
+<script>
+(function(){
+    var S = { data: null, openCats: null, openRows: {}, loading: false };
+    function esc(t){ return $("<div>").text(t == null ? "" : String(t)).html(); }
+    function plural(n, a, b){ return n === 1 ? a : b; }
+    var ICON = { ok: "&#10003;", warn: "!", fail: "&#10005;", unknown: "?", "not-applicable": "-" };
+    var STATUS_TXT = { ok: "OK", warn: "Warning", fail: "Failing", unknown: "Unknown", "not-applicable": "Not applicable" };
+    var COLORS = { A: "#21ba45", B: "#6cc24a", C: "#f2b01e", D: "#f2711c", F: "#db2828", "?": "#8a8f98" };
+
+    function dot(st){ return '<span class="soDot s-' + st + '" aria-hidden="true">' + ICON[st] + '</span>'; }
+    function pill(st){ return '<span class="soPill s-' + st + '">' + STATUS_TXT[st] + '</span>'; }
+    function pts(n){ return n ? "−" + (Math.round(n * 10) / 10) : ""; }
+
+    function ring(sc){
+        var C = 2 * Math.PI * 54, v = Math.max(0, Math.min(100, sc.value)), col = COLORS[sc.grade] || COLORS["?"];
+        return '<div class="soRing" role="img" aria-label="Security score ' + v + ' out of 100, ' + esc(sc.label) + '">' +
+            '<svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="54"></circle>' +
+            '<circle class="arc" cx="60" cy="60" r="54" stroke="' + col + '" stroke-dasharray="' + (C * v / 100).toFixed(1) + ' ' + C.toFixed(1) + '"></circle></svg>' +
+            '<div class="num"><b>' + v + '</b><span>out of 100</span></div></div>';
+    }
+
+    function renderScore(d){
+        var sc = d.score, c = sc.counts || {};
+        var tiles = [["ok", "Passed", c.ok], ["warn", "Warnings", c.warn], ["fail", "Failing", c.fail], ["unknown", "Unknown", c.unknown], ["na", "Not applicable", c["not-applicable"]]];
+        var h = '<div class="soScore">' + ring(sc) + '<div class="soScoreSide"><h3>' + esc(sc.label) + (sc.grade && sc.grade !== "?" ? ' <span class="soMuted">(grade ' + esc(sc.grade) + ')</span>' : '') + '</h3>';
+        h += '<div class="soMuted">' + (sc.lost > 0 ? esc(sc.lost) + ' points lost' : 'No points lost') + ' &middot; ' + sc.applicableWeight + ' points of weight are in scope</div>';
+        h += '<div class="soTiles">' + tiles.map(function(t){ return '<div class="soTile t-' + t[0] + '"><b>' + (t[2] || 0) + '</b><small>' + t[1] + '</small></div>'; }).join("") + '</div>';
+        if (sc.provisional && sc.applicableWeight > 0) h += '<div class="soNote warn"><b>Incomplete.</b> ' + sc.unknownShare + '% of the checks could not be determined, so this score is capped and has no grade. Open the "Unknown" checks to see what is missing.</div>';
+        else if (sc.capped) h += '<div class="soNote warn">' + esc(sc.capReason) + '.</div>';
+        h += '<details class="soWhy"><summary>How this score is calculated</summary><p class="soFormula">' + esc(sc.formula) + '</p>';
+        if ((sc.losses || []).length) {
+            h += '<div class="soLoss">' + sc.losses.map(function(l){ return '<span>' + esc(l.title) + ' <span class="soMuted">(' + STATUS_TXT[l.status].toLowerCase() + ')</span></span><span>' + pts(l.points) + '</span>'; }).join("") + '</div>';
+            h += '<div class="soMuted">' + esc(sc.lost) + ' points lost: ' + sc.losses.slice(0, 6).map(function(l){ return esc(l.title) + ' (' + pts(l.points) + ')'; }).join(", ") + (sc.losses.length > 6 ? ", ..." : "") + '</div>';
+        } else h += '<p>Nothing is costing points.</p>';
+        h += '</details></div></div>';
+        $("#soScoreBox").html(h);
+    }
+
+    function actionById(id){ return ((S.data && S.data.actions) || []).filter(function(a){ return a.id === id; })[0]; }
+
+    function renderBanner(d){
+        var byId = {}; d.checks.forEach(function(c){ byId[c.id] = c; });
+        var empty = byId["tls.enabled"] && byId["tls.enabled"].status === "not-applicable";
+        $("#soBanner").html(empty ? '<div class="soNote"><b>Welcome.</b> There are no enabled proxy rules yet, so most checks about your sites do not apply. Add your first site from <a href="#" id="soGoQuick">Quick Start</a>; the overview fills in as you go.</div>' : "");
+        $("#soGoQuick").on("click", function(e){ e.preventDefault(); if (typeof openTabById === "function") openTabById("qstart"); });
+    }
+
+    function renderRec(d){
+        var avail = (d.actions || []).filter(function(a){ return a.state === "available"; });
+        var h;
+        if (d.managed) h = '<div class="soRec"><div class="txt"><h4 style="margin:0"><i class="lock icon"></i> Fixes are disabled on this node</h4><p>' + esc(d.managed) + '</p></div></div>';
+        else if (!avail.length) h = '<div class="soRec"><div class="txt"><h4 style="margin:0"><i class="check circle icon"></i> Recommended protection</h4><p>Everything Zoraxy can safely switch on for you is already in place or does not apply yet.</p></div></div>';
+        else h = '<div class="soRec"><div class="txt"><h4 style="margin:0"><i class="magic icon"></i> Apply recommended protection</h4><p>' + avail.length + ' safe ' + plural(avail.length, "fix is", "fixes are") + ' ready. You see exactly what would change first, choose what to apply and can undo most of it. The WAF is only ever started in detection-only mode.</p></div>' +
+            '<button class="ui primary button" id="soRecBtn"><i class="play circle icon"></i> Review recommended protection</button></div>';
+        $("#soRec").html(h);
+        // refused fixes are listed too (greyed out, with the reason), so it is clear why they are not offered
+        var shown = (d.actions || []).filter(function(a){ return a.state === "available" || a.state === "refused"; });
+        $("#soRecBtn").on("click", function(){ openDialog(shown.map(function(a){ return a.id; })); });
+    }
+
+    function rowActions(c){
+        var r = c.remediation || {}, h = "", a = r.action ? actionById(r.action) : null;
+        if (r.page || r.href) h += '<button class="ui mini basic button soOpen" data-id="' + esc(c.id) + '"><i class="external alternate icon"></i> ' + esc(r.label || "Open the setting") + '</button>';
+        if (a && a.state === "available" && !(S.data && S.data.managed)) h += '<button class="ui mini primary button soFix" data-act="' + esc(a.id) + '"><i class="eye icon"></i> Preview fix</button>';
+        return h;
+    }
+
+    function renderFirst(d){
+        var bad = d.checks.filter(function(c){ return c.status === "fail" || c.status === "warn" || c.status === "unknown"; })
+            .sort(function(a, b){ return (b.lostPoints - a.lostPoints) || (b.weight - a.weight); }).slice(0, 5);
+        if (!bad.length) { $("#soFirstBox").html('<div class="soEmpty"><i class="big green check circle icon"></i><div><b>Nothing needs your attention.</b></div><div class="soMuted">Every check that applies to your setup passed.</div></div>'); return; }
+        var h = '<h3 class="soH">Fix these first</h3><div class="soFirst">' + bad.map(function(c){
+            return '<div class="soItem s-' + c.status + '"><div class="txt">' + dot(c.status) + ' <b>' + esc(c.title) + '</b> <span class="soMuted">' + pts(c.lostPoints) + ' points</span>' +
+                '<small>' + esc((c.evidence || [])[0] || "") + '</small></div><div class="acts">' + rowActions(c) + '</div></div>';
+        }).join("") + '</div>';
+        $("#soFirstBox").html(h);
+    }
+
+    function renderCats(d){
+        var cats = {}, order = [];
+        d.checks.forEach(function(c){ if (!cats[c.category]) { cats[c.category] = []; order.push(c.category); } cats[c.category].push(c); });
+        var rank = { fail: 0, warn: 1, unknown: 2, ok: 3, "not-applicable": 4 };
+        if (S.openCats === null) { S.openCats = {}; order.forEach(function(k){ S.openCats[k] = cats[k].some(function(c){ return c.status === "fail" || c.status === "warn" || c.status === "unknown"; }); }); }
+        $("#soCats").html(order.map(function(name){
+            var list = cats[name].slice().sort(function(a, b){ return rank[a.status] - rank[b.status] || b.weight - a.weight; });
+            var n = {}; list.forEach(function(c){ n[c.status] = (n[c.status] || 0) + 1; });
+            var sum = ["fail", "warn", "unknown", "ok"].filter(function(s){ return n[s]; }).map(function(s){ return '<span class="soPill s-' + s + '">' + n[s] + ' ' + STATUS_TXT[s].toLowerCase() + '</span>'; }).join("");
+            var open = S.openCats[name];
+            return '<div class="soCat' + (open ? " open" : "") + '" data-cat="' + esc(name) + '"><div class="soCatHead" tabindex="0" role="button" aria-expanded="' + !!open + '"><i class="angle right icon chev"></i><b>' + esc(name) + '</b><span class="sum">' + sum + '</span></div>' +
+                '<div class="soCatBody">' + list.map(function(c){
+                    var ro = !!S.openRows[c.id];
+                    return '<div class="soRow' + (ro ? " open" : "") + '" data-id="' + esc(c.id) + '"><div class="soRowHead" tabindex="0" role="button" aria-expanded="' + ro + '">' + dot(c.status) + '<span class="ttl">' + esc(c.title) +
+                        (c.heuristic ? ' <span class="soHeur" title="A guess from the host name, not an inspection of the application">heuristic</span>' : '') + '</span>' +
+                        '<span class="soSev">' + esc(c.severity) + ' &middot; weight ' + c.weight + '</span>' + pill(c.status) + '<span class="soLost">' + pts(c.lostPoints) + '</span></div>' +
+                        '<div class="soRowBody"><div class="lbl">What was checked</div><ul>' + (c.evidence || []).map(function(e){ return '<li>' + esc(e) + '</li>'; }).join("") + '</ul>' +
+                        '<div class="lbl">Why it matters</div><div>' + esc(c.why) + '</div>' +
+                        (c.remediation && c.remediation.hint ? '<div class="lbl">How to fix</div><div>' + esc(c.remediation.hint) + '</div>' : '') +
+                        '<div class="acts">' + rowActions(c) + '</div></div></div>';
+                }).join("") + '</div></div>';
+        }).join(""));
+    }
+
+    function render(d){
+        S.data = d;
+        renderScore(d); renderBanner(d); renderRec(d); renderFirst(d); renderCats(d);
+        $("#soChecked").text("Checked " + new Date(d.generated).toLocaleTimeString());
+        $("#soNotify").prop("checked", !!(d.settings && d.settings.notify));
+        $("#soDisclaimer").text(d.disclaimer || "");
+        try { window.postureLast = { value: d.score.value, label: d.score.label, grade: d.score.grade, provisional: d.score.provisional }; } catch (e) {}
+    }
+
+    function load(refresh, done){
+        if (S.loading) return; S.loading = true;
+        $("#soRecheck").addClass("loading disabled");
+        $.getJSON("/api/security/posture" + (refresh ? "?refresh=1" : ""), function(d){
+            if (d && d.error) { msgbox(d.error, false, 6000); return; }
+            render(d); if (done) done(d);
+        }).fail(function(){
+            $("#soScoreBox").html('<div class="soEmpty"><i class="big orange exclamation triangle icon"></i><div><b>The security overview could not be loaded.</b></div><div class="soMuted">Check that Zoraxy is running, then press Re-check.</div></div>');
+        }).always(function(){ S.loading = false; $("#soRecheck").removeClass("loading disabled"); });
+    }
+
+    /* ---- opening a setting ---- */
+    function openSetting(id){
+        var c = S.data.checks.filter(function(x){ return x.id === id; })[0]; if (!c) return;
+        var r = c.remediation || {};
+        if (r.href) { window.open(r.href, "_blank"); return; }
+        if (!r.page || typeof openTabById !== "function") return;
+        openTabById(r.page);
+        if (r.anchor) setTimeout(function(){ $("#" + r.page).find('[data-tab="' + r.anchor + '"],[data-sec="' + r.anchor + '"]').first().trigger("click"); }, 450);
+    }
+
+    /* ---- preview / apply dialog ---- */
+    var DLG = { previews: [], results: null };
+    function closeDialog(){ $("#secOvDlgBg").hide(); $("#secOvDlg").empty(); }
+    function openDialog(ids){
+        $("#secOvDlg").html('<h3 id="sdTitle">Preparing the preview</h3><p class="soMuted">Reading the current settings. Nothing is changed.</p>');
+        $("#secOvDlgBg").css("display", "flex");
+        $.ajax({ url: "/api/security/posture/preview", method: "POST", contentType: "application/json", data: JSON.stringify({ actions: ids }), dataType: "json",
+            headers: { "X-CSRF-Token": document.getElementsByTagName("meta")["zoraxy.csrf.Token"].getAttribute("content") } })
+            .done(function(r){
+                if (r && r.error) { closeDialog(); msgbox(r.error, false, 6000); return; }
+                DLG.previews = r.previews || []; DLG.results = null; renderDialog(ids);
+            }).fail(function(){ closeDialog(); msgbox("The preview failed", false, 6000); });
+    }
+    function changeTable(p){
+        if (!p.changes.length) return "";
+        return '<table><thead><tr><th>Setting</th><th>Where</th><th>Now</th><th>After</th></tr></thead><tbody>' + p.changes.map(function(c){
+            return '<tr><td>' + esc(c.label) + '</td><td>' + esc(c.target) + '</td><td>' + esc(c.from) + '</td><td><b>' + esc(c.to) + '</b></td></tr>'; }).join("") + '</tbody></table>';
+    }
+    function renderDialog(ids){
+        var info = {}; ((S.data && S.data.actions) || []).forEach(function(a){ info[a.id] = a; });
+        var h = '<h3 id="sdTitle">Review before applying</h3><p class="soMuted">This is exactly what would change. Tick what you want, then confirm. Nothing runs until you press the button.</p>';
+        var any = false;
+        DLG.previews.forEach(function(p){
+            var a = info[p.id] || {}, can = !p.refusal && !p.noop, pre = can && a.preselected;
+            if (can) any = true;
+            h += '<div class="sdAct' + (can ? "" : " refused") + '" data-id="' + esc(p.id) + '"><label><input type="checkbox" class="sdChk"' + (pre || (can && ids.length === 1) ? " checked" : "") + (can ? "" : " disabled") + '><span>' + esc(p.title) +
+                (p.mayBlock ? '<span class="sdBadge risk">can block visitors</span>' : '') + (p.sticky ? '<span class="sdBadge sticky">browsers remember it</span>' : '') +
+                (!p.mayBlock && !p.sticky && can ? '<span class="sdBadge safe">cannot block visitors</span>' : '') + (can && p.reversible ? ' <span class="soMuted" style="font-weight:400">can be undone</span>' : '') + '</span></label>' +
+                '<p>' + esc(p.description) + '</p>';
+            if (p.refusal) h += '<div class="sdWarn"><b>Not available:</b> ' + esc(p.refusal) + '</div>';
+            else if (p.noop) h += '<div class="sdNote">Already in place, nothing to change.</div>';
+            else h += changeTable(p);
+            if (p.mayBlock && can) h += '<div class="sdWarn">After this, an address that keeps attacking is refused for a while. Private, loopback and trusted proxy addresses are never banned. You can switch it off again on the Auto-ban tab.</div>';
+            if (p.sticky && can) h += '<div class="sdWarn">Browsers keep HSTS for a year even if you switch it off here, so they will refuse plain HTTP to these sites. Only continue if every site works over HTTPS.</div>';
+            (p.notes || []).forEach(function(n){ h += '<div class="sdNote">' + esc(n) + '</div>'; });
+            h += '</div>';
+        });
+        h += '<div class="sdBtns"><button class="ui basic button" id="sdCancel">Cancel</button><button class="ui primary button" id="sdApply"' + (any ? "" : " disabled") + '><i class="check icon"></i> <span id="sdApplyTxt">Apply selected</span></button></div>';
+        $("#secOvDlg").html(h); updateApplyBtn();
+    }
+    function selected(){ return $("#secOvDlg .sdAct").filter(function(){ return $(this).find(".sdChk").prop("checked") && !$(this).find(".sdChk").prop("disabled"); }).map(function(){ return $(this).attr("data-id"); }).get(); }
+    function updateApplyBtn(){ var n = selected().length; $("#sdApply").prop("disabled", n === 0); $("#sdApplyTxt").text(n ? "Apply " + n + " selected " + plural(n, "fix", "fixes") : "Select a fix to apply"); }
+    function doApply(){
+        var ids = selected(); if (!ids.length) return;
+        var reqs = ids.map(function(id){ var p = DLG.previews.filter(function(x){ return x.id === id; })[0]; return { id: id, hash: p.hash }; });
+        $("#sdApply").addClass("loading disabled");
+        $.ajax({ url: "/api/security/posture/apply", method: "POST", contentType: "application/json", data: JSON.stringify({ actions: reqs }), dataType: "json",
+            headers: { "X-CSRF-Token": document.getElementsByTagName("meta")["zoraxy.csrf.Token"].getAttribute("content") } })
+            .done(function(r){ if (r && r.error) { msgbox(r.error, false, 6000); $("#sdApply").removeClass("loading disabled"); return; } showResults(r.results || []); })
+            .fail(function(){ msgbox("Applying failed", false, 6000); $("#sdApply").removeClass("loading disabled"); });
+    }
+    var RES_TXT = { applied: "Applied", "nothing-to-do": "Already in place", refused: "Refused", failed: "Failed", changed: "Not applied: settings changed since the preview", undone: "Undone" };
+    function showResults(rs){
+        var h = '<h3 id="sdTitle">Result</h3>';
+        rs.forEach(function(r){
+            var ok = r.status === "applied" || r.status === "nothing-to-do" || r.status === "undone";
+            h += '<div class="sdRes">' + dot(ok ? "ok" : "fail") + ' <b>' + esc(r.title) + '</b>: ' + esc(RES_TXT[r.status] || r.status) + (r.rolledBack ? " (earlier changes were rolled back)" : "") + (r.error ? '<div class="soMuted">' + esc(r.error) + '</div>' : "") +
+                (r.applied || []).map(function(c){ return '<div class="soMuted">' + esc(c.label) + ' (' + esc(c.target) + '): ' + esc(c.from) + ' &rarr; ' + esc(c.to) + '</div>'; }).join("") +
+                (r.skipped || []).map(function(s){ return '<div class="soMuted">Skipped: ' + esc(s) + '</div>'; }).join("") + '</div>';
+        });
+        h += '<p class="soMuted">Each applied change is recorded in the audit log.</p><div class="sdBtns"><button class="ui primary button" id="sdDone">Done</button></div>';
+        $("#secOvDlg").html(h);
+        load(true);
+    }
+
+    /* ---- events ---- */
+    $("#secOvPage").on("click", "#soRecheck", function(){ load(true); });
+    $("#secOvPage").on("click", ".soCatHead", function(){ var c = $(this).closest(".soCat"), n = c.attr("data-cat"); S.openCats[n] = !c.hasClass("open"); c.toggleClass("open"); $(this).attr("aria-expanded", S.openCats[n]); });
+    $("#secOvPage").on("click", ".soRowHead", function(){ var r = $(this).closest(".soRow"), id = r.attr("data-id"); S.openRows[id] = !r.hasClass("open"); r.toggleClass("open"); $(this).attr("aria-expanded", S.openRows[id]); });
+    $("#secOvPage").on("keydown", ".soCatHead,.soRowHead", function(e){ if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $(this).trigger("click"); } });
+    $("#secOvPage").on("click", ".soOpen", function(e){ e.stopPropagation(); openSetting($(this).attr("data-id")); });
+    $("#secOvPage").on("click", ".soFix", function(e){ e.stopPropagation(); openDialog([$(this).attr("data-act")]); });
+    $("#secOvDlg").on("change", ".sdChk", updateApplyBtn);
+    $("#secOvDlg").on("click", "#sdCancel,#sdDone", closeDialog);
+    $("#secOvDlg").on("click", "#sdApply", doApply);
+    $("#secOvDlgBg").on("click", function(e){ if (e.target === this) closeDialog(); });
+    $(document).on("keydown", function(e){ if (e.key === "Escape" && $("#secOvDlgBg").is(":visible")) closeDialog(); });
+    $("#soNotify").on("change", function(){
+        var on = $(this).prop("checked");
+        $.ajax({ url: "/api/security/posture/settings", method: "POST", contentType: "application/json", data: JSON.stringify({ notify: on }), dataType: "json",
+            headers: { "X-CSRF-Token": document.getElementsByTagName("meta")["zoraxy.csrf.Token"].getAttribute("content") } })
+            .done(function(r){ if (r && r.error) { msgbox(r.error, false, 6000); $("#soNotify").prop("checked", !on); } else msgbox(on ? "You will be notified when the score drops" : "Notifications for the score are off", true, 3000); })
+            .fail(function(){ $("#soNotify").prop("checked", !on); msgbox("Could not save", false, 4000); });
+    });
+
+    function onScreen(){ return $("#secOvPage").is(":visible"); }
+    window.securityOverviewReload = function(){ load(true); };
+    // load when the tab is opened (index.html calls tabSwitchEventBind[tabID]); the components are fetched at start-up while hidden
+    if (typeof tabSwitchEventBind !== "undefined") tabSwitchEventBind["secoverview"] = function(){ load(false); };
+    if (onScreen()) load(false);
+})();
+</script>

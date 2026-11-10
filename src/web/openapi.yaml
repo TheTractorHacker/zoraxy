@@ -248,6 +248,18 @@ paths:
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/TooManyRequests"}
+  /api/v1/security/posture:
+    get:
+      summary: Security overview (posture score and checks)
+      description: >
+        Read only. Every check with its status, the evidence it looked at and the score arithmetic. The score reflects
+        Zoraxy's configuration, it is not a penetration test. Fixes can only be previewed and applied in the admin panel.
+      operationId: getSecurityPosture
+      responses:
+        "200": {description: Score, checks and available fixes, content: {application/json: {schema: {}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
 components:
   securitySchemes:
     bearerAuth:
