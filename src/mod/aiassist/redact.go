@@ -145,10 +145,7 @@ func (r *Redactor) ips(s string) string {
 	last := 0
 	for _, m := range reIPv4.FindAllStringIndex(s, -1) {
 		a, err := netip.ParseAddr(s[m[0]:m[1]])
-		// "Chrome/120.0.0.0" and "1.2.3.4.5" are version numbers, not addresses
-		vers := m[0] > 0 && (s[m[0]-1] == '/' || s[m[0]-1] == '.' || s[m[0]-1] == '-' || (s[m[0]-1] >= '0' && s[m[0]-1] <= '9'))
-		vers = vers || (m[1] < len(s) && (s[m[1]] == '.' && m[1]+1 < len(s) && s[m[1]+1] >= '0' && s[m[1]+1] <= '9'))
-		if err != nil || vers {
+		if err != nil || looksLikeVersion(s, m[0], m[1]) {
 			continue
 		}
 		out.WriteString(s[last:m[0]])
@@ -308,4 +305,28 @@ func (r *Redactor) Seal(feature, task string, data any, toolName, toolDesc strin
 		return nil, err
 	}
 	return &Outbound{Feature: feature, System: systemPreamble, User: user, ToolName: toolName, ToolDesc: toolDesc, Schema: schema, MaxTokens: maxTokens}, nil
+}
+
+// looksLikeVersion decides whether the dotted number s[start:end] is a version number rather than an
+// address. It is deliberately narrow: anything that could be a real address is masked. Only part of a
+// longer dotted number ("1.2.3.4.5"), or the reduced browser form "Name/120.0.0.0", counts as a version.
+func looksLikeVersion(s string, start, end int) bool {
+	isDigit := func(c byte) bool { return c >= '0' && c <= '9' }
+	if start > 0 {
+		prev := s[start-1]
+		if isDigit(prev) {
+			return true
+		}
+		if prev == '.' && start > 1 && isDigit(s[start-2]) {
+			return true
+		}
+		if prev == '/' && start > 1 {
+			c := s[start-2]
+			if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
+				// "Chrome/120.0.0.0": the last three octets are zero
+				return strings.HasSuffix(s[start:end], ".0.0.0")
+			}
+		}
+	}
+	return end+1 < len(s) && s[end] == '.' && isDigit(s[end+1])
 }

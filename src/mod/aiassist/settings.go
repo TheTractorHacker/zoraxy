@@ -164,22 +164,34 @@ func (st *Store) loadLocked() Settings {
 
 // Save validates and writes the settings.
 func (st *Store) Save(s Settings) (Settings, error) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return st.saveLocked(s)
+}
+
+func (st *Store) saveLocked(s Settings) (Settings, error) {
 	if err := s.Validate(); err != nil {
 		return s, err
 	}
-	st.mu.Lock()
-	defer st.mu.Unlock()
 	b, _ := json.MarshalIndent(s, "", " ")
 	return s, writeFileAtomic(filepath.Join(st.dir, "settings.json"), b, 0o600)
 }
 
-// Update applies fn to the stored settings atomically with respect to other Update calls.
+// Update applies fn to the stored settings; load, change and write happen under one lock, so
+// concurrent updates cannot overwrite each other.
 func (st *Store) Update(fn func(*Settings)) (Settings, error) {
+	return st.UpdateTx(func(s Settings) (Settings, error) { fn(&s); return s, nil })
+}
+
+// UpdateTx is Update with a function that may refuse the change (nothing is written then).
+func (st *Store) UpdateTx(fn func(old Settings) (Settings, error)) (Settings, error) {
 	st.mu.Lock()
-	s := st.loadLocked()
-	st.mu.Unlock()
-	fn(&s)
-	return st.Save(s)
+	defer st.mu.Unlock()
+	n, err := fn(st.loadLocked())
+	if err != nil {
+		return n, err
+	}
+	return st.saveLocked(n)
 }
 
 // FeatureOn reports whether a feature toggle is on.

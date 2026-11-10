@@ -83,28 +83,32 @@ func (s *Service) View() PublicView {
 // Save validates and stores new settings. Changing where data goes or what is sent clears the
 // "payload previewed" marks, so the admin sees the new payload before the next first use.
 func (s *Service) Save(in SettingsUpdate) (PublicView, error) {
-	old := s.store.Load()
-	n := in.Settings
-	n.PreviewAcked = old.PreviewAcked
-	if n.Provider != old.Provider || n.Endpoint != old.Endpoint || n.SendIPs != old.SendIPs || n.SendPaths != old.SendPaths || n.MaskHosts != old.MaskHosts {
-		n.PreviewAcked = map[string]bool{}
-	}
-	if err := n.Validate(); err != nil {
+	saved, err := s.store.UpdateTx(func(old Settings) (Settings, error) {
+		n := in.Settings
+		n.PreviewAcked = old.PreviewAcked
+		if n.Provider != old.Provider || n.Endpoint != old.Endpoint || n.SendIPs != old.SendIPs || n.SendPaths != old.SendPaths || n.MaskHosts != old.MaskHosts {
+			n.PreviewAcked = map[string]bool{}
+		}
+		if err := n.Validate(); err != nil {
+			return old, err
+		}
+		// The stored key must never follow a changed destination: it is cleared unless a new key comes with the change.
+		dest := n.Provider != old.Provider || n.Endpoint != old.Endpoint || n.LocalModel != old.LocalModel
+		if in.APIKey != "" {
+			if err := s.vault.Set(in.APIKey); err != nil {
+				return old, err
+			}
+		} else if in.ClearKey || dest {
+			if err := s.vault.Clear(); err != nil {
+				return old, err
+			}
+		}
+		return n, nil
+	})
+	if err != nil {
 		return PublicView{}, err
 	}
-	if in.APIKey != "" {
-		if err := s.vault.Set(in.APIKey); err != nil {
-			return PublicView{}, err
-		}
-	} else if in.ClearKey {
-		if err := s.vault.Clear(); err != nil {
-			return PublicView{}, err
-		}
-	}
-	if _, err := s.store.Save(n); err != nil {
-		return PublicView{}, err
-	}
-	s.audit("ai.settings", "settings changed (enabled="+boolStr(n.Enabled)+", provider="+n.Provider+")")
+	s.audit("ai.settings", "settings changed (enabled="+boolStr(saved.Enabled)+", provider="+saved.Provider+")")
 	return s.View(), nil
 }
 
@@ -220,9 +224,12 @@ func (s *Service) call(ctx context.Context, st Settings, o *Outbound) (*Response
 	if resp != nil {
 		in, out = resp.InputTokens, resp.OutputTokens
 	}
-	if resp == nil && err != nil && !reachedNetwork(err) {
+	switch {
+	case resp == nil && err != nil && !reachedNetwork(err):
 		res.Cancel()
-	} else {
+	case resp == nil && err != nil:
+		res.Fail() // no answer, no usage: a wrong key or a closed tab must not burn the budget
+	default:
 		res.Done(in + out)
 	}
 	result := "ok"

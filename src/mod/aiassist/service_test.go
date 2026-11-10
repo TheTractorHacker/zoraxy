@@ -112,15 +112,12 @@ func TestExplainEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.Verdict != VerdictFalsePositive || len(out.Actions) != 2 {
+	if out.Verdict != VerdictFalsePositive || len(out.Actions) != 1 || out.Dropped != 1 {
 		t.Fatalf("%+v", out)
 	}
 	a := out.Actions[0]
 	if a.Type != ActExcludeVariable || a.Target != "ARGS:q" || a.RuleID != 942100 || a.Endpoint != "app.example.com" {
 		t.Fatalf("action %+v", a)
-	}
-	if out.Actions[1].IP != "203.0.113.77" {
-		t.Fatalf("blocklist ip must come from the event: %+v", out.Actions[1])
 	}
 	body := m.lastBody()
 	for _, banned := range []string{"SECRETVALUE123", "203.0.113.77", "' OR 1=1"} {

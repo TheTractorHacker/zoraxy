@@ -139,7 +139,17 @@ func exclusionPathOK(p string) bool {
 	return strings.HasPrefix(p, "/") && len(p) <= 200 && !strings.ContainsAny(p, "\"'\\\r\n\x00;,?#") && !strings.Contains(p, "%{")
 }
 
+// blocklistableIP refuses addresses that are never a sensible blocklist entry: loopback, private,
+// link-local, multicast and unspecified ones are typically trusted upstreams (CDN, load balancer,
+// the admin's own network) and blocking them could lock the admin out.
+func blocklistableIP(a netip.Addr) bool {
+	return a.IsValid() && !a.IsLoopback() && !a.IsPrivate() && !a.IsLinkLocalUnicast() && !a.IsLinkLocalMulticast() &&
+		!a.IsMulticast() && !a.IsUnspecified()
+}
+
 // resolveActions maps validated model actions onto the event. Actions that do not fit the event are dropped.
+// Exclusions need a likely_false_positive verdict and blocklist proposals a likely_attack verdict. This is
+// enforced here and not only in the prompt, because the model reads attacker controlled text.
 func resolveActions(res *ExplainResult, in EventInput) ([]ResolvedAction, int) {
 	var out []ResolvedAction
 	dropped := 0
@@ -150,17 +160,20 @@ func resolveActions(res *ExplainResult, in EventInput) ([]ResolvedAction, int) {
 		case ActNoAction:
 			ra = &ResolvedAction{Type: ActNoAction, Summary: "No change"}
 		case ActBlocklistProposal:
+			if res.Verdict != VerdictAttack {
+				break
+			}
 			ip := ""
 			if in.WAF != nil {
 				ip = in.WAF.ClientIP
 			} else if in.Block != nil {
 				ip = in.Block.IP
 			}
-			if addr, err := netip.ParseAddr(ip); err == nil {
+			if addr, err := netip.ParseAddr(ip); err == nil && blocklistableIP(addr.Unmap()) {
 				ra = &ResolvedAction{Type: a.Type, IP: addr.Unmap().String(), Summary: "Add " + addr.Unmap().String() + " to the blocklist"}
 			}
 		case ActExcludeRuleForPath:
-			if in.WAF != nil && exclusionPathOK(in.WAF.Path) {
+			if res.Verdict == VerdictFalsePositive && in.WAF != nil && exclusionPathOK(in.WAF.Path) {
 				for _, h := range in.WAF.Rules {
 					if h.ID == a.RuleID && a.RuleID > 0 {
 						ra = &ResolvedAction{Type: a.Type, RuleID: h.ID, Path: in.WAF.Path, Endpoint: in.WAF.Endpoint,
@@ -170,7 +183,7 @@ func resolveActions(res *ExplainResult, in EventInput) ([]ResolvedAction, int) {
 				}
 			}
 		case ActExcludeVariable:
-			if in.WAF != nil && a.RuleID > 0 {
+			if res.Verdict == VerdictFalsePositive && in.WAF != nil && a.RuleID > 0 {
 				for _, h := range in.WAF.Rules {
 					if h.ID != a.RuleID || h.Variable == "" {
 						continue

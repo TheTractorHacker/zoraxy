@@ -165,3 +165,20 @@ func (r *Reservation) Cancel() {
 		l.recent = l.recent[:n-1]
 	}
 }
+
+// Fail settles a call that produced no answer and no usage report (network error, 401, cancelled
+// context): nothing is known to be billed, so no tokens are added. The rate-limit slot stays used.
+func (r *Reservation) Fail() {
+	l := r.l
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if r.done {
+		return
+	}
+	r.done = true
+	l.reserved -= r.est
+	l.inflight--
+	l.loadLocked()
+	l.u.Calls++
+	l.saveLocked()
+}

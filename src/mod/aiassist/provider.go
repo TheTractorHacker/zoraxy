@@ -164,7 +164,7 @@ func callOpenAI(ctx context.Context, hc *http.Client, base, key, model string, o
 	if err != nil {
 		return nil, err
 	}
-	if status == http.StatusBadRequest || status == http.StatusUnprocessableEntity { // server without json_schema support
+	if (status == http.StatusBadRequest || status == http.StatusUnprocessableEntity) && mentionsSchemaSupport(raw) { // server without json_schema support
 		raw, status, err = doJSON(ctx, hc, url, hdr, mk(map[string]any{"type": "json_object"}))
 		if err != nil {
 			return nil, err
@@ -192,7 +192,7 @@ func callOpenAI(ctx context.Context, hc *http.Client, base, key, model string, o
 	if r.Choices[0].FinishReason == "length" {
 		return out, perr("the answer was cut off (token limit); nothing was used")
 	}
-	text, _ := r.Choices[0].Message.Content.(string)
+	text := contentText(r.Choices[0].Message.Content)
 	j, ok := extractJSONObject(text)
 	if !ok {
 		return out, perr("the model did not return a JSON object")
@@ -234,4 +234,30 @@ func extractJSONObject(text string) ([]byte, bool) {
 		}
 	}
 	return nil, false
+}
+
+// mentionsSchemaSupport is true when an error body complains about response_format / json_schema, the
+// only case where a second request with json_object is worth sending (and costs another call).
+func mentionsSchemaSupport(raw []byte) bool {
+	l := strings.ToLower(string(raw))
+	return strings.Contains(l, "schema") || strings.Contains(l, "response_format")
+}
+
+// contentText reads message.content, which is a string, null or a list of text parts.
+func contentText(v any) string {
+	switch c := v.(type) {
+	case string:
+		return c
+	case []any:
+		var b strings.Builder
+		for _, p := range c {
+			if m, ok := p.(map[string]any); ok {
+				if t, ok := m["text"].(string); ok {
+					b.WriteString(t)
+				}
+			}
+		}
+		return b.String()
+	}
+	return ""
 }
