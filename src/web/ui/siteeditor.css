@@ -145,3 +145,17 @@
 /* the New proxy rule dialog never grows taller than the window: its content scrolls (it has an app preset section now) */
 #newRuleModal.ui.modal > .content { max-height: calc(100vh - 9rem); max-height: calc(100dvh - 9rem); overflow-y: auto; }
 #newRuleModal details.nrMore .nrTplGrid { margin-top: 0.4em; }
+
+/* ---- Layout: Tabs (classic) ----
+   The same cards, filtered by their old tab (data-hrp-tab) and ordered as in the old tab (data-hrp-ord, set as flex order by siteeditor.js).
+   The section wrappers are transparent; everything is visible (no Easy / Advanced), the easy-only cards are hidden. */
+#httprpEditModal[data-layout="tabs"] .hrp-sections { display: flex; flex-direction: column; }
+#httprpEditModal[data-layout="tabs"] .hrp-sections:focus { outline: none; }
+#httprpEditModal[data-layout="tabs"] .hrp-sec,
+#httprpEditModal[data-layout="tabs"] .hrp-sec.is-active { display: contents; }
+#httprpEditModal[data-layout="tabs"] .hrp-sec__head { display: none; }
+#httprpEditModal[data-layout="tabs"] .hrp-card { display: none; }
+#httprpEditModal[data-layout="tabs"] .hrp-card.is-tab { display: block; }
+#httprpEditModal[data-layout="tabs"] .hrp-card[data-hrp-easyonly]:not(.is-tab) { display: none; }
+#httprpEditModal[data-layout="tabs"] .hrp-more { display: none; }
+#httprpEditModal .hrp-nav { overscroll-behavior: contain; }

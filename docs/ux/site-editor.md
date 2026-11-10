@@ -1,4 +1,4 @@
-# Site editor: five sections, Easy / Advanced, one Save, app presets
+# Site editor: classic tabs or five sections, Easy / Advanced, one Save, app presets
 
 Phase 4 of the redesign in [audit-2026-11.md](audit-2026-11.md) (section 4). The proxy rule editor (the dialog opened from the
 HTTP Proxy table) used to have 11 tabs organised by technology. It now has **five sections organised by task**, an
@@ -13,6 +13,43 @@ HTTP Proxy table) used to have 11 tabs organised by technology. It now has **fiv
 | New proxy rule dialog ("Start from an app preset") | `src/web/script/newrule.js` |
 | Preset data (Go side) | `src/mod/dynamicproxy/ruletemplate_presets.json`, `ruletemplate_presets.go`, tests `ruletemplate_presets_test.go` |
 | Old control inventory + the test | `tools/ui-smoke/siteeditor_inventory.json`, `siteeditor_inventory.py`, scenario `site_editor_ui` in `smoke.py` |
+
+## 0. Layouts: Tabs (classic) and Sections
+
+The editor has two layouts over **the same cards and the same controls** (no control is in the DOM twice). A **Layout switch**
+(`#hrpLayout`, kit segmented control, "Tabs (classic)" / "Sections") sits at the top of the dialog and is remembered per browser in
+`localStorage` key `zoraxy_site_editor_layout` (read and written in try / catch; any other value means Tabs). **The default is
+Tabs (classic) for everyone**; the Easy / Advanced key (`zoraxy_site_editor_mode`) is a separate preference and is never touched by
+the layout.
+
+* **Tabs (classic)**: the 11 tabs of the editor before the redesign, in the old order with the old labels and icons: Host
+  (`downstream`), Destinations (`upstream`), Virtual Directory (`vdirs`), WebSocket (`websocket`), Alias (`alias`), TLS / SSL
+  (`ssl`), Headers (`headers`), Access Rules (`accessrule`), Security (`security`), WAF (`waf`), Tags (`tags`). Each tab shows
+  the cards that hold the controls it had (git history: the commit before "Site editor redesign: five sections", and
+  `siteeditor_inventory.json`, which records the old tab of every control). Everything is visible: Easy / Advanced does not apply
+  (the switch is hidden, the dialog behaves as Advanced, the note about advanced settings is not shown). The only card that was
+  not in the old editor is **Protection** (the one-select protection summary that mirrors the WAF source), shown at the top of the
+  WAF tab.
+* **Sections**: the five sections and the Easy / Advanced switch described below.
+
+How it works (one code path): every card carries `data-hrp-tab` (its old tab) and `data-hrp-ord` (its position inside that tab, set
+as the CSS `order` by `siteeditor.js`). The five `.hrp-sec` wrappers stay in the DOM; in Tabs they are `display: contents`, and a card
+is shown when its `data-hrp-tab` is the open tab (class `is-tab`). `renderNav()` builds the buttons of `#hrpNav` for the current
+layout (`TABS` or `SECTION_NAV`), both with class `hrpedit_menu_item` and the attribute `cfgpage`; the click and keyboard handlers
+are the same. The Save bar, the dirty tracking, the focus trap, presets and every sub editor are shared and do not know the layout.
+To add a card: put it in a section, give it `data-hrp-tab` and `data-hrp-ord`; `src/siteeditor_tabs_test.go` fails when a card has
+no tab or the tab disagrees with the inventory.
+
+Accessibility: Tabs is a `tablist` of 11 `tab` buttons with `aria-selected`, roving tabindex and Arrow / Home / End keys (wrapping);
+the one `tabpanel` is `#hrpSections` (`aria-labelledby` the selected tab, the tab's `aria-controls` points at it) and the section
+wrappers get `role=presentation`. In Sections each section is its own `tabpanel`, as before. At 390px the strip scrolls sideways
+(`overflow-x: auto`) and shows the scroll cue (`.zx-scroll-end` / `.zx-scroll-start` from `main.css`, set by `uxkit.js` for `#hrpNav`).
+
+Deep links in both layouts: `HrpEditor.show(name)` accepts the old tab names (`downstream`, `upstream`, `vdirs`, `websocket`,
+`alias`, `ssl`, `headers`, `accessrule`, `security`, `waf`, `tags`) and the section names. In Tabs a section name opens the tab with
+its first card (general: Host, routing: Virtual Directory, security: Security, tls: TLS / SSL, advanced: Host); in Sections an old tab
+name opens the section that holds it. Switching the layout keeps the place (the WAF tab opens the Security section and back).
+`HrpEditor.layout()` / `HrpEditor.setLayout()` read and set the layout.
 
 ## 1. Sections and where the old tabs went
 
@@ -65,7 +102,7 @@ Compatibility: the class `hrpedit_menu_item` and the attribute `cfgpage` stay on
 section that holds their controls. Cards keep the old name in their `rpcfg` attribute. `saveProxyInlineEdit(uuid)`,
 `closeHttpRuleEditor()`, `resyncProxyEditorConfig()` and `resetEditorDirty()` exist and work as before.
 
-**The test.** `site_editor_ui` loads `siteeditor_inventory.json` (generated from the old markup by
+**The test.** (Sections layout.) `site_editor_ui` loads `siteeditor_inventory.json` (generated from the old markup by
 `siteeditor_inventory.py`), checks that every selector matches exactly one element of the new editor, that it sits in the
 recorded section, and that its card is shown when the section is open in Advanced mode. The three retired "Apply" buttons
 of the WAF block (`.wafSourceSaveBtn`, `.wafChallengeSaveBtn`, `.wafSaveBtn`) are kept in the DOM, hidden
@@ -175,6 +212,14 @@ unsaved edits (they would be overwritten). Presets are read only in the template
 * Every new visible string is extractable (`python3 tools/i18n/extract.py --check`).
 
 ## 6. Verified, and not
+
+Tabs layout (`tools/ui-smoke/smoke.py --editor-tabs-only`, `editortabs_smoke.py`, also part of the full run; Go: `src/siteeditor_tabs_test.go`):
+the default with no stored choice, the 11 labels and names in order, every inventory control exactly once and visible on its old tab
+(and each tab showing exactly its cards, in the old order), no Easy / Advanced switch and its stored preference untouched, tablist /
+tabpanel aria and arrow / Home / End keys, the Tab trap, legacy deep links in both directions, the layout switch and its memory
+(and a broken stored value falling back to Tabs), one Save bar over edits on two tabs, the preset dialog with its diff, a hostile
+host name, no overflow, the scroll cue at 390px, and screenshots in light, dark and 390px. `smoke.py` stores the Sections layout
+for every other scenario (an init script) so they keep testing the sections; the Tabs scenario opts out of that.
 
 Verified by the browser smoke (`tools/ui-smoke/smoke.py --site-editor-only`, also part of the full run): the inventory, legacy
 tab names, aria and keyboard, focus in and out, Tab trap, Easy / Advanced and its memory, the non-default note and forced
