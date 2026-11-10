@@ -1144,7 +1144,11 @@ def posture_ui(pg, ctx):
         # ---- apply ----
         current["page"] = "posture-apply"
         pg.click("#sdApply")
-        pg.wait_for_selector("#sdDone", timeout=10000)
+        try:
+            pg.wait_for_selector("#sdDone", timeout=120000)  # one admin call per proxy rule for the uptime fix, slow on a loaded machine
+        except Exception:
+            fail("posture", f"apply did not finish: {pg.inner_text('#secOvDlg')[:300]!r}")
+            return
         res_txt = pg.inner_text("#secOvDlg")
         if "Applied" not in res_txt or "audit log" not in res_txt:
             fail("posture", f"apply result not shown: {res_txt[:200]}")
