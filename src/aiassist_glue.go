@@ -21,6 +21,7 @@ var aiService *aiassist.Service
 
 // RegisterAIAPIs registers /api/ai/* (admin session and CSRF protection come with the router).
 func RegisterAIAPIs(authRouter *auth.RouterDef) {
+	wireAIRules() // proposals are judged by the rules engine validator (aiassist_rules.go)
 	if aiService == nil {
 		aiService = aiassist.New(aiassist.Deps{
 			ConfDir: CONF_FOLDER,

@@ -735,7 +735,7 @@
             '<td>' + esc(e.host) + '</td>',
             '<td style="word-break:break-all;"><b>' + esc(e.method) + '</b> <span class="mono">' + esc(dec(e.path)) + '</span></td>',
             '<td class="nowrap">' + statusCell(e.status) + '</td>',
-            '<td>' + chip(e.reason) + (e.detail ? '<span class="sDetail">' + esc(e.detail) + '</span>' : '') + aiExplainButton(e) + '</td>');
+            '<td>' + chip(e.reason) + (e.detail ? (e.reason === "rule" ? '<button type="button" class="sLink sDetail" data-rulename="' + esc(e.detail) + '" data-rulesite="' + esc(e.rule || "") + '" title="Show this rule in Rules">' + esc(e.detail) + '</button>' : '<span class="sDetail">' + esc(e.detail) + '</span>') : '') + aiExplainButton(e) + '</td>');
         return tr;
     }
 
@@ -916,6 +916,8 @@
     $("#sBlocked").on("click", "[data-ip]", function(){ setIP($(this).attr("data-ip")); });
     $("#sBlocked").on("click", "[data-visitor]", function(e){ e.stopPropagation(); jumpToVisitors($(this).attr("data-visitor")); });
     $("#sBlocked").on("click", "[data-rule]", function(e){ e.stopPropagation(); openRule($(this).attr("data-rule")); });
+    /* RULES-BUILDER: the rule name of a rules-engine block opens the Rules page filtered to that rule */
+    $("#sBlocked").on("click", "[data-rulename]", function(e){ e.stopPropagation(); if (window.RulesUI) RulesUI.openFiltered($(this).attr("data-rulename"), $(this).attr("data-rulesite")); });
     $("#sBlocked").on("click", "#sbResetFilters", resetFilters);
     $("#sBlocked").on("click", "#sbOpenFilters", openFilters);
     $("#sbVisitorsLink").on("click", function(e){ e.preventDefault(); openTabById("visitors"); });

@@ -26,6 +26,7 @@ ap.add_argument("--no-page-sweep", action="store_true", help="skip the per-tab s
 ap.add_argument("--i18n-only", action="store_true", help="run only the multi-language scenario")
 ap.add_argument("--posture-only", action="store_true", help="run only the Security overview scenario")
 ap.add_argument("--ai-only", action="store_true", help="run only the AI assistant page scenario")
+ap.add_argument("--rules-only", action="store_true", help="run only the Security rules (rules builder) scenario")
 ap.add_argument("--waf-tuning-only", action="store_true", help="run only the WAF Tuning tab scenario")
 ap.add_argument("--zrok-fake", default=os.environ.get("SMOKE_ZROK_FAKE", ""), help="path of a fake zrok script; enables the zrok flow (the instance needs -allow_external_tools)")
 ap.add_argument("--allow", action="append", default=[], help="regex of messages whose failure is tolerated")
@@ -1485,8 +1486,8 @@ def ai_assistant_ui(pg, ctx):
             name = body.get("response_format", {}).get("json_schema", {}).get("name", "")
             out = {"report": {"ok": True},
                    "propose_rules": {"proposals": [{"name": "Probe wp-login", "description": "Log probes of wp-login.php", "reason": "120 hits in the summary",
-                                                    "expression": "(http.request.uri.path contains \"/wp-login.php\")", "action": "block"}]},
-                   "propose_rule": {"proposals": [{"name": "Office only", "description": "d", "reason": "r", "expression": "(ip.geoip.country ne \"DE\")", "action": "log"}]}}.get(name, {})
+                                                    "expression": "http.path contains \"/wp-login.php\"", "action": "block"}]},
+                   "propose_rule": {"proposals": [{"name": "Office only", "description": "d", "reason": "r", "expression": "ip.country != \"DE\"", "action": "log"}]}}.get(name, {})
             data = json.dumps({"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(out)}}], "usage": {"prompt_tokens": 100, "completion_tokens": 40}}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -1819,6 +1820,13 @@ def posture_ui(pg, ctx):
         jpost("/api/security/posture/undo", {"action": "uptime.enable"})
 
 
+def rules_scenario(pg, ctx):
+    """Security rules builder (tools/ui-smoke/rules_smoke.py)"""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from rules_smoke import rules_ui
+    rules_ui(pg, ctx, {"fail": fail, "current": current, "settle": settle, "check_horizontal": check_horizontal, "out": args.out, "allow": allow})
+
+
 def main():
     with sync_playwright() as p:
         b = p.chromium.launch()
@@ -1848,6 +1856,10 @@ def main():
         if args.posture_only:
             current["page"] = "posture"
             posture_ui(pg, ctx)
+            b.close()
+            return
+        if args.rules_only:
+            rules_scenario(pg, ctx)
             b.close()
             return
         if args.waf_tuning_only:
@@ -2727,6 +2739,8 @@ def main():
         history_ui(pg, ctx)
 
         ai_assistant_ui(pg, ctx)
+
+        rules_scenario(pg, ctx)
 
         # ---- narrow / mobile layout ----
         current["page"] = "mobile"

@@ -134,7 +134,7 @@ func Reasons() []ReasonInfo {
 		{ReasonClientCert, "Client certificate", "The client certificate was missing or not accepted (mTLS).", "httprp", "HTTP Proxy, rule settings", ""},
 		{ReasonPeer, "Peer not allowed", "The direct connection came from an address outside the allowed peer list of the rule.", "httprp", "HTTP Proxy, rule settings", ""},
 		{ReasonAuth, "Authentication", "Basic auth, SSO or OAuth rejected the credentials.", "seccenter", "Security Center, Auth audit", "authaudit"},
-		{ReasonRule, "Rule", "A rule of the rules engine (global or of this site) blocked, rate limited or challenged the request. The detail is the rule name.", "rules", "Rules", ""},
+		{ReasonRule, "Rule", "A rule of the rules engine (global or of this site) blocked, rate limited or challenged the request. The detail is the rule name.", "ruleset", "Rules", ""},
 		{ReasonPlugin, "Plugin", "A plugin refused the request.", "plugins", "Plugins", ""},
 	}
 }
