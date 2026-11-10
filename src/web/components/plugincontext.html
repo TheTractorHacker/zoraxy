@@ -1,5 +1,5 @@
 <div class="">
-    <iframe id="pluginContextLoader" src="" style="width: 100%; border: none;" sandbox="allow-scripts allow-same-origin">
+    <iframe id="pluginContextLoader" title="Plugin" style="width: 100%; border: none;">
     
     </iframe>
 </div>
@@ -22,7 +22,8 @@
     function loadPluginContext(pluginID){
         //Check if the iframe is currently visable
         let pluginContextURL = `/plugin.ui/${pluginID}/`;
-        $("#pluginContextLoader").attr("src", pluginContextURL);
+        //the sandbox is applied only when a plugin page is really opened, so the browser does not warn about it on every page load
+        $("#pluginContextLoader").attr("sandbox", "allow-scripts allow-same-origin").attr("src", pluginContextURL);
     }
 
     function getPluginIDFromWindowHash(){

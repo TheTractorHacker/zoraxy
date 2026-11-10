@@ -206,6 +206,13 @@ body.darkTheme .menubar{
     background-color: white;
 }
 
+.sideWrapper .sideWrapperClose{
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    z-index: 2;
+}
+
 .sideWrapper iframe{
     height: calc(100% - 55px);
     width: 100%;
@@ -724,7 +731,17 @@ body.darkTheme .menudivider{
 }
 
 .acmeRenewStateWrapper:not(.enabled){
-    background: var(--theme_red) !important;
+    background: var(--zx-warn-bg) !important;
+    border: 1px solid var(--zx-warn-line);
+}
+
+.acmeRenewStateWrapper:not(.enabled) .ui.header, .acmeRenewStateWrapper:not(.enabled) .sub.header, .acmeRenewStateWrapper:not(.enabled) .ui.header .icon{
+    color: var(--zx-warn-text) !important;
+}
+
+/* the per-certificate table is dimmed while "Renew All Certs" is on: still readable */
+#acme table.ui.disabled.table{
+    opacity: 0.75 !important;
 }
 
 
@@ -831,6 +848,17 @@ body.darkTheme .menudivider{
 .domain{
     margin-bottom: 1em;
     position: relative;
+}
+
+/* a long host name wraps instead of widening the page */
+.statusbar .domain > div:first-child{
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+.statusbar .domain a{
+    overflow-wrap: anywhere;
 }
 
 .statusDot{
@@ -1136,6 +1164,7 @@ a:focus-visible,
 
 /* Toast: above the confirm box, readable, never wider than the screen */
 #messageBox {
+    overflow-wrap: anywhere;
     max-width: min(300px, calc(100vw - 2em));
     z-index: 1001;
 }

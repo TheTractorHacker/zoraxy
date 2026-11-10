@@ -20,7 +20,7 @@
         </div>
       </div>
 
-      <div class="ui top attached tabular menu">
+      <div class="ui top attached tabular menu" style="overflow-x:auto; overflow-y:hidden; flex-wrap:nowrap;">
         <a class="active item" data-tab="csr">Signing Requests (CSR)</a>
         <a class="item" data-tab="mapdir">Certificate Folder</a>
         <a class="item" data-tab="hooks">Event Hooks</a>
@@ -160,6 +160,12 @@
         });
       }
       function generateCSR(){
+        if ($("#csrCN").val().trim() == ""){
+          $("#csrCN").closest(".field").addClass("error"); $("#csrCN").focus();
+          parent.msgbox("Common name is required", false, 5000);
+          return;
+        }
+        $("#csrCN").closest(".field").removeClass("error");
         $.cjax({url:"/api/cert/csr", method:"POST", data:{
           op:"generate", commonName:$("#csrCN").val(), sans:$("#csrSANs").val(), keyType:$("#csrKeyType").dropdown("get value"),
           name:$("#csrName").val(), organization:$("#csrOrg").val()

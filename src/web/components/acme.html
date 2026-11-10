@@ -41,19 +41,20 @@
             </div>
         </h4>
     </div>
-    <div style="margin-top: 1.2em;">
+    <div style="margin-top: 1.2em;" id="acmeToggleRow">
         <p style="float: right; color: #b3c2b6; display:none;" id="acmeEnableToggleSucc"><i class="green checkmark icon"></i> Setting Updated</p>
         <div class="ui toggle checkbox" id="acmeAutoRenewCheckbox">
             <input type="checkbox" id="enableCertAutoRenew">
             <label>Enable Certificate Auto Renew</label>
         </div>
-        <small id="acmeEmailRequiredHint" style="display:none; color: #e07b39; margin-left: 1em;">
-            <i class="exclamation circle icon"></i> ACME email must be set before enabling
-        </small>
+        <div id="acmeEmailRequiredHint" class="zx-callout zx-callout--warn" role="note" hidden style="margin-top: 0.8em;">
+            <span class="zx-callout__icon" aria-hidden="true"><i class="exclamation circle icon"></i></span>
+            <div class="zx-callout__body">Set the ACME email below and save it before enabling auto renew.</div>
+        </div>
     </div>
     <div class="ui divider"></div>
     <h3>Preferred Certificate Authority</h3>
-    <p>The default CA to use when create a new subdomain proxy endpoint with TLS certificate</p>
+    <p>The default CA used when you create a new subdomain proxy endpoint with a TLS certificate.</p>
     <div class="ui fluid form" tourstep="acmeSettings">
         <div class="field">
             <label id="defaultCALabel">Preferred CA</label>
@@ -151,6 +152,7 @@
     // Scoped variables
     var enableTriggerOnChangeEvent = true;
     var expiredDomains = [];
+    var expiredFiles = [];   // stored certificates whose expiry date has passed, whoever manages them
 
     // Widget initialization
     $("#defaultCA").dropdown();
@@ -161,12 +163,20 @@
     function updateEmailGate(email) {
         if (email.trim() === "") {
             $("#acmeAutoRenewCheckbox").addClass("disabled");
-            $("#acmeEmailRequiredHint").show();
+            $("#acmeEmailRequiredHint").prop("hidden", false);
         } else {
             $("#acmeAutoRenewCheckbox").removeClass("disabled");
-            $("#acmeEmailRequiredHint").hide();
+            $("#acmeEmailRequiredHint").prop("hidden", true);
         }
     }
+
+    // The toggle is disabled while no email is set; a click on it must say why instead of doing nothing
+    $("#acmeToggleRow").on("click", function(){
+        if ($("#acmeAutoRenewCheckbox").hasClass("disabled")){
+            msgbox("Set the ACME email first (Preferred Certificate Authority, below), then enable auto renew.", false, 5000);
+            $("#prefACMEEmail").focus();
+        }
+    });
 
     // Toggle state
     function initToggleState(){
@@ -241,7 +251,7 @@
 
             var domainClass = "validDomain";
             for (var i = 0; i < domains.length; i++){
-                if (expiredDomains.includes(domains[i])){
+                if (expiredDomains.includes(domains[i]) || expiredFiles.includes(srcfile)){
                     domainClass = "expiredDomain";
                     break;
                 }
@@ -298,10 +308,11 @@
             method: "GET",
             success: function(response){
                 expiredDomains = response.domain || [];
-                initDomainTable();
             },
-            error: function(){
-                initDomainTable();
+            complete: function(){
+                $.get("/api/cert/list?date=true", function(list){
+                    expiredFiles = (list || []).filter(function(c){ return c.RemainingDays <= 0; }).map(function(c){ return c.Filename; });
+                }).always(initDomainTable);
             }
         });
     }
@@ -413,10 +424,13 @@
         var eabDirectoryURL = ""
 
 
-        if (newDefaultEmail == ""){
-            msgbox("Invalid acme email given", false);
+        if (!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(newDefaultEmail)){
+            $("#prefACMEEmail").closest(".field").addClass("error");
+            $("#prefACMEEmail").focus();
+            msgbox(newDefaultEmail == "" ? "ACME email is required" : "Enter a valid email address, for example admin@example.com", false);
             return;
         }
+        $("#prefACMEEmail").closest(".field").removeClass("error");
         if ((newDefaultCA === "ZeroSSL" || newDefaultCA === "custom") && (newEABKID == "" && newEABHMAC != "") || (newEABKID != "" && newEABHMAC == "")){
             msgbox("EAB KID and HMAC key must be both provided or empty for ZeroSSL", false);
             return;

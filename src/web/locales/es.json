@@ -3,8 +3,8 @@
   "language": "Spanish",
   "reviewed": false,
   "author": "machine-assisted (Claude)",
-  "coverage": 21.1,
-  "coreCoverage": 41.6
+  "coverage": 20.9,
+  "coreCoverage": 41.2
  },
  "strings": {
   "\"Add Redirection Rule\"": "\"Añadir regla de redirección\"",
@@ -39,7 +39,6 @@
   "+{1} more": "+{1} más",
   "+{2} more": "+{2} más",
   ", loopback, link-local and similar ranges have no country.": ", los rangos loopback, link-local y similares no tienen país.",
-  ", then refresh this page.": ", y luego actualice esta página.",
   "- users: {1}": "- usuarios: {1}",
   "- waiting for Zoraxy to restart...": "- esperando a que Zoraxy se reinicie...",
   ". Cannot be changed later.": ". No se puede cambiar después.",
@@ -101,7 +100,6 @@
   "ACME Auto-Renewer": "Renovador automático ACME",
   "ACME Client": "Cliente ACME",
   "ACME Email": "Correo ACME",
-  "ACME email must be set before enabling": "Debe definir el correo ACME antes de activar",
   "ACME Profiles & Defaults": "Perfiles y valores ACME",
   "ACME Server URL": "URL del servidor ACME",
   "Action": "Acción",
@@ -207,7 +205,6 @@
   "An error occurred. Please try again.": "Se produjo un error. Inténtelo de nuevo.",
   "An update is available.": "Hay una actualización disponible.",
   "and": "y",
-  "and click": "y haga clic en",
   "and open source under": "y código abierto bajo",
   "Andorra": "Andorra",
   "Angola": "Angola",

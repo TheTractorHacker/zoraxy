@@ -283,7 +283,7 @@ func (a *AutoRenewer) HandleACMEEmail(w http.ResponseWriter, r *http.Request) {
 		//Check if the email is valid
 		_, err = mail.ParseAddress(email)
 		if err != nil {
-			utils.SendErrorResponse(w, err.Error())
+			utils.SendErrorResponse(w, "not a valid email address (example: admin@example.com)")
 			return
 		}
 

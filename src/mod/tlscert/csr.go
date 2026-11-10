@@ -114,8 +114,10 @@ func (m *Manager) GenerateCSR(req CSRRequest) (*PendingCSR, []byte, error) {
 	var dnsNames []string
 	var ips []net.IP
 	sans := append([]string{}, req.SANs...)
+	nameKind := "subject alternative name"
 	if len(sans) == 0 {
 		sans = []string{req.CommonName}
+		nameKind = "common name" // no alternative names given: the common name is what is being checked
 	}
 	cleaned := []string{}
 	for _, s := range sans {
@@ -127,7 +129,7 @@ func (m *Manager) GenerateCSR(req CSRRequest) (*PendingCSR, []byte, error) {
 			ips = append(ips, ip)
 		} else {
 			if strings.ContainsAny(s, " /\\@:") {
-				return nil, nil, fmt.Errorf("invalid subject alternative name %q", s)
+				return nil, nil, fmt.Errorf("invalid %s %q", nameKind, truncateForError(s))
 			}
 			dnsNames = append(dnsNames, strings.ToLower(s))
 		}
@@ -447,4 +449,12 @@ func (m *Manager) HandleCSR(w http.ResponseWriter, r *http.Request) {
 	default:
 		utils.SendErrorResponse(w, "invalid operation")
 	}
+}
+
+// truncateForError keeps a user supplied value short enough to quote in an error message.
+func truncateForError(s string) string {
+	if r := []rune(s); len(r) > 60 {
+		return string(r[:60]) + "..."
+	}
+	return s
 }

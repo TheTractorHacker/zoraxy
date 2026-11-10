@@ -24,7 +24,7 @@
     #visitorsPage .vToolbar{
         display: flex; flex-wrap: wrap; gap: 0.5em; align-items: center; margin: 0.8em 0;
     }
-    #visitorsPage .vToolbar .ui.input{ flex: 1 1 14em; min-width: 10em; }
+    #visitorsPage .vToolbar .ui.input{ flex: 1 1 20em; min-width: 10em; }
     #visitorsPage .vToolbar select{
         padding: 0.55em 0.6em; border-radius: 0.3em; border: 1px solid var(--divider_color);
         background: var(--theme_bg_primary); color: var(--text_color); max-width: 13em;
@@ -62,7 +62,14 @@
     @keyframes vPulse{ 50%{ opacity: 0.45; } }
     @media (prefers-reduced-motion: reduce){ #visitorsPage .vSkel td > div{ animation: none; } }
     #visitorsPage .vPrivacy{ font-size: 0.9em; }
-    #visitorsPage .vTabs .item{ cursor: pointer; }
+    #visitorsPage .vTabs .item{ cursor: pointer; flex: 0 0 auto; white-space: nowrap; }
+    #visitorsPage .vTabs{ overflow-x: auto; overflow-y: hidden; flex-wrap: nowrap; }
+    #visitorsPage table.vTable td[colspan]{ white-space: normal; }
+    @media (max-width: 748px){
+        /* the wide table scrolls sideways: keep the empty / error message inside the visible part */
+        #visitorsPage .vTableWrap .vEmpty{ position: sticky; left: 0; max-width: min(100%, 20em); margin: 0; box-sizing: border-box; }
+    }
+    #visitorsPage .vPrivacy .header{ color: var(--text_color); }
 
     /* detail drawer */
     #visitorDrawer{
@@ -100,7 +107,7 @@
 
         <div class="ui top attached tabular menu vTabs" id="vTabs">
             <a class="active item" data-vtab="list"><i class="users icon"></i> Visitors</a>
-            <a class="item" data-vtab="recent"><i class="stream icon"></i> Recent visits</a>
+            <a class="item" data-vtab="recent"><i class="list icon"></i> Recent visits</a>
             <a class="item" data-vtab="settings"><i class="cog icon"></i> Settings &amp; privacy</a>
         </div>
 
@@ -367,7 +374,7 @@
             var extra = $("#vrBody tr").length - 500;                           // keep the DOM small
             if (extra > 0) $("#vrBody tr").slice(-extra).remove();
             if ($("#vrBody tr").length === 0){
-                $("#vrBody").html('<tr><td colspan="8"><div class="vEmpty"><i class="stream icon"></i>No visits recorded yet. New requests appear here live.</div></td></tr>');
+                $("#vrBody").html('<tr><td colspan="8"><div class="vEmpty"><i class="list icon"></i>No visits recorded yet. New requests appear here live.</div></td></tr>');
             } else {
                 $("#vrBody .vEmpty").closest("tr").remove();
             }
@@ -466,9 +473,22 @@
             $("#vsQuery").prop("checked", x.KeepQuery); $("#vsNotify").prop("checked", x.NotifyNewCountry);
         });
     }
+    var VS_LIMITS = [["#vsAge", "Keep for (days)", 1, 3650], ["#vsIps", "Max. IP addresses", 100, 500000], ["#vsRing", "Recent visits kept", 100, 200000]];
+    function validateSettings(){
+        var bad = "";
+        VS_LIMITS.forEach(function(l){
+            var raw = $(l[0]).val().trim(), n = Number(raw), ok = raw !== "" && Number.isInteger(n) && n >= l[2] && n <= l[3];
+            $(l[0]).closest(".field").toggleClass("error", !ok);
+            $(l[0]).attr("aria-invalid", ok ? null : "true");
+            if (!ok && !bad){ bad = t(l[1]) + ": " + tf("enter a whole number from {0} to {1}", l[2], l[3]); $(l[0]).focus(); }
+        });
+        return bad;
+    }
     function saveSettings(){
-        var body = {Enabled: $("#vsEnabled").prop("checked"), MaxAgeDays: parseInt($("#vsAge").val(), 10) || 90, MaxIPs: parseInt($("#vsIps").val(), 10) || 20000,
-                    MaxVisits: parseInt($("#vsRing").val(), 10) || 5000, KeepQuery: $("#vsQuery").prop("checked"), NotifyNewCountry: $("#vsNotify").prop("checked")};
+        var problem = validateSettings();
+        if (problem){ $("#vsMsg").css("color", "#c62828").text(problem); return; }
+        var body = {Enabled: $("#vsEnabled").prop("checked"), MaxAgeDays: parseInt($("#vsAge").val(), 10), MaxIPs: parseInt($("#vsIps").val(), 10),
+                    MaxVisits: parseInt($("#vsRing").val(), 10), KeepQuery: $("#vsQuery").prop("checked"), NotifyNewCountry: $("#vsNotify").prop("checked")};
         $.cjax({url: "./api/visitors/settings", method: "POST", contentType: "application/json", data: JSON.stringify(body), dataType: "json", success: function(d){
             if (d && d.error){ $("#vsMsg").css("color", "#c62828").text(d.error); return; }
             var x = d.Settings;

@@ -3,8 +3,8 @@
   "language": "Japanese",
   "reviewed": false,
   "author": "machine-assisted (Claude)",
-  "coverage": 20.7,
-  "coreCoverage": 41.2
+  "coverage": 20.5,
+  "coreCoverage": 40.8
  },
  "strings": {
   "\"Add Redirection Rule\"": "「リダイレクトルールを追加」",
@@ -41,7 +41,6 @@
   "+{2} more": "+{2} 件",
   ", loopback, link-local and similar ranges have no country.": "、ループバック、リンクローカルなどの範囲には国がありません。",
   ", supported by Authentik.": "、Authentikでサポートされています。",
-  ", then refresh this page.": "、その後このページを再読み込みしてください。",
   "- users: {1}": "- ユーザー: {1}",
   "- waiting for Zoraxy to restart...": "- Zoraxyの再起動を待っています...",
   ". Cannot be changed later.": "。後から変更できません。",
@@ -101,7 +100,6 @@
   "ACME Auto-Renewer": "ACME自動更新",
   "ACME Client": "ACMEクライアント",
   "ACME Email": "ACMEメール",
-  "ACME email must be set before enabling": "有効化する前にACMEメールを設定してください",
   "ACME Profiles & Defaults": "ACMEプロファイルとデフォルト",
   "ACME Server URL": "ACMEサーバーURL",
   "Action": "アクション",
@@ -204,7 +202,6 @@
   "An error occurred while uploading the file.": "ファイルのアップロード中にエラーが発生しました。",
   "An error occurred. Please try again.": "エラーが発生しました。もう一度お試しください。",
   "An update is available.": "アップデートがあります。",
-  "and click": "をクリック:",
   "Andorra": "アンドラ",
   "Angola": "アンゴラ",
   "Anguilla": "アンギラ",

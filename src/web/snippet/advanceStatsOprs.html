@@ -16,7 +16,7 @@
         <div class="ui container">
             <div class="ui header">
                 <div class="content">
-                    Advance Statistics Operations
+                    Advanced Statistics Operations
                     <div class="sub header">Selected Range: <span id="daterange"></span></div>
                 </div>
             </div>
@@ -28,9 +28,9 @@
             <div class="ui divider"></div>
             <h3>Reset Statistics</h3>
             <p>You can reset the statistics within the selected time range for debug purpose. Note that this operation is irreversible.</p>
-            <button class="ui basic red button" onclick="handleResetStats();"><i class="trash icon"></i> RESET STATISTICS</button>
+            <button class="ui basic red button" onclick="handleResetStats();"><i class="trash icon"></i> Reset statistics</button>
             <br><br>
-            <button class="ui basic button iframeOnly"  style="float: right;" onclick="parent.hideSideWrapper();"><i class="remove icon"></i> Cancel</button>
+            <button class="ui basic button iframeOnly"  style="float: right;" onclick="parent.hideSideWrapper();"><i class="remove icon"></i> Close</button>
         </div>
         <script>
             let startDate = "";
@@ -49,7 +49,8 @@
             }
 
             function handleResetStats(){
-                if (confirm("Confirm remove statistics from " + startDate + " to " + endDate +"?")){
+                parent.ZxUI.confirm({title: "Reset statistics?", message: "Remove the statistics from " + startDate + " to " + endDate + "? This cannot be undone.", confirmLabel: "Reset statistics", danger: true}).then(function(ok){
+                    if (!ok){ return; }
                     $.cjax({
                         url: "/api/analytic/resetRange?start=" + startDate + "&end=" + endDate,
                         method: "DELETE",
@@ -61,8 +62,8 @@
                                 parent.hideSideWrapper();
                             }
                         }
-                    })
-                }
+                    });
+                });
             }
 
             /*

@@ -3,8 +3,8 @@
   "language": "Traditional Chinese",
   "reviewed": false,
   "author": "machine-assisted (Claude)",
-  "coverage": 21.3,
-  "coreCoverage": 41.9
+  "coverage": 21.1,
+  "coreCoverage": 41.5
  },
  "strings": {
   "\"Add Redirection Rule\"": "「新增重新導向規則」",
@@ -41,7 +41,6 @@
   ", loopback, link-local and similar ranges have no country.": "、本機迴路、連結本機及類似範圍沒有國家/地區。",
   ", password optional for existing users)": "，現有使用者的密碼為選填）",
   ", supported by Authentik.": "，Authentik 支援。",
-  ", then refresh this page.": "，然後重新整理此頁面。",
   ", which replaces the": "，將取代",
   "- users: {1}": "- 使用者：{1}",
   "- waiting for Zoraxy to restart...": "- 等待 Zoraxy 重新啟動...",
@@ -113,7 +112,6 @@
   "ACME Auto-Renewer": "ACME 自動續期",
   "ACME Client": "ACME 用戶端",
   "ACME Email": "ACME 電子郵件",
-  "ACME email must be set before enabling": "啟用前必須先設定 ACME 電子郵件",
   "ACME Profiles & Defaults": "ACME 設定檔與預設值",
   "ACME Server URL": "ACME 伺服器 URL",
   "Action": "動作",
@@ -220,7 +218,6 @@
   "An error occurred. Please try again.": "發生錯誤，請再試一次。",
   "An update is available.": "有可用的更新。",
   "and": "和",
-  "and click": "並點擊",
   "and open source under": "並以開放原始碼授權於",
   "Andorra": "安道爾",
   "Angola": "安哥拉",

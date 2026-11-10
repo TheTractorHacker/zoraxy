@@ -50,3 +50,17 @@ $.cjax = function(payload){
 
     return $.ajax(payload);
 }
+;
+
+/*
+    Side drawer: Escape inside a snippet iframe closes the drawer of the admin page (index.html), unless an open dropdown or
+    dialog inside the snippet has just used the key.
+*/
+(function () {
+    if (window.parent === window || typeof window.parent.hideSideWrapper !== "function") return;
+    document.addEventListener("keydown", function (e) {
+        if (e.key !== "Escape" || e.defaultPrevented) return;
+        if (document.querySelector(".ui.dropdown.active.visible, .ui.modal.visible.active, .ui.dimmer.visible.active")) return;
+        try { window.parent.hideSideWrapper(); } catch (err) { }
+    });
+})();
