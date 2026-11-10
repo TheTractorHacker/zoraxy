@@ -2025,3 +2025,58 @@ The Status page's "Blocked today" was only a counter. `src/mod/blocklog` now kee
 * **New read-only endpoints**: `GET /api/ech/selfcheck?host=` (real local ECH handshake against the proxy listener, cert verification off; proves server-side acceptance only) and `GET /api/ech/domains[?host=]` (per proxied host, HTTPS record at the system resolver and at 1.1.1.1, classified `ours-active | ours-retired | ours-purged | foreign | none`). `/api/ech/status` also returns `Records` (one copy-ready record per proxied host). Existing endpoints and settings semantics are unchanged; enabling with a bad public-name certificate is allowed (the page asks first, the log warns).
 * **zrok page** (`components/zrok.html`): state card, install/enable/create steps, tunnel cards (URL with copy, uptime, restarts, last exit), inline delete/disable confirmations, a log viewer that shows the last 60 of the 200 captured lines. It refreshes every 15 s only while a tunnel is active, the tab is visible and the page is on screen. No API change.
 * **Tests**: Go (`mod/ech`, `mod/tlscert/hostcheck_test.go`, `echapi_test.go`), `tools/e2e-admin` scenarios `api-ech`, `api-ech-selfcheck-tls`, and the smoke test `ech_zrok_ui` (needs the instance to run with `-allow_external_tools` and `--zrok-fake`; `tools/ui-smoke/run.sh` supplies a fake `zrok` script).
+
+## AI assistant (`mod/aiassist`, branch `ux-ai-assistant`)
+
+An optional helper that makes the proxy smarter without ever being in control of it. **Off by default, bring-your-own key (or a local model), proposals only.** A human applies every change through the existing, validated admin APIs.
+
+### Design
+
+* Package `mod/aiassist` (plain `net/http`, no SDK). Files: `secret.go` (key vault), `settings.go`, `ssrf.go`, `redact.go`, `provider.go`, `limits.go`, `schema.go`, `features.go`, `service.go`, `http.go`. Glue in `aiassist_glue.go` (event lookup, traffic aggregate, audit hook) with one registration line in `api.go` and one exclusion line in `confbackup.go`.
+* Files live in `<conf>/aiassist/`: `settings.json` (no secret), `ai.key` (random 32 byte per-install key, 0600), `apikey.sealed` (AES-256-GCM, 0600, AAD bound), `usage.json`. The two secret files are skipped by the configuration backup zip (`aiassist.IsSecretFile`) and are outside the Fleet/cluster snapshot allow-list (`baseRoots`), so they are in no export. Restoring a backup therefore needs the key to be entered again; a sealed file that does not authenticate is reported as such (`ErrTampered`) and is never used.
+* The API key is write-only: set it with `api_key` in `POST /api/ai/settings/save`; every response contains only `key_set` and `key_last4` (not even that for keys of 8 characters or fewer). It is decrypted per call, never logged, and removed from any error text before it is returned.
+* **Zero cost when off**: `New` starts no goroutine, timer or connection; the month rollover of the counter is computed lazily on a call; every feature checks `enabled` before it builds anything. The test `TestDisabledMakesNoConnectionsAndNoGoroutines` listens on the configured endpoint and asserts zero connections.
+* Providers: Anthropic Messages API (`POST {endpoint}/v1/messages`, `x-api-key`, `anthropic-version: 2023-06-01`; structured output through one tool whose `input_schema` is the result schema, read from the `tool_use` block; `tool_choice` is `auto` plus an explicit instruction because the newest models reject forced tool use; no thinking, no sampling parameters) and OpenAI-compatible chat completions (`json_schema` response format, falls back to `json_object` on HTTP 400/422, JSON is extracted defensively from prose or code fences and then validated as strictly as the Anthropic one). Reply limit 1 MiB, timeout 90 s, no redirects, TLS verification on, `User-Agent: zoraxy-aiassist/1`, no user identifiers, environment proxies ignored.
+* Default model for the Anthropic provider is `claude-sonnet-5-5` (free text, change it in the settings).
+
+### Features (`/api/ai/*`, admin session + CSRF like every admin API, audit-log entries `ai.<feature>` with token counts and result, never prompt content)
+
+| API | What | Output |
+|---|---|---|
+| `explain` | one WAF event (`kind=waf&id=<txid>`) or blocked request (`kind=blocked&id=<seq>`), looked up by the server | verdict (`likely_attack`, `likely_false_positive`, `unclear`), explanation of at most 120 words, up to 3 actions of the allow list `exclude_variable`, `exclude_rule_for_path`, `add_to_blocklist_proposal`, `no_action` |
+| `suggest` | server-side summary (counts only) of the last day | up to 3 proposals |
+| `rule` | plain English (500 characters) | one proposal |
+| `audit` | posture results through the `PostureSource` interface | prioritised plan; hidden (`ErrFeatureOff`) until a source is connected in `aiassist_glue.go` |
+| `preview`, `preview/ack` | the exact payload of a feature | first use of each feature is refused until the payload was shown and acknowledged; a change of provider, endpoint or data policy resets the acknowledgement |
+| `settings`, `settings/save`, `test`, `status` | setup and usage | |
+
+Actions are never taken from the model's words: the model chooses a type and a rule id out of the event's own rule hits; variable, target, path, endpoint and address are re-derived from the event and the WAF code validates them (`waf.TargetForVariable`, `TargetExclusion.Validate`). Actions that do not fit are dropped and counted. The UI sends an accepted action to the **existing** endpoints (`/api/waf/tuning/apply`, `/api/blacklist/ip/add`) only after a confirmation dialog that shows the exact change.
+
+**Rule proposals** are `Proposal{Name, Description, Reason, Expression, Action, Mode}`; `Mode` is forced to `log_only`. The rules-engine integration sets the package variable `aiassist.ValidateProposal` (return an error when the expression does not compile) and may replace `aiassist.ExpressionGrammarHint` with the real field list. Until then proposals are displayed and can be copied; this package does not import the rules engine. The posture integration implements `aiassist.PostureSource` (`Items() []PostureItem`) and passes it as `Deps.Posture` in `aiassist_glue.go`.
+
+### Data policy: what is sent
+
+Only typed, whitelisted fields (`redact.go`); everything else cannot be sent because there is no field for it. Sent: rule id, rule message and CRS category, severity, variable *name*, method, host, path and query parameter *names* (policy `send_paths`, default on), country code, user agent (capped), counts. **Never sent**: cookies, `Authorization` and any other header value, request and response bodies, query parameter values, the WAF "matched data" snippet, tokens, anything matching key/secret/password/session patterns, e-mail addresses, certificate/PEM material. Real IPs are replaced by stable per-install pseudonyms such as `ip-7f3a1c` (HMAC under the install key) unless `send_ips` is on; host names likewise when `mask_hosts` is on. All strings are stripped of control and invisible (bidi, zero-width) characters, `<` and `>` are replaced, fields are capped. `Redactor.Seal` is the only constructor of an `Outbound`; it runs a final verification over the exact text and fails closed. The "Preview what will be sent" button shows that text.
+
+Limits of the scrubber: it is pattern based. Opaque tokens are caught by length and character mix (hex and base64url, not base64 with `/`), so an unusual secret inside a path segment or user agent may pass; that is why `send_paths` and the preview exist.
+
+### Threat model
+
+* **Prompt injection.** Paths, user agents, referers, header and cookie *names* are attacker controlled. Defences: (1) untrusted data sits in a delimited block and the system prompt says it is data; the delimiter cannot appear in data (`<`/`>` replaced); (2) the model has no tools that change state; (3) output is untrusted: strict decode with unknown fields rejected, enums, size caps (explanation 120 words, 3 actions, 500 character expressions), no control characters; (4) actions are allow-listed and re-derived from the event (above); (5) proposals start log-only; (6) nothing is applied without a human click on the existing APIs; (7) a schema violation rejects the whole answer (nothing is applied, an error is shown). `TestPromptInjectionCorpusProducesNoUnlistedActionOrStateChange` covers a corpus.
+* **Model text in the browser.** Never inserted as HTML: `zrAI.render` (`web/script/aiassist.js`) escapes everything first and then allows only `**bold**`, `` `code` `` and `- ` lists; the smoke test feeds it hostile markup.
+* **SSRF.** Link-local (169.254/16, fe80::/10), cloud metadata addresses, multicast and unspecified addresses are always refused. Loopback, private, ULA and CGNAT are allowed only for the OpenAI-compatible provider **and** only when the admin ticked "local model" (which also permits plain http). The check runs on the address that is dialled, so DNS names that resolve to private ranges, mixed answers and rebinding are covered; redirects are never followed.
+* **Cost abuse.** Server side monthly token budget and per-minute rate limit, see below.
+* **Secrets at rest.** AES-256-GCM, per-install key file 0600; not in backups, snapshots, API responses, logs or errors. Anyone with read access to the whole conf folder can still decrypt it, as with any key kept on the same host.
+
+### Budget semantics
+
+`Limiter.Reserve` runs before any network access: it refuses when `used + reserved + estimate > cap` (estimate = bytes of the request / 2 + 50 + `max_tokens`, deliberately high), when more than 2 calls are in flight (`ErrBusy`) or when the per-minute count is reached. After the call the real usage (input + output tokens reported by the provider, or the estimate when it reports none) is added to the counter, which is per calendar month, persisted in `usage.json` and reset lazily. Parallel calls therefore cannot jointly start above the cap; the counter can end above it only by the estimation error of the calls in flight: at most `2 x (real input tokens - estimated input tokens)`, which is zero while the estimate stays conservative. A cap of 0 refuses everything. A call that never reached the network is not charged.
+
+### Adding a feature or a provider
+
+* *Feature*: add a payload struct (only fields that may leave), a task text and a JSON schema in `features.go`/`schema.go`, a strict parser with a validator, a `Preview...` and a run method that calls `gate`, `Seal`, `call` and the parser, an API handler in `http.go`, tests (redaction, schema rejections, injection corpus, mock end to end) and a button in `components/aiassist.html`. Add the feature key to `Ack` and the toggle logic in `gate`.
+* *Provider*: add a `call...` function next to `callAnthropic` with the same signature, add the name in `Settings.Validate`/`ParseEndpoint` and the switch in `Service.call`; keep it on `doJSON` (limits, no redirects) and the guarded client. Tests use `httptest` mock servers only, no test may reach the real network.
+
+### Testing
+
+`cd src && go test ./mod/aiassist/ .` (mock provider, loopback only). Browser: `tools/ui-smoke` has the step `ai_assistant_ui` (mock provider served by the script on a loopback port; disabled state, hostile model text, setup, test connection, preview-before-first-use, suggestions, plain English to rule, Explain block, light/dark/390 px screenshots).

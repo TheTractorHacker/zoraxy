@@ -457,6 +457,7 @@ func initAPIs(targetMux *http.ServeMux) {
 	RegisterAuthAPIs(requireAuth, targetMux)
 	RegisterHTTPProxyAPIs(authRouter)
 	RegisterWAFAPIs(authRouter)
+	RegisterAIAPIs(authRouter) // optional AI assistant (off by default), see aiassist_glue.go
 	RegisterBulkAPIs(authRouter)
 	authRouter.HandleFunc("/api/quickstart", HandleQuickStartState)
 	authRouter.HandleFunc("/api/i18n/language", HandleUILanguage)

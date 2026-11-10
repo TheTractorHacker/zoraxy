@@ -1,3 +1,4 @@
+<script src="./script/aiassist.js"></script> <!-- AI assistant helpers (optional feature) -->
 <style>
     /* Central WAF page */
     #wafPage .wafCards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .8em; }
@@ -983,6 +984,7 @@
             '<button class="ui basic button" id="wafDAllow"><i class="check circle icon"></i> Allow this IP (skip WAF)</button>' +
             '<button class="ui basic button" id="wafDCopy"><i class="copy icon"></i> Copy request</button></div>';
         var d = $("#wafDrawer").html(h).show().data("ev", ev);
+        if (!ev.kind && ev.txid && window.zrAI) zrAI.mount($("<div></div>").appendTo("#wafDrawer"), "waf", ev.txid); // AI assistant (optional), see script/aiassist.js
         $("#wafDrawerClose").focus();
     }
     function closeDrawer(){ $("#wafDrawer").hide().removeData("ev"); }

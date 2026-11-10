@@ -25,6 +25,7 @@ ap.add_argument("--out", default=os.environ.get("SMOKE_OUT", os.path.expanduser(
 ap.add_argument("--no-page-sweep", action="store_true", help="skip the per-tab screenshot sweep (faster; for focused runs on a busy machine)")
 ap.add_argument("--i18n-only", action="store_true", help="run only the multi-language scenario")
 ap.add_argument("--waf-tuning-only", action="store_true", help="run only the WAF Tuning tab scenario")
+ap.add_argument("--ai-only", action="store_true", help="run only the AI assistant page scenario")
 ap.add_argument("--zrok-fake", default=os.environ.get("SMOKE_ZROK_FAKE", ""), help="path of a fake zrok script; enables the zrok flow (the instance needs -allow_external_tools)")
 ap.add_argument("--allow", action="append", default=[], help="regex of messages whose failure is tolerated")
 args = ap.parse_args()
@@ -1027,6 +1028,143 @@ def ech_zrok_ui(pg, ctx):
         fail("dialog", f"native dialogs used: {dialogs}")
 
 
+def ai_assistant_ui(pg, ctx):
+    """AI assistant page against a MOCK provider served from this script (never the real network): disabled state, safe rendering
+    of hostile model text, setup + save (the key is never read back), test connection, preview-before-first-use, suggestions,
+    plain English to rule, and the Explain block (the API answers are mocked, the real path is covered by the Go tests)."""
+    import http.server
+    import threading
+    current["page"] = "ai-assistant"
+    pg.set_viewport_size({"width": 1366, "height": 900})
+
+    class Mock(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))) or b"{}")
+            name = body.get("response_format", {}).get("json_schema", {}).get("name", "")
+            out = {"report": {"ok": True},
+                   "propose_rules": {"proposals": [{"name": "Probe wp-login", "description": "Log probes of wp-login.php", "reason": "120 hits in the summary",
+                                                    "expression": "(http.request.uri.path contains \"/wp-login.php\")", "action": "block"}]},
+                   "propose_rule": {"proposals": [{"name": "Office only", "description": "d", "reason": "r", "expression": "(ip.geoip.country ne \"DE\")", "action": "log"}]}}.get(name, {})
+            data = json.dumps({"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(out)}}], "usage": {"prompt_tokens": 100, "completion_tokens": 40}}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Mock)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        endpoint = "http://127.0.0.1:%d/v1" % srv.server_address[1]
+        pg.evaluate("openTabById('aiassist')")
+        settle(pg, 900)
+        if pg.is_checked("#aiEnabled"):
+            fail("ai", "the assistant must be off by default")
+        if pg.is_visible("#aiAuditCard"):
+            fail("ai", "the audit card must stay hidden until the posture module exists")
+        pg.screenshot(path=os.path.join(args.out, "ai-disabled.png"))
+        check_horizontal(pg, "ai desktop")
+
+        # model text is untrusted: hostile markup must come out escaped
+        res = pg.evaluate("""() => { const t = '<img src=x onerror=alert(1)> <script>window.__pwn=1</scr' + 'ipt> **bold** `code` [x](javascript:alert(1))\\n- item';
+            const h = zrAI.render(t); const d = document.createElement('div'); d.innerHTML = h;
+            return {html: h, bad: d.querySelectorAll('img,script,a,iframe').length, bold: d.querySelectorAll('b').length, li: d.querySelectorAll('li').length}; }""")
+        if res["bad"] != 0 or "<img" in res["html"] or "<script" in res["html"] or res["bold"] != 1 or res["li"] != 1:
+            fail("ai", f"render() is not safe or lost the allowed subset: {res}")
+
+        # setup through the UI
+        pg.evaluate("""ep => { $('#aiEnabled').prop('checked', true); $('#aiProvider').val('openai_compatible').trigger('change');
+            $('#aiEndpoint').val(ep); $('#aiModel').val('mock-model'); $('#aiLocal').prop('checked', true); $('#aiKey').val('sk-fake-smoke-0000WXYZ'); }""", endpoint)
+        pg.click("#aiSave")
+        pg.wait_for_selector("#aiMsg.ok", timeout=5000)
+        st = pg.evaluate("fetch('/api/ai/settings').then(r => r.text())")
+        if "sk-fake" in st or "api_key" in st or "WXYZ" not in st:
+            fail("ai", "settings API must show only the last 4 characters of the key: " + st[:200])
+        if pg.input_value("#aiKey") != "":
+            fail("ai", "the key field must be cleared after saving")
+        pg.click("#aiTest")
+        pg.wait_for_function("document.querySelector('#aiMsg').textContent.indexOf('Connected') >= 0", timeout=8000)
+
+        # preview, then suggestions: the first use asks to see the payload
+        pg.click(".aiPrev[data-feature=suggest]")
+        pg.wait_for_selector("#aiPreviewBox pre", timeout=5000)
+        if "untrusted_data" not in pg.inner_text("#aiPreviewBox"):
+            fail("ai", "preview does not show the delimited data block")
+        pg.screenshot(path=os.path.join(args.out, "ai-preview.png"))
+        pg.click("#aiSuggest")
+        pg.wait_for_selector(".ui.modal.visible .approve.button", timeout=5000)
+        pg.screenshot(path=os.path.join(args.out, "ai-first-use-modal.png"))
+        pg.click(".ui.modal.visible .approve.button")
+        pg.wait_for_selector("#aiResult .aiProposal", timeout=8000)
+        if "log only" not in pg.inner_text("#aiResult"):
+            fail("ai", "proposals must say they start log-only")
+        pg.screenshot(path=os.path.join(args.out, "ai-suggestions.png"))
+        pg.fill("#aiRuleText", "log wp-login requests from outside Germany")
+        pg.click("#aiRule")
+        pg.wait_for_selector(".ui.modal.visible .approve.button", timeout=5000)
+        pg.click(".ui.modal.visible .approve.button")
+        pg.wait_for_selector("#aiResult .aiProposal b:has-text('Office only')", timeout=10000)
+        used = pg.inner_text("#aiUsage")
+        if " 0 of" in used or "tokens used" not in used:
+            fail("ai", "usage counter did not move: " + used)
+
+        # Explain block with mocked API answers
+        pg.evaluate("openTabById('waf')")
+        settle(pg, 600)
+
+        def route(r):
+            u = r.request.url
+            if u.endswith("/api/ai/status"):
+                r.fulfill(status=200, content_type="application/json", body='{"enabled":true,"explain":true,"suggest":true,"audit":false,"audit_available":false}')
+            elif u.endswith("/api/ai/preview"):
+                r.fulfill(status=200, content_type="application/json", body=json.dumps({"feature": "explain", "host": "mock", "model": "m", "system": "S", "user": "U", "acked": True, "data_policy": "x", "estimated_input_tokens": 1}))
+            elif u.endswith("/api/ai/explain"):
+                r.fulfill(status=200, content_type="application/json", body=json.dumps({"verdict": "likely_false_positive", "explanation": "<img src=x onerror=window.__pwn=1> **Normal** search text.",
+                    "actions": [{"type": "exclude_variable", "rule_id": 942100, "variable": "ARGS:q", "target": "ARGS:q", "endpoint": "app.test", "summary": "Rule 942100 will no longer inspect ARGS:q on proxy rule app.test"}]}))
+            else:
+                r.continue_()
+        pg.route("**/api/ai/**", route)
+        pg.evaluate("""() => { $('body').append('<div id="aiProbe"></div>'); zrAI.mount('#aiProbe', 'waf', 'tx-1'); }""")
+        pg.wait_for_selector("#aiProbe button", timeout=5000)
+        pg.click("#aiProbe button")
+        pg.wait_for_selector("#aiProbe .zrAIAction button", timeout=5000)
+        if pg.evaluate("window.__pwn") or pg.locator("#aiProbe img").count():
+            fail("ai", "model text was rendered as HTML")
+        pg.click("#aiProbe .zrAIAction button")
+        pg.wait_for_selector(".ui.modal.visible .zrAIChange", timeout=5000)
+        if "ARGS:q" not in pg.inner_text(".ui.modal.visible .zrAIChange"):
+            fail("ai", "the confirmation must show exactly what will change")
+        pg.screenshot(path=os.path.join(args.out, "ai-confirm.png"))
+        pg.click(".ui.modal.visible .cancel.button")
+        pg.wait_for_timeout(500)
+        pg.unroute("**/api/ai/**")
+        pg.evaluate("$('#aiProbe').remove()")
+
+        # mobile and dark
+        pg.evaluate("openTabById('aiassist')")
+        settle(pg, 600)
+        pg.set_viewport_size({"width": 390, "height": 844})
+        settle(pg, 400)
+        check_horizontal(pg, "ai mobile")
+        pg.screenshot(path=os.path.join(args.out, "ai-mobile.png"), full_page=True)
+        pg.set_viewport_size({"width": 1366, "height": 900})
+        was_dark = pg.evaluate("document.body.classList.contains('darkTheme')")
+        if not was_dark:
+            pg.evaluate("toggleTheme()")
+        settle(pg, 400)
+        pg.screenshot(path=os.path.join(args.out, "ai-dark.png"), full_page=True)
+        if not was_dark:
+            pg.evaluate("toggleTheme()")
+        # leave the instance as found: assistant off, key removed
+        pg.evaluate("""() => new Promise(res => $.cjax({url: './api/ai/settings/save', method: 'POST', data: {settings: JSON.stringify({enabled: false, provider: 'anthropic', endpoint: 'https://api.anthropic.com', model: 'claude-sonnet-5-5',
+            feature_explain: true, feature_suggest: true, feature_audit: true, send_paths: true, monthly_token_budget: 500000, rate_per_minute: 6, clear_key: true})}, success: res, error: res}))""")
+    finally:
+        srv.shutdown()
+
+
 def main():
     with sync_playwright() as p:
         b = p.chromium.launch()
@@ -1047,6 +1185,10 @@ def main():
 
         if args.i18n_only:
             i18n_checks(pg, ctx)
+            b.close()
+            return
+        if args.ai_only:
+            ai_assistant_ui(pg, ctx)
             b.close()
             return
         if args.waf_tuning_only:
@@ -1948,6 +2090,7 @@ def main():
             check_horizontal(pg, "mobile")
             pg.screenshot(path=os.path.join(args.out, f"mobile-{t}.png"))
         blocked_view(pg)
+        ai_assistant_ui(pg, ctx)
         i18n_checks(pg, ctx)
         b.close()
 
