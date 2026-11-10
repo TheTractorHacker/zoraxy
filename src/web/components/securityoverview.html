@@ -62,6 +62,11 @@
     #secOvPage .soDot { flex: 0 0 auto; width: 1.15em; height: 1.15em; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: .75em; font-weight: 700; }
     #secOvPage .soDot.s-ok { background: var(--ok); } #secOvPage .soDot.s-warn { background: var(--warn); } #secOvPage .soDot.s-fail { background: var(--bad); }
     #secOvPage .soDot.s-unknown { background: var(--unk); } #secOvPage .soDot.s-not-applicable { background: transparent; border: 2px solid rgba(128,128,128,.5); color: transparent; }
+    /* status dots: kit tokens so the mark is at least 4.5:1 against the dot in both themes */
+    #secOvPage .soDot { color: var(--zx-on-solid); font-size: .8em; }
+    #secOvPage .soDot.s-ok { background: var(--zx-ok-solid); } #secOvPage .soDot.s-warn { background: var(--zx-warn-solid); } #secOvPage .soDot.s-fail { background: var(--zx-danger-solid); }
+    #secOvPage .soDot.s-unknown { background: var(--zx-text-muted); color: var(--zx-bg); }
+    #secOvPage .soDot.s-not-applicable { color: transparent; }
     #secOvPage .soPill { display: inline-block; padding: 0 .55em; border-radius: 999px; font-size: .78em; font-weight: 700; line-height: 1.8; white-space: nowrap; background: rgba(128,128,128,.2); }
     #secOvPage .soPill.s-ok { background: #21ba4533; color: #1a7a32; } #secOvPage .soPill.s-warn { background: #f2711c33; color: #a14a0a; }
     #secOvPage .soPill.s-fail { background: #db282833; color: #b01e1e; } #secOvPage .soPill.s-unknown { background: rgba(138,143,152,.25); }
@@ -182,10 +187,11 @@
 
     function renderRec(d){
         var avail = (d.actions || []).filter(function(a){ return a.state === "available"; });
+        var nRefused = (d.actions || []).filter(function(a){ return a.state === "refused"; }).length;
         var h;
         if (d.managed) h = '<div class="soRec"><div class="txt"><h4 style="margin:0"><i class="lock icon"></i> Fixes are disabled on this node</h4><p>' + esc(d.managed) + '</p></div></div>';
         else if (!avail.length) h = '<div class="soRec"><div class="txt"><h4 style="margin:0"><i class="check circle icon"></i> Recommended protection</h4><p>Everything Zoraxy can safely switch on for you is already in place or does not apply yet.</p></div></div>';
-        else h = '<div class="soRec"><div class="txt"><h4 style="margin:0"><i class="magic icon"></i> Apply recommended protection</h4><p>' + avail.length + ' safe ' + plural(avail.length, "fix is", "fixes are") + ' ready. You see exactly what would change first, choose what to apply and can undo most of it. The WAF is only ever started in detection-only mode.</p></div>' +
+        else h = '<div class="soRec"><div class="txt"><h4 style="margin:0"><i class="magic icon"></i> Apply recommended protection</h4><p>' + avail.length + ' safe ' + plural(avail.length, "fix is", "fixes are") + ' ready' + (nRefused ? ' (' + nRefused + ' more ' + plural(nRefused, "is", "are") + ' listed as not available, with the reason)' : '') + '. You see exactly what would change first, choose what to apply and can undo most of it. The WAF is only ever started in detection-only mode.</p></div>' +
             '<button class="ui primary button" id="soRecBtn"><i class="play circle icon"></i> Review recommended protection</button></div>';
         $("#soRec").html(h);
         // refused fixes are listed too (greyed out, with the reason), so it is clear why they are not offered

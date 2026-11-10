@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 	"sort"
 	"strings"
@@ -640,6 +642,26 @@ func handleListTrustedProxies(w http.ResponseWriter, r *http.Request) {
 	utils.SendJSONResponse(w, string(js))
 }
 
+// validateTrustedProxyEntry checks that value is a single IP address or a CIDR range.
+// A range that matches every address (/0) is refused: it would make every client a
+// trusted proxy and let anyone forge their client address.
+func validateTrustedProxyEntry(value string) error {
+	if strings.Contains(value, "/") {
+		_, cidr, err := net.ParseCIDR(value)
+		if err != nil {
+			return fmt.Errorf("'%s' is not a valid CIDR range (example: 203.0.113.0/24)", value)
+		}
+		if ones, _ := cidr.Mask.Size(); ones == 0 {
+			return fmt.Errorf("'%s' matches every address and would make every visitor a trusted proxy", value)
+		}
+		return nil
+	}
+	if net.ParseIP(value) == nil {
+		return fmt.Errorf("'%s' is not a valid IP address or CIDR range", value)
+	}
+	return nil
+}
+
 // Add a new trusted proxy
 func handleAddTrustedProxy(w http.ResponseWriter, r *http.Request) {
 	ip, err := utils.PostPara(r, "ip")
@@ -654,6 +676,11 @@ func handleAddTrustedProxy(w http.ResponseWriter, r *http.Request) {
 	p := bluemonday.StrictPolicy()
 	ip = strings.TrimSpace(ip)
 	desc = p.Sanitize(desc)
+
+	if err := validateTrustedProxyEntry(ip); err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
+	}
 
 	//Add the proxy
 	added := accessController.AddTrustedProxy(ip, desc)
@@ -721,6 +748,11 @@ func handleUpdateTrustedProxy(w http.ResponseWriter, r *http.Request) {
 	newIP = strings.TrimSpace(newIP)
 	desc = p.Sanitize(desc)
 
+	if err := validateTrustedProxyEntry(newIP); err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
+	}
+
 	//If IP changed, check if new IP already exists as an entry
 	if originalIP != newIP {
 		if accessController.TrustedProxyExists(newIP) {
@@ -767,7 +799,7 @@ func handleBulkUpdateTrustedProxies(w http.ResponseWriter, r *http.Request) {
 		desc string
 	}
 	var entries []entry
-	for _, rawLine := range strings.Split(csv, "\n") {
+	for lineNo, rawLine := range strings.Split(csv, "\n") {
 		line := strings.TrimSpace(rawLine)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -776,6 +808,10 @@ func handleBulkUpdateTrustedProxies(w http.ResponseWriter, r *http.Request) {
 		ip := strings.TrimSpace(parts[0])
 		if ip == "" {
 			continue
+		}
+		if err := validateTrustedProxyEntry(ip); err != nil {
+			utils.SendErrorResponse(w, fmt.Sprintf("line %d: %s. Nothing was saved.", lineNo+1, err.Error()))
+			return
 		}
 		desc := ""
 		if len(parts) == 2 {

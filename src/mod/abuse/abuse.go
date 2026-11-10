@@ -143,7 +143,7 @@ func (c Config) Normalise() (Config, error) {
 		out.IPv6Prefix = 64
 	}
 	if out.IPv6Prefix < 32 || out.IPv6Prefix > 128 {
-		return c, errors.New("IPv6Prefix must be 32..128")
+		return c, errors.New("IPv6 prefix must be a whole number from 32 to 128")
 	}
 	if out.MaxTracked <= 0 {
 		out.MaxTracked = def.MaxTracked

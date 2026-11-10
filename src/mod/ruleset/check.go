@@ -143,7 +143,7 @@ func (e *Engine) buildTestRequest(in TestInput) (*http.Request, error) {
 	}
 	u, err := url.ParseRequestURI(raw)
 	if err != nil {
-		return nil, fmt.Errorf("invalid url: %v", err)
+		return nil, fmt.Errorf("the test URL is not valid. Use a path such as /login, or a full address such as https://example.com/login")
 	}
 	r := &http.Request{Method: method, URL: u, Proto: "HTTP/1.1", ProtoMajor: 1, ProtoMinor: 1, Header: http.Header{}, RequestURI: u.RequestURI(), ContentLength: 0}
 	if len(in.Headers) > 100 {

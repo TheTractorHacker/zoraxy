@@ -71,6 +71,12 @@
         opts = opts || {};
         var type = opts.type || "info";
         var box = ensureToastBox();
+        // the same message again replaces the earlier one (repeated "Saved" toasts must not pile up over the page)
+        var text = String(message === undefined ? "" : message);
+        Array.prototype.slice.call(box.children).forEach(function (old) {
+            var m = old.querySelector(".zx-toast__msg");
+            if (m && m.textContent === text && old.classList.contains("zx-toast--" + type) && old.parentNode) { old.parentNode.removeChild(old); }
+        });
         var node = document.createElement("div");
         node.className = "zx-toast zx-toast--" + type;
         node.setAttribute("role", type === "error" ? "alert" : "status");

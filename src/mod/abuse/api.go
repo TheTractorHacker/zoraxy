@@ -98,6 +98,10 @@ func (m *Manager) doBan(w http.ResponseWriter, r *http.Request, source string) {
 			utils.SendErrorResponse(w, "invalid seconds")
 			return
 		}
+		if v < 0 {
+			utils.SendErrorResponse(w, "seconds must be a positive whole number (leave it out for a permanent ban)")
+			return
+		}
 		secs = v
 	}
 	if reason == "" {

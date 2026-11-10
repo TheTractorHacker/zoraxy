@@ -608,6 +608,14 @@
         var save = h("button", { type: "button", class: "zx-btn zx-btn--primary" }, isNew ? t("Create list") : t("Save list"));
         save.addEventListener("click", function () {
             msg.textContent = "";
+            name.removeAttribute("aria-invalid");
+            // "New list" never replaces an existing list: that is what "Edit" in the table is for
+            if (isNew && S.lists.some(function (x) { return x.name === name.value.trim(); })) {
+                name.setAttribute("aria-invalid", "true");
+                msg.textContent = tf("A list named “{0}” already exists. Choose another name, or edit that list from the table.", name.value.trim());
+                name.focus();
+                return;
+            }
             ZxUI.setLoading(save, true);
             RB.post("./api/ruleset/list/save", { name: name.value.trim(), type: type.value, description: desc.value.trim(), items: lines() }).then(function () {
                 ZxUI.setLoading(save, false);

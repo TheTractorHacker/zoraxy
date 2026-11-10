@@ -52,7 +52,9 @@
         <!-- Text edit view (hidden by default) -->
         <div id="trustedProxyTextView" style="display:none;">
             <p style="color: grey;"><i class="info circle icon"></i>One entry per line. Format: <code>ip/cidr, description</code>. Lines starting with <code>#</code> are ignored.</p>
-            <textarea id="trustedProxyTextArea" class="ui fluid" rows="14"
+            <div id="trustedProxyTextError" class="zx-callout zx-callout--danger" role="alert" hidden></div>
+            <label for="trustedProxyTextArea" class="zx-sr-only">Trusted proxy list, one entry per line</label>
+            <textarea id="trustedProxyTextArea" class="ui fluid" rows="14" aria-describedby="trustedProxyTextError"
                 style="width:100%; font-family:monospace; font-size:0.95em; padding:0.75em; border:1px solid rgba(34,36,38,.15); border-radius:0.28571429rem; resize:vertical;"></textarea>
             <br><br>
             <button class="ui basic green button" onclick="window.saveBulkTrustedProxies();">
@@ -72,10 +74,11 @@
         <h3>Add Trusted Proxy</h3>
         <div class="ui form">
             <div class="two fields">
-                <div class="field">
+                <div class="field zx-field">
                     <label for="trustedProxyIpInput">IP Address / CIDR</label>
                     <input type="text" id="trustedProxyIpInput" placeholder="e.g. 103.21.244.0/22 or 192.168.1.1">
-                    <small>Supports single IP addresses and CIDR notation (e.g. 192.168.1.0/24 or 192.168.1.1)</small>
+                    <small>Supports single IP addresses and CIDR notation (e.g. 192.168.1.0/24 or 192.168.1.1). A range that matches every address (/0) is refused.</small>
+                    <p class="zx-error" id="trustedProxyIpError" role="alert"></p>
                 </div>
                 <div class="field">
                     <label for="trustedProxyDescInput">Description</label>
@@ -98,6 +101,51 @@
     }
 
     function esc(s){ return ZxUI.esc(s); }
+    function t(s){ return typeof window.t === "function" ? window.t(s) : s; }
+    function tf(s, a){ return typeof window.tf === "function" ? window.tf(s, a) : s.replace('{0}', a); }
+
+    // Same rules as the server (validateTrustedProxyEntry in accesslist.go); the server is the authority,
+    // this only gives the answer next to the field. Returns "" when the value is acceptable.
+    function isIPv4(v){
+        var p = v.split('.');
+        return p.length === 4 && p.every(function(x){ return /^\d{1,3}$/.test(x) && +x <= 255; });
+    }
+    function isIPv6(v){
+        if (v.indexOf(':') < 0 || !/^[0-9a-fA-F:.]+$/.test(v) || v.indexOf(':::') >= 0) return false;
+        if (v.split('::').length > 2) return false;
+        var groups = v.split(':').filter(function(g){ return g !== ''; });
+        var extra = 0;
+        if (groups.length && groups[groups.length - 1].indexOf('.') >= 0) {
+            if (!isIPv4(groups.pop())) return false;
+            extra = 2;
+        }
+        if (!groups.every(function(g){ return /^[0-9a-fA-F]{1,4}$/.test(g); })) return false;
+        var n = groups.length + extra;
+        return v.indexOf('::') >= 0 ? n < 8 : n === 8;
+    }
+    function trustedProxyProblem(v){
+        v = (v || '').trim();
+        if (v === '') return t("Please enter an IP address or CIDR");
+        var slash = v.indexOf('/');
+        var addr = slash < 0 ? v : v.slice(0, slash);
+        var v4 = isIPv4(addr), v6 = !v4 && isIPv6(addr);
+        if (!v4 && !v6) return slash < 0 ? tf("'{0}' is not a valid IP address or CIDR range", v) : tf("'{0}' is not a valid CIDR range (example: 203.0.113.0/24)", v);
+        if (slash >= 0) {
+            var pre = v.slice(slash + 1);
+            if (!/^\d{1,3}$/.test(pre) || +pre > (v4 ? 32 : 128)) return tf("'{0}' is not a valid CIDR range (example: 203.0.113.0/24)", v);
+            if (+pre === 0) return tf("'{0}' matches every address and would make every visitor a trusted proxy", v);
+        }
+        return "";
+    }
+    function ipSortKey(ip){
+        var a = ip.split('/')[0];
+        if (isIPv4(a)) return '0' + a.split('.').map(function(x){ return ('000' + x).slice(-3); }).join('.') + '/' + ip;
+        return '1' + ip.toLowerCase();
+    }
+    function showTextError(msg){
+        var box = $('#trustedProxyTextError');
+        if (msg) { box.text(msg).prop('hidden', false); } else { box.text('').prop('hidden', true); }
+    }
 
     function initTrustedProxyTable(){
         $.get('/api/trustedproxy/list', function(data) {
@@ -111,6 +159,7 @@
                 </tr>
                 `);
             } else {
+                data = data.slice().sort(function(a, b){ var x = ipSortKey(a.IP), y = ipSortKey(b.IP); return x < y ? -1 : (x > y ? 1 : 0); });
                 $.each(data, function(index, proxy) {
                     let ipRaw = proxy.IP;
                     let ip = esc(proxy.IP);
@@ -162,6 +211,7 @@
         if (_inTextEditMode) {
             // Switch back to table mode without saving
             _inTextEditMode = false;
+            showTextError('');
             $('#trustedProxyTableView').show();
             $('#trustedProxyAddForm').show();
             $('#trustedProxyTextView').hide();
@@ -182,13 +232,24 @@
 
     function saveBulkTrustedProxies() {
         var csv = $('#trustedProxyTextArea').val();
+        showTextError('');
+        var lines = csv.split('\n');
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i].trim();
+            if (line === '' || line.charAt(0) === '#') continue;
+            var problem = trustedProxyProblem(line.split(',')[0]);
+            if (problem) {
+                showTextError(tf('Line {0}', i + 1) + ': ' + problem + '. ' + t('Nothing was saved.'));
+                return;
+            }
+        }
         $.cjax({
             type: 'POST',
             url: '/api/trustedproxy/bulkUpdate',
             data: { csv: csv },
             success: function(data) {
                 if (data.error != undefined) {
-                    msgbox("Failed to save: " + data.error, false);
+                    showTextError(data.error);
                     return;
                 }
                 msgbox("Trusted proxy list saved", true);
@@ -204,6 +265,7 @@
     }
 
     function cancelBulkTrustedProxies() {
+        showTextError('');
         // Re-fetch from backend and switch back to table view
         _inTextEditMode = false;
         $('#trustedProxyTableView').show();
@@ -214,21 +276,24 @@
     }
 
     function resetDefaultTrustedProxies() {
-        if (!confirm("Reset the trusted proxy list to factory defaults? This will remove all custom entries.")) {
-            return;
-        }
-        $.cjax({
-            type: 'POST',
-            url: '/api/trustedproxy/reset',
-            success: function(data) {
-                if (data.error != undefined) {
-                    msgbox("Failed to reset: " + data.error, false);
-                    return;
+        ZxUI.confirm({title: t("Reset to default?"), message: t("Reset the trusted proxy list to factory defaults? This will remove all custom entries."),
+                      confirmLabel: t("Reset to default"), danger: true}).then(function(ok){
+            if (!ok) return;
+            $.cjax({
+                type: 'POST',
+                url: '/api/trustedproxy/reset',
+                success: function(data) {
+                    if (data.error != undefined) {
+                        msgbox("Failed to reset: " + data.error, false);
+                        return;
+                    }
+                    // data is the new proxy list
+                    showTextError('');
+                    $('#trustedProxyTextArea').val(proxyListToCsv(data));
+                    initTrustedProxyTable();
+                    msgbox("Trusted proxy list reset to defaults", true);
                 }
-                // data is the new proxy list
-                $('#trustedProxyTextArea').val(proxyListToCsv(data));
-                msgbox("Trusted proxy list reset to defaults", true);
-            }
+            });
         });
     }
 
@@ -236,10 +301,14 @@
         var ip = $('#trustedProxyIpInput').val().trim();
         var desc = $('#trustedProxyDescInput').val().trim();
 
-        if (ip == ''){
-            msgbox("Please enter an IP address or CIDR", false);
+        var problem = trustedProxyProblem(ip);
+        var field = ZxUI.field('#trustedProxyIpInput');
+        if (problem){
+            field.setError(problem);
+            $('#trustedProxyIpInput').focus();
             return;
         }
+        field.clearError();
 
         $.cjax({
             type: 'POST',
@@ -247,7 +316,7 @@
             data: { ip: ip, desc: desc },
             success: function(data){
                 if (data.error != undefined){
-                    msgbox("Failed to add trusted proxy: " + data.error, false);
+                    field.setError(data.error);
                     return;
                 }
                 msgbox("Trusted proxy added", true);
@@ -259,22 +328,22 @@
     }
 
     function removeTrustedProxy(ip){
-        if (!confirm("Are you sure you want to remove this trusted proxy?")){
-            return;
-        }
-
-        $.cjax({
-            type: 'POST',
-            url: '/api/trustedproxy/remove',
-            data: { ip: ip },
-            success: function(data){
-                if (data.error != undefined){
-                    msgbox("Failed to remove trusted proxy: " + data.error, false);
-                    return;
+        ZxUI.confirm({title: t("Remove trusted proxy?"), message: t("Are you sure you want to remove this trusted proxy?"),
+                      confirmLabel: t("Remove"), danger: true}).then(function(ok){
+            if (!ok) return;
+            $.cjax({
+                type: 'POST',
+                url: '/api/trustedproxy/remove',
+                data: { ip: ip },
+                success: function(data){
+                    if (data.error != undefined){
+                        msgbox("Failed to remove trusted proxy: " + data.error, false);
+                        return;
+                    }
+                    msgbox("Trusted proxy removed", true);
+                    initTrustedProxyTable();
                 }
-                msgbox("Trusted proxy removed", true);
-                initTrustedProxyTable();
-            }
+            });
         });
     }
 
@@ -298,8 +367,9 @@
         var newIp = row.find('.proxy-ip-edit input').val().trim();
         var newDesc = row.find('.proxy-desc-edit input').val().trim();
 
-        if (newIp == ''){
-            msgbox("IP address cannot be empty", false);
+        var problem = trustedProxyProblem(newIp);
+        if (problem){
+            msgbox(problem, false, 6000);
             return;
         }
 

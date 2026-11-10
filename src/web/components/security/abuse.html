@@ -8,18 +8,18 @@
     <div class="ui toggle checkbox"><input type="checkbox" id="abEnabled"><label for="abEnabled">Enable automatic banning</label></div>
     <div class="ui divider"></div>
     <h4>Detectors</h4>
-    <div style="overflow-x:auto">
-        <table class="ui very basic unstackable table">
+    <div class="zx-table-wrap" tabindex="0" role="region" aria-label="Detectors">
+        <table class="zx-table zx-table--compact">
             <thead><tr><th>Enabled</th><th>Event</th><th>Events (N)</th><th>Within seconds (T)</th></tr></thead>
             <tbody id="abDetectors"></tbody>
         </table>
     </div>
     <h4>Ban</h4>
     <div class="four fields">
-        <div class="field"><label for="abBan">Ban duration (s)</label><input type="number" id="abBan" min="1"></div>
-        <div class="field"><label for="abEsc">Escalation factor</label><input type="number" id="abEsc" min="1" max="10" step="0.5"></div>
-        <div class="field"><label for="abMax">Max ban (s)</label><input type="number" id="abMax" min="1"></div>
-        <div class="field"><label for="abV6">IPv6 prefix tracked</label><input type="number" id="abV6" min="32" max="128"></div>
+        <div class="field zx-field"><label for="abBan">Ban duration (s)</label><input type="number" id="abBan" min="1" step="1"><p class="zx-help">1 or more seconds</p></div>
+        <div class="field zx-field"><label for="abEsc">Escalation factor</label><input type="number" id="abEsc" min="1" max="10" step="0.5"><p class="zx-help">1 to 10</p></div>
+        <div class="field zx-field"><label for="abMax">Max ban (s)</label><input type="number" id="abMax" min="1" step="1"><p class="zx-help">At least the ban duration</p></div>
+        <div class="field zx-field"><label for="abV6">IPv6 prefix tracked</label><input type="number" id="abV6" min="32" max="128" step="1"><p class="zx-help">32 to 128</p></div>
     </div>
     <div class="field"><label for="abAllow">Allow-list (never banned), one IP or CIDR per line</label><textarea id="abAllow" rows="3"></textarea></div>
     <div class="field"><label for="abExclude">Proxy rules excluded from detection (hostname per line)</label><textarea id="abExclude" rows="2"></textarea></div>
@@ -38,9 +38,9 @@
 </div>
 <div class="ui form">
     <div class="four fields">
-        <div class="field"><input type="text" id="abNewIp" placeholder="IP address" aria-label="IP address to ban"></div>
-        <div class="field"><input type="number" id="abNewSecs" placeholder="seconds (empty = permanent)" aria-label="Ban duration in seconds, empty for permanent"></div>
-        <div class="field"><input type="text" id="abNewReason" placeholder="reason" aria-label="Reason"></div>
+        <div class="field zx-field"><input type="text" id="abNewIp" placeholder="IP address" aria-label="IP address to ban"><p class="zx-error"></p></div>
+        <div class="field zx-field"><input type="number" id="abNewSecs" min="1" step="1" placeholder="seconds (empty = permanent)" aria-label="Ban duration in seconds, empty for permanent"><p class="zx-error"></p></div>
+        <div class="field zx-field"><input type="text" id="abNewReason" maxlength="200" placeholder="reason" aria-label="Reason"></div>
         <div class="field"><button class="ui basic red button" id="abAdd"><i class="ban icon"></i> Ban</button></div>
     </div>
 </div>
@@ -66,6 +66,8 @@
     var cfg = null;
     function esc(s) { return $("<div>").text(s == null ? "" : String(s)).html(); }
     function lines(v) { return v.split("\n").map(function (x) { return x.trim(); }).filter(Boolean); }
+    function t(s) { return typeof window.t === "function" ? window.t(s) : s; }
+    function tf(s, a) { return typeof window.tf === "function" ? window.tf(s, a) : s.replace("{0}", a); }
     function toast(m, ok) { if (window.parent && window.parent.msgbox) { window.parent.msgbox(m, ok); } else if (window.msgbox) { msgbox(m, ok); } }
     function fmt(t) { return t ? new Date(t * 1000).toLocaleString() : "never"; }
 
@@ -79,8 +81,8 @@
             var rows = "";
             (c.AllKinds || []).forEach(function (k) {
                 var d = c.Detectors[k] || {};
-                rows += '<tr data-k="' + esc(k) + '"><td><input type="checkbox" class="dEn" aria-label="Enable detector ' + esc(KINDS[k] || k) + '"' + (d.Enabled ? " checked" : "") + '></td><td>' + esc(KINDS[k] || k) +
-                    '</td><td><input type="number" class="dTh" aria-label="Threshold" min="1" value="' + esc(d.Threshold) + '" style="width:6em"></td><td><input type="number" class="dWin" aria-label="Window in seconds" min="1" value="' + esc(d.WindowSec) + '" style="width:7em"></td></tr>';
+                rows += '<tr data-k="' + esc(k) + '"><td data-label="Enabled"><input type="checkbox" class="dEn" aria-label="Enable detector ' + esc(KINDS[k] || k) + '"' + (d.Enabled ? " checked" : "") + '></td><td data-label="Event">' + esc(KINDS[k] || k) +
+                    '</td><td data-label="Events (N)"><input type="number" class="dTh" aria-label="Threshold" min="1" step="1" value="' + esc(d.Threshold) + '" style="width:6em"></td><td data-label="Within seconds (T)"><input type="number" class="dWin" aria-label="Window in seconds" min="1" step="1" value="' + esc(d.WindowSec) + '" style="width:7em"></td></tr>';
             });
             $("#abDetectors").html(rows);
             $("#abTokenState").html(c.RemoteTokenSet ? "A token is set." : "No token set (remote API disabled).");
@@ -91,13 +93,38 @@
         $.get("/api/abuse/list", function (r) {
             var h = "";
             (r.Bans || []).forEach(function (b) {
-                h += "<tr><td>" + esc(b.IP) + "</td><td>" + esc(b.Scope || "all") + "</td><td>" + esc(b.Reason) + " (" + esc(b.Source) + ", level " + esc(b.Level) + ")</td><td>" +
+                h += "<tr><td>" + esc(b.IP) + "</td><td>" + esc(b.Scope || "all") + '</td><td style="max-width:22em;overflow-wrap:anywhere">' + esc(b.Reason) + " (" + esc(b.Source) + ", level " + esc(b.Level) + ")</td><td>" +
                     esc(fmt(b.Created)) + "</td><td>" + esc(fmt(b.Expires)) + '</td><td><button class="ui mini basic button abUnban" data-ip="' + esc(b.IP) + '" data-scope="' + esc(b.Scope) + '">Unban</button></td></tr>';
             });
             $("#abBans").html(h || '<tr><td colspan="6">No active bans.</td></tr>');
         });
     }
+    // Out-of-range numbers are shown next to the field instead of being silently rewritten by the server.
+    function whole(v) { return /^-?\d+$/.test(String(v).trim()); }
+    function checkForm() {
+        var bad = [];
+        function need(sel, ok, msg) {
+            var f = ZxUI.field(sel);
+            if (ok) { f.clearError(); } else { f.setError(t(msg)); bad.push(sel); }
+        }
+        var ban = $("#abBan").val(), esc_ = $("#abEsc").val(), max = $("#abMax").val(), v6 = $("#abV6").val();
+        need("#abBan", whole(ban) && +ban >= 1, "Enter a whole number of seconds, 1 or more");
+        need("#abEsc", esc_ !== "" && +esc_ >= 1 && +esc_ <= 10, "Enter a number from 1 to 10");
+        need("#abMax", whole(max) && +max >= 1 && (!whole(ban) || +max >= +ban), "Enter a whole number of seconds that is at least the ban duration");
+        need("#abV6", whole(v6) && +v6 >= 32 && +v6 <= 128, "Enter a whole number from 32 to 128");
+        $("#abDetectors tr").each(function () {
+            var th = $(this).find(".dTh"), win = $(this).find(".dWin");
+            [th, win].forEach(function (el) {
+                var ok = whole(el.val()) && +el.val() >= 1;
+                el.attr("aria-invalid", ok ? null : "true");
+                if (!ok) { bad.push(el); }
+            });
+        });
+        if (bad.length) { $(typeof bad[0] === "string" ? bad[0] : bad[0][0]).focus(); }
+        return bad.length === 0;
+    }
     function saveAbuse() {
+        if (!checkForm()) { return { error: t("Some values are out of range. Fix the highlighted fields and save again.") }; }
         var c = { Enabled: $("#abEnabled").prop("checked"), Detectors: {}, BanSeconds: +$("#abBan").val(), EscalationFactor: +$("#abEsc").val(),
             MaxBanSeconds: +$("#abMax").val(), IPv6Prefix: +$("#abV6").val(), AllowList: lines($("#abAllow").val()), ExcludeEndpoints: lines($("#abExclude").val()),
             DropConnection: $("#abDrop").prop("checked"), PerEndpoint: $("#abPerEp").prop("checked"), BanPrivate: $("#abPriv").prop("checked") };
@@ -118,18 +145,42 @@
         } });
     });
     $("#abAdd").on("click", function () {
-        $.cjax({ type: "POST", url: "/api/abuse/ban", data: { ip: $("#abNewIp").val(), seconds: $("#abNewSecs").val(), reason: $("#abNewReason").val() }, success: function (d) {
-            if (d && d.error) { toast(d.error, false); } else { $("#abNewIp").val(""); } loadBans();
+        var ipF = ZxUI.field("#abNewIp"), secF = ZxUI.field("#abNewSecs");
+        var ip = $("#abNewIp").val().trim(), secs = $("#abNewSecs").val().trim();
+        ipF.clearError(); secF.clearError();
+        // the seconds field is documented as "empty = permanent": anything else must be a positive whole number
+        if ($("#abNewSecs")[0].validity.badInput || (secs !== "" && !(whole(secs) && +secs >= 1))) {
+            secF.setError(t("Enter a whole number of seconds, 1 or more, or leave empty for a permanent ban"));
+            $("#abNewSecs").focus();
+            return;
+        }
+        if (ip === "") { ipF.setError(t("Enter the IP address to ban")); $("#abNewIp").focus(); return; }
+        $.cjax({ type: "POST", url: "/api/abuse/ban", data: { ip: ip, seconds: secs, reason: $("#abNewReason").val() }, success: function (d) {
+            if (d && d.error) { ipF.setError(d.error.charAt(0).toUpperCase() + d.error.slice(1)); $("#abNewIp").focus(); }
+            else { $("#abNewIp").val(""); $("#abNewSecs").val(""); $("#abNewReason").val(""); }
+            loadBans();
         } });
     });
+    $("#abNewIp, #abNewSecs").on("input", function () { ZxUI.field(this).clearError(); });
+    $("#abuseForm").on("input", "input", function () { ZxUI.field(this).clearError(); $(this).removeAttr("aria-invalid"); });
     $("#abRefresh").on("click", loadBans);
     $("#abTokGen").on("click", function () {
-        $.cjax({ type: "POST", url: "/api/abuse/token", data: { action: "generate" }, success: function (d) {
-            if (d && d.token) { $("#abTokShow").text("Token (shown once): " + d.token).show(); loadConfig(); } else { toast((d && d.error) || "failed", false); }
-        } });
+        function gen() {
+            $.cjax({ type: "POST", url: "/api/abuse/token", data: { action: "generate" }, success: function (d) {
+                if (d && d.token) { $("#abTokShow").text("Token (shown once): " + d.token).show(); loadConfig(); } else { toast((d && d.error) || "failed", false); }
+            } });
+        }
+        if (cfg && cfg.RemoteTokenSet) {
+            ZxUI.confirm({ title: t("Replace the remote API token?"), message: t("The current token stops working immediately. Every script or fail2ban action that uses it must be updated."),
+                confirmLabel: t("Replace token"), danger: true }).then(function (ok) { if (ok) { gen(); } });
+        } else { gen(); }
     });
     $("#abTokRevoke").on("click", function () {
-        $.cjax({ type: "POST", url: "/api/abuse/token", data: { action: "revoke" }, success: function () { $("#abTokShow").hide(); loadConfig(); } });
+        ZxUI.confirm({ title: t("Revoke the remote API token?"), message: t("The remote API is switched off and every script or fail2ban action that uses the token stops working."),
+            confirmLabel: t("Revoke token"), danger: true }).then(function (ok) {
+            if (!ok) { return; }
+            $.cjax({ type: "POST", url: "/api/abuse/token", data: { action: "revoke" }, success: function () { $("#abTokShow").hide(); loadConfig(); } });
+        });
     });
     loadConfig(); loadBans();
 })();
