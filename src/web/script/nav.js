@@ -75,6 +75,7 @@
         ] },
         { id: "system", label: N_("System"), icon: "cog", items: [
             { tag: "updater", label: N_("Update"), icon: "download", kw: "upgrade version release rollback" },
+            { tag: "aiassist", label: N_("AI assistant"), icon: "lightbulb outline", kw: "claude llm model explain suggest rules ai assistant anthropic ollama" },
             { tag: "history", label: N_("History"), icon: "history", kw: "undo revert restore versions changes diff rollback snapshot backup" },
             { tag: "apitokens", label: N_("API Tokens"), icon: "key", kw: "api key automation bearer" },
             { tag: "plugins", label: N_("Plugin Manager"), icon: "puzzle piece", kw: "extensions addons plugins" },

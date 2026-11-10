@@ -1,4 +1,5 @@
 <script src="./script/useragent.js"></script>
+<script src="./script/aiassist.js"></script> <!-- AI assistant helpers (optional feature) -->
 <link href="./script/datepicker/dp-light.css" rel="stylesheet">
 <script defer src="./script/datepicker/datepicker.js"></script>
 <!--
@@ -712,6 +713,19 @@
         if (s === 444) return '<span class="st5" title="Connection closed without an answer">444 dropped</span>';
         return '<b class="st' + esc(String(s).charAt(0)) + '">' + esc(s) + '</b>';
     }
+    /* ---- AI assistant (optional, off by default): one isolated block, see script/aiassist.js ---- */
+    var aiOn = false;
+    $.getJSON("./api/ai/status", function(s){ aiOn = !!(s && s.enabled && s.explain); });
+    function aiExplainButton(e){
+        return aiOn ? ' <button type="button" class="sLink aiExplainBtn" data-seq="' + esc(e.seq) + '" title="Explain this (AI)" aria-label="Explain this blocked request (AI)"><i class="magic icon"></i></button>' : '';
+    }
+    $("#sBlocked").on("click", ".aiExplainBtn", function(ev){
+        ev.stopPropagation();
+        var box = $("<div></div>");
+        zrAI.modal({title: "Explain this blocked request", node: box, cancel: "Close"});
+        zrAI.mount(box, "blocked", $(this).attr("data-seq"));
+    });
+
     function blockedRow(e){
         var tr = $("<tr></tr>");
         tr.append('<td class="nowrap" title="' + esc(new Date(e.t * 1000).toLocaleString()) + '">' + ago(e.t) + '</td>',
@@ -721,7 +735,7 @@
             '<td>' + esc(e.host) + '</td>',
             '<td style="word-break:break-all;"><b>' + esc(e.method) + '</b> <span class="mono">' + esc(dec(e.path)) + '</span></td>',
             '<td class="nowrap">' + statusCell(e.status) + '</td>',
-            '<td>' + chip(e.reason) + (e.detail ? '<span class="sDetail">' + esc(e.detail) + '</span>' : '') + '</td>');
+            '<td>' + chip(e.reason) + (e.detail ? '<span class="sDetail">' + esc(e.detail) + '</span>' : '') + aiExplainButton(e) + '</td>');
         return tr;
     }
 

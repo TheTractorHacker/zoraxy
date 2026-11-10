@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"imuslab.com/zoraxy/mod/aiassist"
 	"imuslab.com/zoraxy/mod/utils"
 )
 
@@ -41,6 +42,9 @@ func writeConfigZip(out io.Writer, confDir string, dbPath string) error {
 		rel, err := filepath.Rel(confDir, filePath)
 		if err != nil {
 			return err
+		}
+		if aiassist.IsSecretFile(rel) {
+			return nil // the AI assistant key and its install key are never exported
 		}
 		return addFileToZip(zw, "conf/"+filepath.ToSlash(rel), filePath)
 	})

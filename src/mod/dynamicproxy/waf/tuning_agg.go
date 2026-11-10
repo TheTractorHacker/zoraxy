@@ -3,6 +3,7 @@ package waf
 import (
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -72,8 +73,37 @@ type TuningReport struct {
 
 const maxTuningItems = 200
 
-// Rules that only evaluate the anomaly score, never a detection of their own
-func isScoreRule(id int) bool { return id == anomalyEvaluationRuleID || id == 959100 || id == 980130 }
+// Rules that only evaluate the anomaly score, never a detection of their own: the blocking
+// evaluation (949xxx inbound), the outbound evaluation (959xxx) and the correlation/reporting rules
+// (980xxx). Excluding one of them disables blocking, so no tuning path may do it.
+func isScoreRule(id int) bool {
+	return id == anomalyEvaluationRuleID || (id >= 949000 && id < 950000) || (id >= 959000 && id < 960000) || (id >= 980000 && id < 981000)
+}
+
+// IsScoreRule is the exported form of isScoreRule for callers that build exclusions (the AI
+// assistant, the tuning apply endpoint).
+func IsScoreRule(id int) bool { return isScoreRule(id) }
+
+// SpecTouchesScoreRule reports whether a rule ID specification ("949110" or a range "949000-949999")
+// names or covers a score rule. Unparsable specs report true: they are refused.
+func SpecTouchesScoreRule(spec string) bool {
+	spec = strings.TrimSpace(spec)
+	lo, hi := spec, spec
+	if i := strings.IndexByte(spec, '-'); i >= 0 {
+		lo, hi = spec[:i], spec[i+1:]
+	}
+	a, err1 := strconv.Atoi(lo)
+	b, err2 := strconv.Atoi(hi)
+	if err1 != nil || err2 != nil || a < 0 || b < a {
+		return true
+	}
+	for _, r := range [][2]int{{949000, 949999}, {959000, 959999}, {980000, 980999}} {
+		if a <= r[1] && b >= r[0] {
+			return true
+		}
+	}
+	return false
+}
 
 // Variable name families whose names rotate per site or per visitor. display is shown, rx is the selector.
 var nameFamilies = []struct {
