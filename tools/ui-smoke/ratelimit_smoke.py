@@ -76,6 +76,9 @@ def ratelimit_ui(pg, ctx):
     up = serve_upstream()
     upstream = f"127.0.0.1:{up.server_address[1]}"
     pg.set_viewport_size({"width": 1366, "height": 900})
+    js("localStorage.removeItem('zoraxy.lang')")  # English, whatever an earlier scenario left
+    pg.reload(wait_until="networkidle")
+    pg.wait_for_timeout(600)
     theme(False)
     current["page"] = "ratelimit-seed"
     post("/api/proxy/del", {"ep": RL_HOST})

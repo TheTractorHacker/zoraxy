@@ -2889,7 +2889,6 @@ def main():
             b.close()
             return
         consistency_ui(pg, ctx)
-        ratelimit_ui(pg, ctx)
         sites_ui(pg, ctx)
         certs_traffic_ui(pg, ctx)
         tabs = pg.eval_on_selector_all("#mainmenu .item[tag]", "els => els.map(e => e.getAttribute('tag'))")
@@ -3810,6 +3809,7 @@ def main():
             pg.screenshot(path=os.path.join(args.out, f"mobile-{t}.png"))
         blocked_view(pg)
         i18n_checks(pg, ctx)
+        ratelimit_ui(pg, ctx)  # last: its 429 answers land in the blocked requests log, which blocked_view expects to be empty
         b.close()
 
 
