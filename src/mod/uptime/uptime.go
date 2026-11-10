@@ -408,7 +408,11 @@ func (m *Monitor) getWebsiteStatus(url string, skipTLSVerification bool, timeout
 		Transport: transport,
 	}
 
-	req, _ := http.NewRequest("GET", url, nil)
+	req, reqErr := http.NewRequest("GET", url, nil)
+	if reqErr != nil {
+		//A malformed target (e.g. "not a host!!") must not crash the monitor
+		return 0, reqErr
+	}
 	req.Header = http.Header{
 		"User-Agent": {UPTIME_MONITOR_USER_AGENT},
 	}
@@ -427,7 +431,10 @@ func (m *Monitor) getWebsiteStatus(url string, skipTLSVerification bool, timeout
 			m.Config.Logger.PrintAndLog(LOG_MODULE_NAME, fmt.Sprintf("Error pinging %s: %v, try swapping protocol to %s", url, err, rewriteURL), err)
 		}
 
-		req, _ = http.NewRequest("GET", rewriteURL, nil)
+		req, reqErr = http.NewRequest("GET", rewriteURL, nil)
+		if reqErr != nil {
+			return 0, reqErr
+		}
 		req.Header = http.Header{
 			"User-Agent": {UPTIME_MONITOR_USER_AGENT},
 		}

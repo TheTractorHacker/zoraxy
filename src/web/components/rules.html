@@ -61,7 +61,7 @@
                                 <div class="field">
                                     <div class="ui checkbox">
                                         <input type="checkbox" id="useStickySessionLB">
-                                        <label>Sticky Session<br><small>Enable stick session on upstream load balancing</small></label>
+                                        <label>Sticky Session<br><small>Enable sticky session on upstream load balancing</small></label>
                                     </div>
                                 </div>
                                 <div class="field">
@@ -201,7 +201,7 @@
                                         </tr></thead>
                                         <tbody id="basicAuthCredentialTable">
                                         <tr>
-                                            <td colspan="3"><i class="ui green circle check icon"></i> No Entered Credential</td>
+                                            <td colspan="3"><i class="ui grey info circle icon"></i> No credentials entered</td>
                                         </tr>
                                         </tbody>
                                     </table>
@@ -580,7 +580,7 @@
         tableBody.empty();
 
         if (credentials.length === 0) {
-            tableBody.append('<tr><td colspan="3"><i class="ui green circle check icon"></i> No Entered Credential</td></tr>');
+            tableBody.append('<tr><td colspan="3"><i class="ui grey info circle icon"></i> No credentials entered</td></tr>');
         } else {
             for (var i = 0; i < credentials.length; i++) {
             var credential = credentials[i];

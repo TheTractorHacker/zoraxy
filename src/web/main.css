@@ -702,9 +702,9 @@ body.darkTheme .menudivider{
     position: absolute;
     bottom: 0.1em;
     right: 0.2em;
-    font-size: 1em;
-    color:rgb(224, 224, 224);
-    opacity: 0.7;
+    font-size: 0.9em;
+    color: var(--zx-text-muted, #545b66); /* was pale grey on white (1.3:1) */
+    opacity: 1;
     pointer-events: none;
     user-select: none;
 }

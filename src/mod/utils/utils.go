@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/json"
 	"errors"
 	"html"
 	"log"
@@ -32,7 +33,9 @@ func SendJSONResponse(w http.ResponseWriter, json string) {
 
 func SendErrorResponse(w http.ResponseWriter, errMsg string) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte("{\"error\":\"" + errMsg + "\"}"))
+	//Marshal the message: quotes, backslashes and newlines in it (a parse error quoting the input) must not break the JSON
+	body, _ := json.Marshal(map[string]string{"error": errMsg})
+	w.Write(body)
 }
 
 func SendOK(w http.ResponseWriter) {

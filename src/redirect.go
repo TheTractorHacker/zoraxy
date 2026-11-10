@@ -2,8 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 
 	"imuslab.com/zoraxy/mod/utils"
 )
@@ -14,6 +17,48 @@ import (
 	This script handle all the http handlers
 	related to redirection function in the reverse proxy
 */
+
+var redirectSchemeRe = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9+.-]*:`)
+
+// stripRedirectScheme removes http:// or https:// and a trailing slash so a source and a target can be compared
+func stripRedirectScheme(s string) string {
+	l := strings.ToLower(s)
+	l = strings.TrimPrefix(strings.TrimPrefix(l, "http://"), "https://")
+	return strings.TrimSuffix(l, "/")
+}
+
+// checkRedirectInput validates the source and the destination of a redirection rule
+func checkRedirectInput(source, dest string) error {
+	if source == "" {
+		return errors.New("redirect url cannot be empty")
+	}
+	if dest == "" {
+		return errors.New("destination url cannot be empty")
+	}
+	if len(source) > 200 {
+		return errors.New("redirect url is too long (200 characters at most)")
+	}
+	if len(dest) > 2000 {
+		return errors.New("destination url is too long (2000 characters at most)")
+	}
+	if strings.ContainsAny(source, " \t\r\n\x00") {
+		return errors.New("redirect url cannot contain spaces")
+	}
+	if strings.ContainsAny(dest, " \t\r\n\x00") {
+		return errors.New("destination url cannot contain spaces")
+	}
+	if m := redirectSchemeRe.FindString(dest); m != "" {
+		rest := dest[len(m):]
+		isHostPort := rest != "" && rest[0] >= '0' && rest[0] <= '9' //host:8080/path has no scheme
+		if !isHostPort && !strings.HasPrefix(strings.ToLower(dest), "http://") && !strings.HasPrefix(strings.ToLower(dest), "https://") {
+			return errors.New("destination url must be a host name or start with http:// or https://")
+		}
+	}
+	if stripRedirectScheme(source) == stripRedirectScheme(dest) {
+		return errors.New("the destination is the same as the source, that would redirect in a loop")
+	}
+	return nil
+}
 
 // Handle request for listing all stored redirection rules
 func handleListRedirectionRules(w http.ResponseWriter, r *http.Request) {
@@ -62,6 +107,19 @@ func handleAddRedirectionRule(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		utils.SendErrorResponse(w, "invalid status code number")
 		return
+	}
+
+	redirectUrl = strings.TrimSpace(redirectUrl)
+	destUrl = strings.TrimSpace(destUrl)
+	if err := checkRedirectInput(redirectUrl, destUrl); err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
+	}
+	for _, existing := range redirectTable.GetAllRedirectRules() {
+		if existing.RedirectURL == redirectUrl {
+			utils.SendErrorResponse(w, "a redirection rule for "+redirectUrl+" already exists, edit it instead")
+			return
+		}
 	}
 
 	err = redirectTable.AddRedirectRule(redirectUrl, destUrl, forwardChildpath, redirectionStatusCode, requireExactMatch, deviceType)
@@ -135,6 +193,21 @@ func handleEditRedirectionRule(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		utils.SendErrorResponse(w, "invalid status code number")
 		return
+	}
+
+	newRedirectUrl = strings.TrimSpace(newRedirectUrl)
+	destUrl = strings.TrimSpace(destUrl)
+	if err := checkRedirectInput(newRedirectUrl, destUrl); err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
+	}
+	if newRedirectUrl != originalRedirectUrl {
+		for _, existing := range redirectTable.GetAllRedirectRules() {
+			if existing.RedirectURL == newRedirectUrl {
+				utils.SendErrorResponse(w, "a redirection rule for "+newRedirectUrl+" already exists")
+				return
+			}
+		}
 	}
 
 	err = redirectTable.EditRedirectRule(originalRedirectUrl, newRedirectUrl, destUrl, forwardChildpath, redirectionStatusCode, requireExactMatch, deviceType)

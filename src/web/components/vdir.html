@@ -293,7 +293,7 @@
                 if (data.error != undefined){
                     msgbox(data.error, false);
                 }else{
-                    msgbox("New path route added");
+                    msgbox("New path route added" + (matchingPath.charAt(0) == "/" ? "" : " as /" + matchingPath));
                     reloadVdirList();
                     resetVdirForm();
                 }

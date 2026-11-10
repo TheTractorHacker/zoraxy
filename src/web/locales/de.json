@@ -465,7 +465,6 @@
   "Confirm Exit?": "Beenden bestätigen?",
   "Confirm New Password": "Neues Passwort bestätigen",
   "Confirm Password": "Passwort bestätigen",
-  "Confirm remove redirection from {0} ?": "Entfernen der Weiterleitung von {0} bestätigen?",
   "Confirm remove WoL record for {0} ({1}) ?": "Entfernen des WoL-Eintrags für {0} ({1}) bestätigen?",
   "Confirm removing {0} from whitelist?": "Entfernen von {0} aus der Zulassungsliste bestätigen?",
   "Congo": "Kongo",
@@ -489,7 +488,6 @@
   "Copy": "Kopieren",
   "Copy from Terminal": "Aus Terminal kopieren",
   "Copy is not available in this context": "Kopieren ist in diesem Kontext nicht verfügbar",
-  "Copy Pathname": "Pfad kopieren",
   "Copy request": "Anfrage kopieren",
   "Copy this secret now. It will not be shown again.": "Dieses Secret jetzt kopieren. Es wird nicht erneut angezeigt.",
   "Copy your new token": "Neuen Token kopieren",
@@ -827,7 +825,6 @@
   "No data": "Keine Daten",
   "No data from yesterday": "Keine Daten von gestern",
   "No domains": "Keine Domains",
-  "No Entered Credential": "Keine Zugangsdaten eingegeben",
   "No lists yet.": "Noch keine Listen.",
   "No matching menu item": "Kein passender Menüeintrag",
   "No Plugins Installed": "Keine Plugins installiert",
@@ -1221,7 +1218,8 @@
   "Listening port": "Listen-Port",
   "HTTP listener address": "HTTP-Listener-Adresse",
   "Use the global default (Listeners settings)": "Globalen Standard verwenden (Listener-Einstellungen)",
-  "Quick ban list": "Schnellsperrliste"
+  "Quick ban list": "Schnellsperrliste",
+  "No credentials entered": "Keine Zugangsdaten eingegeben"
  },
  "rules": []
 }

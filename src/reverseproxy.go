@@ -485,6 +485,8 @@ func ReverseProxyHandleOnOff(w http.ResponseWriter, r *http.Request) {
 	utils.SendOK(w)
 }
 
+const maxProxyRateLimit = 1000000
+
 func ReverseProxyHandleAddEndpoint(w http.ResponseWriter, r *http.Request) {
 	eptype, err := utils.PostPara(r, "type") //Support root and host
 	if err != nil {
@@ -576,6 +578,10 @@ func ReverseProxyHandleAddEndpoint(w http.ResponseWriter, r *http.Request) {
 		}
 		if proxyRateLimit <= 0 {
 			utils.SendErrorResponse(w, "rate limit number must be greater than 0")
+			return
+		}
+		if proxyRateLimit > maxProxyRateLimit {
+			utils.SendErrorResponse(w, "rate limit number is too large (1000000 requests per second at most)")
 			return
 		}
 	}
@@ -681,6 +687,22 @@ func ReverseProxyHandleAddEndpoint(w http.ResponseWriter, r *http.Request) {
 					aliasHostnames = append(aliasHostnames, strings.TrimSpace(aliasHostname))
 				}
 			}
+		}
+
+		//Validate and normalise the hostnames (lower case, no scheme / path / spaces)
+		if rootOrMatchingDomain, err = normalizeRuleHostname(rootOrMatchingDomain); err != nil {
+			utils.SendErrorResponse(w, err.Error())
+			return
+		}
+		for i, aliasHostname := range aliasHostnames {
+			if aliasHostnames[i], err = normalizeRuleHostname(aliasHostname); err != nil {
+				utils.SendErrorResponse(w, err.Error())
+				return
+			}
+		}
+		if _, loadErr := dynamicProxyRouter.LoadProxy(rootOrMatchingDomain); loadErr == nil {
+			utils.SendErrorResponse(w, "a proxy rule for "+rootOrMatchingDomain+" already exists")
+			return
 		}
 
 		//Generate a default authenticaion provider
@@ -801,6 +823,16 @@ func ReverseProxyHandleAddEndpoint(w http.ResponseWriter, r *http.Request) {
 			//Reverse proxy or redirect, must require value to be set
 			utils.SendErrorResponse(w, "target not defined")
 			return
+		}
+		if err := validateDefaultSiteTarget(defaultSiteOption, dsVal); err != nil {
+			utils.SendErrorResponse(w, err.Error())
+			return
+		}
+		if defaultSiteOption == 1 {
+			if err := validateDefaultSiteTarget(1, endpoint); err != nil {
+				utils.SendErrorResponse(w, err.Error())
+				return
+			}
 		}
 
 		//Write the root options to file
@@ -976,6 +1008,10 @@ func ReverseProxyHandleEditEndpoint(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if proxyRateLimit > maxProxyRateLimit {
+		utils.SendErrorResponse(w, "rate limit number is too large (1000000 requests per second at most)")
+		return
+	}
 	if requireRateLimit && proxyRateLimit <= 0 {
 		utils.SendErrorResponse(w, "rate limit number must be greater than 0")
 		return
@@ -1309,6 +1345,11 @@ func ReverseProxyHandleSetHostname(w http.ResponseWriter, r *http.Request) {
 	if newHostname == "/" {
 		//Reserevd, reutrn error
 		utils.SendErrorResponse(w, "Invalid new hostname: system reserved path")
+		return
+	}
+	//Validate before anything is removed: an invalid name must never cost the rule
+	if newHostname, err = normalizeRuleHostname(newHostname); err != nil {
+		utils.SendErrorResponse(w, err.Error())
 		return
 	}
 

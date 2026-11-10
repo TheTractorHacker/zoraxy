@@ -479,7 +479,6 @@
   "Confirm Exit?": "Confirmar saída?",
   "Confirm New Password": "Confirmar nova senha",
   "Confirm Password": "Confirmar senha",
-  "Confirm remove redirection from {0} ?": "Confirmar a remoção do redirecionamento de {0}?",
   "Confirm remove WoL record for {0} ({1}) ?": "Confirmar a remoção do registro WoL de {0} ({1})?",
   "Confirm removing {0} from whitelist?": "Confirmar a remoção de {0} da lista de permissões?",
   "Congo": "Congo",
@@ -503,7 +502,6 @@
   "Copy": "Copiar",
   "Copy from Terminal": "Copiar do terminal",
   "Copy is not available in this context": "A cópia não está disponível neste contexto",
-  "Copy Pathname": "Copiar caminho",
   "Copy request": "Copiar requisição",
   "Copy this secret now. It will not be shown again.": "Copie este segredo agora. Ele não será exibido novamente.",
   "Copy your new token": "Copie seu novo token",
@@ -841,7 +839,6 @@
   "No data": "Sem dados",
   "No data from yesterday": "Sem dados de ontem",
   "No domains": "Nenhum domínio",
-  "No Entered Credential": "Nenhuma credencial informada",
   "No lists yet.": "Nenhuma lista ainda.",
   "No matching menu item": "Nenhum item de menu correspondente",
   "No Plugins Installed": "Nenhum plugin instalado",
@@ -1237,7 +1234,8 @@
   "Listening port": "Porta de escuta",
   "HTTP listener address": "Endereço do listener HTTP",
   "Use the global default (Listeners settings)": "Usar o padrão global (configurações de listeners)",
-  "Quick ban list": "Lista de banimento rápido"
+  "Quick ban list": "Lista de banimento rápido",
+  "No credentials entered": "Nenhuma credencial informada"
  },
  "rules": []
 }

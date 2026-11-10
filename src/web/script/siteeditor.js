@@ -285,6 +285,20 @@
     }
 
     /* ------------------------------------------------------------------ Protection (WAF source) */
+    // The global WAF state decides what "Follow the global policy" means right now (it used to say "off" whatever the state was)
+    var globalWaf = null;
+    function globalWafHelp() {
+        var base = t("Follows the global policy on the WAF page");
+        if (!globalWaf) { return base + "."; }
+        if (!globalWaf.Enabled) { return base + " " + t("(currently off, enable it on the WAF page)."); }
+        return base + " " + (globalWaf.DefaultMode === "block" ? t("(currently blocking).") : t("(currently detection only)."));
+    }
+    function loadGlobalWaf() {
+        $.getJSON("/api/waf/policy", function (p) {
+            if (p && !p.error) { globalWaf = p; if (hrpSel.val($m().find(".wafSource")) === "inherit") { syncProt(); } }
+        });
+    }
+
     function syncProt() {
         var $src = $m().find(".wafSource");
         var v = hrpSel.val($src) || "inherit";
@@ -298,7 +312,7 @@
             off: t("No firewall inspection for this site."),
             detection_only: t("The firewall logs what it would block but lets everything through. A safe way to start."),
             block: t("The firewall refuses requests that look like attacks."),
-            inherit: t("Follows the global policy on the WAF page (off until you enable it there)."),
+            inherit: globalWafHelp(),
             profile: t("Uses a firewall profile. Choosing another option here replaces it."),
             custom: t("This site has its own complete firewall setup. Choosing another option here replaces it.")
         };
@@ -312,7 +326,7 @@
         $.get("/api/access/list", function (data) {
             if (seq !== st.accessSeq || !$.isArray(data)) { return; }
             $sel.empty();
-            data.forEach(function (r) { $sel.append($("<option>").val(r.ID).text(r.Name + (r.ID === "default" ? "" : " (" + r.ID + ")"))); });
+            data.forEach(function (r) { $sel.append($("<option>").val(r.ID).text(r.Name)); });
             var cur = subd.AccessFilterUUID || "default";
             if (!$sel.find("option").filter(function () { return this.value === cur; }).length) { $sel.append($("<option>").val(cur).text(cur)); }
             $sel.val(cur).prop("disabled", false);
@@ -492,6 +506,7 @@
         updateNote();
         syncProt();
         loadAccess(st.subd);
+        loadGlobalWaf();
         loadCertStatus(st.subd);
         rebase();
         if (st.pending) {

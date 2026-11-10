@@ -488,7 +488,6 @@
   "Confirm Exit?": "Подтвердить выход?",
   "Confirm New Password": "Подтвердите новый пароль",
   "Confirm Password": "Подтвердите пароль",
-  "Confirm remove redirection from {0} ?": "Удалить перенаправление с {0}?",
   "Confirm remove WoL record for {0} ({1}) ?": "Удалить запись WoL для {0} ({1})?",
   "Confirm removing {0} from whitelist?": "Убрать {0} из белого списка?",
   "Congo": "Конго",
@@ -512,7 +511,6 @@
   "Copy": "Копировать",
   "Copy from Terminal": "Скопировать из терминала",
   "Copy is not available in this context": "Копирование недоступно в этом контексте",
-  "Copy Pathname": "Копировать путь",
   "Copy request": "Копировать запрос",
   "Copy this secret now. It will not be shown again.": "Скопируйте этот секрет сейчас. Он больше не будет показан.",
   "Copy your new token": "Скопируйте новый токен",
@@ -853,7 +851,6 @@
   "No data": "Нет данных",
   "No data from yesterday": "Нет данных за вчера",
   "No domains": "Нет доменов",
-  "No Entered Credential": "Учётные данные не введены",
   "No lists yet.": "Списков пока нет.",
   "No matching menu item": "Нет подходящих пунктов меню",
   "No Plugins Installed": "Плагины не установлены",
@@ -1254,7 +1251,8 @@
   "Listening port": "Порт прослушивания",
   "HTTP listener address": "Адрес HTTP-слушателя",
   "Use the global default (Listeners settings)": "Использовать глобальное значение (настройки слушателей)",
-  "Quick ban list": "Список быстрых блокировок"
+  "Quick ban list": "Список быстрых блокировок",
+  "No credentials entered": "Учётные данные не введены"
  },
  "rules": []
 }

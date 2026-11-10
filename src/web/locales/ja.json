@@ -468,7 +468,6 @@
   "Confirm Exit?": "終了しますか?",
   "Confirm New Password": "新しいパスワード (確認)",
   "Confirm Password": "パスワード (確認)",
-  "Confirm remove redirection from {0} ?": "{0} からのリダイレクトを削除しますか?",
   "Confirm remove WoL record for {0} ({1}) ?": "{0} ({1}) のWoLレコードを削除しますか?",
   "Confirm removing {0} from whitelist?": "{0} を許可リストから削除しますか?",
   "Congo": "コンゴ",
@@ -492,7 +491,6 @@
   "Copy": "コピー",
   "Copy from Terminal": "ターミナルからコピー",
   "Copy is not available in this context": "この環境ではコピーを利用できません",
-  "Copy Pathname": "パス名をコピー",
   "Copy request": "リクエストをコピー",
   "Copy this secret now. It will not be shown again.": "このシークレットを今すぐコピーしてください。再表示されません。",
   "Copy your new token": "新しいトークンをコピー",
@@ -820,7 +818,6 @@
   "No data": "データなし",
   "No data from yesterday": "昨日のデータなし",
   "No domains": "ドメインなし",
-  "No Entered Credential": "認証情報が入力されていません",
   "No lists yet.": "リストはまだありません。",
   "No matching menu item": "一致するメニュー項目がありません",
   "No Plugins Installed": "プラグインがインストールされていません",
@@ -1212,7 +1209,8 @@
   "Listening port": "待ち受けポート",
   "HTTP listener address": "HTTP リスナーのアドレス",
   "Use the global default (Listeners settings)": "グローバル既定を使用（リスナー設定）",
-  "Quick ban list": "クイック BAN リスト"
+  "Quick ban list": "クイック BAN リスト",
+  "No credentials entered": "認証情報が入力されていません"
  },
  "rules": []
 }
