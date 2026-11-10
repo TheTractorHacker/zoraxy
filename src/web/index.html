@@ -204,7 +204,8 @@
             <div class="fadingBackground" onclick="hideSideWrapper();"></div>
             <div class="content">
                 <div class="sideWrapperMenu"></div>
-                <iframe src="snippet/placeholder.html"></iframe>
+                <button type="button" class="zx-btn zx-btn--secondary zx-btn--sm sideWrapperClose" onclick="hideSideWrapper();"><i class="times icon" aria-hidden="true"></i> Close</button>
+                <iframe src="snippet/placeholder.html" title="Settings panel"></iframe>
             </div>
         </div>
         <br>
@@ -591,11 +592,19 @@
                 }else{
                     $(".sideWrapper").removeClass("extendedMode");
                 }
+                $("#messageBox").finish().hide(); //a message from the page behind must not sit on top of the drawer content
                 $(".sideWrapper").show();
                 $(".sideWrapper .fadingBackground").fadeIn("fast");
                 $(".sideWrapper .content").transition('slide left in', 300);
                 $("body").css("overflow", "hidden");
             }
+
+            //Escape closes the side drawer (the iframes forward theirs, see utils.js), unless something inside it is using the key
+            document.addEventListener("keydown", function(e){
+                if (e.key === "Escape" && !e.defaultPrevented && $(".sideWrapper").is(":visible") && !$(".zx-dialog-backdrop, .ui.modal.visible.active").length){
+                    hideSideWrapper();
+                }
+            });
 
             function hideSideWrapper(discardFrameContent = false){
                 if ($("#httprpEditModal").length && $("#httprpEditModal").is(":visible")) {

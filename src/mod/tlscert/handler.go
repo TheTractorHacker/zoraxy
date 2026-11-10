@@ -4,6 +4,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -170,6 +171,12 @@ func (m *Manager) HandleCertUpload(w http.ResponseWriter, r *http.Request) {
 	fileBytes, err := io.ReadAll(file)
 	if err != nil {
 		http.Error(w, "Failed to read file", http.StatusBadRequest)
+		return
+	}
+
+	// refuse content that is not a PEM certificate / private key, so a bad upload is reported instead of stored
+	if err := validateUploadedPEM(keytype, fileBytes); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -438,4 +445,25 @@ func (m *Manager) HandleGetCertCommonName(w http.ResponseWriter, r *http.Request
 
 	js, _ := json.Marshal(cert.Subject.CommonName)
 	utils.SendJSONResponse(w, string(js))
+}
+
+// validateUploadedPEM checks that an uploaded "pub" file holds a PEM certificate and a "pri" file a PEM private key.
+func validateUploadedPEM(keytype string, content []byte) error {
+	if keytype == "pub" {
+		if firstCertificate(content) == nil {
+			return errors.New("the public key file is not a PEM encoded certificate")
+		}
+		return nil
+	}
+	rest := content
+	for {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			return errors.New("the private key file is not a PEM encoded private key")
+		}
+		if strings.HasSuffix(block.Type, "PRIVATE KEY") {
+			return nil
+		}
+	}
 }

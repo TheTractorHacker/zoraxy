@@ -123,14 +123,11 @@
     function renderRecords(records){
         $("#utmrender").html("");
         if (Object.keys(records).length === 0){
-            $("#utmrender").html(`<div class="ui basic segment">
-                <h4 class="ui header">
-                    <i class="green check circle icon"></i>
-                    <div class="content">
-                        No Uptime Monitor Targets
-                        <div class="sub header">There are currently no uptime monitor targets configured. To get started, go to <b>HTTP Proxy</b> and click <b>New proxy rule</b>, then refresh this page.</div>
-                    </div>
-                </h4>
+            $("#utmrender").html(`<div class="zx-empty" id="utmEmpty">
+                <div class="zx-empty__icon"><i class="heartbeat icon" aria-hidden="true"></i></div>
+                <div class="zx-empty__title">No uptime monitor targets yet</div>
+                <p class="zx-empty__text">Targets appear here when you add a proxy rule. The first checks run within a few minutes after that.</p>
+                <button type="button" class="zx-btn zx-btn--primary" onclick="openTabById('httprp');">Go to HTTP Proxy</button>
             </div>`);
             return;
         }

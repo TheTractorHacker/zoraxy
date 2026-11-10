@@ -193,3 +193,42 @@ func TestCSRIDValidation(t *testing.T) {
 		}
 	}
 }
+
+// An invalid common name is reported as the common name (not as an alternative name) and a long value is shortened.
+func TestCSRInvalidCommonNameMessage(t *testing.T) {
+	m := newTestManager(t)
+	long := "not a domain!! " + strings.Repeat("x", 200)
+	_, _, err := m.GenerateCSR(CSRRequest{CommonName: long})
+	if err == nil || !strings.Contains(err.Error(), "common name") || strings.Contains(err.Error(), "alternative") || len(err.Error()) > 120 {
+		t.Fatalf("unexpected error for an invalid common name: %v", err)
+	}
+	_, _, err = m.GenerateCSR(CSRRequest{CommonName: "ok.example", SANs: []string{"bad san"}})
+	if err == nil || !strings.Contains(err.Error(), "alternative name") {
+		t.Fatalf("unexpected error for an invalid SAN: %v", err)
+	}
+}
+
+func TestValidateUploadedPEM(t *testing.T) {
+	m := newTestManager(t)
+	p, csrPEM, err := m.GenerateCSR(CSRRequest{CommonName: "up.example"})
+	if err != nil || p == nil {
+		t.Fatal(err)
+	}
+	ca := newTestCA(t)
+	leaf := ca.sign(t, csrPEM, time.Now().Add(time.Hour), false)
+	if validateUploadedPEM("pub", leaf) != nil {
+		t.Fatal("a PEM certificate must be accepted")
+	}
+	for _, bad := range []string{"garbage", "-----BEGIN CERTIFICATE-----\nnot base64!\n-----END CERTIFICATE-----", ""} {
+		if validateUploadedPEM("pub", []byte(bad)) == nil {
+			t.Fatalf("%q accepted as a certificate", bad)
+		}
+		if validateUploadedPEM("pri", []byte(bad)) == nil {
+			t.Fatalf("%q accepted as a private key", bad)
+		}
+	}
+	key := "-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n"
+	if validateUploadedPEM("pri", []byte(key)) != nil {
+		t.Fatal("a PEM private key must be accepted")
+	}
+}

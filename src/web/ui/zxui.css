@@ -357,6 +357,10 @@ body.darkTheme,
     .zx-table td.zx-actions { width: 100%; justify-content: flex-end; }
     .zx-table td.zx-actions::before { content: none; }
     .zx-table td:empty { display: none; }
+    .zx-table td:not([data-label]) { display: block; text-align: center; }
+    .zx-table td:not([data-label])::before { content: none; }
+    .zx-table td { min-width: 0; }
+    .zx-table td > :not(.zx-row-actions) { min-width: 0; overflow-wrap: anywhere; }
     .zx-table tbody tr:hover td { background: transparent; }
 }
 

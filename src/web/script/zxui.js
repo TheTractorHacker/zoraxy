@@ -71,12 +71,18 @@
         opts = opts || {};
         var type = opts.type || "info";
         var box = ensureToastBox();
+        // The same message (and type) is shown once: repeating it (double click, two callbacks) replaces the earlier toast
+        var text = String(message === undefined ? "" : message);
+        Array.prototype.slice.call(box.children).forEach(function (old) {
+            if (old.getAttribute("data-zx-toast") === type + "\n" + text && old.parentNode) { old.parentNode.removeChild(old); }
+        });
         var node = document.createElement("div");
+        node.setAttribute("data-zx-toast", type + "\n" + text);
         node.className = "zx-toast zx-toast--" + type;
         node.setAttribute("role", type === "error" ? "alert" : "status");
         var msg = document.createElement("span");
         msg.className = "zx-toast__msg";
-        msg.textContent = String(message === undefined ? "" : message);
+        msg.textContent = text;
         node.appendChild(msg);
         var timer = null, done = false;
         function dismiss() {

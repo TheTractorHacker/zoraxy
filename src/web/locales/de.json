@@ -103,7 +103,6 @@
   "ACME Auto-Renewer": "ACME-Auto-Erneuerung",
   "ACME Client": "ACME-Client",
   "ACME Email": "ACME-E-Mail",
-  "ACME email must be set before enabling": "ACME-E-Mail muss vor dem Aktivieren gesetzt sein",
   "ACME Profiles & Defaults": "ACME-Profile & Standardwerte",
   "ACME Server URL": "ACME-Server-URL",
   "Action": "Aktion",

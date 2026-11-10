@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"html"
 	"log"
@@ -32,7 +34,15 @@ func SendJSONResponse(w http.ResponseWriter, json string) {
 
 func SendErrorResponse(w http.ResponseWriter, errMsg string) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte("{\"error\":\"" + errMsg + "\"}"))
+	// the message is JSON-escaped: quotes, backslashes and newlines in it (a quoted user input, a Go error) must not break the document
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(map[string]string{"error": errMsg}); err != nil {
+		w.Write([]byte("{\"error\":\"internal error\"}"))
+		return
+	}
+	w.Write(bytes.TrimRight(buf.Bytes(), "\n"))
 }
 
 func SendOK(w http.ResponseWriter) {

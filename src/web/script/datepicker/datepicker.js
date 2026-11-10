@@ -211,3 +211,9 @@ var picker = {
     if (instance.onpick) { instance.onpick(formatted); }
   }
 };
+
+// Escape closes an open popup calendar (it dims the page and covers the controls under it)
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") { return; }
+  document.querySelectorAll(".picker-wrap.popup.show").forEach(w => w.classList.remove("show"));
+});

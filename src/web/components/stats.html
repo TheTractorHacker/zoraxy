@@ -98,6 +98,7 @@
         #statsPage .sBar .sSeg button{ flex:1 1 auto; padding:.5em .3em; }
         #statsPage .sKpis{ grid-template-columns:repeat(2,1fr); }
         #statsPage .sChart{ height:13em; }
+        #statsPage #statsSitesTable td{ white-space:nowrap; }
         #statsPage #sbTable thead{ display:none; }
         #statsPage #sbTable, #statsPage #sbTable tbody{ display:block; }
         #statsPage #sbTable tr{ display:block; padding:.55em 0; border-bottom:1px solid var(--divider_color); }
@@ -280,11 +281,12 @@
             </div>
             <select id="sbReason" aria-label="Reason"><option value="">All reasons</option></select>
             <select id="sbHost" aria-label="Host"><option value="">All hosts</option></select>
-            <input type="search" class="sGrow" id="sbSearch" placeholder="Search IP, host, path, rule..." aria-label="Search blocked requests" autocomplete="off">
+            <input type="search" class="sGrow" id="sbSearch" maxlength="300" placeholder="Search IP, host, path, rule..." aria-label="Search blocked requests" autocomplete="off">
             <span class="sIpTag" id="sbIpTag" style="display:none;"><span class="mono" id="sbIpVal"></span><button type="button" id="sbIpClear" aria-label="Clear IP filter">&times;</button></span>
             <button type="button" class="sBtn" id="sbReload" title="Reload"><i class="sync alternate icon"></i></button>
         </div>
 
+        <div id="sbRecordingOff" class="sInfo" role="note" style="display:none; border-left-color:var(--s-amber);"><b>Recording is switched off.</b> New blocked requests are not added to this list; it shows what was kept before. Switch it on again with "Record blocked requests" below.</div>
         <div id="sbEmpty" class="sEmpty" style="display:none;"></div>
 
         <div id="sbData">
@@ -375,6 +377,25 @@
     }
     function killChart(id){ if (charts[id]){ charts[id].destroy(); delete charts[id]; } }
     function killOverviewCharts(){ Object.keys(charts).forEach(function(id){ if (id !== "sbHourly") killChart(id); }); }
+
+    /* the charts take their text colours when they are drawn: follow the light / dark switch afterwards */
+    var chartsWereDark = DARK();
+    new MutationObserver(function(){
+        if (DARK() === chartsWereDark) return;
+        chartsWereDark = DARK();
+        var th = chartTheme();
+        Object.keys(charts).forEach(function(id){
+            var c = charts[id], o = c.options || {};
+            if (o.plugins && o.plugins.legend && o.plugins.legend.labels) o.plugins.legend.labels.color = th.text;
+            Object.keys(o.scales || {}).forEach(function(k){
+                var sc = o.scales[k];
+                if (sc.ticks) sc.ticks.color = th.text;
+                if (sc.grid && sc.grid.display !== false) sc.grid.color = th.grid;
+            });
+            if (c.config.type === "doughnut" && c.data.datasets[0]) c.data.datasets[0].borderColor = DARK() ? "#1a1a1e" : "#ffffff";
+            c.update("none");
+        });
+    }).observe(document.body, {attributes: true, attributeFilter: ["class"]});
 
     /* top N entries + "Other" for pie style charts */
     function topWithOther(map, n){
@@ -808,6 +829,7 @@
         }
         $("#sbStatsLine").text(num(s.kept) + " of " + num(cap) + " entries kept, " + num(s.recorded) + " recorded since Zoraxy started. Saved to disk every 5 minutes.");
         $("#sbEnabled").prop("checked", !!s.enabled);
+        $("#sbRecordingOff").toggle(!s.enabled);
     }
 
     function renderBlockedList(list, append){

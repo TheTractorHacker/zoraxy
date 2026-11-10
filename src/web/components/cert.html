@@ -6,6 +6,11 @@
     #certPage .certFileHint { color: var(--zx-text-muted); font-size: var(--zx-fs-sm); }
 </style>
 <!-- Certificates (tag cert). Lead with what matters: expiry, expiring soon, hosts without a certificate; adding one is a collapsible card. -->
+<style>
+    /* the collapsed "Add a certificate" card: the description is the last thing in it, keep it off the card border */
+    #certAddCard > .zx-card__desc { padding-bottom: var(--zx-space-4); }
+    #certAddCard:has(#certAddBody:not([hidden])) > .zx-card__desc { padding-bottom: 0; }
+</style>
 <div class="standardContainer" id="certPage">
     <header class="zx-page-header">
         <div class="zx-page-header__main">
@@ -29,7 +34,7 @@
     <div id="certExpiringBox" class="zx-callout zx-callout--warn" role="note" hidden>
         <span class="zx-callout__icon" aria-hidden="true"><i class="clock outline icon"></i></span>
         <div class="zx-callout__body"><span class="zx-callout__title">Expiring soon</span>
-            <span id="certExpiringText">These certificates expire within 30 days. ACME certificates renew themselves when auto renew is on; the others need to be replaced.</span>
+            <span id="certExpiringText">These certificates expire within 30 days. ACME certificates renew themselves when auto renew is on. For the others, upload a new certificate or use Renew now to replace them with a free ACME certificate.</span>
             <ul class="zx-itemlist" id="certExpiringList"></ul>
         </div>
     </div>
@@ -44,7 +49,7 @@
         <div class="zx-card__head"><h3 class="zx-card__title">Certificates, expiring first</h3></div>
         <p class="zx-card__desc">Loaded certificates with the sites that use them. Select a name to download the certificate.</p>
         <div class="zx-card__body">
-            <div class="zx-table-wrap" tabindex="0" role="region" aria-label="Certificates">
+            <div class="zx-table-wrap zx-table-wrap--tall" tabindex="0" role="region" aria-label="Certificates">
                 <table class="zx-table zx-table--comfortable">
                     <thead>
                     <tr>
@@ -137,7 +142,7 @@
                     <button type="button" class="ui basic button" onclick="togglePasteCertInterface();"><i class="ui grey cancel icon"></i> Cancel</button>
                 </div>
             </div>
-            <div id="certUploadSuccMsg" class="ui green message" style="display:none;" role="status">
+            <div id="certUploadSuccMsg" class="ui green message" style="display:none; overflow-wrap:anywhere;" role="status">
                 <i class="ui checkmark icon"></i> Certificate for domain <span id="certUploadingDomain"></span> uploaded.
             </div>
         </div>
@@ -416,6 +421,7 @@
                 if (data.error != undefined){
                     $("#renewLogTitle").text("Renewal of " + name + " failed");
                     $("#renewLog").text(data.error);
+                    msgbox(certEsc("Renewal of " + name + " failed: " + data.error), false, 8000);
                     return;
                 }
                 $("#renewLogTitle").text(data.ok ? "Renewed " + name : "Renewal of " + name + " failed" + (data.error ? ": " + data.error : ""));
@@ -460,7 +466,8 @@
 
     function renewButtonHtml(entry, label){
         if (!entry.Renewable){ return ""; }
-        return `<button type="button" title="Renew now with the settings this certificate was issued with (shows the log)" aria-label="Renew ${certEsc(entry.Filename)} now" class="zx-btn zx-btn--secondary zx-btn--sm renewButton" data-act="renew" data-cert="${certEsc(entry.Filename)}"><i class="sync icon" aria-hidden="true"></i>${label ? " " + label : ""}</button>`;
+        var title = entry.ManagedBy == "acme" ? t("Renew now with the settings this certificate was issued with (shows the log)") : t("This certificate was uploaded. Request a free ACME certificate for the same name to replace it (needs the ACME email, see the ACME page)");
+        return `<button type="button" title="${certEsc(title)}" aria-label="Renew ${certEsc(entry.Filename)} now" class="zx-btn zx-btn--secondary zx-btn--sm renewButton" data-act="renew" data-cert="${certEsc(entry.Filename)}"><i class="sync icon" aria-hidden="true"></i>${label ? " " + label : ""}</button>`;
     }
 
     var certList = [];
@@ -481,11 +488,11 @@
                 let badge = `<span class="zx-badge zx-badge--dot ${expiryBadgeClass(entry.RemainingDays)}">${certEsc(daysLeftText(entry))}</span>`;
                 let issuer = [entry.Issuer, entry.KeyType].filter(Boolean).join(" · ");
                 tbody.append(`<tr>
-                    <td data-label="Domain"><a href="#" data-act="download" data-cert="${certEsc(entry.Filename)}" title="Download certificate">${certEsc(entry.Domain)}</a>
-                        <span class="zx-sub">${certEsc(entry.Filename)}${issuer ? " · " + certEsc(issuer) : ""}</span></td>
-                    <td data-label="Status" class="certdate ${isExpired?"expired":"valid"}">${badge}<span class="zx-sub">${certEsc(entry.ExpireDate)}</span></td>
+                    <td data-label="Domain"><div><a href="#" data-act="download" data-cert="${certEsc(entry.Filename)}" title="Download certificate">${certEsc(entry.Domain)}</a>
+                        <span class="zx-sub">${certEsc(entry.Filename)}${issuer ? " · " + certEsc(issuer) : ""}</span></div></td>
+                    <td data-label="Status" class="certdate ${isExpired?"expired":"valid"}"><div>${badge}<span class="zx-sub">${certEsc(entry.ExpireDate)}</span></div></td>
                     <td data-label="Managed by">${managedByChip(entry)}${entry.UseDNS ? "<span class='zx-sub'>DNS challenge</span>" : ""}</td>
-                    <td data-label="Used by">${usedByHTML}</td>
+                    <td data-label="Used by"><div>${usedByHTML}</div></td>
                     <td data-label="Fallback">${entry.IsFallback ? "<span class='zx-badge zx-badge--ok'>Fallback</span>" : ""}</td>
                     <td data-label="Actions" class="zx-actions"><div class="zx-row-actions">
                         <button type="button" title="Set as default / fallback certificate" class="zx-btn zx-btn--secondary zx-btn--sm" data-act="fallback" data-cert="${certEsc(entry.Filename)}" ${entry.IsFallback ? "disabled" : ""}><i class="home icon" aria-hidden="true"></i> Fallback</button>
@@ -564,7 +571,6 @@
 
     function handleDomainUploadByKeypress(){
         handleDomainKeysUpload(function(){
-            $("#certUploadingDomain").text($("#certdomain").val().trim());
             //After uploaded, reset the file selector
             document.getElementById('pubkeySelector').value = '';
             document.getElementById('prikeySelector').value = '';
@@ -592,64 +598,78 @@
         });
     }
 
-    //Handle domain keys upload
-    function handleDomainKeysUpload(callback=undefined){
-        let domain = $("#certdomain").val();
-        if (domain.trim() == ""){
-            //Check if placeholder has value
-            if ($("#certdomain").attr("placeholder").trim() != ""){
-                domain = $("#certdomain").attr("placeholder").trim();
-            }else{
-                domain = undefined;
-            }
+    //Upload one half of the key pair. Resolves {ok, error}: HTTP status and server message are both checked.
+    function uploadCertFile(ktype, domain, file){
+        return new Promise(function(resolve){
+            const form = new FormData();
+            form.append('file', file, ktype === 'pub' ? 'publicKey' : 'privateKey');
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/api/cert/upload?ktype=' + ktype + '&domain=' + encodeURIComponent(domain));
+            xhr.setRequestHeader('X-CSRF-Token', document.querySelector('meta[name="zoraxy.csrf.Token"]').getAttribute("content"));
+            xhr.onload = function(){
+                if (xhr.status === 200) { resolve({ok: true}); }
+                else { resolve({ok: false, error: (xhr.responseText || xhr.statusText || ("HTTP " + xhr.status)).trim()}); }
+            };
+            xhr.onerror = function(){ resolve({ok: false, error: t("Network error")}); };
+            xhr.send(form);
+        });
+    }
 
-            if (domain == undefined || domain.trim() == "") {
+    //Client-side checks before anything is posted. Returns an error text or "".
+    function validateCertUploadInput(domain, pubText, priText){
+        if (!/^[A-Za-z0-9*._-]{1,253}$/.test(domain)) { return t("The server name may only contain letters, digits, dots, dashes, underscores and *, up to 253 characters."); }
+        if (pubText !== undefined && !/-----BEGIN CERTIFICATE-----[\s\S]*-----END CERTIFICATE-----/.test(pubText)) { return t("The public key is not a PEM certificate (-----BEGIN CERTIFICATE----- ... -----END CERTIFICATE-----)."); }
+        if (priText !== undefined && !/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*-----END [A-Z ]*PRIVATE KEY-----/.test(priText)) { return t("The private key is not a PEM private key (-----BEGIN ... PRIVATE KEY-----)."); }
+        return "";
+    }
+
+    var certUploadBusy = false;
+    function setCertUploadBusy(busy){
+        certUploadBusy = busy;
+        $("#certUploadBtn, #certPasteArea .ui.button").toggleClass("disabled", busy);
+    }
+
+    //Handle domain keys upload. callback runs only when BOTH files were stored; otherwise the server's reason is shown.
+    //pasted = {pub, pri} text when the content came from the paste boxes (it is checked as typed).
+    function handleDomainKeysUpload(callback=undefined, pasted=undefined){
+        if (certUploadBusy) { return; }
+        let domain = $("#certdomain").val().trim();
+        if (domain == ""){
+            domain = ($("#certdomain").attr("placeholder") || "").trim();
+            if (domain == "") {
                 msgbox("Missing domain", false, 5000);
                 return;
             }
         }
-        if (uploadPendingPublicKey && uploadPendingPrivateKey && typeof uploadPendingPublicKey === 'object' && typeof uploadPendingPrivateKey === 'object') {
-            const publicKeyForm = new FormData();
-            const csrfToken = document.querySelector('meta[name="zoraxy.csrf.Token"]').getAttribute("content");
-
-            publicKeyForm.append('file', uploadPendingPublicKey, 'publicKey');
-
-            const privateKeyForm = new FormData();
-            privateKeyForm.append('file', uploadPendingPrivateKey, 'privateKey');
-
-            const publicKeyRequest = new XMLHttpRequest();
-            publicKeyRequest.open('POST', '/api/cert/upload?ktype=pub&domain=' + domain);
-            publicKeyRequest.setRequestHeader('X-CSRF-Token', csrfToken);
-            publicKeyRequest.onreadystatechange = function() {
-            if (publicKeyRequest.readyState === XMLHttpRequest.DONE) {
-                if (publicKeyRequest.status !== 200) {
-                    msgbox('Error uploading public key: ' + publicKeyRequest.statusText, false, 5000);
+        if (!(uploadPendingPublicKey && uploadPendingPrivateKey && typeof uploadPendingPublicKey === 'object' && typeof uploadPendingPrivateKey === 'object')) {
+            msgbox('One or both of the files is missing or not a file object', false, 5000);
+            return;
+        }
+        const check = function(pubText, priText){
+            const err = validateCertUploadInput(domain, pubText, priText);
+            if (err) { msgbox(err, false, 8000); return false; }
+            return true;
+        };
+        const send = function(){
+            setCertUploadBusy(true);
+            Promise.all([uploadCertFile('pub', domain, uploadPendingPublicKey), uploadCertFile('pri', domain, uploadPendingPrivateKey)]).then(function(results){
+                setCertUploadBusy(false);
+                const bad = results.filter(function(r){ return !r.ok; });
+                if (bad.length > 0) {
+                    msgbox(certEsc(t("Certificate not uploaded") + ": " + bad[0].error), false, 8000);
+                    initManagedDomainCertificateList();
+                    return;
                 }
-
-                if (callback != undefined){
-                    callback();
-                }
-                
-            }
-            };
-            publicKeyRequest.send(publicKeyForm);
-
-            const privateKeyRequest = new XMLHttpRequest();
-            privateKeyRequest.open('POST', '/api/cert/upload?ktype=pri&domain=' + domain);
-            privateKeyRequest.setRequestHeader('X-CSRF-Token', csrfToken);
-            privateKeyRequest.onreadystatechange = function() {
-            if (privateKeyRequest.readyState === XMLHttpRequest.DONE) {
-                if (privateKeyRequest.status !== 200) {
-                    msgbox('Error uploading private key: ' + privateKeyRequest.statusText, false, 5000);
-                }
-                if (callback != undefined){
-                    callback();
-                }
-            }
-            };
-            privateKeyRequest.send(privateKeyForm);
+                $("#certUploadingDomain").text(domain);
+                if (callback != undefined){ callback(); }
+            });
+        };
+        if (pasted) {
+            if (check(pasted.pub, pasted.pri)) { send(); }
         } else {
-            msgbox('One or both of the files is missing or not a file object');
+            Promise.all([uploadPendingPublicKey.text(), uploadPendingPrivateKey.text()]).then(function(texts){
+                if (check(texts[0], texts[1])) { send(); }
+            });
         }
     }
 
@@ -885,6 +905,6 @@
             // Refresh certificate list
             initManagedDomainCertificateList();
             ZxHistory.savedToast(t("Certificate uploaded"), "Certificate");
-        });
+        }, {pub: pubkeyContent, pri: prikeyContent});
     }
 </script>
