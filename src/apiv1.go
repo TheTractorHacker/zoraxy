@@ -79,6 +79,7 @@ type v1Backend struct {
 	AccessList, RedirectList, CertList, StatsSummary, WAF    http.HandlerFunc
 	StatsBlocked                                             http.HandlerFunc
 	RulesetRules, RulesetLists                               http.HandlerFunc
+	Posture                                                  http.HandlerFunc
 }
 
 func defaultV1Backend() v1Backend {
@@ -96,6 +97,7 @@ func defaultV1Backend() v1Backend {
 		StatsBlocked: func(w http.ResponseWriter, r *http.Request) { HandleBlockedOverview(w, r) },
 		RulesetRules: func(w http.ResponseWriter, r *http.Request) { HandleRulesetRules(w, r) },
 		RulesetLists: func(w http.ResponseWriter, r *http.Request) { HandleRulesetLists(w, r) },
+		Posture:      func(w http.ResponseWriter, r *http.Request) { HandlePostureGet(w, r) },
 	}
 }
 
@@ -253,6 +255,7 @@ func v1Routes(b v1Backend, guard func(http.Handler) http.Handler) []v1Route {
 		{"GET /api/v1/waf/coverage", read("/api/waf/coverage", b.WAF, nil)},
 		{"GET /api/v1/ruleset/rules", read("/api/ruleset/rules", b.RulesetRules, nil)},
 		{"GET /api/v1/ruleset/lists", read("/api/ruleset/lists", b.RulesetLists, nil)},
+		{"GET /api/v1/security/posture", read("/api/security/posture", b.Posture, nil)},
 	}
 }
 

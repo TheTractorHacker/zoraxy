@@ -2266,3 +2266,44 @@ The Status page's "Blocked today" was only a counter. `src/mod/blocklog` now kee
 * **New read-only endpoints**: `GET /api/ech/selfcheck?host=` (real local ECH handshake against the proxy listener, cert verification off; proves server-side acceptance only) and `GET /api/ech/domains[?host=]` (per proxied host, HTTPS record at the system resolver and at 1.1.1.1, classified `ours-active | ours-retired | ours-purged | foreign | none`). `/api/ech/status` also returns `Records` (one copy-ready record per proxied host). Existing endpoints and settings semantics are unchanged; enabling with a bad public-name certificate is allowed (the page asks first, the log warns).
 * **zrok page** (`components/zrok.html`): state card, install/enable/create steps, tunnel cards (URL with copy, uptime, restarts, last exit), inline delete/disable confirmations, a log viewer that shows the last 60 of the 200 captured lines. It refreshes every 15 s only while a tunnel is active, the tab is visible and the page is on screen. No API change.
 * **Tests**: Go (`mod/ech`, `mod/tlscert/hostcheck_test.go`, `echapi_test.go`), `tools/e2e-admin` scenarios `api-ech`, `api-ech-selfcheck-tls`, and the smoke test `ech_zrok_ui` (needs the instance to run with `-allow_external_tools` and `--zrok-fake`; `tools/ui-smoke/run.sh` supplies a fake `zrok` script).
+
+## Security overview and posture score (`src/mod/posture`, `ux-security-score`)
+
+Page: Security > Security Overview (`web/components/securityoverview.html`). APIs (admin session + CSRF):
+`GET /api/security/posture` (read only, `?refresh=1` skips a 10 s cache), `POST .../preview`, `POST .../apply`,
+`POST .../undo`, `POST .../settings` (notify toggle). Token users get `GET /api/v1/security/posture` only.
+The score reflects Zoraxy's configuration; it is not a penetration test.
+
+**Layout.** `mod/posture` never reads Zoraxy state itself. `src/posture_glue.go` builds a `Facts` snapshot (a nil section
+means "could not be read" and the checks report `unknown`) and implements `Backend`, which calls the same internal
+functions as the admin APIs (`mutateWAFCentral`, `HandleUpdateHttpsRedirect`, `ReverseProxyHandleEditEndpoint`,
+`HandleHSTSState`, the abuse manager). Tests use fakes, no listeners.
+
+**Adding a check.** Append a `Check` to `builtinChecks()` in `checks.go` (or call `posture.Register` from another module):
+unique `ID`, `Category`, `Weight` 1..10 (8+ critical, 5+ high, 3+ medium), `Why` (1-2 sentences), `Remediation` (menu tab id
+in `Page`, optional `Anchor` = `data-tab`/`data-sec` of an inner tab, optional `Action` id, or a `Hint` for start flags).
+`Run(f *Facts)` returns ok / warn / fail / not-applicable / unknown plus `Evidence`, the concrete facts it looked at.
+Rules: never return ok, warn or fail for something not in the snapshot (`TestNothingKnownMeansNothingIsOK`); use
+not-applicable only when the feature is not in use; guesses must set `Heuristic`. Add table tests for each status.
+
+**Score.** `applicable` = weights of checks that are not not-applicable. Cost per check: ok 0, warn 0.5, unknown 0.5, fail 1
+(times weight). `lost = cost * weight / applicable * 100`, `score = 100 - sum(lost)`. A failing `Critical` check caps the
+score at 69. If unknown checks carry more than 25% of the weight the score is "Incomplete": no grade, capped at 69.
+Grades A >= 90, B >= 80, C >= 65, D >= 50, F below. The UI shows the formula and the points lost per check.
+
+**Actions** (`actions.go`). An action is a `Plan(facts, backend)` returning `Change{Key, From, To, Prev}`s or a `Refusal`.
+Preview shows the plan with a hash; apply re-plans on fresh state, refuses if the hash differs ("changed since preview"),
+executes exactly those changes, rolls the action back if one fails, audits through `authAgent.Audit`
+(`posture.apply`, `posture.apply.refused|failed`, `posture.undo`) and records the changes for `Undo`. Safety rules:
+1. idempotent (second apply = no change); 2. nothing that can reject real traffic is ever switched on in blocking mode
+(the WAF goes to detection-only, a stored Block default is lowered when enabling); 3. preconditions are refusals, not partial
+applies (redirect and HSTS need valid trusted certificates for every / each host); 4. explicit administrator choices are
+not overwritten; 5. only actions that cannot block traffic and are undoable may be `Preselected`; auto-ban (`MayBlock`) and
+HSTS (`Sticky`, browsers keep it, no undo) are opt-in; 6. cluster followers and fleet nodes refuse all fixes.
+Built-in actions: `waf.baseline`, `waf.cookies`, `autoban.enable`, `https.redirect`, `uptime.enable`, `hsts.enable`.
+
+**Notification.** Off by default (Security Overview checkbox). Every 30 minutes the monitor compares with a baseline and
+raises one `security.posture` event through the notification centre when the score fell by 10 or a check newly fails (max
+one per 6 hours).
+
+Smoke: `tools/ui-smoke/smoke.py --posture-only` (also part of the full run).

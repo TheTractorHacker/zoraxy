@@ -488,6 +488,7 @@ func initAPIs(targetMux *http.ServeMux) {
 	RegisterPluginAPIs(authRouter)
 	RegisterAbuseAPIs(authRouter)
 	RegisterSecurityAPIs(authRouter)
+	RegisterPostureAPIs(authRouter) //security overview, see posture_api.go
 	RegisterBasicAuthExtAPIs(authRouter)
 	RegisterAuthAuditAPIs(authRouter)
 	RegisterAccessRuleExtraAPIs(authRouter)

@@ -386,11 +386,17 @@ type resolved struct {
 // resolve looks up the latest release on the channel and decides if it is an
 // acceptable (newer, signed, platform-matching) update.
 func (m *Manager) resolve(ctx context.Context, useCache bool) (*resolved, Current, error) {
-	cur, curID := m.current()
 	rels, err := m.releases(ctx, useCache)
 	if err != nil {
+		cur, _ := m.current()
 		return nil, cur, err
 	}
+	return m.resolveFrom(rels)
+}
+
+// resolveFrom decides on a release list that was already fetched (or read from the cache).
+func (m *Manager) resolveFrom(rels []Release) (*resolved, Current, error) {
+	cur, curID := m.current()
 	ch := m.st.settings().Channel
 	latest, err := LatestForChannel(rels, ch)
 	if err != nil {

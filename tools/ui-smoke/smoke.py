@@ -24,6 +24,7 @@ ap.add_argument("--url", default=os.environ.get("ZORAXY_URL", "http://127.0.0.1:
 ap.add_argument("--out", default=os.environ.get("SMOKE_OUT", os.path.expanduser("~/ui-smoke-shots")))
 ap.add_argument("--no-page-sweep", action="store_true", help="skip the per-tab screenshot sweep (faster; for focused runs on a busy machine)")
 ap.add_argument("--i18n-only", action="store_true", help="run only the multi-language scenario")
+ap.add_argument("--posture-only", action="store_true", help="run only the Security overview scenario")
 ap.add_argument("--waf-tuning-only", action="store_true", help="run only the WAF Tuning tab scenario")
 ap.add_argument("--zrok-fake", default=os.environ.get("SMOKE_ZROK_FAKE", ""), help="path of a fake zrok script; enables the zrok flow (the instance needs -allow_external_tools)")
 ap.add_argument("--allow", action="append", default=[], help="regex of messages whose failure is tolerated")
@@ -1027,6 +1028,207 @@ def ech_zrok_ui(pg, ctx):
         fail("dialog", f"native dialogs used: {dialogs}")
 
 
+def posture_ui(pg, ctx):
+    """Security overview: score, evidence, preview -> apply of the WAF fix (detection-only) with the WAF page and the
+    Status tile following, undo, empty state, dark and 390px."""
+    out = lambda n: os.path.join(args.out, n)
+
+    def shot(name, full=True):
+        pg.screenshot(path=out(name), full_page=full)
+
+    def theme(want_dark):
+        if pg.evaluate("document.body.classList.contains('darkTheme')") != want_dark:
+            pg.evaluate("toggleTheme()")
+            pg.wait_for_timeout(300)
+
+    def get(path):
+        return pg.evaluate("p => new Promise(res => $.getJSON(p, r => res(r)).fail(e => res({error: 'http ' + e.status})))", path)
+
+    def post(path, data):
+        return pg.evaluate("""([p, d]) => new Promise(res => $.cjax({url: p, method: 'POST', data: d, success: r => res(r), error: e => res({error: 'http ' + e.status})}))""", [path, data])
+
+    def jpost(path, obj):
+        return pg.evaluate("""([p, o]) => new Promise(res => $.cjax({url: p, method: 'POST', contentType: 'application/json', data: JSON.stringify(o), dataType: 'json',
+            success: r => res(r), error: e => res({error: 'http ' + e.status})}))""", [path, obj])
+
+    def score_text():
+        return pg.inner_text("#soScoreBox .soRing .num b").strip()
+
+    theme(False)
+    pg.set_viewport_size({"width": 1366, "height": 900})
+    hosts = ["posture-a.example.com", "posture-b.example.com"]
+    orig_pol = get("/api/waf/policy")
+
+    # ---- empty / first run state ----
+    current["page"] = "posture-empty"
+    pg.evaluate("openTabById('secoverview')")
+    settle(pg, 900)
+    pg.wait_for_selector("#soScoreBox .soRing", timeout=8000)
+    if pg.locator("#soCats .soCat").count() != 6:
+        fail("posture", f"expected 6 category sections, got {pg.locator('#soCats .soCat').count()}")
+    first = get("/api/security/posture")
+    if first.get("error") or first["score"]["value"] != int(score_text()):
+        fail("posture", f"the ring shows {score_text()} but the API says {first.get('score')}")
+    if any(not c["evidence"] for c in first["checks"]):
+        fail("posture", "a check has no evidence")
+    if next(c for c in first["checks"] if c["id"] == "tls.enabled")["status"] == "not-applicable" and "Welcome" not in pg.inner_text("#soBanner"):
+        fail("posture", "no friendly first-run note although there are no proxy rules")
+    shot("posture-empty-light.png")
+
+    # ---- two proxy rules without any protection ----
+    for h in hosts:
+        post("/api/proxy/add", {"type": "host", "rootname": h, "ep": "127.0.0.1:9", "tls": "false", "tlsval": "false", "bypassGlobalTLS": "false"})
+    try:
+        current["page"] = "posture-overview"
+        pg.click("#soRecheck")
+        settle(pg, 900)
+        before = get("/api/security/posture?refresh=1")
+        waf_before = next(c for c in before["checks"] if c["id"] == "waf.active")
+        if waf_before["status"] != "fail" or "2 of 2" not in " ".join(waf_before["evidence"]):
+            fail("posture", f"WAF check before the fix: {waf_before}")
+        if not pg.is_visible("#soFirstBox .soItem"):
+            fail("posture", "no 'Fix these first' list")
+        n_first = pg.locator("#soFirstBox .soItem").count()
+        if n_first < 1 or n_first > 5:
+            fail("posture", f"'Fix these first' has {n_first} items")
+        # evidence is expandable
+        pg.click(".soRow[data-id='waf.active'] .soRowHead")
+        body = pg.inner_text(".soRow[data-id='waf.active'] .soRowBody")
+        if "2 of 2" not in body or "why it matters" not in body.lower():
+            fail("posture", "the evidence of the WAF check is not shown when expanded")
+        if not pg.locator(".soCat[data-cat='Authentication'].open").count():
+            pg.click(".soCat[data-cat='Authentication'] .soCatHead")
+        if pg.locator(".soRow[data-id='auth.admin_ui_exposed'] .soHeur").count() != 1:
+            fail("posture", "the admin UI check is not labelled as a heuristic")
+        if "not a penetration test" not in pg.inner_text("#soDisclaimer"):
+            fail("posture", "the disclaimer is missing")
+        if "points lost" not in pg.inner_text("#soScoreBox"):
+            fail("posture", "the score does not say how many points were lost")
+        shot("posture-light.png")
+
+        # ---- single fix: preview only, nothing changes ----
+        current["page"] = "posture-fix"
+        if pg.locator(".soFix[data-act='uptime.enable']").count():
+            pg.locator(".soFix[data-act='uptime.enable']").first.click()
+            pg.wait_for_selector("#secOvDlg .sdAct", timeout=5000)
+            if pg.locator("#secOvDlg .sdAct").count() != 1 or "Uptime monitor" not in pg.inner_text("#secOvDlg"):
+                fail("posture", "single fix preview is wrong")
+            pg.click("#sdCancel")
+        # ---- recommended protection: dialog ----
+        pg.evaluate("window.scrollTo(0, 0)")
+        pg.click("#soRecBtn")
+        pg.wait_for_selector("#secOvDlg .sdAct", timeout=5000)
+        settle(pg, 300)
+        checked = pg.eval_on_selector_all("#secOvDlg .sdAct", "els => els.map(e => [e.getAttribute('data-id'), e.querySelector('.sdChk').checked, e.querySelector('.sdChk').disabled])")
+        state = {k: (c, d) for k, c, d in checked}
+        if not state.get("waf.baseline", (False, True))[0]:
+            fail("posture", f"the WAF fix is not pre-selected: {state}")
+        if state.get("autoban.enable", (True, False))[0] or state.get("hsts.enable", (True, False))[0]:
+            fail("posture", f"a fix that can block visitors or is sticky is pre-selected: {state}")
+        dlg = pg.inner_text("#secOvDlg")
+        for want in ("can block visitors", "cannot block visitors", "Nothing runs until you press the button"):
+            if want not in dlg:
+                fail("posture", f"dialog lacks {want!r}")
+        if get("/api/waf/policy").get("Enabled"):
+            fail("posture", "opening the preview already changed the WAF")
+        shot("posture-dialog-light.png", full=False)
+        theme(True)
+        shot("posture-dialog-dark.png", full=False)
+        theme(False)
+        pg.set_viewport_size({"width": 390, "height": 800})
+        pg.wait_for_timeout(300)
+        shot("posture-dialog-390.png", full=False)
+        pg.set_viewport_size({"width": 1366, "height": 900})
+        pg.wait_for_timeout(200)
+
+        # ---- apply ----
+        current["page"] = "posture-apply"
+        pg.click("#sdApply")
+        try:
+            pg.wait_for_selector("#sdDone", timeout=120000)  # one admin call per proxy rule for the uptime fix, slow on a loaded machine
+        except Exception:
+            fail("posture", f"apply did not finish: {pg.inner_text('#secOvDlg')[:300]!r}")
+            return
+        res_txt = pg.inner_text("#secOvDlg")
+        if "Applied" not in res_txt or "audit log" not in res_txt:
+            fail("posture", f"apply result not shown: {res_txt[:200]}")
+        shot("posture-result-light.png", full=False)
+        pol = get("/api/waf/policy")
+        if not pol.get("Enabled") or pol.get("DefaultMode") != "detection_only" or pol.get("ParanoiaLevel") != 1:
+            fail("posture", f"WAF policy after the fix: {pol}")
+        pg.click("#sdDone")
+        settle(pg, 900)
+        after = get("/api/security/posture?refresh=1")
+        if after["score"]["value"] <= before["score"]["value"]:
+            fail("posture", f"score did not improve: {before['score']['value']} -> {after['score']['value']}")
+        if next(c for c in after["checks"] if c["id"] == "waf.active")["status"] != "ok":
+            fail("posture", "waf.active is not ok after the fix")
+        if score_text() != str(after["score"]["value"]):
+            fail("posture", f"the ring shows {score_text()}, expected {after['score']['value']}")
+        wafa = next(a for a in after["actions"] if a["id"] == "waf.baseline")
+        if wafa["state"] != "done" or not wafa["undoable"]:
+            fail("posture", f"waf.baseline action state after apply: {wafa}")
+        print(f"  posture score {before['score']['value']} -> {after['score']['value']} after the WAF fix")
+        shot("posture-after-light.png")
+        # the WAF page shows the new mode
+        pg.evaluate("openTabById('waf')")
+        settle(pg, 1200)
+        if "Detection only" not in pg.inner_text("#wafStatus"):
+            fail("posture", f"the WAF page does not show detection-only: {pg.inner_text('#wafStatus')!r}")
+        # the Status page tile links back
+        pg.evaluate("openTabById('status')")
+        settle(pg, 1500)
+        tile = pg.inner_text("#glancePosture")
+        if "/ 100" not in tile:
+            fail("posture", f"Status tile shows {tile!r}")
+        pg.click("#kpiPosture")
+        settle(pg, 700)
+        if not pg.is_visible("#secoverview"):
+            fail("posture", "the Status tile does not open the overview")
+
+        # ---- undo through the API restores the WAF ----
+        current["page"] = "posture-undo"
+        r = jpost("/api/security/posture/undo", {"action": "waf.baseline"})
+        if r.get("error") or r["results"][0]["status"] != "undone":
+            fail("posture", f"undo: {r}")
+        if get("/api/waf/policy").get("Enabled"):
+            fail("posture", "undo left the WAF enabled")
+        # a refused apply (no hash) changes nothing
+        r = jpost("/api/security/posture/apply", {"actions": [{"id": "waf.baseline"}]})
+        if not r.get("error") or get("/api/waf/policy").get("Enabled"):
+            fail("posture", f"apply without a hash was not refused: {r}")
+
+        # ---- dark, 390px ----
+        current["page"] = "posture-themes"
+        pg.evaluate("openTabById('secoverview')")
+        pg.click("#soRecheck")
+        settle(pg, 900)
+        theme(True)
+        pg.wait_for_timeout(300)
+        shot("posture-dark.png")
+        pg.set_viewport_size({"width": 390, "height": 800})
+        pg.reload(wait_until="networkidle")
+        pg.wait_for_timeout(900)
+        pg.evaluate("openTabById('secoverview')")
+        settle(pg, 900)
+        check_horizontal(pg, "security overview 390px")
+        shot("posture-390-dark.png")
+        theme(False)
+        pg.wait_for_timeout(300)
+        shot("posture-390-light.png")
+        if pg.locator("#soRecBtn").count():
+            pg.click("#soRecBtn")
+            pg.wait_for_selector("#secOvDlg .sdAct", timeout=5000)
+            check_horizontal(pg, "security overview dialog 390px")
+            pg.click("#sdCancel")
+    finally:
+        pg.set_viewport_size({"width": 1366, "height": 900})
+        for h in hosts:
+            post("/api/proxy/del", {"ep": h})
+        post("/api/waf/policy", {"policy": json.dumps(orig_pol)})
+        jpost("/api/security/posture/undo", {"action": "uptime.enable"})
+
+
 def main():
     with sync_playwright() as p:
         b = p.chromium.launch()
@@ -1047,6 +1249,11 @@ def main():
 
         if args.i18n_only:
             i18n_checks(pg, ctx)
+            b.close()
+            return
+        if args.posture_only:
+            current["page"] = "posture"
+            posture_ui(pg, ctx)
             b.close()
             return
         if args.waf_tuning_only:
@@ -1915,6 +2122,8 @@ def main():
         proxy_ux(pg, ctx)
 
         ech_zrok_ui(pg, ctx)
+
+        posture_ui(pg, ctx)
 
         # ---- narrow / mobile layout ----
         current["page"] = "mobile"

@@ -520,6 +520,12 @@
             <span class="kpiValue" id="glanceAlerts">-</span>
             <span class="kpiSub" id="glanceAlertsSub"></span>
         </div>
+        <!-- ux-security-score: security score tile, links to the Security Overview -->
+        <div class="kpiCard skel kpiLinked" id="kpiPosture" role="link" tabindex="0" title="Open the security overview">
+            <span class="kpiLabel"><i class="shield alternate icon"></i> Security score <i class="angle right icon kpiGo"></i></span>
+            <span class="kpiValue" id="glancePosture">-</span>
+            <span class="kpiSub" id="glancePostureSub"></span>
+        </div>
     </div>
 </div>
 
@@ -1640,8 +1646,25 @@
             $("#glanceBlockedSub").text($("#glanceBlockedSub").text().split(" - ")[0] + " - " + txt);
         });
     }
+    /* Security score tile (ux-security-score): reads the cached overview, links to its page */
+    function openPosture(e){ if (e && e.preventDefault) e.preventDefault(); openTabById("secoverview"); }
+    $("#kpiPosture").on("click", openPosture).on("keydown", function(e){ if (e.key === "Enter" || e.key === " ") openPosture(e); });
+    var postureTileAt = 0;
+    function loadPostureTile(){
+        if (Date.now() - postureTileAt < 60000) return; // the overview is not cheap: at most once a minute
+        postureTileAt = Date.now();
+        $.getJSON("/api/security/posture", function(d){
+            if (!d || d.error || !d.score) { $("#glancePosture").text("n/a"); setKpi("kpiPosture", ""); return; }
+            var s = d.score, cls = s.provisional ? "warn" : s.value >= 80 ? "ok" : s.value >= 65 ? "warn" : "bad";
+            $("#glancePosture").text(s.value + " / 100").attr("class", "kpiValue " + cls);
+            var c = s.counts || {}, fix = (c.fail || 0) + (c.warn || 0);
+            $("#glancePostureSub").text(s.label + (fix ? ", " + fix + " to fix" : ", nothing to fix"));
+            setKpi("kpiPosture", cls);
+        }).fail(function(){ $("#glancePosture").text("n/a"); setKpi("kpiPosture", ""); });
+    }
     function loadGlance(){
         if (!onScreen()) return;
+        loadPostureTile();
         $.getJSON("/api/stats/glance", function(d){ if (!d.error) renderGlance(d); })
             .fail(function(){ $("#glancePanel .kpiCard").removeClass("skel"); });
     }
