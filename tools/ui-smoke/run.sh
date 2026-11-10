@@ -24,13 +24,20 @@ case "$1" in
 esac
 EOF
 chmod +x "$tmp/fakebin/zrok"
+start_zoraxy() {
+  (cd "$tmp" && exec ./zoraxy -noauth -dev -allow_external_tools -default_inbound_port "$((PORT+1))" -port ":$PORT" -conf ./conf -dbpath ./sys.db >>zoraxy.log 2>&1) &
+  pid=$!
+  for _ in $(seq 60); do curl -fs "http://127.0.0.1:$PORT/" >/dev/null && break; sleep 0.5; done
+}
+# First start: creates the database and runs the config upgrades (they would rewrite a seeded config).
+start_zoraxy
+kill "$pid" 2>/dev/null || true
+wait "$pid" 2>/dev/null || true
 # A rule from an older version whose host name is hostile markup. The API refuses such a name now, but configs written by
 # older versions can still hold one, and the admin UI must show it as plain text (consistency_smoke.py).
 mkdir -p "$tmp/conf/proxy"
 cat >"$tmp/conf/proxy/\"><img src=x onerror=window.__xss=1>.smoke-xss.example.com.config" <<'EOF2'
 {"ProxyType":1,"RootOrMatchingDomain":"\"><img src=x onerror=window.__xss=1>.smoke-xss.example.com","MatchingDomainAlias":[],"ActiveOrigins":[{"OriginIpOrDomain":"127.0.0.1:9","Weight":1}],"InactiveOrigins":[],"AccessFilterUUID":"default"}
 EOF2
-(cd "$tmp" && exec ./zoraxy -noauth -dev -allow_external_tools -default_inbound_port "$((PORT+1))" -port ":$PORT" -conf ./conf -dbpath ./sys.db >zoraxy.log 2>&1) &
-pid=$!
-for _ in $(seq 60); do curl -fs "http://127.0.0.1:$PORT/" >/dev/null && break; sleep 0.5; done
+start_zoraxy
 "$PY" "$here/smoke.py" --zrok-fake "$tmp/fakebin/zrok" --url "http://127.0.0.1:$PORT" "$@"
