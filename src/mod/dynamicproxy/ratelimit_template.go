@@ -116,6 +116,11 @@ func applyRateTemplate(ep *ProxyEndpoint, t *RuleTemplate, add func(field, old, 
 			ep.RateUnit = tu
 		}
 	}
+	if rateApplied && t.RateLimitBurst == nil && ep.RateLimitBurst != 0 {
+		//The burst belonged to the old limit; without one the burst equals the number (as the preset notes say)
+		add("Rate limit burst", fmt.Sprint(ep.RateLimitBurst), "same as the limit")
+		ep.RateLimitBurst = 0
+	}
 	if t.RateLimitBurst != nil && (!t.NoDowngrade || rateApplied) {
 		add("Rate limit burst", fmt.Sprint(ep.RateLimitBurst), fmt.Sprint(*t.RateLimitBurst))
 		ep.RateLimitBurst = *t.RateLimitBurst

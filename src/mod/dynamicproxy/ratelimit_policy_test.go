@@ -412,7 +412,7 @@ func TestRateOptionsValidation(t *testing.T) {
 /* ---- WebSocket accounting ---- */
 
 func wsRequest(remote string) *http.Request {
-	r := newTestRequest(remote, map[string]string{"Upgrade": "websocket", "Connection": "Upgrade"})
+	r := newTestRequest(remote, map[string]string{"Upgrade": "websocket", "Connection": "Upgrade", "Sec-WebSocket-Key": "dGhlIHNhbXBsZQ=="})
 	return r
 }
 
@@ -573,7 +573,7 @@ func TestPathRuleKeyedAndExempt(t *testing.T) {
 
 func TestPathRuleWebSocketExempt(t *testing.T) {
 	router, sep := pathRuleRouter(t, &PathRule{Pattern: "/ws", Action: PathRuleRateLimit, RateLimit: 1, RateUnit: "minute"})
-	hdr := map[string]string{"Upgrade": "websocket", "Connection": "Upgrade"}
+	hdr := map[string]string{"Upgrade": "websocket", "Connection": "Upgrade", "Sec-WebSocket-Key": "dGhlIHNhbXBsZQ=="}
 	blocked := 0
 	for i := 0; i < 5; i++ {
 		if serveRaw(router, sep, "GET", "/ws", "198.51.100.7:1", hdr).Code == 429 {
@@ -894,5 +894,68 @@ func TestBulkRateLimitUnit(t *testing.T) {
 	}
 	if res := run(BulkParams{RateLimitEnabled: true, RateLimit: 10, RateUnit: "week"}); res != nil && res[0].OK {
 		t.Error("an unknown unit is rejected")
+	}
+}
+
+// A forged Upgrade header is not a handshake: it is counted like any request.
+func TestWebSocketExemptNeedsRealHandshake(t *testing.T) {
+	pe := &ProxyEndpoint{RootOrMatchingDomain: "ws.example.com", RateOptions: &RateLimitOptions{WSExempt: true, WSMaxConnsPerIP: 5}}
+	pe.initRateOptions()
+	if !pe.rateSkipsWebSocket(wsRequest("198.51.100.7:1")) {
+		t.Fatal("a real handshake is exempt")
+	}
+	for name, r := range map[string]*http.Request{
+		"no key":       newTestRequest("198.51.100.7:1", map[string]string{"Upgrade": "websocket", "Connection": "Upgrade"}),
+		"no conn":      newTestRequest("198.51.100.7:1", map[string]string{"Upgrade": "websocket", "Sec-WebSocket-Key": "k"}),
+		"upgrade only": newTestRequest("198.51.100.7:1", map[string]string{"Upgrade": "websocket"}),
+	} {
+		if pe.rateSkipsWebSocket(r) {
+			t.Errorf("%s: must not be exempt", name)
+		}
+	}
+	post := wsRequest("198.51.100.7:1")
+	post.Method = http.MethodPost
+	if pe.rateSkipsWebSocket(post) {
+		t.Error("a POST is not a handshake")
+	}
+}
+
+// Even well formed exempt handshakes are bounded by the guard bucket.
+func TestWebSocketExemptHandshakesAreBounded(t *testing.T) {
+	router := newTestRateLimitRouter(t, false)
+	pe := &ProxyEndpoint{RootOrMatchingDomain: "ws.example.com", RequireRateLimit: true, RateLimit: 3, RateOptions: &RateLimitOptions{WSExempt: true, WSMaxConnsPerIP: 5}}
+	pe.initRateOptions()
+	blocked := 0
+	for i := 0; i < 200; i++ {
+		if router.handleRateLimit(httptest.NewRecorder(), wsRequest("198.51.100.7:1"), pe) != nil {
+			blocked++
+		}
+	}
+	if blocked == 0 || blocked == 200 {
+		t.Errorf("a handshake flood must hit the guard bucket but not all of it, blocked %d", blocked)
+	}
+}
+
+// A new limit without its own burst drops the burst of the old limit.
+func TestPresetResetsStaleBurst(t *testing.T) {
+	ep := &ProxyEndpoint{RootOrMatchingDomain: "a.example.com", RequireRateLimit: true, RateLimit: 1000, RateLimitBurst: 5000}
+	if _, err := ApplyRuleTemplateIn(ep, presetByName(t, "Public website"), ""); err != nil {
+		t.Fatal(err)
+	}
+	if ep.RateUnit != RateUnitMinute || ep.RateLimitBurst != 0 {
+		t.Errorf("unit %q burst %d: the burst must not survive the new limit", ep.RateUnit, ep.RateLimitBurst)
+	}
+}
+
+// The Login preset counts attempts (POST), not page views.
+func TestLoginPresetOnlyCountsPosts(t *testing.T) {
+	p := presetByName(t, "Login page")
+	if len(p.PathRateLimits) == 0 {
+		t.Fatal("no path limits")
+	}
+	for _, pl := range p.PathRateLimits {
+		if len(pl.Methods) != 1 || pl.Methods[0] != "POST" {
+			t.Errorf("%s: methods %v", pl.Name, pl.Methods)
+		}
 	}
 }

@@ -39,7 +39,7 @@ the number" (120 per minute allows 120 at once and then 2 per second; 5 per minu
   **A client that sends `ratenum` without `rateunit` means per second** (it predates units), so an old script can never have its number read as per minute.
   Without both, the stored unit stays. The bulk action `set_ratelimit` takes `RateUnit` and also defaults to per second.
 * A per-minute 429 carries `Retry-After` (seconds until one token is back); per-second limits answer as before.
-* A build older than this one reads a per-minute limit as per second (looser). Rolling back after using minutes is not supported.
+* A build older than this one reads a per-minute limit as per second (looser). Rolling back after using minutes is not supported. This also applies to the updater's automatic rollback and to applying a bundle to a node that is not updated yet: neither is gated by a config version, so a stored "120 per minute" would run as 120 per second there (fails open).
 
 ## 2. Path limits
 
@@ -79,7 +79,7 @@ and then the connection is taken over; the messages inside it are not HTTP reque
 connections one client could hold open. Both are now explicit and opt-in (`RateOptions`):
 
 * `WSMaxConnsPerIP` (0 = no cap): maximum concurrent WebSocket connections per client address and rule; further handshakes get 429 (`Retry-After: 5`). Counted until the connection ends (virtual directory routes too).
-* `WSExempt`: handshakes are not counted against the request limit or the path limits. It can only be switched on together with a connection cap, so exempt handshakes are never unlimited. Not applied when the rule blocks WebSockets.
+* `WSExempt`: handshakes are not counted against the request limit or the path limits. It can only be switched on together with a connection cap, so exempt handshakes are never unlimited. Only a well formed handshake (GET, `Upgrade: websocket`, `Connection: upgrade`, `Sec-WebSocket-Key`) is exempt, and even those draw from a separate guard bucket 20 times the size of the rule's own, so a flood of forged handshakes still gets 429. Not applied when the rule blocks WebSockets.
 * Trusted monitoring addresses are never capped.
 
 ## 6. Presets

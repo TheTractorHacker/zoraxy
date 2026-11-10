@@ -287,7 +287,17 @@ func (pe *ProxyEndpoint) rateExempt(r *http.Request, ip string) bool {
 // rateSkipsWebSocket reports whether this request is a WebSocket handshake the rule does not count.
 // A rule that blocks WebSockets answers the handshake itself, so nothing is exempted there.
 func (pe *ProxyEndpoint) rateSkipsWebSocket(r *http.Request) bool {
-	return pe.rateOpts != nil && pe.rateOpts.WSExempt && !pe.DisableWebSocket && isWebSocketRequest(r)
+	return pe.rateOpts != nil && pe.rateOpts.WSExempt && !pe.DisableWebSocket && isWebSocketHandshake(r)
+}
+
+// wsExemptGuardFactor: exempt handshakes are not free. They draw from a separate bucket this many times
+// larger than the rule's own, so reconnect storms pass but a flood of (possibly forged) handshakes cannot
+// reach the upstream without limit.
+const wsExemptGuardFactor = 20
+
+// wsExemptAllow counts an exempt handshake against the guard bucket of the rule
+func (t *RequestCountPerIpTable) wsExemptAllow(id, ip string, ratePerSec, burst float64) bool {
+	return t.AllowRate(id+"|wsguard", ip, ratePerSec*wsExemptGuardFactor, burst*wsExemptGuardFactor)
 }
 
 // rateKeyFor returns the bucket key of the request. keyed is false when the client address is used

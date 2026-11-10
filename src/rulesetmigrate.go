@@ -218,6 +218,14 @@ func buildRulesetMigration(e *ruleset.Engine) migrationResult {
 			case dynamicproxy.PathRuleDeny:
 				act = ruleset.Action{Type: ruleset.ActBlock}
 			case dynamicproxy.PathRuleRateLimit:
+				if u, _ := dynamicproxy.NormalizeRateUnit(pr.RateUnit); u != dynamicproxy.RateUnitSecond {
+					skip("path_rule", ref, "limits per "+u+"; the engine's rate limit is per second only, so it cannot be proposed without making it looser. Keep this path rule.")
+					continue
+				}
+				if kb := strings.ToLower(strings.TrimSpace(pr.KeyBy)); kb != "" && kb != "ip" {
+					skip("path_rule", ref, "counts per "+kb+" rather than per client address; the engine's rate limit is per client address only. Keep this path rule.")
+					continue
+				}
 				act = ruleset.Action{Type: ruleset.ActRateLimit, Rate: pr.RateLimit, Burst: pr.RateBurst}
 				notes = append(notes, "The path rule counted requests per (site, rule, client); the engine rule counts per (rule, client): same behaviour.")
 			case dynamicproxy.PathRuleAllow:

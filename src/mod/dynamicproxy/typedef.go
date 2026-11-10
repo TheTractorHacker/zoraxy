@@ -505,3 +505,20 @@ func isWebSocketRequest(r *http.Request) bool {
 
 	return strings.ToLower(upgradeHeader) == "websocket"
 }
+
+// isWebSocketHandshake is the strict form used where a request is treated differently because it is a
+// WebSocket handshake (rate limit exemption): GET, Upgrade: websocket, a Connection header with the upgrade
+// token and a Sec-WebSocket-Key. A request that merely carries an Upgrade header does not qualify.
+func isWebSocketHandshake(r *http.Request) bool {
+	if r.Method != http.MethodGet || !isWebSocketRequest(r) || strings.TrimSpace(r.Header.Get("Sec-WebSocket-Key")) == "" {
+		return false
+	}
+	for _, v := range r.Header.Values("Connection") {
+		for _, tok := range strings.Split(v, ",") {
+			if strings.EqualFold(strings.TrimSpace(tok), "upgrade") {
+				return true
+			}
+		}
+	}
+	return false
+}

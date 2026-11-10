@@ -181,7 +181,16 @@ func (router *Router) handleRateLimit(w http.ResponseWriter, r *http.Request, pe
 	}
 
 	//Opt-in exemptions: trusted monitoring, and WebSocket handshakes when the rule says so
-	if pe.rateOpts != nil && (pe.rateExempt(r, ip) || pe.rateSkipsWebSocket(r)) {
+	if pe.rateOpts != nil && pe.rateExempt(r, ip) {
+		return nil
+	}
+	if pe.rateSkipsWebSocket(r) {
+		//Exempt handshakes still draw from a much larger guard bucket (a forged handshake is not free)
+		if pe.RateLimit > 0 && !router.rateLimitCounter.wsExemptAllow(pe.RootOrMatchingDomain, ip, RatePerSecond(pe.RateLimit, pe.RateUnit), rateBurstTokens(pe.RateLimit, pe.RateLimitBurst)) {
+			w.WriteHeader(429)
+			router.Option.Metrics.Event(metrics.EventRateLimited, pe.RootOrMatchingDomain, "limit")
+			return errors.New("rate limit exceeded")
+		}
 		return nil
 	}
 

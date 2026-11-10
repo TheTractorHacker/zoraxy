@@ -110,6 +110,7 @@ tests that its verifier accepts the tool's output (`go test ./mod/updater`).
    exec but is killed if the unit is stopped/restarted by systemd; the in-process guard and crash-loop counter then
    still protect the next start. If the watchdog has to kill a hung process under systemd, the unit needs
    `Restart=always` to come back up.
+   Note: a rollback runs an older binary on the newer config. Fields it does not know are ignored; in particular `RateUnit` (per minute rate limits) is read as per second by builds that predate it, which is looser (see `docs/ux/rate-limits.md`).
 8. State files live in `conf/updater/`: `settings.json` (channel, backup-first), `installed.json`, `pending.json`,
    `history.json` (update history), `audit.log` (one line per action).
 

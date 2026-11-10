@@ -456,10 +456,21 @@ func (h *ProxyHandler) handlePathRules(w http.ResponseWriter, r *http.Request, s
 			if ip == "" {
 				return false
 			}
-			if sep.rateOpts != nil && (sep.rateExempt(r, ip) || sep.rateSkipsWebSocket(r)) {
-				return false //trusted monitoring / WebSocket handshake, see ratelimit_policy.go
+			if sep.rateOpts != nil && sep.rateExempt(r, ip) {
+				return false //trusted monitoring, see ratelimit_policy.go
 			}
 			key := "path|" + sep.RootOrMatchingDomain + "|" + strconv.Itoa(i)
+			if sep.rateSkipsWebSocket(r) {
+				//WebSocket handshake: not counted in the rule's bucket, but a much larger guard bucket still applies
+				if !h.Parent.rateLimitCounter.wsExemptAllow(key, ip, rule.ratePerS, rule.rateBurst) {
+					h.Parent.Option.Metrics.Event(metrics.EventRateLimited, sep.RootOrMatchingDomain, "path")
+					h.Parent.logRequest(r, false, 429, "path-rule-ratelimit", r.Host, "", sep)
+					w.Header().Set("Retry-After", "5")
+					w.WriteHeader(http.StatusTooManyRequests)
+					return true
+				}
+				return false
+			}
 			if !h.Parent.rateLimitCounter.rateAllow(r, key, ip, rule.KeyBy, rule.KeyHeader, rule.ratePerS, rule.rateBurst) {
 				h.Parent.Option.Metrics.Event(metrics.EventRateLimited, sep.RootOrMatchingDomain, "path")
 				h.Parent.logRequest(r, false, 429, "path-rule-ratelimit", r.Host, "", sep)

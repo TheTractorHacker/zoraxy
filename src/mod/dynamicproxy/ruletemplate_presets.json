@@ -258,6 +258,9 @@
    {
     "Name": "Login /login",
     "Pattern": "/login",
+    "Methods": [
+     "POST"
+    ],
     "RateLimit": 5,
     "RateUnit": "minute",
     "RateBurst": 5
@@ -265,6 +268,9 @@
    {
     "Name": "Login /signin",
     "Pattern": "/signin",
+    "Methods": [
+     "POST"
+    ],
     "RateLimit": 5,
     "RateUnit": "minute",
     "RateBurst": 5
@@ -272,6 +278,9 @@
    {
     "Name": "Login /wp-login.php",
     "Pattern": "/wp-login.php",
+    "Methods": [
+     "POST"
+    ],
     "RateLimit": 5,
     "RateUnit": "minute",
     "RateBurst": 5
@@ -279,6 +288,9 @@
    {
     "Name": "Login /auth",
     "Pattern": "/auth",
+    "Methods": [
+     "POST"
+    ],
     "RateLimit": 5,
     "RateUnit": "minute",
     "RateBurst": 5
