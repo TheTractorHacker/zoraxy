@@ -105,6 +105,7 @@ func (h *ProxyHandler) enforcePeerSet(w http.ResponseWriter, r *http.Request, se
 func (pe *ProxyEndpoint) initNetworkOptions() {
 	pe.initClientCert()
 	pe.initPathRules()
+	pe.initRateOptions()
 	pe.initPeerSet()
 	pe.initHeaderRules()
 	pe.initBasicScope()

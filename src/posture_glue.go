@@ -210,6 +210,11 @@ func collectPostureFacts() *posture.Facts {
 				RateLimit: ep.RequireRateLimit, AuthMethod: authMethodName(ep), UptimeMonitor: !ep.DisableUptimeMonitor,
 				Logging: !ep.DisableLogging, BlockExploits: ep.BlockCommonExploits, RequireCaptcha: ep.RequireCaptcha,
 				BotPolicy: ep.BotPolicy, Wildcard: strings.Contains(ep.RootOrMatchingDomain, "*")}
+			for _, pr := range ep.PathRules {
+				if pr != nil && pr.Action == dynamicproxy.PathRuleRateLimit {
+					r.PathRateLimits = append(r.PathRateLimits, pr.Pattern)
+				}
+			}
 			if ep.HeaderRewriteRules != nil {
 				r.HSTSMaxAge = ep.HeaderRewriteRules.HSTSMaxAge
 			}

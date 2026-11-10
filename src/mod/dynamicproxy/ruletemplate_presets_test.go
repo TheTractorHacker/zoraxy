@@ -25,7 +25,8 @@ func presetTestRule() *ProxyEndpoint {
 
 func TestAppPresetsCatalogue(t *testing.T) {
 	want := []string{"WordPress", "Nextcloud", "Home Assistant", "Jellyfin", "Plex", "Grafana", "Vaultwarden",
-		"Gitea or GitLab", "Portainer", "JSON API", "Static website", "Strict admin panel"}
+		"Gitea or GitLab", "Portainer", "JSON API", "Static website", "Strict admin panel",
+		"Public website", "Login page", "Admin dashboard", "Odoo ERP", "REST API per key", "Webhook receiver", "File upload", "WebSocket app limits", "Monitoring-friendly"}
 	have := map[string]*RuleTemplate{}
 	for _, p := range AppPresets() {
 		have[p.Name] = p

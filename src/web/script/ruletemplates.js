@@ -18,7 +18,7 @@
     "use strict";
 
     var $m = null;
-    var st = { list: [], editing: null, original: "", previewTimer: null, previewSeq: 0, rules: null, error: "" };
+    var st = { list: [], editing: null, original: "", previewTimer: null, previewSeq: 0, rules: null, error: "", base: null };
 
     var CSS = [
         "#ruleTplModal.ui.modal{ max-width:62em; }",
@@ -68,7 +68,10 @@
         if (t.Headers && t.Headers.length) { b.push(t.Headers.length + " header(s)"); }
         if (t.UptimeMonitor != null) { b.push("uptime monitor " + (t.UptimeMonitor ? "on" : "off")); }
         if (t.WAFSource != null) { b.push("WAF " + t.WAFSource + (t.WAFSource === "profile" ? ": " + (t.WAFProfile || "") : "")); }
-        if (t.RateLimit != null) { b.push(t.RateLimit > 0 ? "rate limit " + t.RateLimit + "/s" + (t.RateLimitBurst ? " (burst " + t.RateLimitBurst + ")" : "") : "no rate limit"); }
+        if (t.RateLimit != null) { b.push(t.RateLimit > 0 ? "rate limit " + t.RateLimit + (t.RateUnit === "minute" ? "/min" : "/s") + (t.RateLimitBurst ? " (burst " + t.RateLimitBurst + ")" : "") : "no rate limit"); }
+        if (t.RateKeyBy) { b.push("limit per " + (t.RateKeyBy === "header" ? "header " + (t.RateKeyHeader || "") : t.RateKeyBy)); }
+        if (t.PathRateLimits && t.PathRateLimits.length) { b.push(t.PathRateLimits.length + " path limit(s)"); }
+        if (t.WSMaxConnsPerIP) { b.push("max " + t.WSMaxConnsPerIP + " WebSocket connections per IP"); }
         if (t.BlockExploits != null) { b.push("exploit blocking " + (t.BlockExploits ? "on" : "off")); }
         if (t.DisableWebSocket != null) { b.push("WebSocket " + (t.DisableWebSocket ? "off" : "on")); }
         if (t.WebsocketTimeout != null) { b.push("WebSocket timeout " + t.WebsocketTimeout + " s"); }
@@ -104,7 +107,7 @@
         '<div class="rtSection"><h4>Protection</h4>' +
         '<div class="rtRow"><label for="rtWaf">WAF</label><select id="rtWaf"><option value="">Leave unchanged</option><option value="inherit">Inherit global</option><option value="off">Off</option><option value="detection_only">Detection only</option><option value="block">Block</option><option value="profile">Use profile</option></select>' +
         '<input type="text" id="rtWafProfile" placeholder="Profile name" style="display:none;width:12em;"></div>' +
-        '<div class="rtRow"><label><input type="checkbox" id="rtRateOn"> Rate limit</label><input type="number" id="rtRate" min="0" max="1000000" value="100" style="width:7em;"> req/s <input type="number" id="rtBurst" min="0" max="10000000" value="" placeholder="burst" style="width:7em;"> <span class="rtHint">0 turns the limit off</span></div>' +
+        '<div class="rtRow"><label><input type="checkbox" id="rtRateOn"> Rate limit</label><input type="number" id="rtRate" min="0" max="1000000" value="100" style="width:7em;"> <span id="rtRateUnit">req/s</span> <input type="number" id="rtBurst" min="0" max="10000000" value="" placeholder="burst" style="width:7em;"> <span class="rtHint">0 turns the limit off</span></div>' +
         '<div class="rtRow"><label for="rtExploit">Block exploits</label>' + triSelect("rtExploit", ["On", "Off"]) + '</div></div>' +
         '<div class="rtSection"><h4>Behaviour</h4>' +
         '<div class="rtRow"><label for="rtUptime">Uptime monitor</label>' + triSelect("rtUptime", ["On", "Off"]) + '<input type="text" id="rtUptimeUri" placeholder="/healthz (optional)" style="width:12em;"></div>' +
@@ -189,6 +192,7 @@
         $f("rtWafProfile").val(t.WAFProfile || "");
         $f("rtRateOn").prop("checked", t.RateLimit != null);
         $f("rtRate").val(t.RateLimit != null ? t.RateLimit : 100);
+        $f("rtRateUnit").text(t.RateUnit === "minute" ? "req/min" : "req/s");
         $f("rtBurst").val(t.RateLimitBurst != null ? t.RateLimitBurst : "");
         var tri = function (id, v, invert) { $f(id).val(v == null ? "" : ((invert ? !v : !!v) ? "1" : "0")); };
         tri("rtExploit", t.BlockExploits);
@@ -228,6 +232,11 @@
         if ($f("rtRateOn").is(":checked")) {
             var r = num("rtRate"); t.RateLimit = (r == null || isNaN(r)) ? -1 : r;
             var b = num("rtBurst"); if (b != null && !isNaN(b)) { t.RateLimitBurst = b; }
+            if (st.base && st.base.RateUnit) { t.RateUnit = st.base.RateUnit; } //the unit is not editable here, but cloning must not turn 120 req/min into 120 req/s
+            if (st.base && st.base.RateKeyBy) { t.RateKeyBy = st.base.RateKeyBy; if (st.base.RateKeyHeader) { t.RateKeyHeader = st.base.RateKeyHeader; } }
+        }
+        if (st.base) { //settings this form has no field for are carried over unchanged
+            ["PathRateLimits", "WSMaxConnsPerIP", "WSExemptFromRateLimit"].forEach(function (k) { if (st.base[k] != null) { t[k] = st.base[k]; } });
         }
         tri("rtExploit", "BlockExploits");
         tri("rtUptime", "UptimeMonitor");
@@ -248,6 +257,7 @@
         $f("rtTitle").text(src ? (clone ? "Clone template" : "Edit template") : "New template");
         var base = src ? $.extend(true, {}, src) : {};
         if (clone) { base.Name = (src.Name + " copy").slice(0, 64); }
+        st.base = base;
         fill(base);
         $f("rtForm").on("submit", function (e) { e.preventDefault(); save(); });
         $f("rtForm").on("input change", "input, select, textarea", function () { syncEnabled(); schedulePreview(250); });

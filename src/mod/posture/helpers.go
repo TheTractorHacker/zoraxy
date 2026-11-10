@@ -66,6 +66,20 @@ func ratio(what string, bad []string, total int, failAll bool, okText string) Re
 	return Result{Status: StatusWarn, Evidence: []string{fmt.Sprintf("%s for %d of %d proxy %s: %s", what, len(bad), total, plural(total, "rule", "rules"), listNames(bad, 8))}}
 }
 
+// loginPathWords are path words that usually mean a login or administration page. Only a guess.
+var loginPathWords = []string{"login", "signin", "sign-in", "logon", "auth", "admin", "wp-login", "xmlrpc", "password", "account", "session", "token", "oauth"}
+
+// LooksLikeLoginPath reports whether a path pattern looks like a login or admin path
+func LooksLikeLoginPath(p string) bool {
+	p = strings.ToLower(p)
+	for _, w := range loginPathWords {
+		if strings.Contains(p, w) {
+			return true
+		}
+	}
+	return false
+}
+
 // hostWordSet splits a host name into lower case words ("grafana.home-lab.example.com" -> grafana, home, lab, example, com)
 func hostWordSet(host string) map[string]bool {
 	out := map[string]bool{}

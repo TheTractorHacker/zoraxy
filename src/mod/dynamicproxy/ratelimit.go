@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"imuslab.com/zoraxy/mod/metrics"
 	"net/http"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -63,6 +64,16 @@ func (t *RequestCountPerIpTable) Allow(endpointID string, ip string, rate int64,
 	if burst <= 0 {
 		burst = rate
 	}
+	return t.AllowRate(endpointID, ip, float64(rate), float64(burst))
+}
+
+// AllowRate is Allow with a fractional refill rate (tokens per second), used for per minute limits:
+// 120 req/min refills 2 tokens per second, 5 req/min one token every 12 seconds. burst is the
+// bucket size in requests and must be positive.
+func (t *RequestCountPerIpTable) AllowRate(endpointID string, ip string, rate float64, burst float64) bool {
+	if rate <= 0 || burst <= 0 {
+		return false
+	}
 	now := t.clock()
 	key := bucketKey(endpointID, ip)
 
@@ -76,7 +87,7 @@ func (t *RequestCountPerIpTable) Allow(endpointID string, ip string, rate int64,
 				key = bucketKey(endpointID, "*overflow*")
 			}
 		}
-		nb := &tokenBucket{tokens: float64(burst), last: now, rate: float64(rate), burst: float64(burst)}
+		nb := &tokenBucket{tokens: burst, last: now, rate: rate, burst: burst}
 		actual, loaded := t.table.LoadOrStore(key, nb)
 		if !loaded {
 			t.size.Add(1)
@@ -88,7 +99,7 @@ func (t *RequestCountPerIpTable) Allow(endpointID string, ip string, rate int64,
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	//Pick up config changes
-	b.rate, b.burst = float64(rate), float64(burst)
+	b.rate, b.burst = rate, burst
 	if elapsed := now.Sub(b.last).Seconds(); elapsed > 0 {
 		b.tokens += elapsed * b.rate
 		if b.tokens > b.burst {
@@ -149,7 +160,12 @@ func (t *RequestCountPerIpTable) Clear() {
 func (h *ProxyHandler) handleRateLimitRouting(w http.ResponseWriter, r *http.Request, pe *ProxyEndpoint) error {
 	err := h.Parent.handleRateLimit(w, r, pe)
 	if err != nil {
-		h.Parent.logRequestDetail(r, false, 429, "ratelimit", r.URL.Hostname(), "", pe, fmt.Sprintf("limit %d req/s, burst %d", pe.RateLimit, pe.RateLimitBurst))
+		//never log the key: only the numbers and how the key is chosen
+		detail := fmt.Sprintf("limit %s, burst %d", FormatRate(pe.RateLimit, pe.RateUnit), pe.RateLimitBurst)
+		if pe.rateOpts != nil && pe.rateOpts.KeyBy != RateKeyIP {
+			detail += ", keyed by " + pe.rateOpts.KeyBy
+		}
+		h.Parent.logRequestDetail(r, false, 429, "ratelimit", r.URL.Hostname(), "", pe, detail)
 	}
 	return err
 }
@@ -164,8 +180,21 @@ func (router *Router) handleRateLimit(w http.ResponseWriter, r *http.Request, pe
 		return nil
 	}
 
-	//Each endpoint gets its own bucket per client IP
-	if !router.rateLimitCounter.Allow(pe.RootOrMatchingDomain, ip, pe.RateLimit, pe.RateLimitBurst) {
+	//Opt-in exemptions: trusted monitoring, and WebSocket handshakes when the rule says so
+	if pe.rateOpts != nil && (pe.rateExempt(r, ip) || pe.rateSkipsWebSocket(r)) {
+		return nil
+	}
+
+	//Each endpoint gets its own bucket per client IP (or per key, see ratelimit_policy.go)
+	ratePerSec := RatePerSecond(pe.RateLimit, pe.RateUnit)
+	keyBy, keyHeader := "", ""
+	if pe.rateOpts != nil {
+		keyBy, keyHeader = pe.rateOpts.KeyBy, pe.rateOpts.keyHeaderName
+	}
+	if pe.RateLimit <= 0 || !router.rateLimitCounter.rateAllow(r, pe.RootOrMatchingDomain, ip, keyBy, keyHeader, ratePerSec, rateBurstTokens(pe.RateLimit, pe.RateLimitBurst)) {
+		if ratePerSec < 1 && pe.RateLimit > 0 {
+			w.Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds(ratePerSec)))
+		}
 		w.WriteHeader(429)
 		router.Option.Metrics.Event(metrics.EventRateLimited, pe.RootOrMatchingDomain, "limit")
 		return errors.New("rate limit exceeded")

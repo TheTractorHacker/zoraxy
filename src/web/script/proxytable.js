@@ -179,7 +179,7 @@
             b.push('<span class="ptBadge waf" title="Web application firewall: ' + esc(ws) + (r.WAFProfile ? " (" + esc(r.WAFProfile) + ")" : "") + '"><i class="shield alternate icon"></i>WAF' + (ws === "detection_only" ? " detect" : "") + '</span>');
         }
         if (r.RequireCaptcha) { b.push('<span class="ptBadge" title="CAPTCHA challenge"><i class="puzzle piece icon"></i>CAPTCHA</span>'); }
-        if (r.RequireRateLimit) { b.push('<span class="ptBadge" title="Rate limit ' + esc(r.RateLimit) + ' requests per second per IP"><i class="tachometer alternate icon"></i>' + esc(r.RateLimit) + '/s</span>'); }
+        if (r.RequireRateLimit) { b.push(r.RateUnit === "minute" ? '<span class="ptBadge" title="Rate limit ' + esc(r.RateLimit) + ' requests per minute per IP"><i class="tachometer alternate icon"></i>' + esc(r.RateLimit) + '/min</span>' : '<span class="ptBadge" title="Rate limit ' + esc(r.RateLimit) + ' requests per second per IP"><i class="tachometer alternate icon"></i>' + esc(r.RateLimit) + '/s</span>'); }
         if (r.BlockCommonExploits) { b.push('<span class="ptBadge" title="Blocks common exploit payloads"><i class="bug icon"></i>Exploits</span>'); }
         if (r.BlockAICrawlers) { b.push('<span class="ptBadge" title="Blocks AI crawlers and bots"><i class="user secret icon"></i>Bots</span>'); }
         if ((!ws || ws === "inherit") && state.waf && state.waf.Enabled) {

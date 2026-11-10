@@ -515,16 +515,24 @@
 </section>
 <section class="zx-card hrp-card" data-hrp-card="ratelimit" rpcfg="security" data-hrp-nd="ratelimit" aria-labelledby="hrpc-ratelimit">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-ratelimit">Rate limit</h3></div>
-<p class="zx-card__desc">Slow down visitors that send too many requests.</p>
+<p class="zx-card__desc">Slow down visitors that send too many requests. The limit, its unit and the burst are saved with the editor; the key, trusted monitoring, WebSocket and path limit settings below them save by themselves.</p>
 <div class="zx-card__body">
                             <div class="ui checkbox" style="margin-top: 0.4em;">
                                 <input type="checkbox" class="RequireRateLimit">
                                 <label>Require Rate Limit<br>
                                 <small>Check this to enable rate limit on this inbound hostname</small></label>
                             </div><br>
+                            <div style="margin-top: 0.6em;">
+                                <label for="hrpRateUnit"><b>The limit is a number of requests per</b></label>
+                                <select id="hrpRateUnit" class="RateUnit" aria-describedby="hrpRateUnitHelp" style="margin-left: 0.4em;">
+                                    <option value="">second</option>
+                                    <option value="minute">minute</option>
+                                </select><br>
+                                <small id="hrpRateUnitHelp" style="opacity:0.7;">Pick minute to write the limit as in guidance tables, for example 120 per minute. It is the same limit: 120 per minute refills 2 requests per second.</small>
+                            </div>
                             <div class="ui small right labeled fluid input" style="margin-top: 0.4em;">
                                 <input type="number" class="RateLimit" value="0" min="1" >
-                                <label class="ui basic label">
+                                <label class="ui basic label RateUnitLabel">
                                     req / sec / IP
                                 </label>
                             </div>
@@ -534,6 +542,7 @@
                                     burst (0 = same as rate)
                                 </label>
                             </div>
+                            <iframe src="" class="wrapper_frame ratelimit_frame" style="height:70em; margin-top: 1em;" title="Rate limit guidance, key, trusted monitoring, WebSockets and path limits"></iframe>
 </div>
 </section>
 <section class="zx-card hrp-card" data-hrp-card="captcha" rpcfg="security" data-hrp-nd="captcha" aria-labelledby="hrpc-captcha">
@@ -1484,6 +1493,7 @@
         let requireRateLimit = $(editor).find(".RequireRateLimit")[0].checked;
         let rateLimit = $(editor).find(".RateLimit").val();
         let rateLimitBurst = $(editor).find(".RateLimitBurst").val();
+        let rateLimitUnit = $(editor).find(".RateUnit").val() || "";
         let bypassGlobalTLS = $(editor).find(".BypassGlobalTLS")[0].checked;
         let enableConnectSupport = $(editor).find(".EnableConnectSupport")[0].checked;
         let enableUpgradeForwarding = $(editor).find(".EnableUpgradeForwarding")[0].checked;
@@ -1549,6 +1559,7 @@
                 "mitigationAction": mitigationAction,
                 "ratenum" :rateLimit,
                 "rateburst": rateLimitBurst,
+                "rateunit": rateLimitUnit,
                 "captcha": requireCaptcha,
                 "captchaProvider": captchaProvider,
                 "captchaFriendlyEndpoint": $(editor).find(".friendlyEndpointSelect").val() || "global",
@@ -2138,6 +2149,12 @@
             editor.find("[data-hrp-card='alias'] .wrapper_frame").attr('src', frameURL);
         })();
 
+        /* ------------ Rate limit extras (self-contained snippet, saves by itself) ------------ */
+        (() => {
+            let payload = encodeURIComponent(JSON.stringify({ ept: "host", ep: uuid }));
+            editor.find("[data-hrp-card='ratelimit'] .ratelimit_frame").attr('src', "snippet/rateLimitEditor.html?t=" + Date.now() + "#" + payload);
+        })();
+
         /* ------------ Headers ------------ */ 
         (() => {
             let payload = encodeURIComponent(JSON.stringify({
@@ -2266,7 +2283,7 @@
             }
             let parsed = Number(rateLimitValue);
             if (!Number.isInteger(parsed) || parsed < 1 || parsed > 1000000) {
-                msgbox("Rate limit must be a whole number from 1 to 1000000 requests per second", false);
+                msgbox("Rate limit must be a whole number from 1 to 1000000", false);
                 $(this).val(subd.RateLimit);
                 return;
             }
@@ -2288,6 +2305,16 @@
             hrpEdited(uuid, this);
         });
         editor.find(".RateLimit").val(subd.RateLimit).on("change", rateLimitChangeEvent);
+
+        // Unit of the limit: "" = per second (the default and every older config), "minute"
+        function rateUnitLabel(){
+            editor.find(".RateUnitLabel").text(editor.find(".RateUnit").val() === "minute" ? "req / min / IP" : "req / sec / IP");
+        }
+        editor.find(".RateUnit").off("change").val(subd.RateUnit || "").on("change", function(){
+            rateUnitLabel();
+            hrpEdited(uuid, this);
+        });
+        rateUnitLabel();
 
         // Rate limit burst (0 = same as the rate)
         editor.find(".RateLimitBurst").off("change");

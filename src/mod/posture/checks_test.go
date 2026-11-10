@@ -262,6 +262,19 @@ func TestChecks_Abuse(t *testing.T) {
 		{"no rules", func(f *Facts) { f.Proxy.Rules = nil }, StatusNA, ""},
 		{"unknown", func(f *Facts) { f.Proxy = nil }, StatusUnknown, ""},
 	})
+	runCases(t, "abuse.ratelimit_login_paths", []checkCase{
+		{"site wide limits only", nil, StatusOK, "only through the site wide limit"},
+		{"path limit on login", func(f *Facts) {
+			setRules(f, func(r *RuleFacts) { r.RateLimit = false; r.PathRateLimits = []string{"/wp-login.php"} })
+		}, StatusOK, "all 2"},
+		{"path limit on an unrelated path only", func(f *Facts) {
+			setRules(f, func(r *RuleFacts) { r.RateLimit = false; r.PathRateLimits = []string{"/static"} })
+		}, StatusInfo, "no rate limit at all for 2 of 2"},
+		{"nothing", func(f *Facts) { setRules(f, func(r *RuleFacts) { r.RateLimit = false }) }, StatusInfo, "a.example.com"},
+		{"one bare one site wide", func(f *Facts) { f.Proxy.Rules[0].RateLimit = false }, StatusInfo, "1 more have only a site wide limit"},
+		{"no rules", func(f *Facts) { f.Proxy.Rules = nil }, StatusNA, ""},
+		{"unknown", func(f *Facts) { f.Proxy = nil }, StatusUnknown, ""},
+	})
 	runCases(t, "access.trusted_proxy_gating", []checkCase{
 		{"no cdn seen", nil, StatusNA, "none of the 10"},
 		{"cdn and gating", func(f *Facts) { f.Visitors.Via = map[string]int{"cloudflare": 4, "direct": 6} }, StatusOK, "4 of 10"},
@@ -471,5 +484,33 @@ func TestRegistryRejectsBadChecks(t *testing.T) {
 		if r.Register(c) == nil {
 			t.Errorf("%s was accepted", name)
 		}
+	}
+}
+
+// The login path check is only a hint: it has no fix, never costs points and never enters the score.
+func TestLoginPathRateLimitCheckIsInformational(t *testing.T) {
+	var c *Check
+	for _, x := range Default.Checks() {
+		if x.ID == "abuse.ratelimit_login_paths" {
+			x := x
+			c = &x
+		}
+	}
+	if c == nil {
+		t.Fatal("check missing")
+	}
+	if c.Remediation.Action != "" {
+		t.Errorf("an informational check must not offer an automatic fix: %q", c.Remediation.Action)
+	}
+	if !c.Heuristic || c.Critical {
+		t.Errorf("heuristic and not critical expected")
+	}
+	base := Compute([]CheckResult{{ID: "a", Weight: 5, Status: StatusOK}, {ID: "b", Weight: 5, Status: StatusFail}})
+	with := Compute([]CheckResult{{ID: "a", Weight: 5, Status: StatusOK}, {ID: "b", Weight: 5, Status: StatusFail}, {ID: "i", Weight: 10, Status: StatusInfo}})
+	if base.Value != with.Value || with.Applicable != base.Applicable || with.Counts[StatusInfo] != 1 {
+		t.Errorf("an info result must not change the score or the weight in scope: %+v vs %+v", base, with)
+	}
+	if !LooksLikeLoginPath("/wp-login.php") || !LooksLikeLoginPath("/Admin/") || LooksLikeLoginPath("/static/app.js") {
+		t.Error("login path heuristic")
 	}
 }

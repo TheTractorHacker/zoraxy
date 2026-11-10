@@ -42,6 +42,7 @@ func RegisterNetworkingAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/proxy/networking/clientcert", HandleNetworkingClientCert)
 	authRouter.HandleFunc("/api/proxy/networking/clientcert/inspect", HandleNetworkingCAInspect)
 	authRouter.HandleFunc("/api/proxy/networking/pathrules", HandleNetworkingPathRules)
+	authRouter.HandleFunc("/api/proxy/networking/ratelimit", HandleNetworkingRateOptions)
 	authRouter.HandleFunc("/api/proxy/networking/peers", HandleNetworkingPeers)
 	authRouter.HandleFunc("/api/proxy/networking/secondarytls", HandleNetworkingSecondaryTLS)
 	authRouter.HandleFunc("/api/proxy/defaultsite/logging", HandleDefaultSiteLogging)
@@ -99,6 +100,10 @@ func HandleNetworkingGet(w http.ResponseWriter, r *http.Request) {
 	if rules == nil {
 		rules = []*dynamicproxy.PathRule{}
 	}
+	rateOpts := target.RateOptions
+	if rateOpts == nil {
+		rateOpts = &dynamicproxy.RateLimitOptions{}
+	}
 	peers := target.AllowedPeerCIDRs
 	if peers == nil {
 		peers = []string{}
@@ -106,6 +111,8 @@ func HandleNetworkingGet(w http.ResponseWriter, r *http.Request) {
 	js, _ := json.Marshal(map[string]interface{}{
 		"ClientCert":        cc,
 		"PathRules":         rules,
+		"RateOptions":       rateOpts,
+		"RateLimit":         map[string]interface{}{"Enabled": target.RequireRateLimit, "Limit": target.RateLimit, "Burst": target.RateLimitBurst, "Unit": target.RateUnit},
 		"AllowedPeerCIDRs":  peers,
 		"SecondaryPortsTLS": target.SecondaryPortsTLS,
 		"ListeningPorts":    target.ListeningPorts,
@@ -208,6 +215,39 @@ func HandleNetworkingPathRules(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := applyNetworkingChange(ep, func(e *dynamicproxy.ProxyEndpoint) error {
 		e.PathRules = rules
+		return nil
+	}); err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
+	}
+	utils.SendOK(w)
+}
+
+// HandleNetworkingRateOptions stores the optional extras of the rate limit (key, trusted monitoring exemption,
+// WebSocket accounting). The limit itself, its unit and burst are saved by /api/proxy/edit, path limits by
+// /api/proxy/networking/pathrules. POST ep, options (JSON of RateLimitOptions, {} clears them).
+func HandleNetworkingRateOptions(w http.ResponseWriter, r *http.Request) {
+	ep, ok := networkingPostEndpoint(w, r)
+	if !ok {
+		return
+	}
+	raw, err := utils.PostPara(r, "options")
+	if err != nil {
+		utils.SendErrorResponse(w, "options not given")
+		return
+	}
+	var opts dynamicproxy.RateLimitOptions
+	if err := json.Unmarshal([]byte(raw), &opts); err != nil {
+		utils.SendErrorResponse(w, "Invalid options: "+err.Error())
+		return
+	}
+	if err := opts.Validate(); err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
+	}
+	norm := opts.Normalised()
+	if err := applyNetworkingChange(ep, func(e *dynamicproxy.ProxyEndpoint) error {
+		e.RateOptions = norm
 		return nil
 	}); err != nil {
 		utils.SendErrorResponse(w, err.Error())

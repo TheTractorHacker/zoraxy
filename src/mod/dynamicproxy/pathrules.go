@@ -27,7 +27,7 @@ import (
 	  allow         stop evaluating path rules, the request continues down the chain
 	                (it does NOT bypass other protections such as WAF, auth or rate limits)
 	  deny          403
-	  rate_limit    token bucket per (endpoint, rule, client IP): RateLimit req/s, RateBurst burst, 429 when empty
+	  rate_limit    token bucket per (endpoint, rule, client IP or key): RateLimit req/s (or req/min with RateUnit), RateBurst burst, 429 when empty
 	  require_auth  the endpoint's authentication provider is enforced for this path even when an SSO
 	                exception rule would skip it. If the endpoint has no provider the request is refused (fail closed)
 
@@ -71,6 +71,9 @@ type PathRule struct {
 	Action          string   //allow, deny, require_auth, rate_limit
 	RateLimit       int64    //rate_limit: requests per second per client IP
 	RateBurst       int64    //rate_limit: burst size, 0 = same as RateLimit
+	RateUnit        string   `json:",omitempty"` //rate_limit: what RateLimit is per, "" = second (default), "minute"
+	KeyBy           string   `json:",omitempty"` //rate_limit: "" = client address (default), "authorization" or "header" (hashed, falls back to the address)
+	KeyHeader       string   `json:",omitempty"` //rate_limit: header name when KeyBy is "header"
 	CIDRs           []string //Optional scope: IP addresses or CIDR blocks
 	Countries       []string //Optional scope: ISO 3166 alpha-2 country codes
 	ScopeInvert     bool     //Apply the rule to everybody NOT in the scope
@@ -84,6 +87,8 @@ type compiledPathRule struct {
 	prefixes  []netip.Prefix
 	countries map[string]bool
 	hasScope  bool
+	ratePerS  float64 //rate_limit: tokens per second (RateLimit in RateUnit)
+	rateBurst float64 //rate_limit: bucket size in requests
 }
 
 type pathForceAuthKey struct{}
@@ -172,6 +177,23 @@ func compilePathRule(rule *PathRule) (*compiledPathRule, error) {
 		if c.RateBurst < 0 {
 			return nil, errors.New("burst cannot be negative")
 		}
+		if c.RateLimit > maxProxyRateLimitPerUnit {
+			return nil, errors.New("rate is too large")
+		}
+		unit, err := NormalizeRateUnit(c.RateUnit)
+		if err != nil {
+			return nil, err
+		}
+		c.RateUnit = unit
+		if err := ValidateKeying(c.KeyBy, c.KeyHeader); err != nil {
+			return nil, err
+		}
+		c.KeyBy, _ = normalizeKeyBy(c.KeyBy)
+		if c.KeyBy == RateKeyHeader {
+			c.KeyHeader = http.CanonicalHeaderKey(c.KeyHeader)
+		}
+		c.ratePerS = RatePerSecond(c.RateLimit, c.RateUnit)
+		c.rateBurst = rateBurstTokens(c.RateLimit, c.RateBurst)
 	default:
 		return nil, fmt.Errorf("unknown action %q", c.Action)
 	}
@@ -434,11 +456,14 @@ func (h *ProxyHandler) handlePathRules(w http.ResponseWriter, r *http.Request, s
 			if ip == "" {
 				return false
 			}
+			if sep.rateOpts != nil && (sep.rateExempt(r, ip) || sep.rateSkipsWebSocket(r)) {
+				return false //trusted monitoring / WebSocket handshake, see ratelimit_policy.go
+			}
 			key := "path|" + sep.RootOrMatchingDomain + "|" + strconv.Itoa(i)
-			if !h.Parent.rateLimitCounter.Allow(key, ip, rule.RateLimit, rule.RateBurst) {
+			if !h.Parent.rateLimitCounter.rateAllow(r, key, ip, rule.KeyBy, rule.KeyHeader, rule.ratePerS, rule.rateBurst) {
 				h.Parent.Option.Metrics.Event(metrics.EventRateLimited, sep.RootOrMatchingDomain, "path")
 				h.Parent.logRequest(r, false, 429, "path-rule-ratelimit", r.Host, "", sep)
-				w.Header().Set("Retry-After", "1")
+				w.Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds(rule.ratePerS)))
 				w.WriteHeader(http.StatusTooManyRequests)
 				return true
 			}

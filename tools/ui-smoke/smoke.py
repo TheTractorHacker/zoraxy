@@ -30,6 +30,7 @@ ap.add_argument("--site-editor-only", action="store_true", help="run only the si
 ap.add_argument("--rules-only", action="store_true", help="run only the Security rules (rules builder) scenario")
 ap.add_argument("--waf-tuning-only", action="store_true", help="run only the WAF Tuning tab scenario")
 ap.add_argument("--consistency-only", action="store_true", help="run only the consistency-pass scenario (certificates, Related boxes, save bar, history toast, hostile host, renamed pages)")
+ap.add_argument("--ratelimit-only", action="store_true", help="run only the rate limit guidance scenario (ratelimit_smoke.py: per-minute unit, editor, presets, real traffic)")
 ap.add_argument("--sites-only", action="store_true", help="run only the Sites pages audit scenario (Default Site, Stream Proxy, Redirection, hostnames, editor sub views)")
 ap.add_argument("--securityfix-only", action="store_true", help="run only the security-page fixes scenario (Trusted Proxies, Auto-ban, toasts, Access Rules, AI gating, WAF validation, contrast)")
 ap.add_argument("--certs-traffic-only", action="store_true", help="run only the Certificates / ACME / Statistics / Visitors / Uptime scenario (certs_traffic_smoke.py)")
@@ -2103,8 +2104,8 @@ def site_editor_ui(pg, ctx):
         pg.click("#hrpPresetBtn")
         pg.wait_for_selector("#hrpPresetModal .zxp-card", timeout=5000)
         cards = pg.locator("#hrpPresetModal .zxp-card").count()
-        if cards < 12:
-            fail("site-editor", f"the preset dialog lists only {cards} presets (expected at least 12)")
+        if cards < 21:
+            fail("site-editor", f"the preset dialog lists only {cards} presets (expected at least 21)")
         pg.click("#hrpPresetModal .zxp-card:has-text('Grafana')")
         pg.wait_for_selector("#hrpPresetDetail table", timeout=5000)
         det = pg.inner_text("#hrpPresetDetail")
@@ -2168,7 +2169,7 @@ def site_editor_ui(pg, ctx):
         dlg = pg.evaluate("(() => { const m = document.querySelector('#newRuleModal').getBoundingClientRect(); return [m.top, m.bottom, innerHeight]; })()")
         if dlg[0] < -1 or dlg[1] > dlg[2] + 1:
             fail("site-editor", f"the New proxy rule dialog does not fit the window ({dlg})")
-        if pg.locator("#nrPresetGrid .nrTpl").count() < 12 or "app preset" not in pg.inner_text("#nrPresetField").lower():
+        if pg.locator("#nrPresetGrid .nrTpl").count() < 21 or "app preset" not in pg.inner_text("#nrPresetField").lower():
             fail("site-editor", "the New proxy rule dialog must offer 'Start from an app preset'")
         pg.fill("#nrDomain", "se-new.smoke.invalid")
         pg.fill("#nrUpstream", "127.0.0.1:9")
@@ -2269,6 +2270,7 @@ def rules_scenario(pg, ctx):
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "consistency_smoke.py")).read(), "consistency_smoke.py", "exec"))  # defines consistency_ui
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "sites_smoke.py")).read(), "sites_smoke.py", "exec"))  # defines sites_ui
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "securityfix_smoke.py")).read(), "securityfix_smoke.py", "exec"))  # defines securityfix_ui
+exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "ratelimit_smoke.py")).read(), "ratelimit_smoke.py", "exec"))  # defines ratelimit_ui
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "certs_traffic_smoke.py")).read(), "certs_traffic_smoke.py", "exec"))  # defines certs_traffic_ui
 
 
@@ -2843,6 +2845,10 @@ def main():
             return
         if args.consistency_only:
             consistency_ui(pg, ctx)
+            b.close()
+            return
+        if args.ratelimit_only:
+            ratelimit_ui(pg, ctx)
             b.close()
             return
         if args.securityfix_only:
@@ -3803,6 +3809,7 @@ def main():
             pg.screenshot(path=os.path.join(args.out, f"mobile-{t}.png"))
         blocked_view(pg)
         i18n_checks(pg, ctx)
+        ratelimit_ui(pg, ctx)  # last: its 429 answers land in the blocked requests log, which blocked_view expects to be empty
         b.close()
 
 
