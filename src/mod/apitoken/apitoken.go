@@ -5,6 +5,7 @@
 package apitoken
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -402,6 +403,15 @@ func deny(w http.ResponseWriter, code int) {
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
+type tokenNameKey struct{}
+
+// TokenName returns the name of the API token that authenticated the request
+// (only set inside Middleware), for the configuration history.
+func TokenName(r *http.Request) string {
+	n, _ := r.Context().Value(tokenNameKey{}).(string)
+	return n
+}
+
 // Middleware authenticates a Bearer token and audit logs the outcome. Only
 // wrap /api/v1 handlers with it.
 func (m *Manager) Middleware(next http.Handler) http.Handler {
@@ -418,7 +428,7 @@ func (m *Manager) Middleware(next http.Handler) http.Handler {
 			return
 		}
 		sw := &statusWriter{ResponseWriter: w}
-		next.ServeHTTP(sw, r)
+		next.ServeHTTP(sw, r.WithContext(context.WithValue(r.Context(), tokenNameKey{}, name)))
 		if sw.status == 0 {
 			sw.status = http.StatusOK
 		}

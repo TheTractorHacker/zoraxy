@@ -226,6 +226,7 @@
                             <a class="item" tag="updater" tab_group="system">
                                 <i class="simplistic download icon"></i> Update
                             </a>
+                            <a class="item" tag="history" tab_group="system"><i class="simplistic history icon"></i> History</a> <!-- ux-history: menu entry -->
                         </div>
                     </div>
                     <div class="ui divider"></div>
@@ -343,6 +344,9 @@
 
                 <!-- Updater -->
                 <div id="updater" class="functiontab" target="updater.html"></div>
+
+                <!-- ux-history: History (change history and undo) -->
+                <div id="history" class="functiontab" target="history.html"></div>
 
                 <!-- Plugin Context Menu -->
                 <div id="pluginContextWindow" class="functiontab" target="plugincontext.html"></div>
@@ -1027,6 +1031,7 @@
             });
         </script>
         <script src="script/uxkit.js"></script>
+        <script src="script/zxhistory.js"></script> <!-- ux-history: window.ZxHistory helper -->
         <script src="script/wafapi.js"></script>
         <script src="script/newrule.js"></script>
         <script src="script/ruletemplates.js"></script>

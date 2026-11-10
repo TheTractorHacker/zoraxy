@@ -282,7 +282,7 @@ func newAPIv1Handler(mgr *apitoken.Manager, b v1Backend, guard func(http.Handler
 	for _, rt := range v1Routes(b, guard) {
 		api.HandleFunc(rt.Pattern, rt.Handler)
 	}
-	authed := mgr.Middleware(api)
+	authed := mgr.Middleware(historyWrapV1(api))
 
 	root := http.NewServeMux()
 	root.Handle(apiV1Prefix, authed)

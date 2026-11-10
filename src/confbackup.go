@@ -32,6 +32,9 @@ func writeConfigZip(out io.Writer, confDir string, dbPath string) error {
 		if err != nil {
 			return err
 		}
+		if info.IsDir() && info.Name() == ".history" && filePath != confDir {
+			return filepath.SkipDir //the sealed change history is per install and stays out of exports
+		}
 		if info.IsDir() || !info.Mode().IsRegular() {
 			return nil
 		}

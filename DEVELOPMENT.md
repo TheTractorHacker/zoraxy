@@ -2025,3 +2025,117 @@ The Status page's "Blocked today" was only a counter. `src/mod/blocklog` now kee
 * **New read-only endpoints**: `GET /api/ech/selfcheck?host=` (real local ECH handshake against the proxy listener, cert verification off; proves server-side acceptance only) and `GET /api/ech/domains[?host=]` (per proxied host, HTTPS record at the system resolver and at 1.1.1.1, classified `ours-active | ours-retired | ours-purged | foreign | none`). `/api/ech/status` also returns `Records` (one copy-ready record per proxied host). Existing endpoints and settings semantics are unchanged; enabling with a bad public-name certificate is allowed (the page asks first, the log warns).
 * **zrok page** (`components/zrok.html`): state card, install/enable/create steps, tunnel cards (URL with copy, uptime, restarts, last exit), inline delete/disable confirmations, a log viewer that shows the last 60 of the 200 captured lines. It refreshes every 15 s only while a tunnel is active, the tab is visible and the page is on screen. No API change.
 * **Tests**: Go (`mod/ech`, `mod/tlscert/hostcheck_test.go`, `echapi_test.go`), `tools/e2e-admin` scenarios `api-ech`, `api-ech-selfcheck-tls`, and the smoke test `ech_zrok_ui` (needs the instance to run with `-allow_external_tools` and `--zrok-fake`; `tools/ui-smoke/run.sh` supplies a fake `zrok` script).
+
+## Change history and undo (`mod/confhistory`)
+
+Audit finding 7 ("a mistaken security change cannot be undone"). Every successful configuration change made through the
+admin API or the REST API v1 creates a restorable version. Admin UI: System > History. Helper for other pages:
+`window.ZxHistory` (`script/zxhistory.js`; `ZxHistory.undoLast()` opens the restore preview of the state before the
+newest change, the kit wires it to the "Undo" action of save toasts).
+
+### What is captured
+
+One registry (`registry.go`, `DefaultRegistry()`) is the allow-list; other modules can `RegisterArea/RegisterRoot/RegisterTable`
+on `historyMgr.Registry()` before the first capture.
+
+| Captured (conf folder) | Area |
+|---|---|
+| `proxy/*.config` (incl. basic auth hashes, custom headers, CAPTCHA/WAF per rule settings) | proxy |
+| `redirect/`, `streamproxy/`, `rules/` | redirect, streams, pathrules |
+| `access/*.json`, `trusted_proxies.json` | access |
+| `waf_central.json` | waf |
+| `botrules.json`, `basicauth_lists.json`, `blocklist_sources.json`, `abuse/config.json` | security |
+| `acme_conf.json` | acme |
+| `notify.json`, `log_conf.json`, `sitelog.json`, `plugin_groups.json`, `ech/ech.json` | notify, logging, plugins, ech |
+| `sso/zorxauth/groupPolicy/`, `sso/zorxauth/branding/` | sso |
+| `certs/` (certificates and private keys; content never shown) | certs (opt-in, see below) |
+
+sys.db tables (exported as `db/<table>` JSON objects): `settings`, `redirect`, `acme`, `acmepref`, `wolmac`, `fwdproxy`, `webserv`,
+`blocklog`, `visitors`, `uptime`, `statsettings`, `ruletemplates`, `plugins`, `plugin_hooks`, `oauth2`, `oauth2_providers`, `auth_sso_forward`.
+
+**Never captured:** logs, statistics, the dashboard bandwidth counters, visitors and block log, sessions, caches, admin accounts and
+password hashes (table `auth`), API tokens (`apitokens`), OAuth sessions, SSO user databases (`zorxauth_*`), cluster/Fleet state
+(`cluster.json`, `.cluster/`), the admin TLS certificate (`webui/`), updater state, GeoIP databases, `waf_challenge.key`, the
+config `version` marker, bans (`abuse/bans.json`), and the history store itself. Files above 16 MiB are skipped (reported), a
+version is limited to 128 MiB / 20000 files, only regular files (no symlinks) at most `MaxDepth` levels below a root.
+Changes that bypass the API (editing files by hand, certificate renewals, other `sys.db` writers) are recorded as an
+"Edited outside the UI" version just before the next API change and at startup, so "undo" always returns to the exact previous state.
+Not captured: plugin-owned data, anything changed through `/plugin/` APIs, and the `/api/abuse/remote/*` ban API (state, not config).
+
+### Store and secrets
+
+`conf/.history/` (dir 0700, files 0600): `history.key` (random 32 bytes per install, hex), `settings.json` (retention, not secret),
+`index.zhi` (sealed: version metadata, last restore outcome), `versions/<id>.zhv` (sealed manifest path -> blob), `blobs/<name>.zhb`
+(sealed content). Sealing is AES-256-GCM; the encryption key and the blob naming key (HMAC-SHA256 of the plaintext, so identical
+content is stored once and names reveal nothing) are derived from `history.key` with the HKDF helper of `mod/cluster` (`DeriveKey`).
+The additional data binds every object to its kind and name: a flipped bit, a swapped blob or a wrong key fails with
+`ErrTampered` (the Fleet `Seal` format cannot be reused as is because it only accepts the Fleet path allow-list). Nothing in the
+store is readable without the key; there is no download of a sealed version. The store is excluded from `/api/conf/export`.
+Diffs and the "Export comparison" file show JSON only, with every value under a secret-looking key (`pass`, `secret`, `token`,
+`credential`, `private`, `hash`, `*key`, `hmac`, `webhook`, header pairs such as `Authorization`/`X-Api-Key`, ...) replaced by
+`••••` (`•••• (changed)` when the value differs); table exports of `acme`, `acmepref`, `oauth2*` and certificate files are never shown.
+Tests grep the whole store for known secrets.
+
+### Capture
+
+`historyWrap` (history.go) wraps the admin entry handler; `historyWrapV1` the token authenticated `/api/v1` handler (actor `token <name>`).
+After a successful (2xx/3xx) POST/PUT/PATCH/DELETE under `/api/` (never GET, nothing under `/api/history/`, `/api/auth/`, `/api/users/`,
+logs, stats, analytics, updater, cluster, read-only helpers; list in `routes.go`), `Notify` arms a debounce timer (2 s, at most 10 s
+for a continuous burst); when it fires one snapshot is taken. A snapshot with the same content hash as the newest version is not stored,
+so read-only POST endpoints and failed changes (the admin API often answers errors with status 200) create nothing. The summary comes from
+the route table (`Proxy rule edited: example.com`, `WAF policy changed`), the changed objects from comparing manifests. Snapshots are also
+taken before an in-app update (`pre-update`), before every restore (`pre-restore`), and manually ("Save a version now").
+Capture failures are logged and never fail the request.
+
+### Retention
+
+Settings API / UI: `keepCount` (100), `keepDays` (30), `maxMiB` (200). A version stays when it is among the newest N **or** younger
+than D days; afterwards the size cap removes the oldest versions. Never removed: the newest 5 versions, versions held by a running
+restore, the pre-restore and target versions of a restore that is waiting for its health confirmation. Unreferenced blobs are deleted.
+
+### API (`/api/history/`, admin session + CSRF, admin role only)
+
+`list` (paged; `object`, `actor`, `from`, `to`), `get?id=`, `diff?from=&to=[&download=1]` (without `from`: predecessor), `restore` (POST
+`id`, `scope` = `all` or an area id, `dryrun=true`, `confirm=RESTORE` required for scope `all`), `settings` (GET/POST), `snapshot` (POST).
+
+### Restore flow
+
+1. open the version (every blob authenticated), compare with the live state limited to the scope. Scope `all` covers every area except
+   the opt-in `certs` (restoring an old certificate over a renewed one is a trap; ask for the `certs` scope explicitly);
+2. files owned by a Fleet hub / cluster primary (`cluster.Manager.HubManagedReason`: hub published proxy files, whole managed scopes,
+   synced roots on a legacy follower) are **skipped and reported**, never overwritten;
+3. dry run returns the plan with masked diffs and stops;
+4. snapshot of the current state (`pre-restore`), then validation of everything that will be written: path allow-list (relative, clean,
+   no `..`, no hidden or symlink targets, registered root and name pattern), 16 MiB per entry, JSON parse, the loaders' validators
+   (`validateClusterPayload` for proxy rules, WAF, trusted proxies; access rule schema);
+5. files are staged in `.history/staging-*`, verified byte for byte, `pending.json` (`applying`) is written, then each file is swapped with
+   renames (old file moved to `.history/backup-*`), then the table writes; any error undoes every rename and table write;
+6. `pending.json` becomes `applied`, a version "Restored version N" is recorded and Zoraxy restarts itself (`restartSelf`, same as the
+   cluster apply, after a 3 s delay so the HTTP response is delivered);
+7. `BootGuard` (called right after sys.db opens, before modules read their files) counts the first start; `MarkHealthy` 20 s after a stable
+   start (`cluster.HealthyAfter` style) removes the marker and the backup. If a second start finds the marker the old files and tables are
+   put back from the backup folder and the pre-restore snapshot and the outcome is shown as a banner on the History page.
+
+### Failure modes
+
+| Failure | Result |
+|---|---|
+| validation error, unreadable/tampered version | refused, nothing changed, failure recorded |
+| crash after staging | live config untouched; stale staging removed at next start |
+| rename or table write error | all steps undone, running config intact |
+| crash while swapping | next start rolls back from the backup folder and the pre-restore snapshot |
+| restart fails | rolled back, error returned |
+| new config never becomes healthy | rolled back at the next start (needs a supervisor such as systemd, or a manual start, to start the second time) |
+| history store unreadable / key lost | history is unavailable (logged); proxy and admin API keep running; deleting `conf/.history` starts a new history |
+| `-conf` folder replaced by `/api/conf/import` | the old folder (with its history) is kept as `conf.old_*`; history restarts empty |
+
+Limitations: the table restore is not one database transaction (compensating writes are used); history restores sys.db tables via the
+database API, not the file, so unrelated tables are never touched; the restart drops active connections; a node without a supervisor
+that crashes on the restored config stays down until started by hand (the rollback then happens on that start).
+
+### Tests
+
+`go test ./mod/confhistory/` (hash stability, debounce, retention and protection rules, sealed store and tamper detection, secrets not in
+the store or any API output, restore atomicity with failure injection at validation/staging/each swap/tables/db key/restart, boot guard
+paths, path traversal and oversize rejection, scoped restore, Fleet-managed skip, concurrency); `go test ./mod/cluster -run HubManaged`;
+the UI smoke test (`tools/ui-smoke`, step `history_ui`) covers the page in light, dark and 390px.

@@ -124,6 +124,7 @@ func startupSequence() {
 	sysdb = db
 	//Create tables for the database
 	sysdb.NewTable("settings")
+	initHistory() //change history store; finishes an interrupted restore before modules read their files
 
 	//Create tmp folder and conf folder
 	os.MkdirAll(TMP_FOLDER, 0775)
@@ -502,6 +503,7 @@ func finalSequence() {
 /* Shutdown Sequence */
 func ShutdownSeq() {
 	SystemWideLogger.Println("Shutting down " + SYSTEM_NAME)
+	stopHistory()
 	stopDNSResponder()
 	SystemWideLogger.Println("Closing Netstats Listener")
 	if netstatBuffers != nil {

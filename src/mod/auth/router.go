@@ -40,6 +40,7 @@ var viewerDeniedPrefixes = []string{
 	"/api/conf/export",   //full configuration including secrets
 	"/api/info/pprof",    //heap / goroutine dumps
 	"/api/users/",        //account management
+	"/api/history/",      //configuration history (diffs, restore)
 	"/api/abuse/config",  //auto-ban settings
 	"/api/ech/export",    //ECH private key
 	"/api/zrok/logs",     //zrok tunnel output (share tokens, URLs)
