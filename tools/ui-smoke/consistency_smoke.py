@@ -27,11 +27,17 @@ def consistency_ui(pg, ctx):
     pg.set_viewport_size({"width": 1366, "height": 900})
     theme(False)
     current["page"] = "consistency-seed"
-    for host in (HOSTILE, PLAIN):
-        r = post("/api/proxy/add", {"type": "host", "rootname": host, "ep": "127.0.0.1:9", "tls": "false", "tlsval": "false",
-                                    "bypassGlobalTLS": "false", "bpgtls": "false", "cred": "", "ssl": "false"})
-        if r != "OK":
-            fail("consistency", f"could not add test rule {host!r}: {r}")
+    r = post("/api/proxy/add", {"type": "host", "rootname": PLAIN, "ep": "127.0.0.1:9", "tls": "false", "tlsval": "false",
+                                "bypassGlobalTLS": "false", "bpgtls": "false", "cred": "", "ssl": "false"})
+    if r != "OK":
+        fail("consistency", f"could not add test rule {PLAIN!r}: {r}")
+    # the hostile name can no longer be created (hostname validation); run.sh seeds it as a legacy config file instead
+    r = post("/api/proxy/add", {"type": "host", "rootname": HOSTILE, "ep": "127.0.0.1:9", "tls": "false", "tlsval": "false",
+                                "bypassGlobalTLS": "false", "bpgtls": "false", "cred": "", "ssl": "false"})
+    if not (isinstance(r, dict) and r.get("error")):
+        fail("validation", f"a hostile host name was accepted by /api/proxy/add: {r!r}")
+    if not js("h => fetch('/api/proxy/list?type=host').then(r => r.json()).then(l => l.some(x => x.RootOrMatchingDomain === h))", HOSTILE):
+        fail("consistency", "the legacy hostile test rule seeded by run.sh is missing (run the smoke test through run.sh)")
     try:
         # ---- Certificates page: stats, expiring / missing panels, collapsible add card, ACME tab ----
         current["page"] = "cert-sections"

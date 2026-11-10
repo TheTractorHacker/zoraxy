@@ -30,6 +30,7 @@ ap.add_argument("--site-editor-only", action="store_true", help="run only the si
 ap.add_argument("--rules-only", action="store_true", help="run only the Security rules (rules builder) scenario")
 ap.add_argument("--waf-tuning-only", action="store_true", help="run only the WAF Tuning tab scenario")
 ap.add_argument("--consistency-only", action="store_true", help="run only the consistency-pass scenario (certificates, Related boxes, save bar, history toast, hostile host, renamed pages)")
+ap.add_argument("--sites-only", action="store_true", help="run only the Sites pages audit scenario (Default Site, Stream Proxy, Redirection, hostnames, editor sub views)")
 ap.add_argument("--zrok-fake", default=os.environ.get("SMOKE_ZROK_FAKE", ""), help="path of a fake zrok script; enables the zrok flow (the instance needs -allow_external_tools)")
 ap.add_argument("--allow", action="append", default=[], help="regex of messages whose failure is tolerated")
 args = ap.parse_args()
@@ -2262,6 +2263,7 @@ def rules_scenario(pg, ctx):
     rules_ui(pg, ctx, {"fail": fail, "current": current, "settle": settle, "check_horizontal": check_horizontal, "out": args.out, "allow": allow})
 
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "consistency_smoke.py")).read(), "consistency_smoke.py", "exec"))  # defines consistency_ui
+exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "sites_smoke.py")).read(), "sites_smoke.py", "exec"))  # defines sites_ui
 
 
 def main():
@@ -2282,6 +2284,10 @@ def main():
         if pg.evaluate("location.hash") != want:
             fail("quickstart", f"landed on {pg.evaluate('location.hash')}, expected {want} (quickstart state {qs})")
 
+        if args.sites_only:
+            sites_ui(pg, ctx)
+            b.close()
+            return
         if args.consistency_only:
             consistency_ui(pg, ctx)
             b.close()
@@ -2312,6 +2318,7 @@ def main():
             b.close()
             return
         consistency_ui(pg, ctx)
+        sites_ui(pg, ctx)
         tabs = pg.eval_on_selector_all("#mainmenu .item[tag]", "els => els.map(e => e.getAttribute('tag'))")
         tabs = list(dict.fromkeys(tabs))
         if args.no_page_sweep:

@@ -97,6 +97,7 @@
 #httprpEditModal .editor_side_wrapper { position: absolute; top: 0; right: 0; height: 100%; width: 100%; background: var(--zx-bg); z-index: 3; }
 #httprpEditModal .editor_side_wrapper .wrapper_frame { width: 100%; height: calc(100% - 52px); border: 0; border-top: 1px solid var(--zx-border); }
 #httprpEditModal .editor_back_button { display: inline-block; border: none; background: transparent; box-shadow: none; color: var(--zx-text); font-size: 2.2em; cursor: pointer; padding: 0 var(--zx-space-3); line-height: 1; }
+#httprpEditModal .editor_back_button .editor_side_title { font-size: var(--zx-fs-lg); font-weight: 600; margin-left: var(--zx-space-2); vertical-align: middle; color: var(--zx-text); }
 #httprpEditModal .editor_back_button:hover { opacity: 0.6; }
 #httprpEditModal .editor_back_button:focus-visible { outline: none; box-shadow: var(--zx-focus-ring); border-radius: var(--zx-radius-sm); }
 

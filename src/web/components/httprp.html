@@ -59,7 +59,7 @@
         table.ptTable .ptSub{ font-size:0.82em; color:var(--text_color_secondary); margin-top:0.15em; }
         table.ptTable .ptSub .ptSep::after{ content:"\00b7"; margin:0 0.45em; opacity:0.6; }
         table.ptTable .ptSub .icon{ margin-right:0.25em; }
-        table.ptTable .ptUps{ word-break:break-all; font-size:0.93em; }
+        table.ptTable .ptUps{ overflow-wrap:break-word; min-width:11em; font-size:0.93em; }
         table.ptTable .ptMuted, #httprpPage .ptMuted{ opacity:0.5; }
         table.ptTable .ptBad{ color:#db2828; }
         table.ptTable .ptProt{ min-width:9em; }
@@ -105,7 +105,7 @@
         @media (prefers-reduced-motion: reduce){ #ptToast{ transition:none; } table.ptTable tr.ptFlash td{ animation:none; background:rgba(75,117,255,0.2); } }
         @media screen and (max-width: 640px){
             #httprpPage .ptSearch{ max-width:none; flex-basis:100%; }
-            #httprpPage .ptSeg{ overflow-x:auto; max-width:100%; }
+            #httprpPage .ptSeg{ flex-wrap:wrap; max-width:100%; }
             #httprpPage .ptHead .ui.primary.button{ width:100%; }
             #bulkBar{ top:3.9em; padding:0.4em 0.5em; }
             #bulkBar .ui.button:not(.icon){ font-size:0; padding:1.05em 1.15em; }
@@ -293,7 +293,7 @@
                             <div class="ui checkbox" style="margin-top: 0.4em;">
                                 <input type="checkbox" class="UseStickySession">
                                 <label>Use Sticky Session<br>
-                                    <small>Enable stick session on load balancing</small></label>
+                                    <small>Enable sticky session on load balancing</small></label>
                             </div>
 </div>
 </section>
@@ -1067,7 +1067,7 @@
                                             <div class="ui checkbox" style="margin-top: 0.4em;">
                                                 <input type="checkbox" class="EnableUpgradeForwarding">
                                                 <label>Enable protocol upgrade forwarding<br>
-                                                    <small>Forward non-WebSocket Upgrade requests (e.g. Tailscale / Headscale TS2021) to the upstream as a raw tunnel. WebSocket is handled separately in the WebSocket tab.</small></label>
+                                                    <small>Forward non-WebSocket Upgrade requests (e.g. Tailscale / Headscale TS2021) to the upstream as a raw tunnel. WebSocket is handled separately in the WebSocket section.</small></label>
                                             </div>
 </div>
 </section>
@@ -1118,6 +1118,7 @@
         <div class="editor_side_wrapper" style="display:none;">
             <a class="editor_back_button" role="button" tabindex="0" aria-label="Back to the site settings">
                 <i class="chevron circle left icon" style="margin-top: 22px;"></i>
+                <span class="editor_side_title" aria-live="polite"></span>
             </a>
             <iframe src="snippet/placeholder.html" class="wrapper_frame" title="Details">
 
@@ -2263,9 +2264,9 @@
                 $(this).val(subd.RateLimit);
                 return;
             }
-            let parsed = parseInt(rateLimitValue, 10);
-            if (isNaN(parsed) || parsed < 0) {
-                msgbox("Rate limit must be >= 0", false);
+            let parsed = Number(rateLimitValue);
+            if (!Number.isInteger(parsed) || parsed < 1 || parsed > 1000000) {
+                msgbox("Rate limit must be a whole number from 1 to 1000000 requests per second", false);
                 $(this).val(subd.RateLimit);
                 return;
             }
@@ -2819,13 +2820,40 @@
 
     // Section navigation (.hrpedit_menu_item, cfgpage) is bound by script/siteeditor.js
 
+    //Esc inside a sub view (the frame has its own document, so the editor key handler never sees it) goes back one level
+    $("#httprpEditModal .editor_side_wrapper .wrapper_frame").on("load", function(){
+        try {
+            let doc = this.contentDocument;
+            if (!doc || doc.__hrpEscBound) { return; }
+            doc.__hrpEscBound = true;
+            doc.addEventListener("keydown", function(e){
+                if (e.key === "Escape" && !e.defaultPrevented && !(doc.querySelector(".ui.dropdown.active, .ui.modal.visible, .ui.modal.active"))){
+                    e.preventDefault();
+                    e.stopPropagation();
+                    hideEditorSideWrapperViaBtn();
+                }
+            }, true);
+        } catch (err) { /* cross origin frame: nothing to bind */ }
+    });
+
     $("#httprpEditModal .editor_back_button").on("click", function(event) {
         // Prevent click event from propagating to the modal background
         event.stopPropagation();
         hideEditorSideWrapperViaBtn();
     });
 
+    //Name of each sub view, shown next to the back arrow together with the host being edited
+    var SIDE_VIEW_TITLES = {
+        "basicAuthEditor": "Basic auth", "captchaExceptionEditor": "CAPTCHA exceptions", "networkingEditor": "Networking",
+        "opsEditor": "Operations", "pathRulesEditor": "Path rules", "sablierEditor": "Sablier", "scriptEditor": "Scripts",
+        "ssoExceptionEditor": "SSO exceptions", "tagEditor": "Tags", "upstreams": "Upstreams", "zorxAuthExceptionEditor": "ZorxAuth exceptions"
+    };
+
     function showEditorSideWrapper(url){
+        let viewName = (String(url).match(/snippet\/([A-Za-z]+)\.html/) || [])[1];
+        let title = SIDE_VIEW_TITLES[viewName] || "";
+        let host = decodeURIComponent($("#httprpEditModal").attr("editing-host") || "");
+        $("#httprpEditModal .editor_side_title").text(title ? (window.t ? window.t(title) : title) + (host ? " - " + host : "") : "");
         $("#httprpEditModal .editor_side_wrapper .wrapper_frame").attr('src', url);
         $("#httprpEditModal .editor_side_wrapper").fadeIn("fast");
     }

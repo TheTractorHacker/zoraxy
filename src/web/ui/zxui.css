@@ -465,3 +465,8 @@ body.zx-has-savebar .zx-toasts { bottom: 6.5rem; }
     .zx-switch:checked::after { transform: translateX(20px); }
     .zx-savebar { margin-left: var(--zx-space-2); margin-right: var(--zx-space-2); }
 }
+
+/* Footer text and a dark theme destructive outline button: both were below 4.5:1 */
+.zx-footer-text { color: var(--zx-text-muted); }
+.zx-footer-text a { color: var(--zx-link); }
+body.darkTheme .ui.basic.red.button, body.darkTheme .ui.basic.red.buttons .button { color: #ff9b94 !important; box-shadow: 0 0 0 1px #ff9b94 inset !important; }

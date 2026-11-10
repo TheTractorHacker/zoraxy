@@ -30,7 +30,7 @@ function zxEsc(s){ return String(s === undefined || s === null ? "" : s).replace
                         </tr></thead>
                         <tbody id="inlineEditBasicAuthCredentialTable">
                         <tr>
-                            <td colspan="3"><i class="ui green circle check icon"></i> No Entered Credential</td>
+                            <td colspan="3"><i class="ui grey info circle icon"></i> No credentials entered</td>
                         </tr>
                         </tbody>
                     </table>
@@ -381,7 +381,7 @@ function zxEsc(s){ return String(s === undefined || s === null ? "" : s).replace
                 tableBody.empty();
 
                 if (editingCredentials.length === 0) {
-                    tableBody.append('<tr><td colspan="3"><i class="ui green circle check icon"></i> No Entered Credential</td></tr>');
+                    tableBody.append('<tr><td colspan="3"><i class="ui grey info circle icon"></i> No credentials entered</td></tr>');
                 } else {
                     for (var i = 0; i < editingCredentials.length; i++) {
                     var credential = editingCredentials[i];

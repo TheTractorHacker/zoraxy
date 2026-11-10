@@ -75,9 +75,19 @@ func ReverseProxyAddVdir(w http.ResponseWriter, r *http.Request) {
 		matchingPath = "/" + matchingPath
 	}
 
+	if len(matchingPath) > 200 || strings.ContainsAny(matchingPath, " \t\r\n\x00") {
+		utils.SendErrorResponse(w, "the matching path cannot contain spaces and is limited to 200 characters")
+		return
+	}
+
 	domain, err := utils.PostPara(r, "domain")
 	if err != nil {
 		utils.SendErrorResponse(w, "target domain not defined")
+		return
+	}
+	domain = strings.TrimSpace(domain)
+	if err := validateDefaultSiteTarget(1, domain); err != nil {
+		utils.SendErrorResponse(w, "the target is not a valid host or host:port")
 		return
 	}
 

@@ -21,6 +21,7 @@
     var state = {
         list: [],            // rules as returned by /api/proxy/list
         healthRaw: {},       // rule -> upstream -> latest uptime monitor result
+        waf: null,           // global WAF policy (Enabled, DefaultMode), decides what "follows the global policy" means
         access: {},          // access rule id -> access rule
         sel: {},             // rule -> true
         q: "",
@@ -181,6 +182,10 @@
         if (r.RequireRateLimit) { b.push('<span class="ptBadge" title="Rate limit ' + esc(r.RateLimit) + ' requests per second per IP"><i class="tachometer alternate icon"></i>' + esc(r.RateLimit) + '/s</span>'); }
         if (r.BlockCommonExploits) { b.push('<span class="ptBadge" title="Blocks common exploit payloads"><i class="bug icon"></i>Exploits</span>'); }
         if (r.BlockAICrawlers) { b.push('<span class="ptBadge" title="Blocks AI crawlers and bots"><i class="user secret icon"></i>Bots</span>'); }
+        if ((!ws || ws === "inherit") && state.waf && state.waf.Enabled) {
+            var gm = state.waf.DefaultMode === "block" ? "blocking" : "detection only";
+            b.push('<span class="ptBadge waf" title="Follows the global WAF policy (currently ' + gm + ')"><i class="shield alternate icon"></i>WAF (global)</span>');
+        }
         if (!b.length) { b.push('<span class="ptMuted">None</span>'); }
 
         var tags = (r.Tags || []).map(function (t) {
@@ -197,7 +202,7 @@
             '<td class="ptProt">' + b.join("") + '</td>' +
             '<td class="ptTagsCell">' + tags + '</td>' +
             '<td class="ptStatusCell"><button type="button" class="ptPill ' + (on ? "on" : "off") + (st === "err" ? " err" : "") + '" data-act="toggle" role="switch" aria-checked="' + on + '" title="' + esc(stateText(r)) + ". Click to " + (on ? "disable" : "enable") + '">' +
-            '<span class="ptPillDot"></span>' + (on ? "Enabled" : "Disabled") + '</button></td>' +
+            '<span class="ptPillDot"></span>' + (on ? (st === "err" ? "Enabled, upstream down" : "Enabled") : "Disabled") + '</button></td>' +
             '<td class="ptAct"><button type="button" class="ui mini basic blue button editBtn" data-act="edit" title="Edit proxy rule"><i class="edit icon"></i> Edit</button>' +
             '<button type="button" class="ui mini basic icon button ptDel" data-act="delete" title="Remove proxy rule" aria-label="Remove ' + e + '"><i class="red trash icon"></i></button></td>' +
             '</tr>';
@@ -336,6 +341,11 @@
         });
         return seen === 0 ? "" : (up > 0 ? "up" : "down");
     }
+    function loadWaf() {
+        $.getJSON("/api/waf/policy", function (p) {
+            if (p && !p.error) { state.waf = p; if (state.loaded) { render(); } }
+        });
+    }
     function loadAccess() {
         $.get("/api/access/list", function (data) {
             if (data && !data.error && data.forEach) {
@@ -361,7 +371,7 @@
             state.loaded = true;
             render();
             loadHealth();
-            loadAccess();
+            loadAccess(); loadWaf();
         });
     }
 
@@ -560,7 +570,7 @@
     window.updateAccessRuleNameUnderHost = function (epuuid, newruleUID) {
         var r = byName(epuuid);
         if (r) { r.AccessFilterUUID = newruleUID; }
-        loadAccess(); render();
+        loadAccess(); loadWaf(); render();
     };
     window.updateAliasListForEndpoint = function (endpointName, aliases) {
         var r = byName(endpointName);

@@ -40,22 +40,22 @@
             </div>
             <div class="field">
                 <label>Name</label>
-                <input type="text" name="name" placeholder="Config Name">
+                <input type="text" name="name" placeholder="Config Name" aria-label="Name">
             </div>
             <div class="field">
                 <label>Listening Address with Port</label>
-                <input type="text" name="listenAddr" placeholder="">
+                <input type="text" name="listenAddr" placeholder="" aria-label="Listening Address with Port">
                 <small>Address to listen on this host. e.g. :25565 or 127.0.0.1:25565. <br>
                     If you are using Docker, you will also need to expose this port to host network.</small>
             </div>
             <div class="field">
                 <label>Proxy Target Address with Port</label>
-                <input type="text" name="proxyAddr" placeholder="">
+                <input type="text" name="proxyAddr" placeholder="" aria-label="Proxy Target Address with Port">
                 <small>Server address to forward TCP / UDP package. e.g. 192.168.1.100:25565</small>
             </div>
             <div class="field">
                 <label>Timeout (s)</label>
-                <input type="text" name="timeout" placeholder="" value="10">
+                <input type="text" name="timeout" placeholder="" value="10" aria-label="Timeout (s)">
                 <small>Connection timeout in seconds</small>
             </div>
             <Br>
@@ -172,6 +172,13 @@
                 return;
             }
 
+            //A second click while the first request is in flight must not create a duplicate
+            var addBtn = $("#addStreamProxyButton");
+            if (addBtn.hasClass("disabled")){
+                return;
+            }
+            addBtn.addClass("disabled");
+
             // Send the AJAX POST request
             $.cjax({
                 type: 'POST',
@@ -188,15 +195,18 @@
                     accessRuleUUID: $("#streamProxyForm input[name=accessRuleUUID]").val().trim(),
                 },
                 success: function(response) {
+                    addBtn.removeClass("disabled");
                     if (response.error) {
+                        //Keep what the user typed, only a successful add clears the form
                         msgbox(response.error, false, 6000);
-                    }else{
-                        msgbox("Config Added");
+                        return;
                     }
+                    msgbox("Config Added");
                     clearStreamProxyAddEditForm();
                     initProxyConfigList();
                 },
                 error: function() {
+                    addBtn.removeClass("disabled");
                     msgbox('An error occurred while processing the request', false);
                 }
             });
@@ -240,14 +250,10 @@
                 form.find('input[name="timeout"]').parent().removeClass("error");
             }
 
-            // Validate mode is selected
-            var mode = form.find('select[name="mode"]').val();
-            if (mode === '') {
-                form.find('select[name="mode"]').parent().addClass("error");
-                msgbox('Please select a mode', false, 5000);
+            // At least one protocol must be on
+            if (!form.find('input[name="useTCP"]')[0].checked && !form.find('input[name="useUDP"]')[0].checked) {
+                msgbox('Enable TCP, UDP or both', false, 5000);
                 return false;
-            }else{
-                form.find('select[name="mode"]').parent().removeClass("error");
             }
             return true;
         }
@@ -256,17 +262,17 @@
             var tableBody = $('#proxyTable tbody');
             tableBody.empty();
             if (proxyConfigs.length === 0) {
-            var noResultsRow = $('<tr><td colspan="7"><i class="green check circle icon"></i>No Proxy Configs</td></tr>');
+            var noResultsRow = $('<tr><td colspan="7"><i class="grey info circle icon"></i>No Proxy Configs yet. Use the form below to add one.</td></tr>');
                 tableBody.append(noResultsRow);
             } else {
                
                 proxyConfigs.forEach(function(config) {
                     var runningLogo = 'Stopped';
                     var runningClass = "stopped";
-                    var startButton = `<button onclick="startStreamProx('${config.UUID}');" class="ui basic mini circular icon button" title="Start Proxy"><i class="green play icon"></i></button>`;
+                    var startButton = `<button onclick="startStreamProx('${config.UUID}');" class="ui basic mini circular icon button" title="Start Proxy" aria-label="Start Proxy"><i class="green play icon"></i></button>`;
                     if (config.Running){
                         runningLogo = 'Running';
-                        startButton = `<button onclick="stopStreamProx('${config.UUID}');" class="ui basic mini circular icon button" title="Stop Proxy"><i class="red stop icon"></i></button>`;
+                        startButton = `<button onclick="stopStreamProx('${config.UUID}');" class="ui basic mini circular icon button" title="Stop Proxy" aria-label="Stop Proxy"><i class="red stop icon"></i></button>`;
                         runningClass = "running"
                     }
 
@@ -285,7 +291,7 @@
                         modeText.push("ProxyProtocol V2");
                     }
 
-                    modeText = modeText.join(" & ")
+                    modeText = modeText.join(" & ") || "No protocol enabled"
 
                     var thisConfig = encodeURIComponent(JSON.stringify(config));
 
@@ -303,8 +309,8 @@
                     ));
                     row.append($('<td>').html(`
                         ${startButton}
-                        <button onclick="editTCPProxyConfig('${config.UUID}');" class="ui circular basic mini icon button" title="Edit Config"><i class="edit icon"></i></button>
-                        <button onclick="deleteTCPProxyConfig('${config.UUID}');" class="ui circular red basic mini icon button" title="Delete Config"><i class="trash icon"></i></button>
+                        <button onclick="editTCPProxyConfig('${config.UUID}');" class="ui circular basic mini icon button" title="Edit Config" aria-label="Edit Config"><i class="edit icon"></i></button>
+                        <button onclick="deleteTCPProxyConfig('${config.UUID}');" class="ui circular red basic mini icon button" title="Delete Config" aria-label="Delete Config"><i class="trash icon"></i></button>
                     `));
                     tableBody.append(row);
                 });
@@ -379,6 +385,12 @@
                     }
                 });
                 editingStreamProxyConfigUUID = configUUID;
+                //The form is below the list: bring it into view so the click gives visible feedback
+                var formEl = document.getElementById("addproxyConfig");
+                if (formEl && formEl.scrollIntoView){
+                    formEl.scrollIntoView({behavior: "smooth", block: "start"});
+                }
+                $("#streamProxyForm input[name=name]").trigger("focus");
             }else{
                 msgbox("Unable to load target config", false);
             }
@@ -421,9 +433,9 @@
                     $(btn).removeClass("disabled");
                     if (response.error) {
                         msgbox(response.error, false, 6000);
-                    }else{
-                        msgbox("Config Updated");
+                        return;
                     }
+                    msgbox("Config Updated");
                     initProxyConfigList();
                     cancelStreamProxyEdit();
                     clearStreamProxyAddEditForm();
@@ -438,6 +450,18 @@
         }
 
         function deleteTCPProxyConfig(configUUID){
+            var cfg = getConfigDetailsFromDOM(configUUID);
+            ZxUI.confirm({
+                title: "Delete this stream proxy?",
+                message: "The config " + (cfg ? cfg.Name : "") + " is removed and stops forwarding traffic.",
+                confirmLabel: "Delete",
+                danger: true
+            }).then(function(ok){
+                if (ok){ doDeleteTCPProxyConfig(configUUID); }
+            });
+        }
+
+        function doDeleteTCPProxyConfig(configUUID){
             $.cjax({
                 url: "/api/streamprox/config/delete",
                 method: "POST",

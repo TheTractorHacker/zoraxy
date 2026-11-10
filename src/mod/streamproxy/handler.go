@@ -51,6 +51,12 @@ func (m *Manager) HandleAddProxyConfig(w http.ResponseWriter, r *http.Request) {
 	enableLogging, _ := utils.PostBool(r, "enableLogging")
 	accessRuleUUID, _ := utils.PostPara(r, "accessRuleUUID")
 
+	name = strings.TrimSpace(name)
+	if err := m.validateConfig("", name, listenAddr, proxyAddr, useTCP, useUDP, false, false); err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
+	}
+
 	//Create the target config
 	newConfigUUID := m.NewConfig(&ProxyRelayOptions{
 		Name:                 name,
@@ -111,6 +117,25 @@ func (m *Manager) HandleEditProxyConfigs(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
+	// Validate the config as it will be after the edit (absent fields keep their current value)
+	effName, effListen, effTarget := current.Name, current.ListeningAddress, current.ProxyTargetAddr
+	if strings.TrimSpace(newName) != "" {
+		newName = strings.TrimSpace(newName)
+		effName = newName
+	}
+	if strings.TrimSpace(listenAddr) != "" {
+		listenAddr = strings.TrimSpace(listenAddr)
+		effListen = listenAddr
+	}
+	if strings.TrimSpace(proxyAddr) != "" {
+		proxyAddr = strings.TrimSpace(proxyAddr)
+		effTarget = proxyAddr
+	}
+	if err := m.validateConfig(configUUID, effName, effListen, effTarget, useTCP, useUDP, strings.TrimSpace(listenAddr) == "", strings.TrimSpace(proxyAddr) == ""); err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
+	}
+
 	// Create a new ProxyRuleUpdateConfig with the extracted parameters
 	newConfig := &ProxyRuleUpdateConfig{
 		InstanceUUID:         configUUID,
@@ -150,6 +175,11 @@ func (m *Manager) HandleStartProxy(w http.ResponseWriter, r *http.Request) {
 	targetProxyConfig, err := m.GetConfigByUUID(uuid)
 	if err != nil {
 		utils.SendErrorResponse(w, err.Error())
+		return
+	}
+
+	if _, err := validateAddresses(targetProxyConfig.ListeningAddress, targetProxyConfig.ProxyTargetAddr); err != nil {
+		utils.SendErrorResponse(w, "this config cannot be started: "+err.Error())
 		return
 	}
 
