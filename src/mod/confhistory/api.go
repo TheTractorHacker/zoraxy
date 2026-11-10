@@ -88,7 +88,7 @@ func (m *Manager) HandleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonOut(w, http.StatusOK, map[string]any{
-		"items": res.Items, "total": res.Total, "page": res.Page, "pageSize": res.PageSize,
+		"items": res.Items, "total": res.Total, "totalAll": m.Count(), "page": res.Page, "pageSize": res.PageSize,
 		"settings": m.Settings(), "areas": m.reg.Areas(), "lastRestore": m.LastRestore(),
 		"restorePending": m.pendingInfo(), "storeBytes": m.StoreBytes(), "latest": m.Latest(),
 		"healthyAfterSeconds": int(m.opt.HealthyAfter.Seconds()),

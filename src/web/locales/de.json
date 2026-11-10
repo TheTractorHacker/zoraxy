@@ -3,8 +3,8 @@
   "language": "German",
   "reviewed": false,
   "author": "machine-assisted (Claude)",
-  "coverage": 20.6,
-  "coreCoverage": 41.3
+  "coverage": 20.5,
+  "coreCoverage": 40.7
  },
  "strings": {
   "\"Add Redirection Rule\"": "„Weiterleitungsregel hinzufügen“",
@@ -737,7 +737,6 @@
   "Interface language": "Oberflächensprache",
   "Intermediate (Mozilla)": "Intermediate (Mozilla)",
   "Invalid incoming port value": "Ungültiger Wert für eingehenden Port",
-  "Invalid tabid given": "Ungültige Tab-ID angegeben",
   "Invisible": "Unsichtbar",
   "IP": "IP",
   "IP / CIDR": "IP / CIDR",
@@ -775,7 +774,6 @@
   "Loopback Routing Warning": "Loopback-Routing-Warnung",
   "Low": "Niedrig",
   "MAC Address": "MAC-Adresse",
-  "Make {7}": "{7} machen",
   "Manage": "Verwalten",
   "Managed": "Verwaltet",
   "Managed (default)": "Verwaltet (Standard)",

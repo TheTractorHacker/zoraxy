@@ -19,6 +19,7 @@ import (
 	"imuslab.com/zoraxy/mod/dynamicproxy/waf"
 	"imuslab.com/zoraxy/mod/offline"
 	"imuslab.com/zoraxy/mod/posture"
+	"imuslab.com/zoraxy/mod/utils"
 )
 
 /*
@@ -499,7 +500,8 @@ func proxyRuleByName(name string) *dynamicproxy.ProxyEndpoint {
 	if dynamicProxyRouter == nil {
 		return nil
 	}
-	ep, err := dynamicProxyRouter.LoadProxy(name)
+	// rules are stored under the ASCII (punycode) form of their host name, a rule named in Unicode is not found by that name
+	ep, err := dynamicProxyRouter.LoadProxy(utils.NormalizeHostname(name))
 	if err != nil {
 		return nil
 	}
@@ -558,7 +560,7 @@ func (postureBackend) Set(key, value string) error {
 		if ep := proxyRuleByName(strings.TrimPrefix(key, "hsts.")); ep == nil || ep.HeaderRewriteRules == nil {
 			return fmt.Errorf("this proxy rule has no header settings")
 		}
-		return runInternalHandler(HandleHSTSState, url.Values{"domain": {strings.TrimPrefix(key, "hsts.")}, "maxage": {value}})
+		return runInternalHandler(HandleHSTSState, url.Values{"domain": {utils.NormalizeHostname(strings.TrimPrefix(key, "hsts."))}, "maxage": {value}})
 	}
 	return fmt.Errorf("unknown setting %s", key)
 }

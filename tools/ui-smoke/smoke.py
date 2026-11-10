@@ -34,6 +34,7 @@ ap.add_argument("--sites-only", action="store_true", help="run only the Sites pa
 ap.add_argument("--securityfix-only", action="store_true", help="run only the security-page fixes scenario (Trusted Proxies, Auto-ban, toasts, Access Rules, AI gating, WAF validation, contrast)")
 ap.add_argument("--certs-traffic-only", action="store_true", help="run only the Certificates / ACME / Statistics / Visitors / Uptime scenario (certs_traffic_smoke.py)")
 ap.add_argument("--netsys-only", action="store_true", help="run only the Network / System pages scenario (ux-fix-network-system audit)")
+ap.add_argument("--overview-only", action="store_true", help="run only the Status / Security overview / History / palette / navigation fix scenario")
 ap.add_argument("--zrok-fake", default=os.environ.get("SMOKE_ZROK_FAKE", ""), help="path of a fake zrok script; enables the zrok flow (the instance needs -allow_external_tools)")
 ap.add_argument("--allow", action="append", default=[], help="regex of messages whose failure is tolerated")
 args = ap.parse_args()
@@ -2319,8 +2320,7 @@ def network_system_ui(pg, ctx):
 
 def _network_system_body(pg, ctx, args, after, shot, dialogs, api, toast_text, wait_msgbox, go, admin_port):
 
-    # ================= Static Web Server: port change on a fresh install (nil pointer panic) =================
-    current["page"] = "netsys/webserv"
+    # ================= Static Web Server: port change on a fresh install (nil pointer panic) ==========    current["page"] = "netsys/webserv"
     go("webserv")
     for bad in ("0", "99999", "-1", "abc"):
         r = api("POST", "/api/webserv/setPort", {"port": bad})
@@ -2816,6 +2816,8 @@ def _network_system_body(pg, ctx, args, after, shot, dialogs, api, toast_text, w
 
     if dialogs:
         fail("dialog", f"native dialogs used on the Network / System pages: {dialogs}")
+=======
+exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "overview_smoke.py")).read(), "overview_smoke.py", "exec"))  # defines overview_ui
 
 
 def main():
@@ -2848,6 +2850,8 @@ def main():
             securityfix_ui(pg, ctx)
         if args.certs_traffic_only:
             certs_traffic_ui(pg, ctx)
+        if args.overview_only:
+            overview_ui(pg, ctx)
             b.close()
             return
         if args.i18n_only:
@@ -3754,6 +3758,8 @@ def main():
         posture_ui(pg, ctx)
 
         history_ui(pg, ctx)
+
+        overview_ui(pg, ctx)
 
         current["page"] = "site-editor"
         site_editor_ui(pg, ctx)

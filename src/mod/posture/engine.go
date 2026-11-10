@@ -94,6 +94,21 @@ func (e *Engine) plan(a Action, f *Facts) Plan {
 	return p
 }
 
+// texts are the title and description to show for an action: the plan's own when it has some and
+// there is something to do, else the static ones of the action
+func (p Plan) texts(a Action) (title, desc string) {
+	title, desc = a.Title, a.Description
+	if len(p.Changes) > 0 {
+		if p.Title != "" {
+			title = p.Title
+		}
+		if p.Description != "" {
+			desc = p.Description
+		}
+	}
+	return
+}
+
 func (e *Engine) facts() *Facts {
 	f := e.Collect()
 	if f == nil {
@@ -121,7 +136,8 @@ func (e *Engine) Overview(refresh bool) Overview {
 	journal, _ := e.Journal.Load()
 	for _, a := range e.Actions.All() {
 		p := e.plan(a, f)
-		info := ActionInfo{ID: a.ID, Title: a.Title, Description: a.Description, Covers: a.Covers, Preselected: a.Preselected,
+		title, desc := p.texts(a)
+		info := ActionInfo{ID: a.ID, Title: title, Description: desc, Covers: a.Covers, Preselected: a.Preselected,
 			MayBlock: a.MayBlock, Sticky: a.Sticky, Reversible: a.Reversible(), Changes: len(p.Changes), State: "available"}
 		switch {
 		case o.Managed != "":
@@ -160,8 +176,9 @@ func (e *Engine) Preview(ids []string) ([]Preview, error) {
 		if managed != "" && p.Refusal == "" {
 			p.Refusal, p.Changes = managed, nil
 		}
-		out = append(out, Preview{ID: a.ID, Title: a.Title, Hash: p.Hash(), Changes: nz(p.Changes), Refusal: p.Refusal, Notes: p.Notes,
-			NoOp: p.Refusal == "" && len(p.Changes) == 0, MayBlock: a.MayBlock, Sticky: a.Sticky, Reversible: a.Reversible(), Description: a.Description})
+		title, desc := p.texts(a)
+		out = append(out, Preview{ID: a.ID, Title: title, Hash: p.Hash(), Changes: nz(p.Changes), Refusal: p.Refusal, Notes: p.Notes,
+			NoOp: p.Refusal == "" && len(p.Changes) == 0, MayBlock: a.MayBlock, Sticky: a.Sticky, Reversible: a.Reversible(), Description: desc})
 	}
 	return out, nil
 }

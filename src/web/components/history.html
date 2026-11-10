@@ -26,6 +26,9 @@
     }
     #hxPage .hx-toolbar { display: flex; flex-wrap: wrap; gap: 0.5em; align-items: flex-end; margin-bottom: 1em; }
     #hxPage .hx-toolbar .field { margin: 0; min-width: 0; }
+    #hxPage .hx-toolbar .field.hx-wide { flex: 2 1 17em; }
+    #hxPage .hx-toolbar .field.hx-wide input { width: 100%; }
+    #hxPage .hx-error { color: var(--zx-danger-text, #9f3a38); flex: 1 1 100%; margin: 0; }
     #hxPage .hx-toolbar input { max-width: 100%; }
     #hxPage .hx-timeline { position: relative; margin: 0; padding: 0; list-style: none; }
     #hxPage .hx-item {
@@ -60,7 +63,7 @@
     #hxPage .hx-secret { font-family: ui-monospace, monospace; }
     #hxRestoreModal .hx-list { max-height: 14em; overflow: auto; margin: 0.5em 0; padding-left: 1.2em; }
     #hxRestoreModal .hx-list li { overflow-wrap: anywhere; }
-    #hxRestoreModal .hx-diff { max-height: 18em; overflow: auto; }
+    #hxRestoreModal .hx-diff { overflow: visible; } /* the dialog scrolls, not a box inside it */
     #hxRestoreModal details.hx-file { border: 1px solid rgba(128,128,128,.35); border-radius: 4px; margin-bottom: 0.4em; }
     #hxRestoreModal details.hx-file > summary { cursor: pointer; padding: 0.3em 0.6em; font-weight: 600; }
     #hxRestoreModal .hx-code { overflow-x: auto; max-width: 100%; }
@@ -91,9 +94,9 @@
 
     <div class="ui basic segment">
         <div class="ui form hx-toolbar">
-            <div class="field">
+            <div class="field hx-wide">
                 <label for="hxFilterObject">Object</label>
-                <input type="text" id="hxFilterObject" placeholder="example.com, WAF, redirect..." autocomplete="off">
+                <input type="text" id="hxFilterObject" placeholder="example.com, WAF, redirect" autocomplete="off">
             </div>
             <div class="field">
                 <label for="hxFilterActor">Changed by</label>
@@ -111,6 +114,7 @@
                 <button class="ui basic button" id="hxFilterBtn"><i class="search icon"></i> Filter</button>
                 <button class="ui basic button" id="hxFilterClear">Clear</button>
             </div>
+            <p class="hx-error" id="hxFilterError" role="alert" hidden></p>
         </div>
         <div class="hx-actions" style="margin-bottom:1em; display:flex; flex-wrap:wrap; gap:0.4em;">
             <button class="ui basic button" id="hxSnapshotBtn" style="margin:0;"><i class="camera icon"></i> Save a version now</button>
@@ -159,8 +163,12 @@
         <div id="hxConfirmWrap" style="margin-top:1em; display:none;">
             <div class="ui warning message">Restoring the whole configuration replaces your current settings and restarts Zoraxy.
                 A version of the current state is saved first, so you can go back. Type <b>RESTORE</b> to continue.</div>
-            <div class="ui fluid input"><input type="text" id="hxConfirmWord" autocomplete="off" placeholder="RESTORE"></div>
+            <div class="ui form"><div class="field">
+                <label for="hxConfirmWord">Type RESTORE to confirm</label>
+                <input type="text" id="hxConfirmWord" autocomplete="off" placeholder="RESTORE">
+            </div></div>
         </div>
+        <div id="hxDiffWrap" style="margin-top:1em;"></div>
         <div id="hxRestoreResult" style="margin-top:1em;"></div>
     </div>
     <div class="actions">
@@ -188,6 +196,13 @@
     var TRIGGERS = { "api": "Change", "baseline": "Starting point", "external": "Edited outside the UI", "pre-update": "Before update",
         "pre-restore": "Before restore", "restore": "Restore", "manual": "Saved by hand" };
 
+    function fmtSize(b) {
+        b = b || 0;
+        if (b < 1024) return b + " B";
+        if (b < 1048576) return (b / 1024).toFixed(1) + " KiB";
+        return (b / 1048576).toFixed(1) + " MiB";
+    }
+
     /* ---------------------------------------------------------- list */
     function load(page) {
         S.page = page || S.page;
@@ -197,12 +212,13 @@
             renderBanner(res);
             renderList(res);
             renderSettings(res.settings);
-            $("#hxStats").text(res.total + (res.total === 1 ? " version, " : " versions, ") + (res.storeBytes / 1048576).toFixed(1) + " MiB on disk");
+            var all = res.totalAll == null ? res.total : res.totalAll;
+            $("#hxStats").text((all !== res.total ? res.total + " of " + all + " versions match, " : all + (all === 1 ? " version, " : " versions, ")) + fmtSize(res.storeBytes) + " on disk");
             var pages = Math.max(1, Math.ceil(res.total / res.pageSize));
             $("#hxPageInfo").text("Page " + res.page + " of " + pages);
             $("#hxPrev").prop("disabled", res.page <= 1);
             $("#hxNext").prop("disabled", res.page >= pages);
-            $("#hxUndoBtn").toggleClass("disabled", res.total < 2);
+            $("#hxUndoBtn").toggleClass("disabled", all < 2);
         }, function (e) {
             $("#hxTimeline").html('<li class="hx-empty">' + esc(e.message) + '</li>');
         });
@@ -314,16 +330,17 @@
         $("#hxRestoreGo").addClass("disabled");
         $("#hxRestoreResult").empty();
         $("#hxPreview").html('<div class="hx-note">Checking what would change...</div>');
+        $("#hxDiffWrap").empty();
         var scope = $("#hxScope").val();
         window.ZxHistory.restore({ id: S.restoreId, scope: scope, dryrun: true }).then(function (res) {
             S.needWord = res.scope === "all";
-            var html = "";
+            var html = "", diffHtml = "";
             if (!res.items.length) {
                 html += '<div class="ui info message">The current configuration already matches this version for this selection. Nothing to restore.</div>';
             } else {
                 html += '<p><b>' + res.items.length + '</b> object(s) would change. Nothing has been changed yet.</p><ul class="hx-list">' +
                     res.items.map(function (i) { return '<li>' + esc(i.kind === "added" ? "brought back" : i.kind === "removed" ? "removed" : "reverted") + ': ' + esc(i.label) + '</li>'; }).join("") + '</ul>';
-                html += '<div class="hx-diff">' + renderDiff(res.diffs || []) + '</div>';
+                diffHtml = '<h4 style="margin:0 0 0.4em;">What would change, line by line</h4><div class="hx-diff">' + renderDiff(res.diffs || []) + '</div>';
             }
             if (res.skipped.length) {
                 html += '<div class="ui warning message"><b>Skipped (managed elsewhere):</b><ul class="hx-list">' +
@@ -331,6 +348,7 @@
             }
             html += '<p style="color:grey;">Applying a restore restarts Zoraxy. If it does not come back healthy, the previous configuration is put back automatically.</p>';
             $("#hxPreview").html(html);
+            $("#hxDiffWrap").html(diffHtml);
             S.previewOK = res.items.length > 0;
             $("#hxConfirmWrap").toggle(S.previewOK && S.needWord);
             $("#hxConfirmWord").val("");
@@ -398,17 +416,28 @@
             if (v) f[p[0]] = v;
         });
         S.filters = f;
+        var bad = f.from && f.to && f.from > f.to;
+        $("#hxFilterError").prop("hidden", !bad).text(bad ? "The From date is after the To date. Swap them to see versions." : "");
+        $("#hxFilterFrom, #hxFilterTo").attr("aria-invalid", bad ? "true" : "false");
+        return !bad;
     }
 
     $(function () {
-        $("#hxFilterBtn").on("click", function () { readFilters(); load(1); });
-        $("#hxFilterClear").on("click", function () { $("#hxPage .hx-toolbar input").val(""); S.filters = {}; load(1); });
-        $("#hxFilterObject, #hxFilterActor").on("keydown", function (e) { if (e.key === "Enter") { readFilters(); load(1); } });
+        $("#hxFilterBtn").on("click", function () { if (readFilters()) load(1); });
+        $("#hxFilterClear").on("click", function () { $("#hxPage .hx-toolbar input").val(""); readFilters(); load(1); });
+        $("#hxFilterObject, #hxFilterActor").on("keydown", function (e) { if (e.key === "Enter" && readFilters()) { load(1); } });
         $("#hxPrev").on("click", function () { load(S.page - 1); });
         $("#hxNext").on("click", function () { load(S.page + 1); });
         $("#hxSnapshotBtn").on("click", function () {
-            window.ZxHistory.snapshot("").then(function (r) { toast(r.created ? "Version saved" : "Nothing changed since the last version"); load(1); },
-                function (e) { toast(e.message, false); });
+            var $b = $(this);
+            if ($b.prop("disabled")) return;
+            $b.prop("disabled", true);
+            window.ZxHistory.snapshot("").then(function (r) {
+                if (r.created) toast("Version saved");
+                else if (window.ZxUI && ZxUI.toast) ZxUI.toast("Nothing changed since the last version", { type: "info" });
+                else toast("Nothing changed since the last version");
+                load(1);
+            }, function (e) { toast(e.message, false); }).then(function () { $b.prop("disabled", false); });
         });
         $("#hxUndoBtn").on("click", function () {
             window.ZxHistory.undoLast().catch(function (e) { toast(e.message, false); });

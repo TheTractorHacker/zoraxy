@@ -792,8 +792,16 @@
         const c = document.getElementById("diagram-canvas");
         const svgW = parseFloat(c.getAttribute("width") || 0);
         const svgH = parseFloat(c.getAttribute("height") || 0);
-        panX = (wEl.clientWidth  - svgW * zoom) / 2;
-        panY = (wEl.clientHeight - svgH * zoom) / 2;
+        // Fit: a big map is scaled down (never up) so no node is cut off at the edges, and the
+        // bottom strip with the zoom bar and the legend is kept free of nodes.
+        const vw = wEl.clientWidth, vh = wEl.clientHeight;
+        const padX = 16, padTop = 16, padBottom = 64;
+        if (svgW > 0 && svgH > 0 && vw > 0 && vh > 0) {
+            const fit = Math.min(1, (vw - 2 * padX) / svgW, (vh - padTop - padBottom) / svgH);
+            if (isFinite(fit) && fit > 0) zoom = Math.max(ZOOM_MIN, fit);
+        }
+        panX = (vw - svgW * zoom) / 2;
+        panY = padTop + Math.max(0, (vh - padTop - padBottom - svgH * zoom) / 2);
         applyTransform();
     }
 

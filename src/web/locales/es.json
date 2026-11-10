@@ -3,8 +3,8 @@
   "language": "Spanish",
   "reviewed": false,
   "author": "machine-assisted (Claude)",
-  "coverage": 20.8,
-  "coreCoverage": 41.1
+  "coverage": 20.7,
+  "coreCoverage": 40.6
  },
  "strings": {
   "\"Add Redirection Rule\"": "\"Añadir regla de redirección\"",
@@ -746,7 +746,6 @@
   "Interface language": "Idioma de la interfaz",
   "Intermediate (Mozilla)": "Intermedio (Mozilla)",
   "Invalid incoming port value": "Valor de puerto de entrada no válido",
-  "Invalid tabid given": "ID de pestaña no válido",
   "Invisible": "Invisible",
   "IP": "IP",
   "IP / CIDR": "IP / CIDR",
@@ -784,7 +783,8 @@
   "Loopback Routing Warning": "Aviso de enrutamiento loopback",
   "Low": "Bajo",
   "MAC Address": "Dirección MAC",
-  "Make {7}": "Hacer {7}",
+  "Make admin": "Hacer admin",
+  "Make viewer": "Hacer lector",
   "Manage": "Gestionar",
   "Managed": "Gestionado",
   "Managed (default)": "Gestionado (predeterminado)",

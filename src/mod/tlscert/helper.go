@@ -61,9 +61,7 @@ func domainToFilename(domain string, ext string) string {
 		domain = "_" + trimDomain
 	}
 
-	if strings.HasPrefix(".", ext) {
-		ext = strings.TrimPrefix(ext, ".") // Ensure ext does not start with a dot
-	}
+	ext = strings.TrimPrefix(ext, ".") // Ensure ext does not start with a dot
 
 	// Add .pem extension
 	return domain + "." + ext

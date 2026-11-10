@@ -3,8 +3,8 @@
   "language": "French",
   "reviewed": false,
   "author": "machine-assisted (Claude)",
-  "coverage": 20.4,
-  "coreCoverage": 40.0
+  "coverage": 20.3,
+  "coreCoverage": 39.5
  },
  "strings": {
   "\"Add Redirection Rule\"": "« Ajouter une règle de redirection »",
@@ -741,7 +741,6 @@
   "Interface language": "Langue de l'interface",
   "Intermediate (Mozilla)": "Intermédiaire (Mozilla)",
   "Invalid incoming port value": "Valeur de port entrant invalide",
-  "Invalid tabid given": "tabid fourni invalide",
   "Invisible": "Invisible",
   "IP": "IP",
   "IP / CIDR": "IP / CIDR",

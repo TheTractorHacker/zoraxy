@@ -19,9 +19,10 @@
             <img src="img/res/1F44B.png">
             <div class="content" style="font-weight: lighter;">
               Welcome to Zoraxy!
-              <div class="sub header">What services are you planning to setup today?</div>
+              <div class="sub header">What services are you planning to set up today?</div>
             </div>
         </h1>
+        <p class="zx-sub" id="qsPickHint" style="margin-top:.8em">Pick one of the three cards to start a guided walkthrough for it, or create a proxy rule right away.</p>
         <p class="zx-sub" style="margin-top:.8em">Already running? The <a href="#status" data-nav-open="status">Status page</a> has a short "Get started" checklist that shows what is still missing: a proxy rule, a certificate, the WAF, a backup and notifications.</p>
         <br>
         <div class="ui stackable equal width grid">
@@ -68,7 +69,7 @@
         <br>
         <div style="width: 100%;" align="center">
             <button onclick="openNewRuleDialog();" class="ui primary button" title="Create your first proxy rule right now"><i class="plus icon"></i> Create a proxy rule</button>
-            <button onclick="startQuickStartTour();" class="ui finished button quickstartControlButton">
+            <button onclick="startQuickStartTour();" class="ui finished disabled button quickstartControlButton" id="qsStartBtn" aria-disabled="true" aria-describedby="qsPickHint" title="Pick one of the cards above first">
                 Start Walkthrough
             </button>
             <button onclick="setQuickStartDismissed(true);" class="ui basic button" id="qsDismissBtn" title="Remove Quick Start from the menu. It also disappears by itself once a proxy rule exists and the proxy is running.">
@@ -125,6 +126,11 @@
         $(this).addClass("active");
         let tourType = $(this).attr("name");
         currentQuickSetupClass = tourType;
+        $("#qsStartBtn").removeClass("disabled").attr("aria-disabled", "false").attr("title", "Start the walkthrough for the selected card");
+    });
+    //The cards are choices: make them reachable and operable from the keyboard
+    $("#quickstart .serviceOption").attr({role: "button", tabindex: "0"}).on("keydown", function(e){
+        if (e.key === "Enter" || e.key === " "){ e.preventDefault(); $(this).trigger("click"); }
     });
 
     $("#quickstart .tutorial").on("click", function(data){

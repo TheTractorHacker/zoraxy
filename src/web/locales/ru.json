@@ -3,8 +3,8 @@
   "language": "Russian",
   "reviewed": false,
   "author": "machine-assisted (Claude)",
-  "coverage": 21.1,
-  "coreCoverage": 42.0
+  "coverage": 21.0,
+  "coreCoverage": 41.4
  },
  "strings": {
   "\"Add Redirection Rule\"": "«Добавить правило перенаправления»",
@@ -762,7 +762,6 @@
   "Interface language": "Язык интерфейса",
   "Intermediate (Mozilla)": "Промежуточный (Mozilla)",
   "Invalid incoming port value": "Неверное значение входящего порта",
-  "Invalid tabid given": "Указан неверный tabid",
   "Invisible": "Невидимый",
   "IP": "IP",
   "IP / CIDR": "IP / CIDR",

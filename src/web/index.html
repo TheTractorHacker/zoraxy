@@ -443,6 +443,17 @@
                 return targetTabBtn;
             }
 
+            //The hash that openTabById wrote last. A different hash means the person used the Back button
+            //or edited the URL: the page then follows the hash.
+            let _lastOpenedHash = "";
+            window.addEventListener("hashchange", function(){
+                let h = window.location.hash;
+                if (h === _lastOpenedHash || h.length <= 1) { return; }
+                let tabID = decodeURIComponent(h.substr(1));
+                if (tabID.startsWith("{")) { return; } //plugin windows carry their own state
+                openTabById(tabID);
+            });
+
             //Select and open a tab by its tag id
             let tabSwitchEventBind = {}; //Bind event to tab switch by tabid
             function openTabById(tabID, object=undefined){
@@ -452,7 +463,9 @@
                     targetBtn = getTabButtonById(tabID);
                 }
                 if (targetBtn == undefined){
-                    alert("Invalid tabid given");
+                    //An unknown page (mistyped #hash, link from an older version): show the Status page
+                    //instead of an error, and the URL follows because openTabById sets the hash
+                    if (tabID !== "status") { openTabById("status"); }
                     return;
                 }
                 if (window.innerWidth < 750){
@@ -483,6 +496,7 @@
                 }else{
                     window.location.hash = tabID;
                 }
+                _lastOpenedHash = window.location.hash;
 
                 // Update document title
                 var tabLabel = $(targetBtn).clone().children('i').remove().end().text().trim();

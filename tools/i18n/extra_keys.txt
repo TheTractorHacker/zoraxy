@@ -99,3 +99,5 @@ Dismiss
 Enter a host name
 Enter a URL
 Turn this Zoraxy into a Fleet hub?
+Make admin
+Make viewer
