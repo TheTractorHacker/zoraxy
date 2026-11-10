@@ -1139,6 +1139,8 @@ a:focus-visible,
     max-width: min(300px, calc(100vw - 2em));
     z-index: 1001;
 }
+/* While a Save bar is showing, the toast sits above it instead of covering its buttons */
+body.zx-has-savebar #messageBox { bottom: 6.5rem; }
 @media (prefers-reduced-motion: reduce) {
     * { scroll-behavior: auto !important; }
 }
@@ -1213,3 +1215,15 @@ body.darkTheme input[type="checkbox"]:not(.hidden), body.darkTheme input[type="r
 /* number cells in settings tables should not stretch full width */
 .ui.table td input[type="number"] { width: 6.5em; max-width: 100%; }
 .ui.very.basic.table td, .ui.very.basic.table th { padding-top: .55em; padding-bottom: .55em; }
+
+/* Scrolling or focusing a control must not leave it under the fixed top bar */
+html { scroll-padding-top: 5.5rem; }
+
+/* ===== contrast (WCAG AA): the legacy Fomantic colours were found below 4.5:1 by the UI audit; use the kit tokens ===== */
+.ui.primary.button, .ui.primary.buttons .button { background-color: var(--zx-primary); color: var(--zx-on-primary); }
+.ui.primary.button:hover, .ui.primary.button:focus, .ui.primary.buttons .button:hover, .ui.primary.buttons .button:focus { background-color: var(--zx-primary-hover); color: var(--zx-on-primary); }
+.functiontab a:not(.item):not(.button):not(.ui):not(.label) { color: var(--zx-link); }
+.functiontab a:not(.item):not(.button):not(.ui):not(.label):hover { text-decoration: underline; }
+body > .ui.container[style*="color: grey"], .ui.container[style*="color: grey"] { color: var(--zx-text-muted) !important; }
+body.darkTheme .ui.basic.red.button, body.darkTheme .ui.basic.red.buttons .button { color: var(--zx-danger-text) !important; box-shadow: 0 0 0 1px var(--zx-danger-line) inset !important; }
+.ui.progress .bar > .progress { color: var(--zx-text) !important; }

@@ -193,6 +193,23 @@ def rules_ui(pg, ctx, h):
     pg.locator("#rbListForm textarea").fill("203.0.113.0/24\n198.51.100.7")
     pg.click("#rbListForm button:has-text('Create list')")
     pg.wait_for_selector("#rbListsBody tr[data-list=office]")
+    # "New list" with an existing name must not silently replace that list
+    pg.click("#rbNewList")
+    pg.wait_for_selector("#rbListForm input")
+    pg.locator("#rbListForm input").nth(0).fill("office")
+    pg.locator("#rbListForm select").select_option("ip")
+    pg.locator("#rbListForm textarea").fill("1.1.1.1")
+    pg.click("#rbListForm button:has-text('Create list')")
+    pg.wait_for_function("(document.querySelector('#rbListForm .zx-error') || {textContent: ''}).textContent.indexOf('already exists') >= 0", timeout=3000)
+    kept = [l for l in get("/api/ruleset/lists") if l["name"] == "office"]
+    if not kept or kept[0]["items"] != ["203.0.113.0/24", "198.51.100.7"]:
+        fail("rules", f"a duplicate list name overwrote the existing list: {kept}")
+    pg.click("#rbListForm button:has-text('Cancel')")
+    # the tester explains a malformed URL in plain words, without the Go parser text
+    bad_url = post("/api/ruleset/test", {"site": "", "method": "GET", "url": "not a url"})
+    msg = json.dumps(bad_url)
+    if "not valid" not in msg or "parse" in msg or "invalid URI" in msg:
+        fail("rules", f"the tester must not show raw parser errors: {msg[:200]}")
     pg.click("#rbListsBody tr[data-list=office] button[aria-label^='Edit list']")
     pg.wait_for_selector("#rbListForm textarea")
     pg.locator("#rbListForm textarea").fill("203.0.113.0/24")

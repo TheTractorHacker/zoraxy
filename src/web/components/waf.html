@@ -33,6 +33,9 @@
     #wafPage .wafFirst .act .button { margin: 0 0 .4em; }
     #wafPage .wafFirst .act small { display: block; opacity: .75; max-width: 22em; margin: 0 auto; }
     /* tabs */
+    /* the tab strip scrolls sideways: a soft edge shows that there is more on that side */
+    #wafTabs { background: linear-gradient(to right, var(--zx-bg) 30%, transparent) left center / 2em 100% no-repeat local, linear-gradient(to left, var(--zx-bg) 30%, transparent) right center / 2em 100% no-repeat local,
+        linear-gradient(to right, rgba(0,0,0,.22), transparent) left center / .9em 100% no-repeat scroll, linear-gradient(to left, rgba(0,0,0,.22), transparent) right center / .9em 100% no-repeat scroll; }
     #wafTabs .item { display: inline-flex !important; align-items: center; gap: .45em; white-space: nowrap; padding: .85em 1.1em !important; }
     #wafTabs .item > i.icon { margin: 0 !important; opacity: .8; }
     /* mode cards */
@@ -56,7 +59,7 @@
     #wafPage .wafTile:has(.tOrange) { border-left-color: #f2711c; }
     #wafPage .wafTile .l { text-transform: uppercase; letter-spacing: .04em; font-size: .76em; margin-top: .15em; }
     /* overview panels */
-    #wafPage .wafPanels { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: .9em; margin-top: .4em; }
+    #wafPage .wafPanels { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: .9em; margin-top: .4em; align-items: start; }
     #wafPage .wafPanel { border: 1px solid rgba(128,128,128,.35); border-radius: 8px; padding: .8em 1em 1em; background: rgba(128,128,128,.04); min-width: 0; }
     #wafPage .wafPanel h5 { margin: 0 0 .55em; font-size: 1em; display: flex; flex-wrap: wrap; align-items: baseline; gap: .2em .6em; }
     #wafPage .wafPanel h5 small { font-weight: 400; opacity: .7; }
@@ -682,7 +685,7 @@
     function mutatePolicy(fn, okMsg, done){
         $.getJSON("/api/waf/policy", function(p){
             if (fail(p)) return;
-            try { fn(p); } catch (e){ msgbox(e.message, false, 5000); return; }
+            try { fn(p); } catch (e){ msgbox(e.message, false, 5000); if (done) done(); return; }
             post("/api/waf/policy", {policy: JSON.stringify(p)}, function(){
                 msgbox(okMsg || "WAF policy saved and applied");
                 loadPolicy(function(){ loadOverview(); if (S.cov) loadCoverage(); if (done) done(); });
@@ -690,7 +693,10 @@
         });
     }
     $("#wafpSave").on("click", function(){
-        var btn = $(this).addClass("loading");
+        // keep the label visible while saving (Fomantic's .loading hides it)
+        var btn = $(this), oldHtml = btn.html();
+        btn.prop("disabled", true).html('<i class="spinner loading icon"></i> ' + t("Saving…"));
+        var restore = function(){ btn.prop("disabled", false).html(oldHtml); };
         mutatePolicy(function(p){
             p.ParanoiaLevel = parseInt($("#wafpParanoia").val());
             p.InboundThreshold = parseInt($("#wafpThreshold").val()) || 5;
@@ -699,14 +705,15 @@
             p.IgnoreAnalyticsCookies = $("#wafpCookies").prop("checked");
             p.ChallengeThreshold = parseInt($("#wafpChallenge").val()) || 0;
             p.ChallengeTTLMinutes = parseInt($("#wafpChallengeTTL").val()) || 0;
+            if (p.InboundThreshold < 1) throw new Error("The anomaly score threshold must be a whole number of 1 or more.");
             if (p.ChallengeThreshold < 0) throw new Error("The challenge threshold cannot be negative (0 turns the challenge band off).");
             if (p.ChallengeThreshold >= p.InboundThreshold) throw new Error("The challenge threshold (" + p.ChallengeThreshold + ") must be lower than the anomaly score threshold (" + p.InboundThreshold + ").");
             if (p.ChallengeTTLMinutes < 0 || p.ChallengeTTLMinutes > 1440) throw new Error("The challenge validity must be between 1 and 1440 minutes.");
             p.CustomRules = $("#wafpCustomRules").val();
             p.TrustedPaths = textToTrusted($("#wafpTrustedPaths").val());
             p.AllowedIPs = lines($("#wafpAllowedIPs").val());
-        }, "WAF policy saved and applied", function(){ btn.removeClass("loading"); });
-        setTimeout(function(){ btn.removeClass("loading"); }, 6000);
+        }, "WAF policy saved and applied", restore);
+        setTimeout(restore, 6000);
     });
 
     /* ---------- graduated response bands ---------- */

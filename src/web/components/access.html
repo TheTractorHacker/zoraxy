@@ -1,7 +1,7 @@
 <style>
     #currentEditingAccessRule {
-        background: var(--theme_background);
-        color: white;
+        background: var(--zx-primary);
+        color: var(--zx-on-primary);
         border-radius: 1em;
         font-weight: bolder;
     }
@@ -1177,6 +1177,7 @@
 
     function addCountryToBlacklist() {
         var countryCode = $("#countrySelector").dropdown("get value").toLowerCase();
+        if (countryCode == ""){ msgbox("Select at least one country first", false); return; }
         let ccs = [countryCode];
         if (countryCode.includes(",")){
             //Multiple country codes selected
@@ -1303,8 +1304,24 @@
     /* 
         Whitelist APIs
     */
+    var _whitelistRevert = false;
     function enableWhitelist() {
+        if (_whitelistRevert) { _whitelistRevert = false; return; }
         var isChecked = $('#enableWhitelist').is(':checked');
+        if (!isChecked) { postEnableWhitelist(false); return; }
+        // Turning the whitelist on with nothing on it denies every visitor: ask first
+        var rule = currentEditingAccessRule;
+        $.when($.get("/api/whitelist/list?type=country&id=" + rule), $.get("/api/whitelist/list?type=ip&id=" + rule)).done(function(c, i){
+            var empty = !(c[0] && c[0].length) && !(i[0] && i[0].length);
+            if (!empty) { postEnableWhitelist(true); return; }
+            ZxUI.confirm({title: "Turn on an empty whitelist?", message: "Nothing is on this whitelist yet, so visitors will be denied (except local network addresses if allowed below). Add countries or IP addresses first, or turn it on anyway.",
+                          confirmLabel: "Turn on anyway", danger: true}).then(function(ok){
+                if (ok) { postEnableWhitelist(true); }
+                else { _whitelistRevert = true; $('#enableWhitelist').parent().checkbox("set unchecked"); setTimeout(function(){ _whitelistRevert = false; }, 300); }
+            });
+        }).fail(function(){ postEnableWhitelist(true); });
+    }
+    function postEnableWhitelist(isChecked) {
         $.cjax({
             type: 'POST',
             url: '/api/whitelist/enable',
@@ -1317,6 +1334,7 @@
 
     function addCountryToWhitelist() {
         var countryCode = $("#countrySelectorWhitelist").dropdown("get value").toLowerCase();
+        if (countryCode == ""){ msgbox("Select at least one country first", false); return; }
         let ccs = [countryCode];
         if (countryCode.includes(",")){
             //Multiple country codes selected

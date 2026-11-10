@@ -133,7 +133,8 @@
 (function(){
     var P = "#aiPage ";
     var DEF = {endpoint: "https://api.anthropic.com", model: "claude-sonnet-5-5"};
-    var keySet = false;
+    function N_(s){ return s; }
+    var keySet = false, saved = {enabled: false}, provider = "anthropic";
 
     function msg(text, ok){ $(P + "#aiMsg").text(text || "").removeClass("ok err").addClass(ok ? "ok" : "err"); }
 
@@ -161,6 +162,8 @@
         $(P + "#aiSendPaths").prop("checked", v.send_paths);
         $(P + "#aiMaskHosts").prop("checked", v.mask_hosts);
         keySet = !!v.key_set;
+        saved = {enabled: !!v.enabled, suggest: !!v.feature_suggest, explain: !!v.feature_explain, audit: !!v.feature_audit};
+        provider = v.provider; shownProvider = v.provider;
         $(P + "#aiKey").val("").attr("placeholder", keySet ? "A key is stored (ends in " + (v.key_last4 || "****") + "). Type to replace it." : "Paste your API key");
         $(P + "#aiKeyState").text(v.key_error ? v.key_error : (keySet ? "Key set." : "No key set. A local model may not need one."));
         $(P + "#aiClearKey").toggle(keySet);
@@ -191,6 +194,9 @@
 
     function save(extra, done){
         var s = collect(extra), k = $(P + "#aiKey").val();
+        var bud = $.trim($(P + "#aiBudget").val()), rate = $.trim($(P + "#aiRate").val());
+        if (!/^\d+$/.test(bud) || +bud > 1000000000) { msg(t("The monthly token budget must be a whole number from 0 to 1,000,000,000."), false); $(P + "#aiBudget").focus(); return; }
+        if (!/^\d+$/.test(rate) || +rate < 1 || +rate > 120) { msg(t("Calls per minute must be a whole number from 1 to 120."), false); $(P + "#aiRate").focus(); return; }
         if (k) s.api_key = k;
         zrAI.api("./api/ai/settings/save", {settings: JSON.stringify(s)}, function(d){
             fill(d.settings, d.usage, $(P + "#aiFAuditWrap").is(":visible"));
@@ -199,10 +205,15 @@
         }, function(e){ msg(e, false); });
     }
 
+    // the model typed for a provider is remembered while the page is open, so switching back and forth does not lose it
+    var modelOf = {}, shownProvider = null;
+    $(P + "#aiProvider").on("focus mousedown", function(){ shownProvider = $(this).val(); });
     $(P + "#aiProvider").on("change", function(){
         var p = $(this).val();
-        if (p == "anthropic") { $(P + "#aiEndpoint").val(DEF.endpoint); $(P + "#aiModel").val(DEF.model); }
-        else if ($(P + "#aiEndpoint").val() == DEF.endpoint) { $(P + "#aiEndpoint").val("http://127.0.0.1:11434/v1"); $(P + "#aiModel").val(""); }
+        if (shownProvider && shownProvider != p) { modelOf[shownProvider] = $(P + "#aiModel").val(); }
+        shownProvider = p;
+        if (p == "anthropic") { $(P + "#aiEndpoint").val(DEF.endpoint); $(P + "#aiModel").val(modelOf[p] || DEF.model); }
+        else if ($(P + "#aiEndpoint").val() == DEF.endpoint) { $(P + "#aiEndpoint").val("http://127.0.0.1:11434/v1"); $(P + "#aiModel").val(modelOf[p] || ""); }
         providerUI();
     });
     $(P + "#aiSave").on("click", function(){ msg(""); save(); });
@@ -287,13 +298,26 @@
         box.append($('<p class="aiHint"></p>').text(appliable ? "These are proposals only. Nothing is created until you click \"Add as log-only rule\" (or build it yourself with \"Open in builder\"); rules created here start in log-only mode and never enforce on their own." : "The rule builder is not connected yet: proposals are shown for you to read and copy. Nothing was created."));
     }
 
+    function cap(s){ s = String(s || ""); return s.charAt(0).toUpperCase() + s.slice(1); }
+    function showErr(text){ $(P + "#aiResult").empty().append($('<div class="aiMsg err" role="alert"></div>').text(cap(text))); }
+    // The preview and send dialog only makes sense when the call can actually go out
+    var FEATURE_NAME = {suggest: N_("Suggest rules"), rule: N_("Suggest rules"), audit: N_("Configuration audit")};
+    function notReady(feature){
+        if (!saved.enabled) return t("The AI assistant is turned off. Turn it on in the settings above, add an API key and press Save.");
+        if (feature != "rule" && !saved[feature]) return tf("The feature “{0}” is switched off. Tick it under Features above and press Save.", t(FEATURE_NAME[feature]));
+        if (feature == "rule" && !saved.suggest) return tf("The feature “{0}” is switched off. Tick it under Features above and press Save.", t(FEATURE_NAME.rule));
+        if (provider == "anthropic" && !keySet) return t("No API key is stored yet. Paste your key in the settings above and press Save.");
+        return "";
+    }
     function run(btn, feature, params, call, render){
         msg("");
+        var why = notReady(feature);
+        if (why) { showErr(why); return; }
         zrAI.withPreview(feature, params, function(){
             btn.addClass("loading").prop("disabled", true);
             $(P + "#aiResult").empty();
             call(function(d){ btn.removeClass("loading").prop("disabled", false); render(d); load(); },
-                function(e){ btn.removeClass("loading").prop("disabled", false); $(P + "#aiResult").empty().append($('<div class="aiMsg err"></div>').text(e)); });
+                function(e){ btn.removeClass("loading").prop("disabled", false); showErr(e); });
         });
     }
     $(P + "#aiSuggest").on("click", function(){
@@ -301,7 +325,7 @@
     });
     $(P + "#aiRule").on("click", function(){
         var t = $.trim($(P + "#aiRuleText").val());
-        if (!t) { msg("Describe the rule first", false); return; }
+        if (!t) { showErr(window.t("Describe the rule you want first, for example: log every request to /admin from outside my country.")); $(P + "#aiRuleText").focus(); return; }
         run($(this), "rule", {text: t}, function(ok, bad){ zrAI.api("./api/ai/rule", {text: t}, ok, bad); }, function(d){ proposals(d.proposals || [], d.appliable); });
     });
     $(P + "#aiAudit").on("click", function(){

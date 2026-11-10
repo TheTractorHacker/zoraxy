@@ -967,7 +967,7 @@
             success: function(d) {
                 box.empty();
                 if (d.error !== undefined) {
-                    box.append($('<div class="ui negative message"></div>').text("Discovery failed: " + d.error));
+                    box.append($('<div class="ui negative message"></div>').text("Discovery failed: " + String(d.error).replace(/^discovery failed:\s*/i, "")));
                     return;
                 }
                 const ok = d.pkceS256Supported && d.jwksReachable && d.jwksKeyCount > 0;
