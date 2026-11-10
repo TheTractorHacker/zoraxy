@@ -26,6 +26,7 @@ import (
 
 	"imuslab.com/zoraxy/mod/abuse"
 	"imuslab.com/zoraxy/mod/access"
+	"imuslab.com/zoraxy/mod/aicrawler"
 	"imuslab.com/zoraxy/mod/auth/sso/forward"
 	"imuslab.com/zoraxy/mod/blocklog"
 	"imuslab.com/zoraxy/mod/botrules"
@@ -116,6 +117,7 @@ type RouterOption struct {
 	Metrics              *metrics.Registry          //Optional Prometheus metrics registry (nil or disabled = no overhead)
 	BasicAuthLists       *CredentialLists           `json:"-"` //Optional named basic auth credential lists (basicauth_ext.go)
 	Bots                 *botrules.Engine           `json:"-"` //Optional bot (User-Agent) rules, see bot_hook.go
+	AICrawlers           *aicrawler.Engine          `json:"-"` //Optional AI crawler policy (nil or disabled = no overhead), see aicrawler_hook.go
 	Abuse                *abuse.Manager             `json:"-"` //Optional automatic abuse banning (nil or disabled = no overhead), see abuse_hook.go
 	Rules                *ruleset.Engine            `json:"-"` //Optional rules engine (nil or no rule = one atomic load), see ruleset_hook.go
 

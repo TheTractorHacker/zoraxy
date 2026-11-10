@@ -331,6 +331,12 @@ func (e *Engine) Load() error {
 
 // Evaluate matches a User-Agent. clientIP is only called when a good bot has to be verified.
 func (e *Engine) Evaluate(ua string, clientIP func() string) Decision {
+	return e.EvaluateSkip(ua, clientIP, "")
+}
+
+// EvaluateSkip is Evaluate without the managed category skipCategory (""= none). The AI crawler policy uses it to
+// leave out "ai_crawler" for a crawler it allowed explicitly; every other rule still applies.
+func (e *Engine) EvaluateSkip(ua string, clientIP func() string, skipCategory string) Decision {
 	c := e.c.Load()
 	if len(ua) > maxUA {
 		ua = ua[:maxUA]
@@ -370,6 +376,9 @@ func (e *Engine) Evaluate(ua string, clientIP func() string) Decision {
 		}
 	}
 	for _, cat := range c.cats {
+		if cat.id == skipCategory {
+			continue
+		}
 		for _, it := range cat.items {
 			if strings.Contains(lower, it) {
 				return Decision{cat.action, cat.id}

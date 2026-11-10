@@ -359,6 +359,7 @@ func ReverseProxyInit() {
 		Metrics:             metricsRegistry,
 		Abuse:               getAbuseManager(),
 		Bots:                getBotEngine(),
+		AICrawlers:          getAICrawlerEngine(),
 		Rules:               getRulesEngine(),
 		BasicAuthLists:      getCredentialLists(),
 		/* Timeouts */

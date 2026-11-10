@@ -1,0 +1,203 @@
+<!--
+    AI crawlers (tag aicrawlers, Security group). Policy per crawler group / crawler / site for the known AI crawlers.
+    Data: /api/aicrawler/* (mod/aicrawler). Logic: script/aicrawlers.js. Everything on this page is off until you turn it on.
+    The per-site overrides live on this page (not in the site editor) and are self-contained below the registry.
+-->
+<style>
+    #aiCrawlersPage .aic-sub { color: var(--zx-text-muted); font-size: var(--zx-fs-sm); }
+    #aiCrawlersPage .aic-stack > * + * { margin-top: var(--zx-space-4); }
+    #aiCrawlersPage .aic-grouprow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 14rem); gap: var(--zx-space-3); align-items: center; padding: var(--zx-space-2) 0; border-top: 1px solid var(--zx-border); }
+    #aiCrawlersPage .aic-grouprow:first-child { border-top: 0; }
+    #aiCrawlersPage .aic-grouprow b { display: block; }
+    #aiCrawlersPage .zx-table td .zx-select { min-width: 9rem; }
+    #aiCrawlersPage .aic-name { overflow-wrap: anywhere; }
+    #aiCrawlersPage .aic-mono { font-family: var(--zx-font-mono); overflow-wrap: anywhere; }
+    #aiCrawlersPage .aic-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: var(--zx-space-3) var(--zx-space-4); }
+    #aiCrawlersPage .aic-over { display: flex; flex-wrap: wrap; gap: var(--zx-space-2); align-items: center; padding: var(--zx-space-1) 0; }
+    #aiCrawlersPage pre.aic-pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 18rem; overflow: auto; background: var(--zx-surface-2); border: 1px solid var(--zx-border); border-radius: var(--zx-radius-md); padding: var(--zx-space-3); font-family: var(--zx-font-mono); font-size: var(--zx-fs-sm); color: var(--zx-text); margin: var(--zx-space-2) 0 0; }
+    #aiCrawlersPage .aic-posture { list-style: none; margin: 0; padding: 0; }
+    #aiCrawlersPage .aic-posture li { display: flex; gap: var(--zx-space-2); align-items: baseline; padding: var(--zx-space-1) 0; flex-wrap: wrap; }
+    #aiCrawlersPage .aic-posture li > span:last-child { flex: 1 1 18rem; min-width: 0; overflow-wrap: anywhere; }
+    #aiCrawlersPage .zx-table-wrap { max-height: none; }
+    #aiCrawlersPage .aic-test { display: flex; flex-wrap: wrap; gap: var(--zx-space-2); align-items: center; }
+    #aiCrawlersPage .aic-test .zx-input { flex: 1 1 16rem; }
+    #aiCrawlersPage .aic-test .zx-select { flex: 0 1 14rem; width: auto; min-width: 0; max-width: 100%; }
+    #aiCrawlersPage .zx-select { max-width: 100%; }
+    #aiCrawlersPage .aic-detail { margin-top: var(--zx-space-2); }
+    @media (max-width: 600px) { #aiCrawlersPage .aic-grouprow { grid-template-columns: minmax(0, 1fr); } }
+</style>
+<div class="standardContainer" id="aiCrawlersPage">
+    <header class="zx-page-header">
+        <div class="zx-page-header__main">
+            <div class="zx-page-header__crumbs" data-zx-crumbs></div>
+            <h2 class="zx-page-header__title">AI crawlers</h2>
+            <p class="zx-page-header__sub">Decide which AI crawlers may read your sites. Pick an action for each purpose (training, search, user-triggered fetch) or for one
+                crawler, and override it for a single site. <b>It is off until you turn it on</b>, and a crawler without a policy is handled exactly as before.</p>
+        </div>
+        <div class="zx-page-header__actions">
+            <button type="button" class="zx-btn zx-btn--secondary" data-zx-history="AI crawler policy"><i class="history icon" aria-hidden="true"></i> History</button>
+            <button type="button" class="zx-btn zx-btn--secondary" id="aicReload"><i class="sync alternate icon" aria-hidden="true"></i> Reload</button>
+        </div>
+    </header>
+    <aside class="zx-related" aria-label="Related pages">
+        <span class="zx-related__title">Related</span>
+        <ul>
+            <li><a href="#seccenter" data-nav-open="seccenter">Security Center</a> <span>the bot rules, including the older AI crawlers list</span></li>
+            <li><a href="#waf" data-nav-open="waf">WAF</a> <span>still inspects allowed crawlers</span></li>
+            <li><a href="#httprp" data-nav-open="httprp">HTTP Proxy</a> <span>the older AI crawlers switch of each rule</span></li>
+            <li><a href="#captcha" data-nav-open="captcha">CAPTCHA</a> <span>what the Challenge action shows</span></li>
+            <li><a href="#stats" data-nav-open="stats">Statistics</a> <span>blocked requests, with the crawler name</span></li>
+        </ul>
+    </aside>
+
+    <div class="zx-callout zx-callout--info" role="note"><span class="zx-callout__icon" aria-hidden="true"><i class="info circle icon"></i></span>
+        <div class="zx-callout__body"><b>robots.txt is a request, not a lock.</b> A crawler can ignore it, and some documented ones do. What stops a crawler is the
+            <b>Block</b> or <b>Challenge</b> action on this page. A <i>User-Agent</i> is also only a claim: use <b>Verified crawlers only</b> to tell the real ones from imitations
+            (only possible where the operator publishes a way to check).</div></div>
+
+    <div class="aic-stack">
+        <form id="aicForm" class="aic-stack" onsubmit="return false;" autocomplete="off">
+            <section class="zx-card" aria-labelledby="aicT1">
+                <div class="zx-card__head"><h3 class="zx-card__title" id="aicT1">Policy</h3><span class="zx-badge" id="aicStateBadge">Off</span></div>
+                <div class="zx-card__body">
+                    <label class="zx-toggle-row"><span class="zx-toggle-row__text"><span class="zx-toggle-row__title">Turn on the AI crawler policy</span>
+                        <span class="zx-toggle-row__desc">While this is off nothing here runs and nothing is served: the AI crawlers switch of a proxy rule, the bot rules and the WAF work as they always did.
+                            When on, only crawlers you give an action are affected.</span></span>
+                        <input type="checkbox" class="zx-switch" role="switch" id="aicEnabled" data-zx-label="AI crawler policy on"></label>
+                </div>
+            </section>
+
+            <section class="zx-card" aria-labelledby="aicT2">
+                <div class="zx-card__head"><h3 class="zx-card__title" id="aicT2">Defaults for all sites</h3></div>
+                <p class="zx-card__desc">One action per purpose. A single crawler can differ in the table below, a single site on this page further down.</p>
+                <div class="zx-card__body">
+                    <div id="aicGroups"></div>
+                    <div class="aic-fields" style="margin-top: var(--zx-space-4)">
+                        <div class="zx-field">
+                            <label class="zx-toggle-row"><span class="zx-toggle-row__text"><span class="zx-toggle-row__title">Verified crawlers only</span>
+                                <span class="zx-toggle-row__desc">Allow or rate-limit a crawler only when its identity checks out. A request that claims to be one but fails gets the action below.</span></span>
+                                <input type="checkbox" class="zx-switch" role="switch" id="aicVerified" data-zx-label="Verified crawlers only"></label>
+                            <p class="zx-help">Needs the operator's published address ranges (see Refresh below). A crawler whose operator publishes nothing cannot be verified and is treated as failing, so it is not let in.</p>
+                        </div>
+                        <div class="zx-field">
+                            <div class="zx-field__label-row"><label class="zx-field__label" for="aicSpoof">When the check fails (spoofed)</label></div>
+                            <div class="zx-field__control"><select class="zx-select" id="aicSpoof" data-zx-label="Action for a failed check">
+                                <option value="block">Block</option><option value="challenge">Challenge (CAPTCHA)</option><option value="log">Log only</option></select></div>
+                        </div>
+                        <div class="zx-field">
+                            <div class="zx-field__label-row"><label class="zx-field__label" for="aicRate">Rate limit (requests per minute)</label></div>
+                            <div class="zx-field__control"><input class="zx-input zx-input--short" type="number" min="1" max="100000" step="1" id="aicRate" inputmode="numeric" data-zx-label="Rate limit per minute"></div>
+                            <p class="zx-help">Used by the Rate limit action, counted per crawler and site. Above it the crawler gets HTTP 429.</p>
+                        </div>
+                    </div>
+                    <div class="zx-field" style="margin-top: var(--zx-space-3)">
+                        <label class="zx-toggle-row"><span class="zx-toggle-row__text"><span class="zx-toggle-row__title">Skip the WAF for verified, allowed crawlers (not recommended)</span>
+                            <span class="zx-toggle-row__desc">By default an allowed crawler is still inspected by the WAF, like any visitor. Tick this only if the WAF blocks a crawler you trust. It applies
+                                only when the crawler's identity was verified, never on the User-Agent alone.</span></span>
+                            <input type="checkbox" class="zx-switch" role="switch" id="aicBypass" data-zx-label="Skip the WAF for verified crawlers"></label>
+                    </div>
+                </div>
+            </section>
+
+            <section class="zx-card" aria-labelledby="aicT3">
+                <div class="zx-card__head"><h3 class="zx-card__title" id="aicT3">Known crawlers</h3><span class="zx-badge zx-badge--info" id="aicRegVersion"></span></div>
+                <p class="zx-card__desc">A curated list, grouped by purpose. "Same as purpose" follows the default above. Googlebot and Bingbot are search engines, not AI crawlers, and are not listed.</p>
+                <div class="zx-card__body">
+                    <div class="zx-table-wrap" tabindex="0" role="region" aria-label="Known AI crawlers">
+                        <table class="zx-table zx-table--comfortable">
+                            <thead><tr><th>Crawler</th><th>Purpose</th><th>Can it be verified?</th><th>Action</th></tr></thead>
+                            <tbody id="aicRegRows"><tr><td colspan="4">Loading...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </form>
+
+        <section class="zx-card" aria-labelledby="aicT4">
+            <div class="zx-card__head"><h3 class="zx-card__title" id="aicT4">Published address ranges</h3></div>
+            <p class="zx-card__desc">Some operators publish the addresses their crawler uses. Zoraxy ships none of them. <b>Nothing is fetched at start-up or on a timer</b>: the lists below are
+                downloaded only when you press Refresh, from these exact https addresses, with a size and time limit, and kept on this server.</p>
+            <div class="zx-card__body">
+                <div class="zx-row" style="margin-bottom: var(--zx-space-3)"><button type="button" class="zx-btn zx-btn--secondary" id="aicRefresh"><i class="download icon" aria-hidden="true"></i> Refresh ranges</button>
+                    <span class="aic-sub" id="aicRefreshMsg" role="status"></span></div>
+                <div class="zx-table-wrap" tabindex="0" role="region" aria-label="Published address ranges">
+                    <table class="zx-table zx-table--compact">
+                        <thead><tr><th>List</th><th>Used for</th><th>Loaded</th></tr></thead>
+                        <tbody id="aicRangeRows"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section class="zx-card" aria-labelledby="aicT5">
+            <div class="zx-card__head"><h3 class="zx-card__title" id="aicT5">Sites</h3></div>
+            <p class="zx-card__desc">Every site follows the defaults unless you change it here. A site can have its own actions, turn the policy off for itself, and serve a
+                <code>robots.txt</code> and an <code>llms.txt</code>. Changes in this card are saved with the Save site button, separately from the defaults above.</p>
+            <div class="zx-card__body">
+                <div class="zx-field" style="margin-bottom: var(--zx-space-3)">
+                    <div class="zx-field__label-row"><label class="zx-field__label" for="aicRobotsDefault">Default robots.txt for sites that do not choose</label></div>
+                    <div class="zx-field__control"><select class="zx-select" id="aicRobotsDefault" style="max-width: 24rem">
+                        <option value="off">Off (do not touch robots.txt)</option><option value="merge">Add to the site's own file</option><option value="serve">Serve instead of the site's own file</option></select>
+                        <button type="button" class="zx-btn zx-btn--secondary" id="aicRobotsDefaultSave">Save default</button></div>
+                    <p class="zx-help">Generated from the actions above: Disallow for blocked and challenged crawlers, Allow for allowed ones. Advisory only. Only used while the policy is on.</p>
+                </div>
+                <div class="zx-table-wrap" tabindex="0" role="region" aria-label="Sites">
+                    <table class="zx-table zx-table--comfortable">
+                        <thead><tr><th>Site</th><th>Policy</th><th>robots.txt</th><th>llms.txt</th><th></th></tr></thead>
+                        <tbody id="aicSiteRows"><tr><td colspan="5">Loading...</td></tr></tbody>
+                    </table>
+                </div>
+                <div id="aicSiteEditor" class="zx-card" hidden style="margin-top: var(--zx-space-4)" aria-live="polite"></div>
+            </div>
+        </section>
+
+        <section class="zx-card" aria-labelledby="aicT6">
+            <div class="zx-card__head"><h3 class="zx-card__title" id="aicT6">Try a User-Agent</h3></div>
+            <p class="zx-card__desc">Check which crawler a User-Agent is and what the policy you saved would do. Nothing is counted or limited by this test.</p>
+            <div class="zx-card__body">
+                <div class="aic-test">
+                    <label class="zx-field__label" for="aicTestUA" style="flex: 0 0 100%">User-Agent</label>
+                    <input class="zx-input" id="aicTestUA" type="text" maxlength="512" spellcheck="false" placeholder="Mozilla/5.0 (compatible; GPTBot/1.2; +https://openai.com/gptbot)" data-zx-ignore>
+                    <label class="zx-field__label" for="aicTestSite" style="flex: 0 0 100%">Site</label>
+                    <select class="zx-select" id="aicTestSite" data-zx-ignore></select>
+                    <button type="button" class="zx-btn zx-btn--secondary" id="aicTestBtn">Check</button>
+                </div>
+                <div id="aicTestOut" class="aic-detail" role="status" aria-live="polite"></div>
+            </div>
+        </section>
+
+        <section class="zx-card" aria-labelledby="aicT7">
+            <div class="zx-card__head"><h3 class="zx-card__title" id="aicT7">What the policy has seen</h3></div>
+            <p class="zx-card__desc">Counters since Zoraxy started (kept in memory only). Blocked, challenged, rate-limited and spoofed requests also appear in the blocked requests log of the Statistics page, with the crawler name.</p>
+            <div class="zx-card__body">
+                <div id="aicStatsEmpty" class="zx-empty" hidden><div class="zx-empty__title">No crawler seen yet</div><div class="zx-empty__text">Counters appear here after the policy is on and a known AI crawler visits.</div></div>
+                <div class="zx-table-wrap" tabindex="0" role="region" aria-label="Crawler activity" id="aicStatsWrap" hidden>
+                    <table class="zx-table zx-table--compact">
+                        <thead><tr><th>Crawler</th><th>Site</th><th>Decision</th><th class="zx-num">Requests</th><th>Last seen</th></tr></thead>
+                        <tbody id="aicStatRows"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section class="zx-card" aria-labelledby="aicT8">
+            <div class="zx-card__head"><h3 class="zx-card__title" id="aicT8">Posture notes</h3><span class="zx-badge zx-badge--info">Informational</span></div>
+            <p class="zx-card__desc">Observations about this setup. They are not part of the Security Overview score and change nothing.</p>
+            <div class="zx-card__body"><ul class="aic-posture" id="aicPosture"></ul></div>
+        </section>
+
+        <section class="zx-card zx-card--flat" aria-labelledby="aicT9">
+            <div class="zx-card__head"><h3 class="zx-card__title" id="aicT9">Where this runs in the request path</h3></div>
+            <div class="zx-card__body">
+                <ol>
+                    <li>Access rules (blacklist, whitelist, auto-ban), then the Rules engine. These come first, so a rule can still block a crawler.</li>
+                    <li>Generated <code>/robots.txt</code> and <code>/llms.txt</code> answers, then client certificate, path rules and header rules.</li>
+                    <li><b>AI crawler policy</b>: block, challenge, rate limit, or mark the crawler as allowed.</li>
+                    <li>Bot rules and the AI crawlers switch of the rule: an <b>allowed</b> crawler is not stopped by the AI list of these two, the rest of them still applies.</li>
+                    <li>WAF: an allowed crawler is still inspected, unless you ticked the WAF skip and it was verified. Then the rate limit of the rule, CAPTCHA gating and sign-in, which are unchanged.</li>
+                </ol>
+            </div>
+        </section>
+    </div>
+</div>
+<script src="script/aicrawlers.js"></script>

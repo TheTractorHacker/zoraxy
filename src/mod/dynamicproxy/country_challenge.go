@@ -25,13 +25,18 @@ func (router *Router) countryChallenge(w http.ResponseWriter, r *http.Request, s
 // captchaChallenge serves / verifies the endpoint CAPTCHA for a request that has to prove itself
 // (country challenge, bot rule action "challenge"). Fails closed (403) when no CAPTCHA is configured.
 func (router *Router) captchaChallenge(w http.ResponseWriter, r *http.Request, sep *ProxyEndpoint, why string) bool {
+	return router.captchaChallengeDetail(w, r, sep, why, "")
+}
+
+// captchaChallengeDetail is captchaChallenge with a free text detail for the blocked-request log (e.g. the AI crawler name)
+func (router *Router) captchaChallengeDetail(w http.ResponseWriter, r *http.Request, sep *ProxyEndpoint, why string, detail string) bool {
 	if sep == nil || sep.CaptchaConfig == nil || !sep.CaptchaConfig.IsConfigured() || router.captchaSessionStore == nil {
 		//Fail closed: the country is meant to be restricted, so without a CAPTCHA it is blocked
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusForbidden)
 		w.Write(localizedPage(r, page_forbidden))
 		router.Option.Metrics.Event(metrics.EventAccessBlocked, endpointLabel(sep), why+"-challenge-unavailable")
-		router.logRequest(r, false, 403, why+"-challenge-unavailable", r.Host, "", sep)
+		router.logRequestDetail(r, false, 403, why+"-challenge-unavailable", r.Host, "", sep, detail)
 		return true
 	}
 	clientIP := router.GetClientIPForEndpoint(r, sep)
@@ -60,6 +65,6 @@ func (router *Router) captchaChallenge(w http.ResponseWriter, r *http.Request, s
 	}
 	captcha.RenderChallenge(w, r, sep.CaptchaConfig, domain, router.Option.WebDirectory)
 	router.Option.Metrics.Event(metrics.EventCaptchaChallenge, endpointLabel(sep), why)
-	router.logRequest(r, false, 403, why+"-challenge", r.Host, "", sep)
+	router.logRequestDetail(r, false, 403, why+"-challenge", r.Host, "", sep, detail)
 	return true
 }

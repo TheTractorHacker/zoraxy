@@ -3,8 +3,8 @@
   "language": "Japanese",
   "reviewed": false,
   "author": "machine-assisted (Claude)",
-  "coverage": 20.3,
-  "coreCoverage": 40.2
+  "coverage": 19.5,
+  "coreCoverage": 40.0
  },
  "strings": {
   "\"Add Redirection Rule\"": "「リダイレクトルールを追加」",
