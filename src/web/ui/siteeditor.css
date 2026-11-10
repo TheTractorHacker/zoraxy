@@ -137,6 +137,8 @@
 #hrpPresetModal .content, #newRuleModal .zxp-detail { color: var(--zx-text); background: var(--zx-bg); }
 #hrpPresetModal.ui.modal { background: var(--zx-bg); color: var(--zx-text); }
 #hrpPresetModal .actions { background: var(--zx-surface-2); text-align: right; }
+/* with the rate limit presets the list is longer than a short window: the content scrolls, the buttons stay in view */
+#hrpPresetModal.ui.modal > .content { max-height: calc(100vh - 9rem); overflow-y: auto; }
 #hrpPresetModal .hrp-dlg-title { margin: 0 0 var(--zx-space-1); color: var(--zx-text); }
 #hrpPresetModal .zx-table th, #newRuleModal .zxp-detail .zx-table th { text-align: left; }
 .hrp-tablewrap { overflow-x: auto; }
