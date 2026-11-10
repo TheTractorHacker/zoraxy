@@ -7,7 +7,7 @@ import (
 )
 
 // SendErrorResponse must always produce valid JSON, also for messages with quotes (the admin UI would otherwise report "Request failed (HTTP 200)").
-func TestSendErrorResponseIsValidJSON(t *testing.T) {
+func TestSendErrorResponseValidJSONAndContentType(t *testing.T) {
 	for _, msg := range []string{"plain", `invalid status "abc": use codes`, "back\\slash <b>", "line\nbreak", ""} {
 		rec := httptest.NewRecorder()
 		SendErrorResponse(rec, msg)
