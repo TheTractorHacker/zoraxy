@@ -13,8 +13,8 @@ import (
 	"imuslab.com/zoraxy/mod/dynamicproxy/domainsniff"
 	"imuslab.com/zoraxy/mod/info/hardwareinfo"
 	"imuslab.com/zoraxy/mod/ipscan"
-	"imuslab.com/zoraxy/mod/netstat"
 	"imuslab.com/zoraxy/mod/netcalc"
+	"imuslab.com/zoraxy/mod/netstat"
 	"imuslab.com/zoraxy/mod/netutils"
 	"imuslab.com/zoraxy/mod/tlscert"
 	"imuslab.com/zoraxy/mod/utils"
@@ -490,7 +490,8 @@ func initAPIs(targetMux *http.ServeMux) {
 	RegisterPluginAPIs(authRouter)
 	RegisterAbuseAPIs(authRouter)
 	RegisterSecurityAPIs(authRouter)
-	RegisterPostureAPIs(authRouter) //security overview, see posture_api.go
+	RegisterAICrawlerAPIs(authRouter) // AI crawler policy (off by default), see aicrawlerapi.go
+	RegisterPostureAPIs(authRouter)   //security overview, see posture_api.go
 	RegisterBasicAuthExtAPIs(authRouter)
 	RegisterAuthAuditAPIs(authRouter)
 	RegisterAccessRuleExtraAPIs(authRouter)
