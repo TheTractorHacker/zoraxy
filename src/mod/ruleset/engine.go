@@ -56,6 +56,9 @@ type RuleInput struct {
 	Expression  string    `json:"expression"`
 	Tree        *TreeNode `json:"tree"`
 	Action      Action    `json:"action"`
+	// IfUpdated, when set, makes Update fail with ErrConflict unless the stored rule still has this Updated stamp
+	// (the stamp the client loaded): protects against a second admin session overwriting newer changes
+	IfUpdated *int64 `json:"if_updated,omitempty"`
 }
 
 type state struct {
@@ -503,6 +506,27 @@ type ErrNotFound struct{ What string }
 
 func (e ErrNotFound) Error() string { return e.What + " not found" }
 
+// ErrConflict is returned when a rule was changed by someone else since the caller loaded it
+type ErrConflict struct{ What string }
+
+func (e ErrConflict) Error() string { return e.What + " was changed elsewhere since it was loaded" }
+
+// nextStamp returns a modification stamp that is always newer than the previous one, even within the same second
+func nextStamp(old int64) int64 {
+	n := time.Now().Unix()
+	if n <= old {
+		n = old + 1
+	}
+	return n
+}
+
+func checkStamp(what string, have int64, want *int64) error {
+	if want != nil && *want != have {
+		return ErrConflict{what}
+	}
+	return nil
+}
+
 // ValidationError is a rejected change (bad input), as opposed to a storage failure
 type ValidationError struct {
 	Msg string
@@ -658,12 +682,15 @@ func (e *Engine) Update(site, id string, in RuleInput) (RuleInfo, error) {
 	if i < 0 {
 		return RuleInfo{}, ErrNotFound{"rule"}
 	}
+	if err := checkStamp("rule", rules[i].Updated, in.IfUpdated); err != nil {
+		return RuleInfo{}, err
+	}
 	r, err := e.ruleFromInput(in, listMap(st.lists))
 	if err != nil {
 		return RuleInfo{}, err
 	}
 	old := rules[i]
-	r.ID, r.Created, r.Updated = old.ID, old.Created, time.Now().Unix()
+	r.ID, r.Created, r.Updated = old.ID, old.Created, nextStamp(old.Updated)
 	r.Enabled, r.DryRun = old.Enabled, old.DryRun
 	if in.Enabled != nil {
 		r.Enabled = *in.Enabled
@@ -696,6 +723,11 @@ func (e *Engine) Delete(site, id string) error {
 
 // SetEnabled switches a rule on or off
 func (e *Engine) SetEnabled(site, id string, on bool) (RuleInfo, error) {
+	return e.SetEnabledIf(site, id, on, nil)
+}
+
+// SetEnabledIf is SetEnabled that fails with ErrConflict when ifUpdated is set and the rule changed since
+func (e *Engine) SetEnabledIf(site, id string, on bool, ifUpdated *int64) (RuleInfo, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	st := e.st.clone()
@@ -704,8 +736,11 @@ func (e *Engine) SetEnabled(site, id string, on bool) (RuleInfo, error) {
 	if i < 0 {
 		return RuleInfo{}, ErrNotFound{"rule"}
 	}
+	if err := checkStamp("rule", rules[i].Updated, ifUpdated); err != nil {
+		return RuleInfo{}, err
+	}
 	rules[i].Enabled = on
-	rules[i].Updated = time.Now().Unix()
+	rules[i].Updated = nextStamp(rules[i].Updated)
 	st.put(site, rules)
 	if err := e.commit(st, scopeOf(site)); err != nil {
 		return RuleInfo{}, err

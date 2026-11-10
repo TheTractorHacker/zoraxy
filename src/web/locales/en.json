@@ -4846,6 +4846,7 @@
   "This rule does not match the request": "This rule does not match the request",
   "This rule matches the request": "This rule matches the request",
   "This rule set belongs to {0}, the address you use for the admin interface.": "This rule set belongs to {0}, the address you use for the admin interface.",
+  "This rule was changed in another session after you opened it. Nothing was saved. Copy what you need, discard your changes and open the rule again.": "This rule was changed in another session after you opened it. Nothing was saved. Copy what you need, discard your changes and open the rule again.",
   "This rule was proposed by the AI assistant. It is not trusted: read the conditions, test it, and only then enforce it.": "This rule was proposed by the AI assistant. It is not trusted: read the conditions, test it, and only then enforce it.",
   "This runs the same migrations Zoraxy runs at startup and reports what changed. No restart.{0}": "This runs the same migrations Zoraxy runs at startup and reports what changed. No restart.{0}",
   "this server": "this server",

@@ -58,6 +58,12 @@
         return "string";
     };
 
+    // "Ignore case" only means something for plain string comparisons: not for regexes (they are not lower-cased),
+    // exists checks, or country codes (always upper case)
+    M.lowerApplies = function (c) {
+        return !!c.lower && M.field(c.field).type === "string" && c.field !== "ip.country" && ["none", "regex"].indexOf(M.valueKind(c.field, c.op)) < 0;
+    };
+
     M.newGroup = function (op, children) { return { kind: "group", id: nid(), op: op || "and", not: false, children: children || [] }; };
     M.newCond = function (field, meta) {
         var f = field || "http.path", ops = meta ? M.opsFor(meta, f) : ["eq"];
@@ -105,17 +111,17 @@
         var k = M.valueKind(c.field, c.op);
         if (k === "none") { return undefined; }
         if (c.useRef && k === "list") { return { list: c.ref }; }
-        if (k === "list") { return c.items.map(function (s) { return c.lower ? String(s).toLowerCase() : s; }); }
+        if (k === "list") { return c.items.map(function (s) { return M.lowerApplies(c) ? String(s).toLowerCase() : s; }); }
         if (k === "int") { return parseInt(c.value, 10); }
         if (k === "bool") { return c.value === "true"; }
-        return c.lower && k === "string" ? String(c.value).toLowerCase() : String(c.value);
+        return M.lowerApplies(c) && k === "string" ? String(c.value).toLowerCase() : String(c.value);
     }
     function wrapNot(n, inner) { return n.not ? { type: "not", children: [inner] } : inner; }
     M.toTree = function (n) {
         if (n.kind === "cond") {
             var o = { type: "cond", field: n.field };
             if (M.field(n.field).indexed) { o.key = n.key; }
-            if (n.lower && M.field(n.field).type === "string" && n.op !== "exists" && n.op !== "not_exists") { o.transform = "lower"; }
+            if (M.lowerApplies(n)) { o.transform = "lower"; }
             o.op = n.op;
             var v = valueOf(n);
             if (v !== undefined) { o.value = v; }
@@ -185,11 +191,13 @@
         var op = D.ops[c.op] || { phrase: c.op };
         var s;
         if (c.field === "ip.is_private") {
-            s = c.value === "false" ? t("the client is not on a private network") : t("the client is on a private network");
+            // the value and the operator both count: "is not true" means public clients
+            var priv = (c.value === "false") === (c.op === "ne");
+            s = priv ? t("the client is on a private network") : t("the client is not on a private network");
         } else {
             var noun = t(fd.noun);
             if (M.field(c.field).indexed) { noun = tf("{0} “{1}”", noun, c.key); }
-            if (c.lower && M.field(c.field).type === "string" && c.op !== "exists" && c.op !== "not_exists") { noun = tf("{0} (ignoring case)", noun); }
+            if (M.lowerApplies(c)) { noun = tf("{0} (ignoring case)", noun); }
             var k = M.valueKind(c.field, c.op), val = "";
             if (k === "list") { val = " " + listText(c); }
             else if (k === "string" || k === "regex" || k === "int") {

@@ -339,6 +339,10 @@ def rules_ui(pg, ctx, h):
     for r in rules():
         post("/api/ruleset/rule/delete", {"site": "", "id": r["id"]})
 
+    # ---- failure / edge cases (second session, API failure, model rules) ----
+    from rules_edge_smoke import rules_edge
+    rules_edge(pg, h, post, rules, valid, savebar_click)
+
     # ---- visual checks: dark and 390px ----
     pg.evaluate("RB.refresh()")
     post("/api/ruleset/rule/create", {"site": "", "rule": {"name": "Sample", "expression": 'http.path starts_with "/admin" and ip.country != "US"', "action": {"type": "block", "status": 403}}})
@@ -361,6 +365,9 @@ def rules_ui(pg, ctx, h):
     settle(pg, 400)
     check_horizontal(pg, "rules mobile list")
     shot("rules-list-mobile.png")
+    nw = pg.evaluate("(() => { const b = document.querySelector('#rbList tr[data-id] .rb-name'); const r = b.getBoundingClientRect(); return [r.width, document.querySelector('#rbList tr[data-id] .rb-name b').getBoundingClientRect().height]; })()")
+    if nw[0] < 200 or nw[1] > 30:
+        fail("rules", f"the rule name must have its own full-width row in the stacked mobile list (width/height {nw})")
     pg.click("#rbList tr[data-id] button[data-act=edit]")
     pg.wait_for_selector("#rbEditor .rb-group")
     settle(pg, 400)

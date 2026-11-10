@@ -76,6 +76,7 @@
     function runCheck() {
         clearTimeout(timer);
         var my = ++ed.seq, payload;
+        ed.probeP = null;
         if (ed.adv) {
             if (!ed.text.trim()) { ed.check = { state: "empty" }; paint(); return Promise.resolve(ed.check); }
             payload = { expression: ed.text };
@@ -93,7 +94,7 @@
             paint();
             if (res.ok && RB.blocking(payload.action)) {
                 var cand = ed.adv ? { expression: ed.text } : { tree: payload.tree };
-                RB.lockoutProbe(cand, ed.site).then(function (more) {
+                ed.probeP = RB.lockoutProbe(cand, ed.site).then(function (more) {
                     if (!ed || my !== ed.seq) { return; }
                     ed.lock = ed.lock.concat(more).filter(function (x, i, a) { return a.indexOf(x) === i; });
                     paintLock();
@@ -370,6 +371,7 @@
         opSel.addEventListener("change", function () {
             var k0 = M.valueKind(c.field, c.op); c.op = opSel.value; var k1 = M.valueKind(c.field, c.op);
             if (k0 !== k1) { c.value = (k1 === "bool") ? "true" : ""; c.items = []; c.ref = ""; c.useRef = false; }
+            if (k1 === "regex" || k1 === "none") { c.lower = false; }
             if (k1 === "list" && k0 !== "list" && c.value) { c.items = [c.value]; c.value = ""; }
             rerender("[data-nid=\"" + c.id + "\"] .rb-op"); touch();
         });
@@ -383,7 +385,7 @@
         var val = h("div", { class: "rb-val" }, valueWidget(c));
         top.appendChild(val);
         var kind = M.valueKind(c.field, c.op);
-        if (f.type === "string" && kind !== "none" && kind !== "regex") {
+        if (f.type === "string" && kind !== "none" && kind !== "regex" && c.field !== "ip.country") {
             top.appendChild(check(t("Ignore case"), c.lower, function (on) { c.lower = on; touch(); }, { title: t("Compare in lower case: the value is lower-cased too") }));
         }
         top.appendChild(ctlButtons(c));
@@ -594,7 +596,7 @@
         var r = o.rule, d = o.draft || {}, act = r ? r.action : d.action;
         ed = { site: o.site || "", id: r ? r.id : null, isNew: !r, name: r ? r.name : (d.name || ""), description: r ? (r.description || "") : (d.description || ""),
             enabled: r ? r.enabled : true, dry_run: r ? r.dry_run : true, origDry: r ? r.dry_run : true, a: loadAction(act || { type: "block", status: 403 }),
-            adv: false, text: "", canon: r ? r.expression : (d.expression || ""), check: null, seq: 0, lock: [], isAI: String((r ? r.description : d.description) || "").indexOf(RB.AI_MARK) === 0 };
+            updated: r ? r.updated : null, probeP: null, adv: false, text: "", canon: r ? r.expression : (d.expression || ""), check: null, seq: 0, lock: [], isAI: String((r ? r.description : d.description) || "").indexOf(RB.AI_MARK) === 0 };
         if (r) { ed.root = M.fromTree(r.tree); }
         else if (d.tree) { ed.root = M.fromTree(d.tree); }
         else if (parsed && parsed.ok) { ed.root = M.fromTree(parsed.tree); }
@@ -604,6 +606,7 @@
         var rootNode = RB.q("#rbEditor"); rootNode.hidden = false;
         build(); renderConds(); renderAction();
         ui.advSwitch.checked = ed.adv;
+        ed.origSig = ruleSig();
         ui.state.value = ed.isNew ? "" : JSON.stringify(snapshot());
         bar = ZxUI.saveBar({ form: ui.stateBox, mount: rootNode, id: "rules-editor", saveLabel: ed.isNew ? t("Create rule") : t("Save rule"), discardLabel: t("Discard changes"),
             successText: t("Saved"), onSave: save, onDiscard: function () {
@@ -625,7 +628,7 @@
                 return RB.post("./api/ruleset/validate", { expression: d.expression }).then(function (res) { start(o, res); }, function () { start(o, null); });
             }
             start(o);
-        });
+        }).catch(function (e) { RB.toast(RB.errText(e), { type: "error" }); });
     };
 
     function closeEditor(force) {
@@ -644,25 +647,40 @@
         } else { done(); }
     }
 
+    // what the engine acts on: the condition and the action (not the name or the notes)
+    function ruleSig() {
+        try { return JSON.stringify({ c: ed.adv ? ed.text : M.toTree(ed.root), a: buildAction() }); } catch (e) { return ""; }
+    }
+
     function save() {
         return runCheck().then(function (c) {
+            // the real-tester probes run after the check: wait for them, so the warning below never depends on timing
+            if (c && c.state === "ok" && ed.probeP) { return ed.probeP.then(function () { return c; }, function () { return c; }); }
+            return c;
+        }).then(function (c) {
             if (!c || c.state !== "ok") { return { error: t("The rule is not valid yet. Fix the marked problems and try again.") }; }
             if (!ed.name.trim()) { ui.nameI.focus(); return { error: t("Give the rule a name.") }; }
             var action = buildAction(), transition = !ed.dry_run && (ed.isNew || ed.origDry), issues = (ed.lock || []).slice();
-            var needConfirm = !ed.dry_run && (transition || issues.length > 0);
+            // an enforcing rule whose condition or action changed is confirmed too, whatever the lock-out checks found
+            var changed = !ed.isNew && ruleSig() !== ed.origSig;
+            var needConfirm = !ed.dry_run && (transition || issues.length > 0 || changed);
             var step = needConfirm ? RB.confirmEnforce({ site: ed.site, name: ed.name.trim(), tree: ed.adv ? (c.res && c.res.tree) : M.toTree(ed.root), expression: null, action: action, sentence: ui.sentence.textContent, issues: issues }) : Promise.resolve(true);
             return step.then(function (ok) {
                 if (!ok) { return { error: t("Not saved: you did not confirm enforcing the rule.") }; }
                 var rule = { name: ed.name.trim(), description: ed.description.trim(), enabled: ed.enabled, dry_run: ed.dry_run, action: action };
                 if (ed.adv) { rule.expression = ed.text; } else { rule.tree = M.toTree(ed.root); }
+                if (!ed.isNew && ed.updated) { rule.if_updated = ed.updated; }
                 var req = ed.isNew ? RB.post("./api/ruleset/rule/create", { site: ed.site, rule: rule }) : RB.post("./api/ruleset/rule/update", { site: ed.site, id: ed.id, rule: rule });
                 return req.then(function (ri) {
-                    ed.id = ri.id; ed.isNew = false; ed.origDry = ri.dry_run; ed.name = ri.name;
+                    ed.id = ri.id; ed.isNew = false; ed.origDry = ri.dry_run; ed.name = ri.name; ed.updated = ri.updated; ed.origSig = ruleSig();
                     ui.title.textContent = tf("Edit rule: {0}", ri.name);
                     if (S.site === ed.site) { RB.loadRules(S.site); }
                     RB.toast(rule.dry_run ? tf("Rule “{0}” saved in log-only mode", ri.name) : tf("Rule “{0}” saved and enforcing", ri.name));
                     return true;
-                }, function (e) { return { error: RB.errText(e) + (e.detail ? " (" + (e.detail.message || JSON.stringify(e.detail)) + ")" : "") }; });
+                }, function (e) {
+                    if (e && e.status === 409) { return { error: t("This rule was changed in another session after you opened it. Nothing was saved. Copy what you need, discard your changes and open the rule again.") }; }
+                    return { error: RB.errText(e) + (e.detail ? " (" + (e.detail.message || JSON.stringify(e.detail)) + ")" : "") };
+                });
             });
         });
     }

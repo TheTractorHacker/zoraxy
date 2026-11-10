@@ -297,12 +297,19 @@
     function setEnabled(r, sw) {
         var on = sw.checked;
         sw.disabled = true;
-        RB.post("./api/ruleset/rule/" + (on ? "enable" : "disable"), { site: S.site, id: r.id }).then(function (ri) {
+        RB.post("./api/ruleset/rule/" + (on ? "enable" : "disable"), { site: S.site, id: r.id, if_updated: r.updated }).then(function (ri) {
             Object.assign(r, ri);
             sw.disabled = false;
             RB.toast(on ? tf("Rule “{0}” enabled (applied immediately)", r.name) : tf("Rule “{0}” disabled (applied immediately)", r.name));
-        }, function (e) { sw.checked = !on; sw.disabled = false; RB.toast(RB.errText(e), { type: "error" }); });
+        }, function (e) {
+            sw.checked = !on; sw.disabled = false;
+            RB.toast(RB.errText(e), { type: "error" });
+            if (e && e.status === 409) { staleReload(); }
+        });
     }
+
+    // another session changed the rules: show what is really there
+    function staleReload() { return loadRules(S.site).then(function () { renderRules(); }, function () {}); }
 
     function move(r, dir) {
         var ids = S.rules.map(function (x) { return x.id; }), i = ids.indexOf(r.id), j = i + dir;
@@ -312,7 +319,11 @@
             S.rules = list || [];
             renderRules({ id: r.id, act: dir < 0 ? "up" : "down" });
             var s = q("#rbLive"); if (s) { s.textContent = tf("{0} moved to position {1} of {2}", r.name, j + 1, ids.length); }
-        }, function (e) { RB.toast(RB.errText(e), { type: "error" }); });
+        }, function (e) {
+            RB.toast(RB.errText(e), { type: "error" });
+            // the list was out of date (a rule added or deleted elsewhere): reload it so the next move works
+            if (e && (e.status === 400 || e.status === 404 || e.status === 409)) { staleReload(); }
+        });
     }
 
     function ruleInput(r, over) {
@@ -688,7 +699,7 @@
         // open the page on a scope, filtered to a rule name (links from the blocked-request view)
         openFiltered: function (name, site) {
             if (typeof openTabById === "function") { openTabById("ruleset"); }
-            init().then(function () {
+            ready(function () {
                 S.site = site || ""; q("#rbScope").value = S.site;
                 S.q = name || ""; q("#rbSearch").value = S.q; S.shown = PAGE;
                 return loadRules(S.site).then(function (rules) {
@@ -699,7 +710,7 @@
         // open the editor with a draft (AI proposals, templates): {site, name, description, expression|tree, action}
         openDraft: function (d) {
             if (typeof openTabById === "function") { openTabById("ruleset"); }
-            init().then(function () { RB.openEditor({ site: d.site || "", draft: d, fromProposal: !!d.fromProposal }); });
+            ready(function () { RB.openEditor({ site: d.site || "", draft: d, fromProposal: !!d.fromProposal }); });
         }
     };
 
@@ -711,9 +722,9 @@
         q("#rbScope").addEventListener("change", function () { S.site = this.value; S.shown = PAGE; refresh(); });
         q("#rbSearch").addEventListener("input", function () { S.q = this.value.trim(); S.shown = PAGE; if (S.inited) { renderRules(); } });
         q("#rbNew").addEventListener("click", function () { RB.openEditor({ site: S.site }); });
-        q("#rbRefresh").addEventListener("click", function () { init().then(function () { refresh(); }); });
-        q("#rbToggleTpl").addEventListener("click", function () { S.showTemplates = !S.showTemplates; q("#rbToggleTpl").setAttribute("aria-expanded", String(!!S.showTemplates)); init().then(function () { renderRules(); }); });
-        q("#rbNewList").addEventListener("click", function () { init().then(function () { listForm(null); }); });
+        q("#rbRefresh").addEventListener("click", function () { ready(function () { refresh(); }); });
+        q("#rbToggleTpl").addEventListener("click", function () { S.showTemplates = !S.showTemplates; q("#rbToggleTpl").setAttribute("aria-expanded", String(!!S.showTemplates)); ready(function () { renderRules(); }); });
+        q("#rbNewList").addEventListener("click", function () { ready(function () { listForm(null); }); });
         q("#rbImportScan").addEventListener("click", runImport);
         var tt = RB.tester({ site: function () { return q("#rbTestSite").value; } });
         q("#rbTesterMount").appendChild(tt.el);
@@ -726,9 +737,16 @@
             S.inited = true;
             return refresh();
         });
+        // a failed first load must not stay failed forever: forget it, tell the user, and let the next click retry
+        initP.catch(function (e) {
+            initP = null;
+            RB.toast(RB.errText(e), { type: "error" });
+        });
         return initP;
     }
     RB.init = init;
+    // run fn once the page data is loaded; a failed load was already reported by init(), so nothing more to do here
+    function ready(fn) { return init().then(fn, function () {}); }
     bind();
-    if (typeof tabSwitchEventBind !== "undefined") { tabSwitchEventBind["ruleset"] = function () { if (S.ed) { return; } init().then(function () { if (initP && S.inited) { refresh(); } }); }; }
+    if (typeof tabSwitchEventBind !== "undefined") { tabSwitchEventBind["ruleset"] = function () { if (S.ed) { return; } ready(function () { if (initP && S.inited) { refresh(); } }); }; }
 })();

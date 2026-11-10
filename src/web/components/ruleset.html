@@ -104,6 +104,11 @@
     #rbPage .rb-toolbtns { display: flex; flex-wrap: wrap; gap: var(--zx-space-2); margin-left: auto; }
     #rbPage .zx-tabpanel { min-width: 0; }
     #rbPage .rb-name { overflow-wrap: anywhere; }
+    /* stacked (phone) layout: the rule cell is a full-width block, not a label/value row, so the name keeps its width */
+    @media (max-width: 480px) {
+        #rbPage td.rb-namecell { display: block; text-align: left; }
+        #rbPage td.rb-namecell::before { display: block; margin-bottom: 2px; }
+    }
     #rbPage .rb-sum { font-size: var(--zx-fs-sm); margin-top: 2px; overflow-wrap: anywhere; max-width: 60ch; }
     #rbPage tr.rb-off .rb-namecell { opacity: .65; }
     #rbPage .rb-modebtn { cursor: pointer; font: inherit; font-size: var(--zx-fs-xs); font-weight: 600; }
