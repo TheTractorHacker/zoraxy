@@ -393,6 +393,11 @@ def certs_traffic_ui(pg, ctx):
             fail("console", f"the page load logs iframe sandbox warnings: {bad}")
     finally:
         current["page"] = "ct-cleanup"
+        # the generated traffic must not leak into later scenarios (the Status page draws its map from today's statistics)
+        js("""() => { const tok = document.querySelector('meta[name="zoraxy.csrf.Token"]').content, d = new Date(), p = n => String(n).padStart(2, '0');
+            const day = d.getFullYear() + '_' + p(d.getMonth() + 1) + '_' + p(d.getDate());
+            return fetch('/api/analytic/resetRange?start=' + day + '&end=' + day, {method: 'DELETE', headers: {'X-CSRF-Token': tok}})
+                .then(() => fetch('/api/visitors/delete', {method: 'POST', headers: {'X-CSRF-Token': tok, 'Content-Type': 'application/x-www-form-urlencoded'}, body: 'ip=127.0.0.1'})); }""")
         js("""h => new Promise(res => $.cjax({url: '/api/proxy/del', method: 'POST', data: {ep: h}, success: r => res(r), error: () => res('error')}))""", host)
         js("""async () => { const tok = document.querySelector('meta[name="zoraxy.csrf.Token"]').content;
             for (const d of ['up.smoke.test', 'soon.smoke.test', 'old.smoke.test']) { await fetch('/api/cert/delete', {method: 'POST', headers: {'X-CSRF-Token': tok, 'Content-Type': 'application/x-www-form-urlencoded'}, body: 'domain=' + d}); } }""")
