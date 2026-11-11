@@ -2,6 +2,12 @@
 
 Newest first within each area. Each item names the page and what a user notices; design background is in [audit-2026-11.md](audit-2026-11.md), the components in [components.md](components.md).
 
+## Admin sign-in session
+* **Security Center > Admin accounts > Sign-in session** (new card): how long an admin stays signed in. Two number fields (minutes without "Remember me", days with it, ranges 5 to 43200 minutes and 1 to 365 days, with the current value in words), a checkbox **Keep me signed in while I am active** (sliding expiry) and a Save bar. The defaults are exactly the old fixed values (60 minutes, 7 days, sliding off), so nothing changes until an admin saves. A new value applies to the next sign-in without a restart; accounts that are already signed in keep the expiry they got (the card says so).
+* Why this place: the setting is about admin accounts, the Admin accounts tab already holds sign-in related things (accounts, roles, audit log) and is admin-only; System settings is about the interface and visitor pages. Not added to the Security overview checks (no clear "good" value to score).
+* Sliding expiry re-issues the cookie at most every 5 minutes (a quarter of the lifetime for short lifetimes), and only for page loads and changes, not for the background GET calls an open page makes, so an idle tab does not keep the session alive and the idle logout still works. The lifetime is also enforced on the server (not only by the cookie), and the cookie library's own 30 day limit is raised so a long "Remember me" is honoured.
+* **Session expired**: when the session ends while a page is open (a 401, or the redirect to the login page that the server answers with), the admin UI shows one banner "Your session expired. Sign in again" with a link, instead of a stream of "Request failed" toasts and a login form injected into a panel.
+
 ## Navigation and search
 * New menu: Overview, Sites, Security, Certificates, Traffic, Network, Fleet & HA, System (was six groups of about 30 pages). All old `#tag` links and saved menu state still work.
 * Breadcrumbs on every page, a command palette (Ctrl+K) that finds pages, proxy hosts, settings and actions, and a menu filter (`/`).

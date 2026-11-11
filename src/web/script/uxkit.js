@@ -295,8 +295,48 @@
        5. Failed API requests -> toast (rate limited)
     --------------------------------------------------------------- */
     var lastAjaxToast = 0;
+
+    /* A request answered with 401, or redirected to the login page (what the server does when the session cookie is gone or
+       expired), means the session ended. Show ONE banner with a sign-in link instead of a stream of failed requests. */
+    var sessionEnded = false;
+    function endedSession(xhr, settings) {
+        if (!xhr) { return false; }
+        var url = String((settings && settings.url) || "").split("?")[0];
+        if (/\/api\/auth\/(login|logout|checkLogin|authEnabled|register)$/.test(url)) { return false; }
+        if (xhr.status === 401) { return true; }
+        var ru = String(xhr.responseURL || "");
+        return /\/login\.html(\?|#|$)/.test(ru) && !/\/login\.html(\?|#|$)/.test(url);
+    }
+    function showSessionExpired() {
+        if (sessionEnded) { return; }
+        sessionEnded = true;
+        var bar = document.createElement("div");
+        bar.className = "zx-session-banner";
+        bar.setAttribute("role", "alert");
+        var msg = document.createElement("span");
+        msg.className = "zx-session-banner__msg";
+        msg.textContent = (typeof window.t === "function" ? window.t("Your session expired.") : "Your session expired.");
+        var link = document.createElement("a");
+        link.href = "/login.html";
+        link.className = "zx-btn zx-btn--primary zx-session-banner__link";
+        link.textContent = (typeof window.t === "function" ? window.t("Sign in again") : "Sign in again");
+        bar.appendChild(msg);
+        bar.appendChild(link);
+        document.body.appendChild(bar);
+        document.body.classList.add("zx-session-ended");
+    }
+    window.zxSessionExpired = showSessionExpired;
+    function initSessionExpiry() {
+        //ajaxComplete runs for every finished request (also a redirect to the login page that came back as 200)
+        $(document).ajaxComplete(function (ev, xhr, settings) {
+            if (endedSession(xhr, settings)) { showSessionExpired(); }
+        });
+    }
+
     function initAjaxErrorToast() {
+        initSessionExpiry();
         $(document).ajaxError(function (ev, xhr, settings) {
+            if (sessionEnded && (endedSession(xhr, settings) || (xhr && xhr.status === 401))) { return; } //already explained by the banner
             if (!xhr || xhr.statusText === "abort" || xhr.status === 0 && xhr.readyState === 0) { return; }
             //The server explains itself in {"error": "..."} (also with HTTP 4xx): show that text, not a bare status code
             var reason = "";
