@@ -4,6 +4,7 @@ Undo toast, palette jump, Status tile, bot rules note). exec()'d by smoke.py (na
 undoes every change it makes."""
 
 import json
+import ssl
 import urllib.error
 import urllib.request
 
@@ -22,14 +23,22 @@ def blocked_ui(pg, ctx):
 
     def hit(host, ua):
         port = int(args.url.rsplit(":", 1)[1].split("/")[0]) + 1
-        r = urllib.request.Request("http://127.0.0.1:%d/" % port, headers={"Host": host, "User-Agent": ua})
-        try:
-            x = urllib.request.urlopen(r, timeout=5)
-            return x.status, x.headers.get("X-Zoraxy-Ref"), x.read().decode("utf-8", "replace")
-        except urllib.error.HTTPError as e:
-            return e.code, e.headers.get("X-Zoraxy-Ref"), e.read().decode("utf-8", "replace")
-        except Exception as e:  # proxy port not where we expect it
-            return 0, None, str(e)
+        ctx_tls = ssl.create_default_context()
+        ctx_tls.check_hostname = False
+        ctx_tls.verify_mode = ssl.CERT_NONE
+        for scheme in ("http", "https"):  # the inbound port serves TLS when the instance has it on by default
+            r = urllib.request.Request("%s://127.0.0.1:%d/" % (scheme, port), headers={"Host": host, "User-Agent": ua})
+            try:
+                x = urllib.request.urlopen(r, timeout=5, context=ctx_tls)
+                return x.status, x.headers.get("X-Zoraxy-Ref"), x.read().decode("utf-8", "replace")
+            except urllib.error.HTTPError as e:
+                body = e.read().decode("utf-8", "replace")
+                if e.code == 400 and "HTTPS server" in body:
+                    continue
+                return e.code, e.headers.get("X-Zoraxy-Ref"), body
+            except Exception as e:  # proxy port not where we expect it
+                return 0, None, str(e)
+        return 0, None, "no answer"
 
     current["page"] = "blocked-why"
     pg.set_viewport_size({"width": 1366, "height": 900})
@@ -99,6 +108,22 @@ def blocked_ui(pg, ctx):
         pg.wait_for_timeout(300)
         if pg.locator(".zx-drawer").count():
             fail("blocked", "Esc must close the drawer")
+        # a click on the row: Esc gives the focus back to the row's chevron, not to <body>
+        pg.click("#sbBody tr.sbRow td.sbcUa")
+        pg.wait_for_selector(".zx-drawer", timeout=8000)
+        pg.keyboard.press("Escape")
+        pg.wait_for_timeout(300)
+        if not js("document.activeElement && document.activeElement.hasAttribute('data-why')"):
+            fail("blocked", "after Esc the focus must return to the row's chevron button")
+        # leaving the page (browser Back) must not leave the drawer open over another page
+        pg.click("#sbBody tr.sbRow td.sbcUa")
+        pg.wait_for_selector(".zx-drawer", timeout=8000)
+        pg.go_back()
+        pg.wait_for_timeout(500)
+        if pg.locator(".zx-drawer").count():
+            fail("blocked", "the drawer must close when the page changes (Back)")
+        pg.go_forward()
+        pg.wait_for_selector("#sbBody tr.sbRow", timeout=8000)
         # bottom sheet at 390px
         pg.set_viewport_size({"width": 390, "height": 844})
         pg.fill("#sbSearch", ref)

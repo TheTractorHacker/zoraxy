@@ -680,6 +680,7 @@
             if (closed) { return; }
             closed = true;
             document.removeEventListener("keydown", onKey, true);
+            window.removeEventListener("hashchange", onNav);
             if (openDrawer === api) { openDrawer = null; }
             if (back.parentNode) { back.parentNode.removeChild(back); }
             if (previous && previous.focus && previous.isConnected !== false) { try { previous.focus({ preventScroll: true }); } catch (e) { /* element gone */ } }
@@ -699,6 +700,9 @@
         panel.querySelector(".zx-drawer__close").addEventListener("click", close);
         back.addEventListener("mousedown", function (e) { if (e.target === back) { close(); } });
         document.addEventListener("keydown", onKey, true);
+        // leaving the page (Back, a tab or menu switch) leaves nothing of the drawer behind
+        function onNav() { window.removeEventListener("hashchange", onNav); close(); }
+        window.addEventListener("hashchange", onNav);
         document.body.appendChild(back);
         panel.focus({ preventScroll: true });
         var api = {

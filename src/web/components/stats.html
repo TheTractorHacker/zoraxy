@@ -94,6 +94,7 @@
     @keyframes sPulse{ 50%{ opacity:.45; } }
     @media (prefers-reduced-motion: reduce){ #statsPage .sSkel{ animation:none; } }
     /* Blocked: row drawer ("Why was this blocked?"), User-Agent column, search states */
+    #statsPage #sbHost, #statsPage #sbReason{ max-width:min(16em, 100%); text-overflow:ellipsis; }   /* a very long hostname must not widen the filter bar */
     #statsPage table.sTable tbody tr.sbRow{ cursor:pointer; }
     #statsPage .sbRef{ display:block; font-size:.8em; color:var(--s-muted); letter-spacing:.02em; }
     #statsPage .sbUa{ display:block; max-width:15em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--s-muted); font-size:.92em; }
@@ -1217,7 +1218,7 @@
     $("#sBlocked").on("click", "tr.sbRow", function(e){
         if ($(e.target).closest("a,button,input,select,summary,[data-ip],[data-reason],[data-rule],[data-rulename]").not("[data-why]").length) return;
         if (window.getSelection && String(window.getSelection()).length) return;   // selecting text is not a click on the row
-        openWhy($(this).attr("data-seq"), this);
+        openWhy($(this).attr("data-seq"), $(this).find("[data-why]")[0] || this);   // the chevron takes the focus back, a row cannot
     });
     $("#sBlocked").on("click", "[data-why]", function(e){ e.stopPropagation(); openWhy($(this).attr("data-why"), this); });
 
