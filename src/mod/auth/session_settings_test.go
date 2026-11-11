@@ -191,6 +191,30 @@ func TestRememberMeSixtyDaysValidates(t *testing.T) {
 	}
 }
 
+// A cookie from before this feature (no "exp") keeps the old 30 day server side limit, although the store
+// limit is now a year.
+func TestLegacySessionKeepsThirtyDayLimit(t *testing.T) {
+	a, _ := sessAgent(t)
+	vals := map[interface{}]interface{}{"authenticated": true, "username": "admin", "sessver": a.loadState("admin").ver}
+	sc := a.SessionStore.Codecs[0].(*securecookie.SecureCookie)
+	mk := func(days int) *http.Cookie {
+		issued := time.Now().Add(-time.Duration(days) * 24 * time.Hour).Unix()
+		setCodecClock(t, sc, func() int64 { return issued })
+		v, err := sc.Encode(a.SessionName, vals)
+		setCodecClock(t, sc, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &http.Cookie{Name: a.SessionName, Value: v}
+	}
+	if !a.CheckAuth(reqWith(mk(10), "GET", "/", nil)) {
+		t.Fatal("a 10 day old legacy cookie must still be valid")
+	}
+	if a.CheckAuth(reqWith(mk(40), "GET", "/", nil)) {
+		t.Fatal("a 40 day old legacy cookie (no exp) must be refused as before")
+	}
+}
+
 func TestSlidingExtend(t *testing.T) {
 	a, now := sessAgent(t)
 	a.SetSessionSettings(SessionSettings{LifetimeMinutes: 60, RememberDays: 7, SlidingExtend: true})

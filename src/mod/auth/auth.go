@@ -16,6 +16,7 @@ import (
 
 	"encoding/hex"
 
+	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
 	db "imuslab.com/zoraxy/mod/database"
 	"imuslab.com/zoraxy/mod/info/logger"
@@ -35,6 +36,8 @@ type AuthAgent struct {
 
 	cache userCache //account state cache (role / disabled / session generation), see users.go
 	audit auditLog  //admin account audit log, see users.go
+
+	legacyCodecs []securecookie.Codec //30 day (securecookie default) check for sessions without "exp", see sessionUser
 
 	sessConf sessionConf      //session lifetime settings, see session_settings.go
 	nowFn    func() time.Time //test hook, nil = time.Now
@@ -67,6 +70,7 @@ func NewAuthenticationAgent(sessionName string, key []byte, sysdb *db.Database, 
 	newAuthAgent := AuthAgent{
 		SessionName:             sessionName,
 		SessionStore:            store,
+		legacyCodecs:            securecookie.CodecsFromPairs(key),
 		Database:                sysdb,
 		LoginRedirectionHandler: loginRedirectionHandler,
 		Logger:                  systemLogger,

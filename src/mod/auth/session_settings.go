@@ -23,6 +23,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gorilla/securecookie"
+
 	"imuslab.com/zoraxy/mod/utils"
 )
 
@@ -163,6 +165,20 @@ func (a *AuthAgent) stampSession(values map[interface{}]interface{}, remember bo
 func (a *AuthAgent) sessionExpired(values map[interface{}]interface{}) bool {
 	exp, ok := values["exp"].(int64)
 	return ok && a.timeNow().Unix() >= exp
+}
+
+// legacySessionTooOld keeps the old server side age limit (securecookie's default of 30 days) for a session
+// issued before "exp" existed: raising the store limit must not lengthen the life of such a cookie.
+func (a *AuthAgent) legacySessionTooOld(r *http.Request, values map[interface{}]interface{}) bool {
+	if _, has := values["exp"]; has || len(a.legacyCodecs) == 0 {
+		return false
+	}
+	c, err := r.Cookie(a.SessionName)
+	if err != nil {
+		return false
+	}
+	var dst map[interface{}]interface{}
+	return securecookie.DecodeMulti(a.SessionName, c.Value, &dst, a.legacyCodecs...) != nil
 }
 
 // RefreshSession implements the sliding expiry. Call it for a request that is user activity and passed

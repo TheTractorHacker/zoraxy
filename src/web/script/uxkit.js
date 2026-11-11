@@ -303,7 +303,12 @@
         if (!xhr) { return false; }
         var url = String((settings && settings.url) || "").split("?")[0];
         if (/\/api\/auth\/(login|logout|checkLogin|authEnabled|register)$/.test(url)) { return false; }
-        if (xhr.status === 401) { return true; }
+        //a 401 only counts when it is the admin server's own plain "Unauthorized" answer: a 401 passed through
+        //from a plugin or another service, or a JSON {"error"} body, is not the end of the session
+        if (xhr.status === 401) {
+            if (/\/plugin(\.ui)?\//.test(url)) { return false; }
+            return /^\s*(401 - )?Unauthorized\s*$/i.test(String(xhr.responseText || ""));
+        }
         var ru = String(xhr.responseURL || "");
         return /\/login\.html(\?|#|$)/.test(ru) && !/\/login\.html(\?|#|$)/.test(url);
     }

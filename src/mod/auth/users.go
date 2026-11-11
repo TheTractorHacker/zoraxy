@@ -136,7 +136,7 @@ func (a *AuthAgent) sessionUser(r *http.Request) (string, bool) {
 	if !ok || name == "" {
 		return "", false
 	}
-	if a.sessionExpired(session.Values) {
+	if a.sessionExpired(session.Values) || a.legacySessionTooOld(r, session.Values) {
 		return "", false
 	}
 	ver, _ := session.Values["sessver"].(int)
