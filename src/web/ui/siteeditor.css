@@ -145,3 +145,11 @@
 /* the New proxy rule dialog never grows taller than the window: its content scrolls (it has an app preset section now) */
 #newRuleModal.ui.modal > .content { max-height: calc(100vh - 9rem); max-height: calc(100dvh - 9rem); overflow-y: auto; }
 #newRuleModal details.nrMore .nrTplGrid { margin-top: 0.4em; }
+
+/* allowed User-Agents of the bot rules (Security > Exploit and crawler blocking): only shown when the list has entries */
+#httprpEditModal .hrpBotAllow { margin-top: var(--zx-space-4); padding-top: var(--zx-space-3); border-top: 1px solid var(--zx-border); }
+#httprpEditModal .hrpBotAllowTitle { display: block; font-weight: 600; color: var(--zx-text); margin-bottom: var(--zx-space-2); }
+#httprpEditModal .hrpBotAllowList { list-style: none; margin: 0 0 var(--zx-space-2); padding: 0; display: flex; flex-wrap: wrap; gap: var(--zx-space-2); }
+#httprpEditModal .hrpBotAllowList li { display: inline-flex; align-items: center; gap: var(--zx-space-1); max-width: 100%; padding: 2px 4px 2px var(--zx-space-3); border: 1px solid var(--zx-border-strong); border-radius: var(--zx-radius-md); background: var(--zx-surface-2); }
+#httprpEditModal .hrpBotAllowItem { font-family: var(--zx-font-mono); font-size: .95em; overflow-wrap: anywhere; color: var(--zx-text); background: none; padding: 0; }
+#httprpEditModal .hrpBotAllowHelp { display: block; color: var(--zx-text-muted); }

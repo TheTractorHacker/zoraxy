@@ -247,7 +247,7 @@
         if (ap.AuthMethod) { add("auth", t("Authentication"), "security"); }
         if (s.RequireRateLimit) { add("ratelimit", t("Rate limit"), "security"); }
         if (s.RequireCaptcha) { add("captcha", t("CAPTCHA challenge"), "security"); }
-        if (s.BlockCommonExploits || s.BlockAICrawlers || s.MitigationAction) { add("exploits", t("Exploit and crawler blocking"), "security"); }
+        if (s.BlockCommonExploits || s.BlockAICrawlers || s.MitigationAction || (s.BotAllowUA || []).length) { add("exploits", t("Exploit and crawler blocking"), "security"); }
         var source = s.WAFSource || (s.WAF ? "custom" : "inherit");
         if (source === "profile" || source === "custom" || nonEmpty(s.WAFExtra)) { add("waf", t("Firewall settings"), "security"); }
         if (nonEmpty((s.WAF || {}).Response) || nonEmpty((s.WAFExtra || {}).Response)) { add("wafresp", t("Response protection"), "security"); }

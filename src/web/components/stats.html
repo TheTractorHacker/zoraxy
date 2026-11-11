@@ -127,6 +127,9 @@
     .zx-drawer .bwPreview{ margin:0 0 var(--zx-space-3); color:var(--zx-text); }
     .zx-drawer .bwPreview:empty{ display:none; }
     .zx-drawer .bwPrev{ margin:0 0 var(--zx-space-2); padding:var(--zx-space-3); border-left:4px solid var(--zx-info-solid); background:var(--zx-info-bg); color:var(--zx-info-text); border-radius:var(--zx-radius-sm); overflow-wrap:anywhere; }
+    .zx-drawer .bwWarn{ margin:0 0 var(--zx-space-2); padding:var(--zx-space-2) var(--zx-space-3); border-left:4px solid var(--zx-warn-solid); background:var(--zx-warn-bg); color:var(--zx-warn-text); border-radius:var(--zx-radius-sm); font-size:var(--zx-fs-sm); overflow-wrap:anywhere; }
+    .zx-drawer .bwNote{ margin:0 0 var(--zx-space-3); color:var(--zx-text-muted); font-size:var(--zx-fs-sm); }
+    .zx-drawer .bwPat{ margin:0 0 var(--zx-space-3); }
     .zx-drawer .bwChanges{ margin:0; padding:0 0 0 1.2em; font-size:var(--zx-fs-sm); color:var(--zx-text-muted); overflow-wrap:anywhere; }
     .zx-drawer .bwAll{ margin:0 0 var(--zx-space-3); }
     .zx-drawer .zx-callout{ margin-bottom:var(--zx-space-3); }
@@ -1143,19 +1146,51 @@
         var allBox = $('<label class="zx-check bwAll" hidden><input type="checkbox"><span></span></label>');
         allBox.find("span").text(t("This changes every site. I understand."));
         var errBox = $('<div class="zx-callout zx-callout--danger" role="alert" hidden><div class="zx-callout__body"></div></div>');
-        var chosen = null;
+        // the editable value of a fix (the User-Agent pattern): its own element so typing is not interrupted by a redraw of the preview
+        var patId = "bwpat" + Date.now();
+        var patBox = $('<div class="zx-field bwPat" hidden><label class="zx-field__label"></label><input class="zx-input mono" type="text" maxlength="64" autocomplete="off" autocapitalize="off" spellcheck="false"><p class="zx-help"></p><p class="zx-error" role="alert"></p></div>');
+        patBox.find("label").attr("for", patId); patBox.find("input").attr("id", patId);
+        var chosen = null, patSeq = 0, patBusy = false, patTimer = null;
         function refresh(){
             live.empty();
             allBox.prop("hidden", !(chosen && chosen.requiresAllSites));
+            var inp = chosen && chosen.input;
+            patBox.prop("hidden", !inp);
+            if (inp){
+                patBox.find("label").text(t("User-Agent contains"));
+                patBox.find(".zx-help").text(t("Lower case, 4 to 64 characters. Use the product name only, for example curl/, not a version."));
+                patBox.find(".zx-error").text(inp.error || "");
+                patBox.toggleClass("is-invalid", !!inp.error);
+                patBox.find("input").attr("aria-invalid", inp.error ? "true" : "false");
+                if (patBox.find("input").data("fix") !== chosen.id){ patBox.find("input").data("fix", chosen.id).val(inp.value); }
+            }
             if (!chosen){ applyBtn.prop("disabled", true); return; }
+            if (inp && inp.error){ applyBtn.prop("disabled", true); return; }
             live.append($('<p class="bwPrev"></p>').text(chosen.preview || ""));
+            if (chosen.warning){ live.append($('<p class="bwWarn"></p>').text(t("A User-Agent is trivially spoofable: anyone can send this text. This is a convenience for a known client, not security."))); }
             if ((chosen.changes || []).length){
                 var ul = $('<ul class="bwChanges"></ul>');
                 chosen.changes.forEach(function(c){ ul.append($("<li></li>").append($("<b></b>").text(c.what + ": "), document.createTextNode(c.before + " → " + c.after))); });
                 live.append(ul);
             }
-            applyBtn.prop("disabled", chosen.requiresAllSites && !allBox.find("input").prop("checked"));
+            applyBtn.prop("disabled", patBusy || (chosen.requiresAllSites && !allBox.find("input").prop("checked")));
         }
+        // the pattern was edited: ask the server for the exact preview of the new value (it validates, and the previewId binds it)
+        patBox.find("input").on("input", function(){
+            if (!chosen || !chosen.input) return;
+            var fixId = chosen.id, typed = this.value, my = ++patSeq;
+            patBusy = true; applyBtn.prop("disabled", true);
+            clearTimeout(patTimer);
+            patTimer = setTimeout(function(){
+                $.getJSON("./api/blocked/explain?seq=" + encodeURIComponent(e.seq) + "&pattern=" + encodeURIComponent(typed), function(x){
+                    if (my !== patSeq || !drw.isOpen()) return;
+                    patBusy = false;
+                    var nf = ((x && x.fixes) || []).filter(function(f){ return f.id === fixId; })[0];
+                    if (!nf){ patBox.find(".zx-error").text(t("This pattern can no longer be offered. Close the panel and open the entry again.")); patBox.addClass("is-invalid"); applyBtn.prop("disabled", true); return; }
+                    if (chosen && chosen.id === fixId){ $.extend(chosen, {preview: nf.preview, changes: nf.changes, previewId: nf.previewId, input: nf.input, warning: nf.warning, label: nf.label}); if (chosen._lab) chosen._lab.text(nf.label); refresh(); }
+                }).fail(function(){ if (my === patSeq){ patBusy = false; patBox.find(".zx-error").text(t("Could not check the pattern")); patBox.addClass("is-invalid"); } });
+            }, 250);
+        });
         if (ex.canFix && fixes.length){
             var fs = $('<fieldset class="bwFixes"></fieldset>').append($("<legend></legend>").text(t("Fix this block")));
             var gname = "bwfix" + Date.now();
@@ -1166,16 +1201,18 @@
                 var inp = $('<input type="radio">').attr({name: gname, value: f.id});
                 if (!first && !f.requiresAllSites) first = inp;
                 inp.on("change", function(){ chosen = f; allBox.find("input").prop("checked", false); errBox.prop("hidden", true); refresh(); });
-                var main = $('<span class="bwFixMain"></span>').append($('<span class="bwFixLabel"></span>').text(f.label),
+                f._lab = $('<span class="bwFixLabel"></span>').text(f.label);
+                var main = $('<span class="bwFixMain"></span>').append(f._lab,
                     $('<span class="bwFixMeta"></span>').append($('<span class="zx-badge zx-badge--' + risk[1] + '"></span>').text(t(risk[0])), $('<span class="zx-badge"></span>').text(t(SCOPE[f.scope] || f.scope))));
                 fs.append(lab.append(inp, main));
             });
-            body.append(fs, live, allBox, errBox);
+            body.append(fs, patBox, live, allBox, errBox);
             allBox.find("input").on("change", refresh);
             if (first){ first.prop("checked", true).trigger("change"); } else refresh();
         } else {
             body.append($('<div class="zx-callout"></div>').append($('<div class="zx-callout__body"></div>').text(ex.noFixReason || t("There is no safe fix to offer for this block. Open the rule to change it."))));
         }
+        if (ex.canFix && ex.note){ body.append($('<p class="bwNote"></p>').text(ex.note)); }
         body.append($('<h3 class="bwH"></h3>').text(t("Details")), dl([[t("Time"), e.t ? new Date(e.t * 1000).toLocaleString() : ""], [t("Site"), e.host], [t("IP address"), e.ip, true],
             [t("Request"), (e.method || "") + " " + dec(e.path || ""), true], [t("Status"), e.status === 444 ? t("444 dropped") : e.status], [t("User-Agent"), e.ua, true]]));
         if (ex.canFix && fixes.length) foot.append(applyBtn);
@@ -1186,7 +1223,7 @@
             ZxUI.setLoading(applyBtn, true);
             errBox.prop("hidden", true);
             $.cjax({url: "./api/blocked/fix", method: "POST", contentType: "application/json", dataType: "json",
-                data: JSON.stringify({seq: e.seq, fixId: chosen.id, previewId: chosen.previewId, allSites: !!chosen.requiresAllSites && allBox.find("input").prop("checked")}),
+                data: JSON.stringify({seq: e.seq, fixId: chosen.id, previewId: chosen.previewId, pattern: chosen.input ? patBox.find("input").val() : undefined, allSites: !!chosen.requiresAllSites && allBox.find("input").prop("checked")}),
                 success: function(d){
                     ZxUI.setLoading(applyBtn, false);
                     if (!d || d.error){
