@@ -8,7 +8,7 @@ a site that opts in shows the one-line summary and hides its own provider/key fi
 import json
 
 CC_HOST = "central-captcha.demo.test"
-CC_SECRET = "1x0000000000000000000000000000000AA"   # Cloudflare's published always-pass test secret, not a real secret
+CC_SECRET = "zx-smoke-unique-secret-7f3a9c2e41b8"   # must not occur anywhere in the page text (the Cloudflare public test secret does, in the help table)
 CC_SITE_KEY = "1x00000000000000000000AA"
 
 
