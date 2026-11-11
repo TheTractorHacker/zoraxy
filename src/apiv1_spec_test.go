@@ -23,7 +23,7 @@ func TestAPIv1SpecDocumentsAdminOnlyAreas(t *testing.T) {
 		t.Fatal("openapi.yaml lacks the 'Not part of the token API' section")
 	}
 	_, h, _, _, rw := v1TestSetup(t)
-	for _, p := range []string{"/api/v1/proxy/captcha/default", "/api/v1/proxy/templates/list", "/api/v1/updater/info", "/api/v1/apitoken/list", "/api/v1/backup"} {
+	for _, p := range []string{"/api/v1/proxy/captcha/default", "/api/v1/proxy/captcha/central", "/api/v1/proxy/templates/list", "/api/v1/updater/info", "/api/v1/apitoken/list", "/api/v1/backup"} {
 		if w := v1Do(h, "GET", p, rw, ""); w.Code == 200 {
 			t.Errorf("%s is reachable with a token", p)
 		}

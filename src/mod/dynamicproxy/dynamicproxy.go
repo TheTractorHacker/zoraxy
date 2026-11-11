@@ -427,7 +427,15 @@ func (router *Router) handleNonTLSRequest(w http.ResponseWriter, r *http.Request
 }
 
 func (router *Router) handleCaptchaGating(w http.ResponseWriter, r *http.Request, sep *ProxyEndpoint) (handled bool, challenged bool) {
-	if !sep.RequireCaptcha || !sep.CaptchaConfig.IsConfigured() {
+	if !sep.RequireCaptcha {
+		return false, false
+	}
+	cc := sep.EffectiveCaptchaConfig() // resolved once, so one request never mixes two central configs
+	if !cc.IsConfigured() {
+		if cc != nil && cc.UseCentral {
+			// The rule asked for the central provider but none is usable: fail closed, never an open door
+			return router.captchaCentralMissing(w, r, sep, cc), false
+		}
 		return false, false
 	}
 
@@ -436,12 +444,12 @@ func (router *Router) handleCaptchaGating(w http.ResponseWriter, r *http.Request
 	// cannot satisfy a CIDR exception or be reported to the CAPTCHA provider
 	clientIP := router.GetClientIPForEndpoint(r, sep)
 
-	if r.URL.Path == captcha.AltchaChallengePath && sep.CaptchaConfig.Provider == captcha.ProviderAltcha {
-		captcha.HandleAltchaChallenge(w, r, sep.CaptchaConfig)
+	if r.URL.Path == captcha.AltchaChallengePath && cc.Provider == captcha.ProviderAltcha {
+		captcha.HandleAltchaChallenge(w, r, cc)
 		return true, false
 	}
 	if r.URL.Path == captcha.VerifyPath {
-		captcha.HandleVerification(w, r, sep.CaptchaConfig, router.captchaSessionStore, clientIP)
+		captcha.HandleVerification(w, r, cc, router.captchaSessionStore, clientIP)
 		router.recordCaptchaVerification(w, sep)
 		if !captchaVerifiedOK(w) {
 			abuseNoteKind(r, abuse.KindCaptchaFail)
@@ -449,11 +457,11 @@ func (router *Router) handleCaptchaGating(w http.ResponseWriter, r *http.Request
 		return true, false
 	}
 
-	if !captcha.ShouldEnforcePath(pathmatch.RequestTarget(r), sep.CaptchaConfig) {
+	if !captcha.ShouldEnforcePath(pathmatch.RequestTarget(r), cc) {
 		return false, false
 	}
 
-	if captcha.CheckException(r, sep.CaptchaConfig.ExceptionRules, clientIP) {
+	if captcha.CheckException(r, cc.ExceptionRules, clientIP) {
 		return false, false
 	}
 	sessionOK, sessionReason := captcha.CheckSessionReason(r, router.captchaSessionStore)
@@ -468,7 +476,7 @@ func (router *Router) handleCaptchaGating(w http.ResponseWriter, r *http.Request
 		domain = sep.RootOrMatchingDomain
 	}
 
-	captcha.RenderChallenge(w, r, sep.CaptchaConfig, domain, router.Option.WebDirectory)
+	captcha.RenderChallenge(w, r, cc, domain, router.Option.WebDirectory)
 	router.Option.Metrics.Event(metrics.EventCaptchaChallenge, sep.RootOrMatchingDomain, sessionReason)
 	return true, true
 }
@@ -956,4 +964,22 @@ func proxyProtocolSourceChecker(isTrusted func(ip string) bool) proxyproto.Sourc
 		}
 		return isTrusted != nil && isTrusted(ip.String()), nil
 	}
+}
+
+// captchaCentralMissing handles a request of a rule that requires CAPTCHA with the
+// central provider while no usable central provider exists. Requests the rule
+// would have challenged get the blocked page (403); paths outside the protected
+// prefixes and exception rules still pass, as they would with a working provider.
+func (router *Router) captchaCentralMissing(w http.ResponseWriter, r *http.Request, sep *ProxyEndpoint, cc *captcha.Config) bool {
+	clientIP := router.GetClientIPForEndpoint(r, sep)
+	if !captcha.ShouldEnforcePath(pathmatch.RequestTarget(r), cc) || captcha.CheckException(r, cc.ExceptionRules, clientIP) {
+		return false
+	}
+	domain := r.Host
+	if domain == "" {
+		domain = sep.RootOrMatchingDomain
+	}
+	captcha.RenderBlocked(w, r, cc, domain)
+	router.Option.Metrics.Event(metrics.EventCaptchaChallenge, sep.RootOrMatchingDomain, "central-provider-missing")
+	return true
 }

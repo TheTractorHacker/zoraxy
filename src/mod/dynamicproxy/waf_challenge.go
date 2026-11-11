@@ -214,7 +214,7 @@ func (w *challengeCookieWriter) Unwrap() http.ResponseWriter { return w.Response
 
 // wafChallengeAvailable reports whether the endpoint can serve a challenge (a configured CAPTCHA provider)
 func (router *Router) wafChallengeAvailable(sep *ProxyEndpoint) bool {
-	return sep != nil && sep.CaptchaConfig.IsConfigured() && router.captchaSessionStore != nil
+	return sep != nil && sep.EffectiveCaptchaConfig().IsConfigured() && router.captchaSessionStore != nil
 }
 
 // wafChallengeVerify handles the CAPTCHA verification endpoints for the challenge band. It runs before WAF
@@ -224,15 +224,15 @@ func (router *Router) wafChallengeVerify(w http.ResponseWriter, r *http.Request,
 	if !cfg.ChallengeEnabled() || !router.wafChallengeAvailable(sep) {
 		return false
 	}
-	if r.URL.Path == captcha.AltchaChallengePath && sep.CaptchaConfig.Provider == captcha.ProviderAltcha {
-		captcha.HandleAltchaChallenge(w, r, sep.CaptchaConfig)
+	if r.URL.Path == captcha.AltchaChallengePath && sep.EffectiveCaptchaConfig().Provider == captcha.ProviderAltcha {
+		captcha.HandleAltchaChallenge(w, r, sep.EffectiveCaptchaConfig())
 		return true
 	}
 	if r.URL.Path != captcha.VerifyPath {
 		return false
 	}
 	cw := &challengeCookieWriter{ResponseWriter: w, router: router, r: r, sep: sep, clientIP: clientIP, ttl: cfg.ChallengeTTL()}
-	captcha.HandleVerification(cw, r, sep.CaptchaConfig, router.captchaSessionStore, clientIP)
+	captcha.HandleVerification(cw, r, sep.EffectiveCaptchaConfig(), router.captchaSessionStore, clientIP)
 	router.recordCaptchaVerification(w, sep)
 	if !captchaVerifiedOK(w) {
 		abuseNoteKind(r, abuse.KindCaptchaFail)
@@ -250,7 +250,7 @@ func (router *Router) wafServeChallenge(w http.ResponseWriter, r *http.Request, 
 	if domain == "" {
 		domain = sep.RootOrMatchingDomain
 	}
-	captcha.RenderChallenge(w, r, sep.CaptchaConfig, domain, router.Option.WebDirectory)
+	captcha.RenderChallenge(w, r, sep.EffectiveCaptchaConfig(), domain, router.Option.WebDirectory)
 	router.Option.Metrics.Event(metrics.EventCaptchaChallenge, sep.RootOrMatchingDomain, "waf-challenge")
 	router.logRequestDetail(r, false, http.StatusForbidden, "waf-challenged", r.Host, "", sep, detail)
 }

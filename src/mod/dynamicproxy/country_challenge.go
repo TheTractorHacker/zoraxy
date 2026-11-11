@@ -26,7 +26,7 @@ func (router *Router) countryChallenge(w http.ResponseWriter, r *http.Request, s
 // captchaChallenge serves / verifies the endpoint CAPTCHA for a request that has to prove itself
 // (country challenge, bot rule action "challenge"). Fails closed (403) when no CAPTCHA is configured.
 func (router *Router) captchaChallenge(w http.ResponseWriter, r *http.Request, sep *ProxyEndpoint, why string) bool {
-	if sep == nil || sep.CaptchaConfig == nil || !sep.CaptchaConfig.IsConfigured() || router.captchaSessionStore == nil {
+	if sep == nil || sep.EffectiveCaptchaConfig() == nil || !sep.EffectiveCaptchaConfig().IsConfigured() || router.captchaSessionStore == nil {
 		//Fail closed: the country is meant to be restricted, so without a CAPTCHA it is blocked
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusForbidden)
@@ -35,17 +35,17 @@ func (router *Router) captchaChallenge(w http.ResponseWriter, r *http.Request, s
 		router.logRequest(r, false, 403, why+"-challenge-unavailable", r.Host, "", sep)
 		return true
 	}
-	if !sep.CaptchaConfig.ChallengeAllowedOnPath(pathmatch.RequestTarget(r)) {
+	if !sep.EffectiveCaptchaConfig().ChallengeAllowedOnPath(pathmatch.RequestTarget(r)) {
 		return false // outside the protected paths of this site: not challenged
 	}
 	clientIP := router.GetClientIPForEndpoint(r, sep)
 
-	if r.URL.Path == captcha.AltchaChallengePath && sep.CaptchaConfig.Provider == captcha.ProviderAltcha {
-		captcha.HandleAltchaChallenge(w, r, sep.CaptchaConfig)
+	if r.URL.Path == captcha.AltchaChallengePath && sep.EffectiveCaptchaConfig().Provider == captcha.ProviderAltcha {
+		captcha.HandleAltchaChallenge(w, r, sep.EffectiveCaptchaConfig())
 		return true
 	}
 	if r.URL.Path == captcha.VerifyPath {
-		captcha.HandleVerification(w, r, sep.CaptchaConfig, router.captchaSessionStore, clientIP)
+		captcha.HandleVerification(w, r, sep.EffectiveCaptchaConfig(), router.captchaSessionStore, clientIP)
 		router.recordCaptchaVerification(w, sep)
 		if !captchaVerifiedOK(w) {
 			abuseNoteKind(r, "captcha_fail")
@@ -55,14 +55,14 @@ func (router *Router) captchaChallenge(w http.ResponseWriter, r *http.Request, s
 	if ok, _ := captcha.CheckSessionReason(r, router.captchaSessionStore); ok {
 		return false
 	}
-	if captcha.CheckException(r, sep.CaptchaConfig.ExceptionRules, clientIP) {
+	if captcha.CheckException(r, sep.EffectiveCaptchaConfig().ExceptionRules, clientIP) {
 		return false
 	}
 	domain := r.Host
 	if domain == "" {
 		domain = sep.RootOrMatchingDomain
 	}
-	captcha.RenderChallenge(w, r, sep.CaptchaConfig, domain, router.Option.WebDirectory)
+	captcha.RenderChallenge(w, r, sep.EffectiveCaptchaConfig(), domain, router.Option.WebDirectory)
 	router.Option.Metrics.Event(metrics.EventCaptchaChallenge, endpointLabel(sep), why)
 	router.logRequest(r, false, 403, why+"-challenge", r.Host, "", sep)
 	return true

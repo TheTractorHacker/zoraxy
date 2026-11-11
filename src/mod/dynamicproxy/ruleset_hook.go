@@ -263,7 +263,7 @@ func (router *Router) ruleChallenge(w http.ResponseWriter, r *http.Request, sep 
 		serveProxyRequestError(w, r, http.StatusForbidden, router, ErrorTemplateForbidden)
 		return true
 	}
-	if router.ruleChallengeValid(r, sep, clientIP) || !sep.CaptchaConfig.ChallengeAllowedOnPath(pathmatch.RequestTarget(r)) {
+	if router.ruleChallengeValid(r, sep, clientIP) || !sep.EffectiveCaptchaConfig().ChallengeAllowedOnPath(pathmatch.RequestTarget(r)) {
 		return false
 	}
 	abuseNoteKind(r, "") //a challenge is not a block
@@ -273,7 +273,7 @@ func (router *Router) ruleChallenge(w http.ResponseWriter, r *http.Request, sep 
 	if domain == "" {
 		domain = sep.RootOrMatchingDomain
 	}
-	captcha.RenderChallenge(w, r, sep.CaptchaConfig, domain, router.Option.WebDirectory)
+	captcha.RenderChallenge(w, r, sep.EffectiveCaptchaConfig(), domain, router.Option.WebDirectory)
 	router.Option.Metrics.Event(metrics.EventCaptchaChallenge, endpointLabel(sep), "rule-challenge")
 	router.logRequestDetail(r, false, http.StatusForbidden, "rule-challenge", r.Host, "", sep, m.Name)
 	return true
@@ -285,8 +285,8 @@ func (router *Router) ruleChallengeEndpoints(w http.ResponseWriter, r *http.Requ
 	if !router.wafChallengeAvailable(sep) {
 		return false
 	}
-	if r.URL.Path == captcha.AltchaChallengePath && sep.CaptchaConfig.Provider == captcha.ProviderAltcha {
-		captcha.HandleAltchaChallenge(w, r, sep.CaptchaConfig)
+	if r.URL.Path == captcha.AltchaChallengePath && sep.EffectiveCaptchaConfig().Provider == captcha.ProviderAltcha {
+		captcha.HandleAltchaChallenge(w, r, sep.EffectiveCaptchaConfig())
 		return true
 	}
 	if r.URL.Path != captcha.VerifyPath {
@@ -300,7 +300,7 @@ func (router *Router) ruleChallengeEndpoints(w http.ResponseWriter, r *http.Requ
 		base = &challengeCookieWriter{ResponseWriter: w, router: router, r: r, sep: sep, clientIP: clientIP, ttl: rt.res.Config.ChallengeTTL()}
 	}
 	cw := &ruleChallengeWriter{ResponseWriter: base, router: router, r: r, sep: sep, clientIP: clientIP, ttl: ttl}
-	captcha.HandleVerification(cw, r, sep.CaptchaConfig, router.captchaSessionStore, clientIP)
+	captcha.HandleVerification(cw, r, sep.EffectiveCaptchaConfig(), router.captchaSessionStore, clientIP)
 	router.recordCaptchaVerification(w, sep)
 	if !captchaVerifiedOK(w) {
 		abuseNoteKind(r, abuse.KindCaptchaFail)

@@ -177,6 +177,7 @@ func buildCaptchaConfigFromRequest(r *http.Request) (*dynamicproxy.CaptchaConfig
 		ProtectedPathPrefixes: protectedPathPrefixes,
 	}
 	cfg.LimitChallengesToPaths, _ = utils.PostBool(r, "captchaLimitChallenges")
+	cfg.UseCentral, _ = utils.PostBool(r, "captchaUseCentral")
 	parseCaptchaPageSettings(r, cfg)
 	if err := cfg.ValidatePageSettings(); err != nil {
 		return nil, err
@@ -218,6 +219,7 @@ func HandleCaptchaPreview(w http.ResponseWriter, r *http.Request) {
 // Add user customizable reverse proxy
 func ReverseProxyInit() {
 	loadCaptchaDefaultBranding()
+	loadCaptchaCentral()
 	/*
 		Load Reverse Proxy Ingress Settings
 	*/
@@ -1120,6 +1122,7 @@ func ReverseProxyHandleEditEndpoint(w http.ResponseWriter, r *http.Request) {
 	//The form does not carry the CAPTCHA exception rules, keep the stored ones
 	if targetProxyEntry != nil {
 		preserveCaptchaExceptionRules(captchaConfig, targetProxyEntry.CaptchaConfig)
+		applyCaptchaCentralOptIn(r, captchaConfig, targetProxyEntry.CaptchaConfig)
 	}
 	newProxyEndpoint.CaptchaConfig = captchaConfig
 	newProxyEndpoint.UseStickySession = useStickySession

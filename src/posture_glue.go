@@ -217,8 +217,7 @@ func collectPostureFacts() *posture.Facts {
 				r.WAFMode, r.WAFOrigin = c.Mode, c.Source
 				r.ChallengeBand, r.ChallengeReady = c.ChallengeThreshold > 0, c.ChallengeReady
 			}
-			if ep.RequireCaptcha && ep.CaptchaConfig != nil {
-				cc := ep.CaptchaConfig
+			if cc := ep.EffectiveCaptchaConfig(); ep.RequireCaptcha && cc != nil {
 				r.CaptchaKeysOK = cc.Provider == captcha.ProviderAltcha || (cc.SiteKey != "" && cc.SecretKey != "")
 			}
 			if ep.AuthenticationProvider != nil && ep.AuthenticationProvider.AuthMethod == dynamicproxy.AuthMethodForward {
