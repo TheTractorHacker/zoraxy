@@ -147,21 +147,111 @@ def blocked_ui(pg, ctx):
         pg.click("#sbNfClear")
         pg.wait_for_selector("#sbBody tr.sbRow")
 
-        # ---- apply, verify, undo
-        pg.fill("#sbSearch", ref)
-        pg.keyboard.press("Enter")
-        pg.wait_for_selector("[data-bw-apply]")
+        # ---- bot-ua-allow: the narrow fix (this site only, User-Agent product token), editable pattern, screenshots
+        def theme(want_dark):
+            if js("document.body.classList.contains('darkTheme')") != want_dark:
+                js("toggleTheme()")
+                pg.wait_for_timeout(300)
+
+        def open_drawer():
+            pg.fill("#sbSearch", ref)
+            pg.keyboard.press("Enter")
+            pg.wait_for_selector("[data-bw-apply]")
+            pg.wait_for_timeout(300)
+
+        open_drawer()
+        if js("document.querySelector('.zx-drawer input[type=radio]:checked').value") != "bot-ua-allow":
+            fail("blocked", "the narrow User-Agent fix must be the preselected choice")
+        want = 'requests whose User-Agent contains "curl/" skip the bot rules on %s only. Other sites unchanged.' % BLK_HOSTS[0]
+        if want not in js("document.querySelector('.bwPreview').textContent"):
+            fail("blocked", "bot-ua-allow preview text wrong: %r" % js("document.querySelector('.bwPreview').textContent"))
+        if js("document.querySelector('.bwPat input').value") != "curl/":
+            fail("blocked", "the pattern must be prefilled with the product token only")
+        if "spoofable" not in js("document.querySelector('.bwWarn') ? document.querySelector('.bwWarn').textContent : ''"):
+            fail("blocked", "the spoofing warning is missing")
+        if js("document.querySelector('.bwAll').hidden") is not True:
+            fail("blocked", "site fix must not ask for the all-sites confirmation")
+        # invalid edits: an error under the field, Apply disabled; a valid edit brings the preview back
+        for bad in ("mozilla", "cur", "chrome/"):
+            pg.fill(".bwPat input", bad)
+            pg.wait_for_function("document.querySelector('.bwPat .zx-error').textContent.length > 0", timeout=4000)
+            if not js("document.querySelector('[data-bw-apply]').disabled"):
+                fail("blocked", "Apply must be disabled for the pattern %r" % bad)
+        shot("blocked-ua-error.png")
+        pg.fill(".bwPat input", "curl/")
+        pg.wait_for_function("document.querySelector('.bwPat .zx-error').textContent.length == 0 && !document.querySelector('[data-bw-apply]').disabled", timeout=4000)
+        for dark in (False, True):
+            theme(dark)
+            shot("blocked-ua-drawer-%s.png" % ("dark" if dark else "light"))
+        theme(False)
+        pg.keyboard.press("Escape")
+        pg.set_viewport_size({"width": 390, "height": 844})
+        open_drawer()
+        shot("blocked-ua-drawer-390.png")
+        if js("document.documentElement.scrollWidth > document.documentElement.clientWidth"):
+            fail("blocked", "page scrolls horizontally at 390px with the UA fix drawer")
+        pg.keyboard.press("Escape")
+        pg.set_viewport_size({"width": 1366, "height": 900})
+
+        # ---- apply, verify, undo (the preselected fix: User-Agent allow on this site)
+        open_drawer()
         pg.click("[data-bw-apply]")
         pg.wait_for_selector(".zx-toast")
         pg.wait_for_timeout(800)
         if hit(BLK_HOSTS[0], "curl/8.18.0")[0] in (0, 403):  # 502: the request passed the bot rule, the dummy upstream is closed
             fail("blocked", "after Apply the same request must pass the bot rule on the site (toast: %r)" % js("document.querySelector('.zx-toast') && document.querySelector('.zx-toast').textContent"))
+        if hit(BLK_HOSTS[0], "CURL/7.0")[0] in (0, 403):
+            fail("blocked", "the User-Agent match must be case-insensitive")
+        if hit(BLK_HOSTS[0], "python-requests/2.31")[0] != 403:
+            fail("blocked", "another HTTP library must still be blocked on the same site")
         if hit(BLK_HOSTS[1], "curl/8.18.0")[0] != 403:
             fail("blocked", "the fix must not change the other site")
+        # the site editor lists the entry with a remove button, and Easy mode shows the card
+        js("""h => fetch('/api/proxy/list?type=host').then(r => r.json()).then(l => { initHttpProxyRuleEditorModal(l.filter(x => x.RootOrMatchingDomain === h)[0]); })""", BLK_HOSTS[0])
+        pg.wait_for_selector("#httprpEditModalWrapper .hrp-main", state="visible", timeout=8000)
+        pg.wait_for_timeout(800)
+        if not pg.is_visible("#httprpEditModalWrapper .hrpBotAllow"):
+            fail("blocked", "the site editor must list the allowed User-Agent in the Security section")
+        if js("[...document.querySelectorAll('#httprpEditModalWrapper .hrpBotAllowItem')].map(e => e.textContent).join()") != "curl/":
+            fail("blocked", "site editor list content wrong")
+        for dark in (False, True):
+            theme(dark)
+            js("document.querySelector('#httprpEditModalWrapper .hrpBotAllow').scrollIntoView({block: 'center'})")
+            pg.wait_for_timeout(200)
+            shot("blocked-ua-site-%s.png" % ("dark" if dark else "light"))
+        theme(False)
+        pg.set_viewport_size({"width": 390, "height": 844})
+        pg.wait_for_timeout(300)
+        js("document.querySelector('#httprpEditModalWrapper .hrpBotAllow').scrollIntoView({block: 'center'})")
+        pg.wait_for_timeout(200)
+        shot("blocked-ua-site-390.png")
+        pg.set_viewport_size({"width": 1366, "height": 900})
+        # remove through the list: the block is back; then re-add through undo of nothing: use the drawer again
+        pg.click("#httprpEditModalWrapper [data-ua-remove]")
+        pg.wait_for_timeout(1200)
+        if pg.is_visible("#httprpEditModalWrapper .hrpBotAllow"):
+            fail("blocked", "the list must disappear after the last entry is removed")
+        if hit(BLK_HOSTS[0], "curl/8.18.0")[0] != 403:
+            fail("blocked", "removing the entry must restore the block")
+        js("openTabById('stats')")
+        pg.wait_for_timeout(600)
+        js("statsOpenBlocked({})")
+        pg.wait_for_selector("#sbBody tr.sbRow")
+        open_drawer()
+        pg.click("[data-bw-apply]")
+        pg.wait_for_selector(".zx-toast")
+        pg.wait_for_timeout(800)
+        if hit(BLK_HOSTS[0], "curl/8.18.0")[0] in (0, 403):
+            fail("blocked", "second apply failed")
         pg.click(".zx-toast__undo >> text=Undo")
         pg.wait_for_timeout(1500)
         if hit(BLK_HOSTS[0], "curl/8.18.0")[0] != 403:
             fail("blocked", "Undo must restore the block")
+        # the blunt fix is still there for those who want it
+        open_drawer()
+        if js("document.querySelectorAll('.zx-drawer input[value=bot-site-off]').length") != 1:
+            fail("blocked", "the existing fixes must still be offered")
+        pg.keyboard.press("Escape")
 
         # ---- Ctrl+K jump
         pg.keyboard.press("Control+k")
