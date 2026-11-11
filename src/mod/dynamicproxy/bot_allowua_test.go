@@ -51,7 +51,7 @@ func TestOldConfigWithoutBotAllowUALoads(t *testing.T) {
 		t.Fatal(err)
 	}
 	if ep.BotAllowUA != nil || ep.BotPolicy != "on" {
-		t.Fatalf("%+v", ep)
+		t.Fatalf("%v %q", ep.BotAllowUA, ep.BotPolicy)
 	}
 	js, _ := json.Marshal(&ep)
 	if strings.Contains(string(js), "BotAllowUA") {
