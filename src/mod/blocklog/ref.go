@@ -49,7 +49,6 @@ func FormatRef(ref string) string {
 // text is not a reference.
 func NormalizeRef(in string) string {
 	in = strings.ToUpper(strings.TrimSpace(in))
-	in = strings.TrimPrefix(in, "ZX")
 	var b strings.Builder
 	for i := 0; i < len(in); i++ {
 		c := in[i]
@@ -66,10 +65,14 @@ func NormalizeRef(in string) string {
 		}
 		b.WriteByte(c)
 	}
-	if b.Len() != refLen {
+	out := b.String()
+	if len(out) == refLen+2 && strings.HasPrefix(out, "ZX") { // the visitor's spelling; an 8 character ID may itself start with ZX
+		out = out[2:]
+	}
+	if len(out) != refLen {
 		return ""
 	}
-	return b.String()
+	return out
 }
 
 // Get returns the entry with this sequence number if it is still in the log. O(1): sequence numbers

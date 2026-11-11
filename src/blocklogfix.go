@@ -534,10 +534,24 @@ func captchaFixes(e blocklog.Entry, ep *dynamicproxy.ProxyEndpoint, site string,
 				Changes: []fixChange{{What: what, Before: "(no exception)", After: value}},
 			},
 			apply: func() (func() error, error) {
+				wasNil := false //put "no list at all" back as it was, not as an empty list
+				if cur, err := dynamicProxyRouter.LoadProxy(site); err == nil && cur.CaptchaConfig != nil {
+					wasNil = cur.CaptchaConfig.ExceptionRules == nil
+				}
 				if err := mutateCaptchaException(site, spec, addCaptchaExceptionRule); err != nil {
 					return nil, err
 				}
-				return func() error { return mutateCaptchaException(site, spec, removeCaptchaExceptionRule) }, nil
+				return func() error {
+					return mutateCaptchaException(site, spec, func(cfg *captcha.Config, sp captchaExceptionSpec) error {
+						if err := removeCaptchaExceptionRule(cfg, sp); err != nil {
+							return err
+						}
+						if wasNil && len(cfg.ExceptionRules) == 0 {
+							cfg.ExceptionRules = nil
+						}
+						return nil
+					})
+				}, nil
 			},
 		}
 	}
@@ -617,8 +631,9 @@ func HandleBlockedLookup(w http.ResponseWriter, r *http.Request) {
 	}
 	if text == "" {
 		text = strings.TrimSpace(q.Get("q")) //a typed value: reference or address
-		if blocklog.NormalizeRef(text) == "" {
-			out.Kind = "ip"
+		out.Kind = "ip"
+		if blocklog.NormalizeRef(text) != "" {
+			out.Kind = "ref"
 		}
 	}
 	if text == "" || len(text) > 64 {
