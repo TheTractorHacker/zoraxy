@@ -13,6 +13,7 @@ Newest first within each area. Each item names the page and what a user notices;
 ## Security
 * **Security Overview**: a 0-100 score with the evidence behind every check and one-click, previewable, reversible fixes.
 * Every security page has a short subtitle, a **Related** box linking the pages that deal with the same concept (Access Rules, Auto-ban, Trusted Proxies, WAF, SSO, CAPTCHA, Security Overview) and a **History** shortcut. Jargon (trusted proxy gating, paranoia level, anomaly score, SNI) has a "what is this?" popover.
+* **Central CAPTCHA provider**: the CAPTCHA page has a "Central provider" section (provider, site key, secret key, session length and provider options, saved with the Save bar, with a list of the sites that use it). In a proxy rule's CAPTCHA settings, "Provider settings" offers "Use central provider" or "Custom for this site"; with the central one the rule's key fields are hidden and a one-line summary links to the central page. Off by default: nothing changes until a central provider is saved and a site opts in. Paths, exceptions and page look stay per site. If a site uses the central provider while none is saved, it blocks the requests that need a CAPTCHA (it never lets them through). The secret is never shown again; leave the field empty to keep it.
 * Rules and presets: the rules engine page and app presets are described in their own sections of DEVELOPMENT.md.
 
 ## Certificates

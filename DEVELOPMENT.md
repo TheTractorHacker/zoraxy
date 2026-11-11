@@ -1883,6 +1883,15 @@ loaded at start). `captcha.MergeBranding` fills every field a rule leaves empty 
 provider, keys and Turnstile options are never inherited); the merge happens in `renderPage` for live pages, and for previews when the
 form posts `applyDefault=true`. Not replicated by cluster sync (node local setting).
 
+**Central provider**: `GET/POST /api/proxy/captcha/central` (`captcha_central_api.go`, `mod/dynamicproxy/captcha/central.go`, stored in
+`settings/captchaCentral`, loaded at start, atomic in-memory copy). GET never returns the secret (`SecretSet` / `Configured` instead);
+POST with an empty `captchaSecretKey` keeps the stored secret (same provider only); `clear=true` removes it. A rule opts in with
+`CaptchaConfig.UseCentral` (form field `captchaUseCentral`). `ProxyEndpoint.EffectiveCaptchaConfig()` resolves it at request time
+(`captcha.ResolveCentral`: central provider fields + the rule's own paths, exceptions, limit switch and branding; the rule's stored
+provider fields are untouched) and every trigger (gate, verify, Altcha, exploit, country / bot, WAF challenge, rules challenge, posture,
+IsConfigured checks) must use it, never `ep.CaptchaConfig` directly. Opted in without a usable central provider, the rule is not
+configured and the gate answers the blocked page (fail closed). Not replicated by cluster sync. Smoke: `smoke.py --central-captcha-only`.
+
 ### WAF page (`components/waf.html`)
 Tabs: Overview (mode selector cards, tiles, events per hour, needs-attention list, top rules / IPs), Events (filters, group by rule /
 IP / URL / proxy rule, severity badges, rule descriptions from the CRS reference, detail drawer with the matched variable / value

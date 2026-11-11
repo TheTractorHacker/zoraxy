@@ -34,6 +34,7 @@ ap.add_argument("--sites-only", action="store_true", help="run only the Sites pa
 ap.add_argument("--securityfix-only", action="store_true", help="run only the security-page fixes scenario (Trusted Proxies, Auto-ban, toasts, Access Rules, AI gating, WAF validation, contrast)")
 ap.add_argument("--certs-traffic-only", action="store_true", help="run only the Certificates / ACME / Statistics / Visitors / Uptime scenario (certs_traffic_smoke.py)")
 ap.add_argument("--netsys-only", action="store_true", help="run only the Network / System pages scenario (ux-fix-network-system audit)")
+ap.add_argument("--central-captcha-only", action="store_true", help="run only the central CAPTCHA provider scenario (central_captcha_smoke.py)")
 ap.add_argument("--overview-only", action="store_true", help="run only the Status / Security overview / History / palette / navigation fix scenario")
 ap.add_argument("--zrok-fake", default=os.environ.get("SMOKE_ZROK_FAKE", ""), help="path of a fake zrok script; enables the zrok flow (the instance needs -allow_external_tools)")
 ap.add_argument("--allow", action="append", default=[], help="regex of messages whose failure is tolerated")
@@ -2270,6 +2271,7 @@ exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "cons
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "sites_smoke.py")).read(), "sites_smoke.py", "exec"))  # defines sites_ui
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "securityfix_smoke.py")).read(), "securityfix_smoke.py", "exec"))  # defines securityfix_ui
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "certs_traffic_smoke.py")).read(), "certs_traffic_smoke.py", "exec"))  # defines certs_traffic_ui
+exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "central_captcha_smoke.py")).read(), "central_captcha_smoke.py", "exec"))  # defines central_captcha_ui
 
 
 def network_system_ui(pg, ctx):
@@ -2847,6 +2849,10 @@ def main():
             return
         if args.securityfix_only:
             securityfix_ui(pg, ctx)
+        if args.central_captcha_only:
+            central_captcha_ui(pg, ctx)
+            b.close()
+            return
         if args.certs_traffic_only:
             certs_traffic_ui(pg, ctx)
         if args.overview_only:
@@ -2885,6 +2891,7 @@ def main():
         consistency_ui(pg, ctx)
         sites_ui(pg, ctx)
         certs_traffic_ui(pg, ctx)
+        central_captcha_ui(pg, ctx)
         tabs = pg.eval_on_selector_all("#mainmenu .item[tag]", "els => els.map(e => e.getAttribute('tag'))")
         tabs = list(dict.fromkeys(tabs))
         if args.no_page_sweep:

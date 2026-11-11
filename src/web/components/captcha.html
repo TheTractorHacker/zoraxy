@@ -49,6 +49,79 @@
         </ul>
     </aside>
 
+    <!-- ===== Central provider ===== -->
+    <section class="ui segment" id="cpCentral" aria-labelledby="cpCentralTitle">
+        <h3 class="ui header" id="cpCentralTitle"><i class="shield alternate icon"></i> Central provider</h3>
+        <p class="cpHelp">Set the CAPTCHA provider, keys and session length once for the whole node. A proxy rule that picks <b>Use central provider</b> in its CAPTCHA settings uses
+            these values, so you can change a key here and every such rule follows without a save per site. Each rule keeps its own protected paths, exceptions and page look.
+            Bot check is already central: switch it on in <a href="#seccenter" data-nav-open="seccenter">Security Center</a> and choose the policy per site.</p>
+        <div class="zx-callout zx-callout--warn" role="note" id="cpCentralWarn" hidden>
+            <span class="zx-callout__icon" aria-hidden="true"><i class="exclamation circle icon"></i></span>
+            <div class="zx-callout__body">No usable central provider is saved, but <b id="cpCentralWarnN">0</b> site(s) are set to use it. Those sites block every request that needs a CAPTCHA until you save one here.</div>
+        </div>
+        <div class="ui form" id="cpCentralForm">
+            <div class="two fields">
+                <div class="field"><label for="ccProvider">Provider</label>
+                    <select id="ccProvider" name="captchaProvider" class="ui fluid dropdown">
+                        <option value="0">Cloudflare Turnstile</option>
+                        <option value="1">Google reCAPTCHA</option>
+                        <option value="2">Altcha (self-hosted)</option>
+                        <option value="3">Friendly Captcha</option>
+                    </select></div>
+                <div class="field"><label for="ccSession">Session duration (seconds)</label>
+                    <input type="number" id="ccSession" name="captchaSessionDuration" min="60" max="2592000" value="3600">
+                    <div class="cpHelp">How long a solved challenge stays valid (1 minute to 30 days).</div></div>
+            </div>
+            <div class="two fields">
+                <div class="field ccKeyField"><label for="ccSiteKey">Site key (public)</label>
+                    <input type="text" id="ccSiteKey" name="captchaSiteKey" autocomplete="off" spellcheck="false" placeholder="Site key"></div>
+                <div class="field"><label for="ccSecret" id="ccSecretLabel">Secret key</label>
+                    <input type="password" id="ccSecret" name="captchaSecretKey" autocomplete="new-password" spellcheck="false" placeholder="Secret key">
+                    <div class="cpHelp" id="ccSecretHelp"></div></div>
+            </div>
+            <div class="ccOpt ccRecaptcha" style="display:none">
+                <div class="three fields">
+                    <div class="field"><label for="ccRcVersion">reCAPTCHA version</label>
+                        <select id="ccRcVersion" name="captchaRecaptchaVersion" class="ui fluid dropdown"><option value="v2">v2 (checkbox)</option><option value="v3">v3 (invisible score)</option></select></div>
+                    <div class="field"><label for="ccRcScore">Minimum score (v3)</label>
+                        <input type="number" id="ccRcScore" name="captchaRecaptchaScore" min="0" max="1" step="0.1" value="0.5"></div>
+                    <div class="field"><label for="ccRcAction">v3 action name</label>
+                        <input type="text" id="ccRcAction" name="captchaRecaptchaAction" maxlength="32" placeholder="access"></div>
+                </div>
+                <div class="field"><div class="ui checkbox"><input type="checkbox" id="ccRcInvisible" name="captchaRecaptchaInvisible"><label for="ccRcInvisible">v2: invisible badge (needs an invisible-type key)</label></div></div>
+            </div>
+            <div class="ccOpt ccFriendly" style="display:none">
+                <div class="field"><label for="ccFriendly">Friendly Captcha endpoint</label>
+                    <select id="ccFriendly" name="captchaFriendlyEndpoint" class="ui fluid dropdown"><option value="global">Global</option><option value="eu">EU</option></select></div>
+            </div>
+            <div class="ccOpt ccAltcha" style="display:none">
+                <div class="field"><label for="ccAltchaMax">Altcha work factor (0 = default)</label>
+                    <input type="number" id="ccAltchaMax" name="captchaAltchaMaxNumber" min="0" value="0"></div>
+            </div>
+            <div class="ccOpt ccTurnstile">
+                <div class="two fields">
+                    <div class="field"><label for="ccTsMode">Turnstile widget mode</label>
+                        <select id="ccTsMode" name="turnstileMode" class="ui fluid dropdown"><option value="">Managed (default)</option><option value="managed">Managed</option><option value="non-interactive">Non-interactive</option><option value="invisible">Invisible</option></select></div>
+                    <div class="field"><label for="ccTsAppearance">Appearance</label>
+                        <select id="ccTsAppearance" name="turnstileAppearance" class="ui fluid dropdown"><option value="">Always (default)</option><option value="always">Always</option><option value="execute">Execute</option><option value="interaction-only">Interaction only</option></select></div>
+                </div>
+                <div class="two fields">
+                    <div class="field"><label for="ccTsTheme">Widget theme</label>
+                        <select id="ccTsTheme" name="turnstileTheme" class="ui fluid dropdown"><option value="">Auto (default)</option><option value="light">Light</option><option value="dark">Dark</option></select></div>
+                    <div class="field"><label for="ccTsSize">Widget size</label>
+                        <select id="ccTsSize" name="turnstileSize" class="ui fluid dropdown"><option value="">Normal (default)</option><option value="flexible">Flexible</option><option value="compact">Compact</option></select></div>
+                </div>
+                <div class="two fields">
+                    <div class="field"><label for="ccTsAction">Action (optional)</label><input type="text" id="ccTsAction" name="turnstileAction" maxlength="32"></div>
+                    <div class="field"><label for="ccTsCData">cData (optional)</label><input type="text" id="ccTsCData" name="turnstileCData" maxlength="255"></div>
+                </div>
+            </div>
+            <div class="field"><div class="ui checkbox"><input type="checkbox" id="ccVerifyHost" name="captchaVerifyHostname"><label for="ccVerifyHost">Reject tokens whose hostname differs from the requested host</label></div></div>
+        </div>
+        <h4 class="ui header" id="ccSitesTitle" style="margin-top:1.2em">Sites using the central provider</h4>
+        <div id="ccSites" class="cpHelp">Loading...</div>
+    </section>
+
     <!-- ===== Overview ===== -->
     <div id="cpOverview">
         <div class="ui basic segment" style="padding-top:0">
@@ -364,6 +437,86 @@
         return false;
     }
 
+
+    /* ---------------- central provider ---------------- */
+    var centralInfo = null, centralBar = null;
+    function ccUpdateUI() {
+        var p = parseInt($("#ccProvider").val(), 10);
+        $("#cpCentral .ccRecaptcha").toggle(p === 1);
+        $("#cpCentral .ccFriendly").toggle(p === 3);
+        $("#cpCentral .ccAltcha").toggle(p === 2);
+        $("#cpCentral .ccTurnstile").toggle(p === 0);
+        $("#cpCentral .ccKeyField").toggle(p !== 2);
+        $("#ccSecretLabel").text(p === 2 ? t("HMAC key (secret)") : t("Secret key"));
+        var set = centralInfo && centralInfo.SecretSet && centralInfo.Provider === p;
+        $("#ccSecret").attr("placeholder", set ? t("Saved, leave empty to keep") : t("Secret key"));
+        $("#ccSecretHelp").text(set ? t("A secret key is saved. It is never shown again; type a new one only to replace it.") : t("Required."));
+    }
+    function ccFill(c) {
+        centralInfo = c;
+        c = c || {};
+        var ts = c.Turnstile || {};
+        $("#ccProvider").val(String(c.Provider || 0));
+        $("#ccSiteKey").val(c.SiteKey || "");
+        $("#ccSecret").val("");
+        $("#ccSession").val(c.SessionDuration || 3600);
+        $("#ccRcVersion").val(c.RecaptchaVersion || "v2");
+        $("#ccRcScore").val(c.RecaptchaScore || 0.5);
+        $("#ccRcAction").val(c.RecaptchaAction || "");
+        $("#ccRcInvisible").prop("checked", !!c.RecaptchaInvisible);
+        $("#ccFriendly").val(c.FriendlyEndpoint || "global");
+        $("#ccAltchaMax").val(c.AltchaMaxNumber || 0);
+        $("#ccTsMode").val(ts.Mode || ""); $("#ccTsAppearance").val(ts.Appearance || "");
+        $("#ccTsTheme").val(ts.Theme || ""); $("#ccTsSize").val(ts.Size || "");
+        $("#ccTsAction").val(ts.Action || ""); $("#ccTsCData").val(ts.CData || "");
+        $("#ccVerifyHost").prop("checked", !!c.VerifyHostname);
+        ccUpdateUI();
+        if (centralBar) { centralBar.reset(); }
+    }
+    function ccRenderSites() {
+        var users = rules.filter(function (r) { return r.CaptchaConfig && r.CaptchaConfig.UseCentral; });
+        var configured = !!(centralInfo && centralInfo.Configured);
+        $("#ccSitesTitle").text(tf("Sites using the central provider ({0} of {1})", users.length, rules.length));
+        $("#cpCentralWarn").prop("hidden", configured || users.length === 0);
+        $("#cpCentralWarnN").text(users.length);
+        if (!users.length) {
+            $("#ccSites").text(t("No site uses it yet. Open a proxy rule, go to its CAPTCHA section and choose Use central provider."));
+            return;
+        }
+        var h = "";
+        users.forEach(function (r) {
+            h += '<li><a href="#" class="ccSiteLink" data-ep="' + esc(r.RootOrMatchingDomain) + '">' + esc(r.RootOrMatchingDomain) + "</a></li>";
+        });
+        $("#ccSites").html('<ul style="margin:0; padding-left:1.2em">' + h + "</ul>");
+    }
+    function loadCentral() {
+        $.getJSON("/api/proxy/captcha/central", function (d) {
+            ccFill((d && typeof d === "object" && !d.error) ? d : null);
+        }).fail(function () { ccFill(null); }).always(ccRenderSites);
+    }
+    $("#ccProvider").on("change", ccUpdateUI);
+    $(document).on("click", "#cpCentral .ccSiteLink", function (e) {
+        e.preventDefault();
+        if (typeof openTabById === "function") { openTabById("httprp"); }
+    });
+    if (window.ZxUI && ZxUI.saveBar) {
+        centralBar = ZxUI.saveBar({
+            form: "#cpCentralForm",
+            saveLabel: t("Save central provider"),
+            onSave: function () {
+                var data = {};
+                $("#cpCentralForm [name]").each(function () {
+                    data[this.name] = (this.type === "checkbox") ? this.checked : $(this).val();
+                });
+                return $.cjax({ url: "/api/proxy/captcha/central", method: "POST", data: data }).then(function (resp) {
+                    if (resp && resp.error) { return resp; }
+                    loadCentral();
+                    return resp;
+                });
+            }
+        });
+    }
+
     /* ---------------- overview ---------------- */
     function loadOverview() {
         $("#cpRows").html('<tr><td colspan="6"><div class="ui active centered inline loader"></div></td></tr>');
@@ -371,6 +524,7 @@
             $.getJSON("/api/proxy/list?type=host", function (data) {
                 rules = data || [];
                 renderOverview();
+                loadCentral();
             }).fail(function () {
                 $("#cpRows").html('<tr><td colspan="6"><div class="ui negative message">Unable to load the proxy rules.</div></td></tr>');
             });
