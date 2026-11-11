@@ -1,6 +1,7 @@
 package dynamicproxy
 
 import (
+	"imuslab.com/zoraxy/mod/blocklog"
 	"imuslab.com/zoraxy/mod/pathmatch"
 	"net/http"
 
@@ -20,19 +21,24 @@ otherwise the rule falls back to a block, never to an open door.
 Returns true if the request was handled (challenge page, verification, or block).
 */
 func (router *Router) countryChallenge(w http.ResponseWriter, r *http.Request, sep *ProxyEndpoint, rule *access.AccessRule) bool {
-	return router.captchaChallenge(w, r, sep, "country")
+	return router.captchaChallengeFor(w, r, sep, "country", "", AccessRuleKey(rule))
 }
 
 // captchaChallenge serves / verifies the endpoint CAPTCHA for a request that has to prove itself
 // (country challenge, bot rule action "challenge"). Fails closed (403) when no CAPTCHA is configured.
 func (router *Router) captchaChallenge(w http.ResponseWriter, r *http.Request, sep *ProxyEndpoint, why string) bool {
+	return router.captchaChallengeFor(w, r, sep, why, "", "")
+}
+
+// captchaChallengeFor is captchaChallenge that also tells the blocked-request log which category or
+// rule asked for the challenge (name, shown as "http_library (challenge, no CAPTCHA, acted as block)")
+// and its machine key. The forwardType, and with it the statistics counters, is not changed.
+func (router *Router) captchaChallengeFor(w http.ResponseWriter, r *http.Request, sep *ProxyEndpoint, why, name, ruleID string) bool {
 	if sep == nil || sep.CaptchaConfig == nil || !sep.CaptchaConfig.IsConfigured() || router.captchaSessionStore == nil {
 		//Fail closed: the country is meant to be restricted, so without a CAPTCHA it is blocked
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusForbidden)
-		w.Write(localizedPage(r, page_forbidden))
+		router.writeForbiddenPage(w, r, http.StatusForbidden, localizedPage(r, page_forbidden), why == "country")
 		router.Option.Metrics.Event(metrics.EventAccessBlocked, endpointLabel(sep), why+"-challenge-unavailable")
-		router.logRequest(r, false, 403, why+"-challenge-unavailable", r.Host, "", sep)
+		router.logRequestRule(r, false, 403, why+"-challenge-unavailable", r.Host, "", sep, blocklog.ChallengeDetail(name, true), ruleID)
 		return true
 	}
 	if !sep.CaptchaConfig.ChallengeAllowedOnPath(pathmatch.RequestTarget(r)) {
@@ -64,6 +70,6 @@ func (router *Router) captchaChallenge(w http.ResponseWriter, r *http.Request, s
 	}
 	captcha.RenderChallenge(w, r, sep.CaptchaConfig, domain, router.Option.WebDirectory)
 	router.Option.Metrics.Event(metrics.EventCaptchaChallenge, endpointLabel(sep), why)
-	router.logRequest(r, false, 403, why+"-challenge", r.Host, "", sep)
+	router.logRequestRule(r, false, 403, why+"-challenge", r.Host, "", sep, blocklog.ChallengeDetail(name, false), ruleID)
 	return true
 }

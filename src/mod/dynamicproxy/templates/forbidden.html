@@ -1,55 +1,63 @@
+<!DOCTYPE html>
 <html>
     <head>
-        <!-- Zoraxy Forbidden Template -->
+        <!-- Zoraxy Forbidden Template. Self contained: no external CSS, fonts or scripts, so it also renders when the visitor cannot reach a CDN.
+             Placeholder {{ref}} is replaced with the reference ID of the block (ZX-XXXX-XXXX). A template without it keeps working. -->
         <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0 user-scalable=no">
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.5.0/semantic.min.css">
-        <script type="text/javascript" src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
-        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.5.0/semantic.min.js"></script>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="color-scheme" content="light dark">
         <title>Forbidden</title>
         <style>
+            :root{
+                --bg:#f4f5f7; --card:#ffffff; --text:#1f2328; --muted:#5b636d; --line:#d8dce1; --accent:#c0392b; --code:#eef0f3;
+            }
+            @media (prefers-color-scheme: dark){
+                :root{ --bg:#14171b; --card:#1d2126; --text:#e6e8eb; --muted:#9aa3ad; --line:#323840; --accent:#ef6a5b; --code:#262b32; }
+            }
+            *{ box-sizing:border-box; }
+            html,body{ margin:0; min-height:100%; }
+            body{
+                background:var(--bg); color:var(--text);
+                font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+                line-height:1.5; display:flex; align-items:center; justify-content:center;
+                min-height:100vh; padding:16px;
+            }
             #msg{
-                position: absolute;
-                top: calc(50% - 150px);
-                left: calc(50% - 250px);
-                width: 500px;
-                height: 300px;
-                text-align: center;
+                width:100%; max-width:520px; background:var(--card); border:1px solid var(--line);
+                border-radius:8px; padding:28px 24px; text-align:center;
             }
-
-            #footer{
-                position: fixed;
-                padding: 2em;
-                padding-left: 5em;
-                padding-right: 5em;
-                bottom: 0px;
-                left: 0px;
-                width: 100%;
-            }   
-
-            small{
-                word-break: break-word;
+            .mark{ font-size:3.5rem; line-height:1; color:var(--accent); font-weight:700; letter-spacing:-.02em; }
+            h3{ margin:.6em 0 0; font-size:1.25rem; }
+            hr{ border:0; border-top:1px solid var(--line); margin:16px 0; }
+            p{ margin:.5em 0; }
+            .ref{ margin:.25em 0 0; }
+            .ref code{
+                display:inline-block; padding:.3em .7em; border-radius:6px; background:var(--code);
+                font:600 1.15rem ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; letter-spacing:.06em;
+                user-select:all; word-break:break-all;
             }
+            .meta{ text-align:left; color:var(--muted); font-size:.8rem; }
+            .meta small{ display:block; word-break:break-word; }
         </style>
     </head>
     <body>
         <div id="msg">
-            <h1 style="font-size: 6em; margin-bottom: 0px;"><i class="red ban icon"></i></h1>
-            <div>
-                <h3 style="margin-top: 1em;">403 - Forbidden</h3>
-                <div class="ui divider"></div>
-                <p>You do not have permission to view this directory or page. <br>
-                    This might be caused by the region limit setting of this site.</p>
-                <div class="ui divider"></div>
-                <div style="text-align: left;">
-                    <small>Request time: <span id="reqtime"></span></small><br>
-                    <small id="reqURLDisplay">Request URI: <span id="requrl"></span></small>
-                </div>
+            <div class="mark" aria-hidden="true">403</div>
+            <h3>403 - Forbidden</h3>
+            <hr>
+            <p>You do not have permission to view this directory or page.</p>
+            <!--region--><p>This might be caused by the region limit setting of this site.</p><!--/region-->
+            <!--ref--><p>Access denied. If you think this is a mistake, give the site owner this reference:</p>
+            <p class="ref"><code>{{ref}}</code></p><!--/ref-->
+            <hr>
+            <div class="meta">
+                <small>Request time: <span id="reqtime"></span></small>
+                <small id="reqURLDisplay">Request URI: <span id="requrl"></span></small>
             </div>
         </div>
         <script>
-            $("#reqtime").text(new Date().toLocaleString(undefined, {year: 'numeric', month: '2-digit', day: '2-digit', weekday:"long", hour: '2-digit', hour12: false, minute:'2-digit', second:'2-digit'}));
-            $("#requrl").text(window.location.href);
+            document.getElementById("reqtime").textContent = new Date().toLocaleString(undefined, {year: 'numeric', month: '2-digit', day: '2-digit', weekday: "long", hour: '2-digit', hour12: false, minute: '2-digit', second: '2-digit'});
+            document.getElementById("requrl").textContent = window.location.href;
         </script>
     </body>
 </html>

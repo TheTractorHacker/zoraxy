@@ -55,16 +55,16 @@ func (h *ProxyHandler) handleBotRules(w http.ResponseWriter, r *http.Request, se
 		h.Parent.logRequest(r, true, 200, reason+"-logonly", r.Host, "", sep)
 		return false
 	case botrules.ActionChallenge:
-		return h.Parent.captchaChallenge(w, r, sep, "bot")
+		return h.Parent.captchaChallengeFor(w, r, sep, "bot", d.Reason, "bot:"+d.Reason)
 	case botrules.ActionDrop:
 		h.Parent.Option.Metrics.Event(metrics.EventAccessBlocked, endpointLabel(sep), "bot")
-		h.Parent.logRequest(r, false, 444, reason+"-dropped", r.Host, "", sep)
+		h.Parent.logRequestRule(r, false, 444, reason+"-dropped", r.Host, "", sep, "", "bot:"+d.Reason)
 		abuseNoteKind(r, abuse.KindBot)
 		dropConnection(w)
 		return true
 	}
 	h.Parent.Option.Metrics.Event(metrics.EventAccessBlocked, endpointLabel(sep), "bot")
-	h.Parent.logRequest(r, false, 403, reason, r.Host, "", sep)
+	h.Parent.logRequestRule(r, false, 403, reason, r.Host, "", sep, "", "bot:"+d.Reason)
 	abuseNoteKind(r, abuse.KindBot)
 	serveProxyRequestError(w, r, http.StatusForbidden, h.Parent, ErrorTemplateForbidden)
 	return true

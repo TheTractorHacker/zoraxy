@@ -78,12 +78,18 @@ func Classify(forwardType string) (reason, detail string, ok bool) {
 		return ReasonRule, "", true
 	case "rule-ratelimit":
 		return ReasonRule, "rate limit", true
-	case "rule-challenge", "rule-challenge-unavailable":
-		return ReasonRule, strings.TrimPrefix(ft, "rule-"), true
-	case "country-challenge", "country-challenge-unavailable":
-		return ReasonCountryChallenge, strings.TrimPrefix(ft, "country-"), true
-	case "bot-challenge", "bot-challenge-unavailable":
-		return ReasonBot, strings.TrimPrefix(ft, "bot-"), true
+	case "rule-challenge":
+		return ReasonRule, "challenge", true
+	case "rule-challenge-unavailable":
+		return ReasonRule, DetailChallengeUnavailable, true
+	case "country-challenge":
+		return ReasonCountryChallenge, "challenge", true
+	case "country-challenge-unavailable":
+		return ReasonCountryChallenge, DetailChallengeUnavailable, true
+	case "bot-challenge":
+		return ReasonBot, "challenge", true
+	case "bot-challenge-unavailable":
+		return ReasonBot, DetailChallengeUnavailable, true
 	}
 	switch {
 	case strings.HasPrefix(ft, "client-cert-"):
@@ -99,6 +105,24 @@ func Classify(forwardType string) (reason, detail string, ok bool) {
 		return ReasonBot, withDrop(strings.TrimPrefix(ft, "bot-")), true
 	}
 	return "", "", false
+}
+
+// DetailChallengeUnavailable explains a challenge that could not be served: the action asked for a
+// CAPTCHA, the site has none, so the request was refused.
+const DetailChallengeUnavailable = "challenge, no CAPTCHA, acted as block"
+
+// ChallengeDetail is the detail of a rule that asks for a challenge: the category or rule name
+// that fired plus what happened ("http_library (challenge, no CAPTCHA, acted as block)"). The
+// forwardType (and so the statistics counters) stays as it is; only the logged detail is richer.
+func ChallengeDetail(name string, unavailable bool) string {
+	d := "challenge"
+	if unavailable {
+		d = DetailChallengeUnavailable
+	}
+	if name == "" {
+		return d
+	}
+	return name + " (" + d + ")"
 }
 
 // IsBlocked reports whether the forwardType is a rejection by Zoraxy

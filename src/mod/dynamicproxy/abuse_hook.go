@@ -110,9 +110,7 @@ func (router *Router) abuseBegin(w http.ResponseWriter, r *http.Request, sep *Pr
 			return w, r, noopDone, true
 		}
 		router.logRequestDetail(r, false, http.StatusForbidden, "auto-ban", r.Host, "", sep, detail)
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusForbidden)
-		w.Write(localizedPage(r, page_forbidden))
+		router.writeForbiddenPage(w, r, http.StatusForbidden, localizedPage(r, page_forbidden), false)
 		return w, r, noopDone, true
 	}
 

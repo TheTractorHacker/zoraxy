@@ -447,6 +447,12 @@ func (router *Router) logRequest(r *http.Request, succ bool, statusCode int, for
 
 // logRequestDetail is logRequest plus a free text detail for the blocked-request log (e.g. the WAF rule that matched)
 func (router *Router) logRequestDetail(r *http.Request, succ bool, statusCode int, forwardType string, originalHostname string, upstreamHostname string, endpoint *ProxyEndpoint, detail string) {
+	router.logRequestRule(r, succ, statusCode, forwardType, originalHostname, upstreamHostname, endpoint, detail, "")
+}
+
+// logRequestRule is logRequestDetail plus the machine key of the rule that fired (bot:http_library,
+// access:Office, waf:941100 ...), kept with the blocked-request entry so the admin can open that rule.
+func (router *Router) logRequestRule(r *http.Request, succ bool, statusCode int, forwardType string, originalHostname string, upstreamHostname string, endpoint *ProxyEndpoint, detail, ruleID string) {
 	// Resolve the client IP once via the trusted-proxy aware resolver so that
 	// untrusted proxy headers (X-Forwarded-For, X-Real-IP, etc.) cannot be used
 	// to spoof the IP recorded in the log file or the statistics collector.
@@ -483,7 +489,7 @@ func (router *Router) logRequestDetail(r *http.Request, succ bool, statusCode in
 	}
 	collector := router.Option.StatisticCollector
 	tracker := router.Option.VisitorTracker
-	router.recordBlocked(r, statusCode, forwardType, upstreamHostname, endpoint, clientIP, detail)
+	router.recordBlocked(r, statusCode, forwardType, upstreamHostname, endpoint, clientIP, detail, ruleID)
 	if collector == nil && tracker == nil {
 		return
 	}
@@ -544,6 +550,13 @@ func (router *Router) logRequestDetail(r *http.Request, succ bool, statusCode in
 func serveProxyRequestError(w http.ResponseWriter, r *http.Request, statusCode int, router *Router, templateType ErrorTemplateType) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Add("Vary", "Accept-Language")
+	// Block pages carry the reference ID the admin can search in Statistics > Blocked
+	ref := ""
+	if templateType == ErrorTemplateForbidden {
+		if ref = router.requestRef(r); ref != "" {
+			w.Header().Set(RefHeader, blocklog.FormatRef(ref))
+		}
+	}
 	w.WriteHeader(statusCode)
 
 	// Get the embedded template and filename for this template type
@@ -553,14 +566,14 @@ func serveProxyRequestError(w http.ResponseWriter, r *http.Request, statusCode i
 	if router != nil && router.Option.WebDirectory != "" {
 		customTemplate, err := os.ReadFile(filepath.Join(router.Option.WebDirectory, "templates", templateName))
 		if err == nil {
-			// Custom template found, use it
-			w.Write(customTemplate)
+			// Custom template found, use it ({{ref}} is filled in; templates without it are written as they are)
+			w.Write(renderErrorPage(customTemplate, ref, false))
 			return
 		}
 	}
 
 	// Fall back to embedded template (translated from Accept-Language, English by default)
-	w.Write(localizedPage(r, embeddedContent))
+	w.Write(renderErrorPage(localizedPage(r, embeddedContent), ref, false))
 }
 
 // localizedPage translates a built-in visitor error page to the language negotiated from the request's
@@ -579,7 +592,7 @@ func localizedPage(r *http.Request, page []byte) []byte {
 // recordBlocked adds a request that Zoraxy rejected to the blocked-request log (with the reason).
 // Same privacy rules as the visitor list: nothing is kept for rules that opted out of statistics,
 // the statistics exclusion list applies, and the query string only when the visitor list keeps it.
-func (router *Router) recordBlocked(r *http.Request, statusCode int, forwardType, upstreamHostname string, endpoint *ProxyEndpoint, clientIP, detail string) {
+func (router *Router) recordBlocked(r *http.Request, statusCode int, forwardType, upstreamHostname string, endpoint *ProxyEndpoint, clientIP, detail, ruleID string) {
 	bl := router.Option.BlockLog
 	if bl == nil || endpoint == nil || endpoint.DisableStatisticCollection || !bl.Enabled() {
 		return
@@ -601,7 +614,10 @@ func (router *Router) recordBlocked(r *http.Request, statusCode int, forwardType
 	e := blocklog.Entry{
 		Time: time.Now().Unix(), IP: clientIP, Host: r.Host, Rule: endpoint.RootOrMatchingDomain,
 		Method: r.Method, Path: path, Status: statusCode, Reason: reason, Detail: detail, UA: r.UserAgent(),
-		Tags: router.rulesTags(r),
+		Tags: router.rulesTags(r), RuleID: ruleID,
+	}
+	if statusCode != 444 { //a dropped connection shows the visitor nothing to quote
+		e.Ref = router.requestRef(r)
 	}
 	if e.Host == "" {
 		e.Host = endpoint.RootOrMatchingDomain

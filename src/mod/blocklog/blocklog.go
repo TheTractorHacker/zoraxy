@@ -42,6 +42,12 @@ type Entry struct {
 	UA      string `json:"ua,omitempty"`
 
 	Tags []string `json:"tags,omitempty"` // tags set by rules of the rules engine on this request
+
+	// Ref is the short reference the visitor was shown (8 characters, see NewRef / FormatRef). RuleID is the
+	// machine key of what fired (bot:http_library, access:Office, waf:941100 ...). Both are empty on
+	// entries written by older versions.
+	Ref    string `json:"ref,omitempty"`
+	RuleID string `json:"rid,omitempty"`
 }
 
 // Settings are persisted by the caller
@@ -67,6 +73,7 @@ type Log struct {
 	dirty    bool
 	recorded uint64
 	byReason map[string]uint64 // since start, not bounded by the ring
+	byRef    map[string]uint64 // Ref -> Seq of the entries that are still in the ring
 
 	stop    chan struct{}
 	done    chan struct{}
@@ -78,7 +85,7 @@ func New(file string, capacity int, s Settings) *Log {
 	if capacity <= 0 {
 		capacity = DefaultCapacity
 	}
-	l := &Log{file: file, ring: make([]Entry, capacity), byReason: map[string]uint64{},
+	l := &Log{file: file, ring: make([]Entry, capacity), byReason: map[string]uint64{}, byRef: map[string]uint64{},
 		stop: make(chan struct{}), done: make(chan struct{})}
 	l.enabled.Store(s.Enabled)
 	return l
@@ -148,9 +155,17 @@ func (l *Log) Record(e Entry) {
 	e.Path = trunc(e.Path, maxPathLen)
 	e.UA = trunc(e.UA, maxUALen)
 	e.Detail = trunc(e.Detail, maxDetailLen)
+	e.RuleID = trunc(e.RuleID, maxDetailLen)
+	e.Ref = NormalizeRef(e.Ref)
 	l.mu.Lock()
 	l.seq++
 	e.Seq = l.seq
+	if old := &l.ring[l.next]; l.count == len(l.ring) && old.Ref != "" && l.byRef[old.Ref] == old.Seq {
+		delete(l.byRef, old.Ref) //the entry is about to be overwritten
+	}
+	if e.Ref != "" {
+		l.byRef[e.Ref] = e.Seq
+	}
 	l.ring[l.next] = e
 	l.next = (l.next + 1) % len(l.ring)
 	if l.count < len(l.ring) {
@@ -169,6 +184,7 @@ type Filter struct {
 	IP     string // exact
 	Q      string // case-insensitive substring of ip, host, path, detail, UA, reason
 	Since  int64  // unix seconds
+	Ref    string // exact reference ID (any spelling, see NormalizeRef); looked up through the index
 }
 
 func (f Filter) match(e *Entry, withReason bool) bool {
@@ -176,6 +192,9 @@ func (f Filter) match(e *Entry, withReason bool) bool {
 		return false
 	}
 	if withReason && f.Reason != "" && e.Reason != f.Reason {
+		return false
+	}
+	if f.Ref != "" && e.Ref != NormalizeRef(f.Ref) {
 		return false
 	}
 	if f.Host != "" && e.Host != f.Host {
@@ -220,10 +239,21 @@ func (l *Log) List(f Filter, before uint64, limit int) ListResult {
 	if limit <= 0 || limit > 1000 {
 		limit = 100
 	}
+	res := ListResult{Items: []Entry{}}
+	if f.Ref != "" { //O(1) through the index instead of a scan
+		e, ok := l.GetByRef(f.Ref)
+		if !ok || !f.match(&e, true) {
+			return res
+		}
+		res.Total = 1
+		if before == 0 || e.Seq < before {
+			res.Items = append(res.Items, e)
+		}
+		return res
+	}
 	l.mu.RLock()
 	all := l.snapshotLocked()
 	l.mu.RUnlock()
-	res := ListResult{Items: []Entry{}}
 	for i := len(all) - 1; i >= 0; i-- {
 		e := &all[i]
 		if !f.match(e, true) {
@@ -345,6 +375,7 @@ func (l *Log) Clear() {
 		l.ring[i] = Entry{}
 	}
 	l.byReason = map[string]uint64{}
+	l.byRef = map[string]uint64{}
 	l.dirty = true
 	l.mu.Unlock()
 }
@@ -463,6 +494,12 @@ func (l *Log) load() {
 		entries = entries[len(entries)-len(l.ring):]
 	}
 	for _, e := range entries {
+		if e.Ref != "" {
+			e.Ref = NormalizeRef(e.Ref)
+		}
+		if e.Ref != "" {
+			l.byRef[e.Ref] = e.Seq
+		}
 		l.ring[l.next] = e
 		l.next = (l.next + 1) % len(l.ring)
 		if l.count < len(l.ring) {

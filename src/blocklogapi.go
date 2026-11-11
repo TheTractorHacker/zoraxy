@@ -21,7 +21,12 @@ import (
 	POST /api/blocked/settings   JSON {Enabled:bool}
 	POST /api/blocked/clear      confirm=yes
 
-	Filters: reason (see blocklog.Reasons), host, ip, q (search), since (hours back, 0 = all)
+	GET  /api/blocked/lookup     ref | ip              find by the reference ID the visitor saw, or by address (blocklogfix.go)
+	GET  /api/blocked/explain    seq | ref             plain text, rule link and the fixes that can be offered
+	POST /api/blocked/fix        seq, fixId, previewId apply one previewed fix (admin only), answers an undo token
+	POST /api/blocked/undo       undoToken             put the previous value back (admin only)
+
+	Filters: reason (see blocklog.Reasons), host, ip, ref, q (search), since (hours back, 0 = all)
 	The log is bounded (last 2000 entries) and honours the statistics exclusion list, "exclude blocked
 	requests" and the per rule "disable statistics collection"; query strings are only kept when the
 	visitor list keeps them (Visitors > settings).
@@ -64,6 +69,12 @@ func parseBlockFilter(w http.ResponseWriter, r *http.Request) (blocklog.Filter, 
 	}
 	if len(f.Q) > 100 {
 		return bad("search text too long")
+	}
+	if rf := strings.TrimSpace(q.Get("ref")); rf != "" {
+		if blocklog.NormalizeRef(rf) == "" {
+			return bad("invalid ref")
+		}
+		f.Ref = rf
 	}
 	if rs := q.Get("reason"); rs != "" {
 		known := false
@@ -211,4 +222,5 @@ func RegisterBlockedAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/blocked/list", HandleBlockedList)
 	authRouter.HandleFunc("/api/blocked/settings", HandleBlockedSettings)
 	authRouter.HandleFunc("/api/blocked/clear", HandleBlockedClear)
+	registerBlockedFixAPIs(authRouter)
 }

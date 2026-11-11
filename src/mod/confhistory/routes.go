@@ -70,6 +70,8 @@ var routeTable = []routeLabel{
 	{"/api/log/sites/", "Site logging changed"},
 	{"/api/logger/", "Logging settings changed"},
 	{"/api/blocked/settings", "Blocked-request log settings changed"},
+	{"/api/blocked/fix", "Fix applied via Blocked drawer"},
+	{"/api/blocked/undo", "Fix undone via Blocked drawer"},
 	{"/api/visitors/settings", "Visitor tracking settings changed"},
 	{"/api/stats/settings", "Statistics settings changed"},
 	{"/api/utm/", "Uptime monitor changed"},
