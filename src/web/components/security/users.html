@@ -31,17 +31,17 @@
             <div class="two fields">
                 <div class="field zx-field">
                     <label for="sesMin">Stay signed in for</label>
-                    <div class="ui right labeled input"><input type="number" id="sesMin" min="5" max="43200" step="1" inputmode="numeric"><span class="ui basic label">minutes</span></div>
+                    <div class="zx-inputgroup"><input type="number" id="sesMin" min="5" max="43200" step="1" inputmode="numeric"><span class="zx-inputgroup__unit">minutes</span></div>
                     <p class="zx-help" id="sesMinHelp">5 to 43200 (30 days)</p>
                 </div>
                 <div class="field zx-field">
                     <label for="sesDays">Remember me keeps me signed in for</label>
-                    <div class="ui right labeled input"><input type="number" id="sesDays" min="1" max="365" step="1" inputmode="numeric"><span class="ui basic label">days</span></div>
+                    <div class="zx-inputgroup"><input type="number" id="sesDays" min="1" max="365" step="1" inputmode="numeric"><span class="zx-inputgroup__unit">days</span></div>
                     <p class="zx-help" id="sesDaysHelp">1 to 365</p>
                 </div>
             </div>
-            <div class="inline field"><div class="ui checkbox"><input type="checkbox" id="sesSlide"><label for="sesSlide">Keep me signed in while I am active</label></div>
-                <p class="zx-help" style="margin-top:.25em">Opening a page or changing something extends the session (checked every few minutes). A page left open that only refreshes its numbers does not count, so an idle admin is still signed out.</p></div>
+            <div class="inline field"><div class="ui checkbox"><input type="checkbox" id="sesSlide"><label for="sesSlide">Keep me signed in while I am active</label></div></div>
+            <p class="zx-help" style="margin-top:-.5em">Opening a page or changing something extends the session (checked every few minutes). A page left open that only refreshes its numbers does not count, so an idle admin is still signed out.</p>
         </div>
         <p class="zx-help" id="sesNow" role="status" style="margin-top:1em"></p>
     </div>
@@ -132,7 +132,7 @@
         if (role !== "admin") { return; }
         $("#sesCard").prop("hidden", false);
         if (window.zxSecBar) { window.zxSecBar.destroy(); }
-        window.zxSecBar = ZxUI.saveBar({ form: "#sesForm", id: "admin-session", onSave: sesSave });
+        window.zxSecBar = ZxUI.saveBar({ form: "#sesForm", id: "admin-session", noHistory: true, onSave: sesSave });
         sesLoad();
     });
     $.get("/api/auth/authEnabled", function (on) {

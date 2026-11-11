@@ -99,13 +99,13 @@ with sync_playwright() as p:
             # validation: out of range is refused with a message next to the field and nothing is saved
             pg.fill("#sesMin", "3")
             pg.wait_for_selector(".zx-savebar:not([hidden]) [data-zx-save]")
-            pg.click(".zx-savebar [data-zx-save]")
+            pg.click(".zx-savebar:not([hidden]) [data-zx-save]")
             pg.wait_for_function("document.querySelector('#sesMin').closest('.zx-field').classList.contains('is-invalid')", timeout=4000)
             check(True, "light: 3 minutes refused with a field message")
             pg.fill("#sesMin", "5")
             pg.fill("#sesDays", "30")
             pg.check("#sesSlide")
-            pg.click(".zx-savebar [data-zx-save]")
+            pg.click(".zx-savebar:not([hidden]) [data-zx-save]")
             pg.wait_for_function("document.querySelector('#sesNow').textContent.includes('5 minutes')", timeout=6000)
             check(True, "light: saved 5 minutes / 30 days / sliding, effective text updated")
             pg.wait_for_timeout(2600)  # the "Saved" bar fades out

@@ -327,6 +327,20 @@
     }
     window.zxSessionExpired = showSessionExpired;
     function initSessionExpiry() {
+        //jQuery hides the native responseURL from its jqXHR: watch the native XHR to see a redirect to the login page
+        if ($.ajaxSettings && typeof $.ajaxSettings.xhr === "function") {
+            var origXhr = $.ajaxSettings.xhr;
+            $.ajaxSettings.xhr = function () {
+                var x = origXhr.apply(this, arguments);
+                var settings = this;
+                try {
+                    x.addEventListener("load", function () {
+                        if (endedSession({ status: x.status, responseURL: x.responseURL }, settings)) { showSessionExpired(); }
+                    });
+                } catch (e) { /* not an XHR */ }
+                return x;
+            };
+        }
         //ajaxComplete runs for every finished request (also a redirect to the login page that came back as 200)
         $(document).ajaxComplete(function (ev, xhr, settings) {
             if (endedSession(xhr, settings)) { showSessionExpired(); }
