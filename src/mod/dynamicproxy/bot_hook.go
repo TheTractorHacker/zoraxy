@@ -40,6 +40,20 @@ func (h *ProxyHandler) handleBotRules(w http.ResponseWriter, r *http.Request, se
 	} else if len(uas) > 4 {
 		uas = uas[:4]
 	}
+	//Per-site allow list: skips the rules only when EVERY User-Agent value is on it (a second header must not
+	//smuggle a bot past the rules behind an allowed first one). Nothing is logged, the request is just not judged.
+	if len(sep.BotAllowUA) > 0 {
+		all := true
+		for _, ua := range uas {
+			if !botrules.AllowedUA(sep.BotAllowUA, ua) {
+				all = false
+				break
+			}
+		}
+		if all {
+			return false
+		}
+	}
 	ipFn := func() string { return h.Parent.GetClientIPForEndpoint(r, sep) }
 	for _, ua := range uas {
 		if d = eng.Evaluate(ua, ipFn); d.Action != "" {
