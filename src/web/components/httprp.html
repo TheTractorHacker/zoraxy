@@ -546,6 +546,18 @@
                                 <small>Gate access to this endpoint with CAPTCHA verification</small></label>
                             </div>
                             <div class="captchaSettings" style="margin-top: 1em; padding-left: 1.5em;">
+                                <div class="captchaCentralPick">
+                                    <label for="captchaUseCentralSel">Provider settings</label>
+                                    <select class="captchaUseCentralSel hrp-select" id="captchaUseCentralSel" style="margin-bottom:0.4em;">
+                                        <option value="1">Use central provider (recommended)</option>
+                                        <option value="0">Custom for this site</option>
+                                    </select>
+                                    <div class="captchaCentralSummary zx-callout zx-callout--info" role="note" style="margin-bottom:0.8em;">
+                                        <span class="zx-callout__icon" aria-hidden="true"><i class="info circle icon"></i></span>
+                                        <div class="zx-callout__body"><span class="captchaCentralSummaryText"></span> <a href="#captcha" class="captchaCentralLink">Edit the central provider</a></div>
+                                    </div>
+                                </div>
+                                <div class="captchaOwnProvider">
                                 <label>CAPTCHA Provider</label>
                                 <div class="ui fluid selection dropdown captchaProviderDropdown" style="margin-bottom: 0.8em;">
                                     <input type="hidden" value="0" name="captchaProvider">
@@ -569,6 +581,7 @@
                                     <label class="ui basic label">seconds</label>
                                 </div>
                                 <small style="opacity:0.7;">Session duration in <b>seconds</b> (min 60, max 2592000): how long users can access after solving CAPTCHA. <b class="CaptchaSessionHuman"></b></small>
+                                </div>
                                 <div style="margin-top: 0.8em;">
                                     <label>Protected Path Prefixes (Optional)</label>
                                     <textarea class="CaptchaPathPrefixes" rows="3" placeholder="/form&#10;/api" style="width: 100%; resize: vertical;"></textarea>
@@ -581,6 +594,7 @@
                                 </div>
                                 <button class="ui basic compact small button editCaptchaExceptionsBtn" style="margin-top: 0.8em;"><i class="ui yellow shield alternate icon"></i> CAPTCHA Exceptions</button>
                                 <button class="ui basic compact small button openCaptchaPageBtn" style="margin-top: 0.8em;"><i class="paint brush icon"></i> Customise bot-check page</button> <!-- feat/ui-audit-captcha-waf -->
+                                <div class="captchaOwnExtras">
                                 <!-- Friendly Captcha specific settings -->
                                 <div class="friendlyCaptchaSettings" style="margin-top: 0.8em; display: none;">
                                     <label>Friendly Captcha endpoint</label>
@@ -611,6 +625,8 @@
                                         </div>
                                         <small style="opacity:0.7;">Higher score = stricter verification (0.5 recommended)</small>
                                     </div>
+                                </div>
+
                                 </div>
 
                                 <!-- Customise the CAPTCHA pages -->
@@ -684,6 +700,7 @@
                                             <div class="field"><label>Message</label>
                                                 <input type="text" data-cp="captchaBlockedMessage" maxlength="500" placeholder="Your request was blocked by the security rules of this site."></div>
 
+                                            <div class="captchaOwnOnly">
                                             <div class="turnstileSettings">
                                                 <div class="ui divider"></div>
                                                 <b>Cloudflare Turnstile</b>
@@ -742,6 +759,8 @@
                                             <div class="ui checkbox" style="display:block;">
                                                 <input type="checkbox" data-cp="captchaVerifyHostname">
                                                 <label>Reject tokens whose siteverify hostname differs from the requested host</label>
+                                            </div>
+
                                             </div>
 
                                             <div class="ui divider"></div>
@@ -1373,6 +1392,53 @@
         editor.find(".cpLogoClear").toggle(v !== "");
     }
 
+    /* ---- central CAPTCHA provider (node wide, see the CAPTCHA page) ---- */
+    const CAPTCHA_PROVIDER_NAMES = {0: "Cloudflare Turnstile", 1: "Google reCAPTCHA", 2: "Altcha", 3: "Friendly Captcha"};
+    let captchaCentralInfo = null; // GET /api/proxy/captcha/central (never contains the secret), null = none saved
+
+    function captchaCentralConfigured(){
+        return !!(captchaCentralInfo && captchaCentralInfo.Configured);
+    }
+
+    function loadCaptchaCentralInfo(done){
+        $.getJSON("/api/proxy/captcha/central", function(d){
+            captchaCentralInfo = (d && typeof d === "object" && !d.error) ? d : null;
+        }).fail(function(){
+            captchaCentralInfo = null;
+        }).always(function(){ if (done) done(); });
+    }
+
+    function captchaUsesCentral(editor){
+        return editor.find(".captchaUseCentralSel").val() == "1";
+    }
+
+    function humanCaptchaSeconds(sec){
+        sec = parseInt(sec, 10) || 3600;
+        if (sec % 86400 === 0) return tf("{0} day(s)", sec / 86400);
+        if (sec % 3600 === 0) return tf("{0} hour(s)", sec / 3600);
+        if (sec % 60 === 0) return tf("{0} minute(s)", sec / 60);
+        return tf("{0} second(s)", sec);
+    }
+
+    // Show / hide the per-site provider fields and the one-line central summary
+    function applyCaptchaCentralMode(editor){
+        let central = captchaUsesCentral(editor);
+        editor.find(".captchaOwnProvider, .captchaOwnExtras, .captchaOwnOnly").toggle(!central);
+        let box = editor.find(".captchaCentralSummary");
+        box.toggle(central);
+        if (!central) return;
+        let text = box.find(".captchaCentralSummaryText");
+        if (captchaCentralConfigured()){
+            let c = captchaCentralInfo;
+            let name = t(CAPTCHA_PROVIDER_NAMES[c.Provider] || "CAPTCHA");
+            box.removeClass("zx-callout--warn").addClass("zx-callout--info");
+            text.text(tf("Central provider: {0}, session {1}. Changes to it apply to every site that uses it.", name, humanCaptchaSeconds(c.SessionDuration)));
+        } else {
+            box.removeClass("zx-callout--info").addClass("zx-callout--warn");
+            text.text(t("No central provider is set up yet. Until one is saved, this site blocks every request that needs a CAPTCHA (it never lets them through)."));
+        }
+    }
+
     function updateCaptchaProviderSections(editor){
         let provider = editor.find(".captchaProviderDropdown").dropdown("get value");
         let version = editor.find(".recaptchaVersionDropdown").dropdown("get value");
@@ -1402,6 +1468,17 @@
         fields.captchaProvider = editor.find(".captchaProviderDropdown").dropdown("get value");
         fields.captchaRecaptchaVersion = editor.find(".recaptchaVersionDropdown").dropdown("get value");
         fields.captchaFriendlyEndpoint = editor.find(".friendlyEndpointSelect").val() || "global";
+        if (captchaUsesCentral(editor) && captchaCentralInfo){
+            let c = captchaCentralInfo, ts = c.Turnstile || {};
+            fields.captchaProvider = String(c.Provider || 0);
+            fields.captchaRecaptchaVersion = c.RecaptchaVersion || "v2";
+            fields.captchaFriendlyEndpoint = c.FriendlyEndpoint || "global";
+            fields.captchaRecaptchaInvisible = !!c.RecaptchaInvisible;
+            fields.captchaRecaptchaAction = c.RecaptchaAction || "";
+            fields.turnstileMode = ts.Mode || ""; fields.turnstileAppearance = ts.Appearance || "";
+            fields.turnstileTheme = ts.Theme || ""; fields.turnstileSize = ts.Size || "";
+            fields.turnstileAction = ts.Action || ""; fields.turnstileCData = ts.CData || "";
+        }
         fields.domain = editor.data("cpDomain") || "";
         let csrf = document.getElementsByTagName("meta")["zoraxy.csrf.Token"];
         if (csrf){
@@ -1565,6 +1642,7 @@
                 "captchaRecaptchaScore": captchaRecaptchaScore,
                 "captchaPathPrefixes": captchaPathPrefixes,
                 "captchaLimitChallenges": captchaLimitChallenges,
+                "captchaUseCentral": captchaUsesCentral($(editor)),
                 "tags": tags,
             };
         Object.assign(cfgPayload, captchaPageFields);
@@ -2394,6 +2472,27 @@
         editor.data("cpDomain", subd.RootOrMatchingDomain);
         populateCaptchaPageFields(editor, subd.CaptchaConfig);
         bindCaptchaPageEditor(editor, uuid);
+
+        // Provider settings: central (node wide) or custom. Sites that already have their own
+        // provider stay on "Custom" until an admin changes it; a site that has no CAPTCHA
+        // config yet starts on the central provider when one exists.
+        let useCentralNow = subd.CaptchaConfig ? !!subd.CaptchaConfig.UseCentral : false;
+        editor.find(".captchaUseCentralSel").val(useCentralNow ? "1" : "0");
+        applyCaptchaCentralMode(editor);
+        loadCaptchaCentralInfo(function(){
+            if (!subd.CaptchaConfig && captchaCentralConfigured()){
+                editor.find(".captchaUseCentralSel").val("1");
+            }
+            applyCaptchaCentralMode(editor);
+        });
+        editor.find(".captchaUseCentralSel").off("change").on("change", function(){
+            applyCaptchaCentralMode(editor);
+            hrpEdited(uuid, this);
+        });
+        editor.find(".captchaCentralLink").off("click").on("click", function(e){
+            e.preventDefault();
+            openTabById("captcha");
+        });
 
         // Bind CAPTCHA checkbox change event
         editor.find(".RequireCaptcha").off("change").on("change", function() {

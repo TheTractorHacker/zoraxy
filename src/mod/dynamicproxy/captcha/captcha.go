@@ -84,6 +84,11 @@ type Config struct {
 	// gate. Requests outside the prefixes are never challenged by those triggers
 	// (other blocking features still apply). Off by default.
 	LimitChallengesToPaths bool `json:"LimitChallengesToPaths,omitempty"`
+
+	// UseCentral takes the provider fields (provider, keys, session length,
+	// provider options) from the node wide central config at request time; the
+	// provider fields above stay stored but unused. See central.go. Off by default.
+	UseCentral bool `json:"UseCentral,omitempty"`
 }
 
 // ExceptionRule defines rules for bypassing CAPTCHA

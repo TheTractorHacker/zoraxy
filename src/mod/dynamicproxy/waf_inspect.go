@@ -225,7 +225,7 @@ func (router *Router) wafInspect(w http.ResponseWriter, r *http.Request, sep *Pr
 	if rt.res.Config.ChallengeEnabled() && router.wafChallengeAvailable(sep) {
 		info.ChallengeValid = func(r *http.Request) bool {
 			// outside the protected paths of this site a challenge is treated as already passed
-			return !sep.CaptchaConfig.ChallengeAllowedOnPath(pathmatch.RequestTarget(r)) || router.wafChallengeValid(r, sep, clientIP)
+			return !sep.EffectiveCaptchaConfig().ChallengeAllowedOnPath(pathmatch.RequestTarget(r)) || router.wafChallengeValid(r, sep, clientIP)
 		}
 		info.OnChallenge = func(w http.ResponseWriter, r *http.Request, txID string) {
 			challenged = true

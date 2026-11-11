@@ -26,7 +26,7 @@ func TestAPIv1SpecDocumentsAdminOnlyAreas(t *testing.T) {
 	if !strings.Contains(spec.Info.Description, "/api/blocked/fix") {
 		t.Fatal("openapi.yaml must say the Blocked fix / undo helpers are not part of the token API")
 	}
-	for _, p := range []string{"/api/v1/proxy/captcha/default", "/api/v1/proxy/templates/list", "/api/v1/updater/info", "/api/v1/apitoken/list", "/api/v1/backup",
+	for _, p := range []string{"/api/v1/proxy/captcha/default", "/api/v1/proxy/captcha/central", "/api/v1/proxy/templates/list", "/api/v1/updater/info", "/api/v1/apitoken/list", "/api/v1/backup",
 		"/api/v1/blocked/lookup", "/api/v1/blocked/explain", "/api/v1/blocked/fix", "/api/v1/blocked/undo"} {
 		if w := v1Do(h, "GET", p, rw, ""); w.Code == 200 {
 			t.Errorf("%s is reachable with a token", p)

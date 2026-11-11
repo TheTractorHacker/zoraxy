@@ -69,7 +69,7 @@ func HandleBotRulesGet(w http.ResponseWriter, r *http.Request) {
 	if dynamicProxyRouter != nil {
 		for name, ep := range dynamicProxyRouter.GetProxyEndpointsAsMap() {
 			policies[name] = ep.BotPolicy
-			if ep.CaptchaConfig != nil && ep.CaptchaConfig.IsConfigured() {
+			if ep.EffectiveCaptchaConfig() != nil && ep.EffectiveCaptchaConfig().IsConfigured() {
 				captchaSites++
 			}
 		}

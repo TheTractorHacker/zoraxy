@@ -50,6 +50,7 @@ func RegisterHTTPProxyAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/proxy/add", ReverseProxyHandleAddEndpoint)
 	authRouter.HandleFunc("/api/proxy/captcha/preview", HandleCaptchaPreview)
 	authRouter.HandleFunc("/api/proxy/captcha/default", HandleCaptchaDefaultBranding)
+	authRouter.HandleFunc("/api/proxy/captcha/central", HandleCaptchaCentral)
 	authRouter.HandleFunc("/api/proxy/captcha/exceptions/list", ListProxyCaptchaExceptionRules)
 	authRouter.HandleFunc("/api/proxy/captcha/exceptions/add", AddProxyCaptchaExceptionRule)
 	authRouter.HandleFunc("/api/proxy/captcha/exceptions/delete", RemoveProxyCaptchaExceptionRule)

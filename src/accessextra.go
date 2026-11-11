@@ -128,7 +128,7 @@ func handleChallengeList(w http.ResponseWriter, r *http.Request) {
 			if want == "" {
 				want = "default"
 			}
-			if ruleOfHost == want && !ep.CaptchaConfig.IsConfigured() {
+			if ruleOfHost == want && !ep.EffectiveCaptchaConfig().IsConfigured() {
 				hostsWithoutCaptcha = append(hostsWithoutCaptcha, ep.RootOrMatchingDomain)
 			}
 		}

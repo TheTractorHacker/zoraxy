@@ -385,7 +385,7 @@ func buildBlockFixes(e blocklog.Entry) ([]fixCandidate, string) {
 	}
 	// A path / address exemption of the CAPTCHA, where the block was a CAPTCHA that got served
 	if (e.Reason == blocklog.ReasonCaptcha || e.Reason == blocklog.ReasonCountryChallenge || e.Reason == blocklog.ReasonBot) &&
-		!noCaptchaDetail(e.Detail) && ep.CaptchaConfig != nil && ep.CaptchaConfig.IsConfigured() {
+		!noCaptchaDetail(e.Detail) && ep.CaptchaConfig != nil && ep.EffectiveCaptchaConfig() != nil && ep.EffectiveCaptchaConfig().IsConfigured() {
 		if e.Reason != blocklog.ReasonBot || strings.Contains(e.Detail, "challenge") {
 			out = append(out, captchaFixes(e, ep, site, ipOK)...)
 		}
