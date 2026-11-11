@@ -470,6 +470,11 @@
         $("#ccTsTheme").val(ts.Theme || ""); $("#ccTsSize").val(ts.Size || "");
         $("#ccTsAction").val(ts.Action || ""); $("#ccTsCData").val(ts.CData || "");
         $("#ccVerifyHost").prop("checked", !!c.VerifyHostname);
+        // The selects are Fomantic dropdowns: .val() alone leaves the visible label stale.
+        $("#cpCentralForm select").each(function () {
+            var $d = $(this).closest(".ui.dropdown");
+            if ($d.length) { $d.dropdown("set selected", $(this).val()); }
+        });
         ccUpdateUI();
         if (centralBar) { centralBar.reset(); }
     }
@@ -492,7 +497,7 @@
     function loadCentral() {
         $.getJSON("/api/proxy/captcha/central", function (d) {
             ccFill((d && typeof d === "object" && !d.error) ? d : null);
-        }).fail(function () { ccFill(null); }).always(ccRenderSites);
+        }).fail(function () { ccFill(null); }).always(function () { ccRenderSites(); renderOverview(); });
     }
     $("#ccProvider").on("change", ccUpdateUI);
     $(document).on("click", "#cpCentral .ccSiteLink", function (e) {
@@ -541,6 +546,13 @@
         var on = 0;
         list.forEach(function (r) {
             var cfg = r.CaptchaConfig || null;
+            var usesCentral = !!(cfg && cfg.UseCentral);
+            if (usesCentral) {
+                // show what is actually served: the central provider, not the site's stale own fields
+                var ci = centralInfo || {};
+                cfg = $.extend({}, cfg, {Provider: ci.Provider || 0, RecaptchaVersion: ci.RecaptchaVersion,
+                    SessionDuration: ci.SessionDuration, SiteKey: ci.Configured ? "x" : "", SecretKey: ci.Configured ? "x" : ""});
+            }
             var prov = cfg ? (PROVIDERS[cfg.Provider || 0] + (cfg.Provider == 1 ? " " + (cfg.RecaptchaVersion || "v2") : "")) : "";
             if (r.RequireCaptcha) { on++; }
             var name = r.RootOrMatchingDomain;
@@ -548,7 +560,7 @@
             var brand = brandingCustomised(cfg);
             var brandCell = brand ? '<span class="cpTag on">customised</span>' : (globalBranding ? '<span class="cpTag">global default</span>' : '<span class="cpTag off">stock</span>');
             if (brand && cfg.Branding.AccentColor) { brandCell = '<span class="cpSwatch" style="background:' + esc(cfg.Branding.AccentColor) + '"></span>' + brandCell; }
-            var keyless = cfg && r.RequireCaptcha && (cfg.Provider == 2 ? !cfg.SecretKey : (!cfg.SiteKey || !cfg.SecretKey));
+            var keyless = cfg && r.RequireCaptcha && (usesCentral ? !(centralInfo && centralInfo.Configured) : cfg.Provider == 2 ? !cfg.SecretKey : (!cfg.SiteKey || !cfg.SecretKey));
             html += '<tr data-ep="' + esc(name) + '">' +
                 '<td style="white-space:nowrap">' +
                 (r.RequireCaptcha

@@ -61,6 +61,8 @@ def central_captcha_ui(pg, ctx):
     pg.screenshot(path=os.path.join(args.out, "central-captcha-light.png"), full_page=True)
 
     # opt the site in with the editor and check the summary / hidden fields
+    js("openTabById('httprp')")
+    pg.wait_for_timeout(800)
     js("""h => fetch('/api/proxy/list?type=host').then(r => r.json()).then(l => { initHttpProxyRuleEditorModal(l.filter(x => x.RootOrMatchingDomain === h)[0]); })""", CC_HOST)
     pg.wait_for_selector("#httprpEditModalWrapper .hrp-main", state="visible", timeout=8000)
     pg.wait_for_timeout(900)
@@ -78,7 +80,7 @@ def central_captcha_ui(pg, ctx):
 
     # the choice is stored on the site and survives a reload; the site config keeps working
     r = post("/api/proxy/edit", {"type": "host", "ep": CC_HOST, "rootname": CC_HOST, "captchaUseCentral": "true",
-                                 "requireCaptcha": "true", "captchaProvider": "0"})
+                                 "captcha": "true", "captchaProvider": "0"})
     cfg = js("h => fetch('/api/proxy/list?type=host').then(r => r.json()).then(l => l.filter(x => x.RootOrMatchingDomain === h)[0])", CC_HOST)
     if not (cfg and cfg.get("CaptchaConfig") and cfg["CaptchaConfig"].get("UseCentral")):
         fail("central-captcha", f"UseCentral was not stored on the site (edit answered {r!r})")
