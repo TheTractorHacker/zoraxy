@@ -172,9 +172,9 @@ def blocked_ui(pg, ctx):
         if js("document.querySelector('.bwAll').hidden") is not True:
             fail("blocked", "site fix must not ask for the all-sites confirmation")
         # invalid edits: an error under the field, Apply disabled; a valid edit brings the preview back
-        for bad in ("mozilla", "cur", "chrome/"):
+        for bad, frag in (("mozilla", "mozilla"), ("cur", "at least 4"), ("chrome/", "chrome/")):
             pg.fill(".bwPat input", bad)
-            pg.wait_for_function("document.querySelector('.bwPat .zx-error').textContent.length > 0", timeout=4000)
+            pg.wait_for_function("f => document.querySelector('.bwPat .zx-error').textContent.indexOf(f) >= 0", arg=frag, timeout=4000)
             if not js("document.querySelector('[data-bw-apply]').disabled"):
                 fail("blocked", "Apply must be disabled for the pattern %r" % bad)
         shot("blocked-ua-error.png")
@@ -207,6 +207,8 @@ def blocked_ui(pg, ctx):
         if hit(BLK_HOSTS[1], "curl/8.18.0")[0] != 403:
             fail("blocked", "the fix must not change the other site")
         # the site editor lists the entry with a remove button, and Easy mode shows the card
+        js("openTabById('httprp')")
+        pg.wait_for_timeout(900)
         js("""h => fetch('/api/proxy/list?type=host').then(r => r.json()).then(l => { initHttpProxyRuleEditorModal(l.filter(x => x.RootOrMatchingDomain === h)[0]); })""", BLK_HOSTS[0])
         pg.wait_for_selector("#httprpEditModalWrapper .hrp-main", state="visible", timeout=8000)
         pg.wait_for_timeout(800)

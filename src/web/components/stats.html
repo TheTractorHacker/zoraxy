@@ -130,6 +130,7 @@
     .zx-drawer .bwWarn{ margin:0 0 var(--zx-space-2); padding:var(--zx-space-2) var(--zx-space-3); border-left:4px solid var(--zx-warn-solid); background:var(--zx-warn-bg); color:var(--zx-warn-text); border-radius:var(--zx-radius-sm); font-size:var(--zx-fs-sm); overflow-wrap:anywhere; }
     .zx-drawer .bwNote{ margin:0 0 var(--zx-space-3); color:var(--zx-text-muted); font-size:var(--zx-fs-sm); }
     .zx-drawer .bwPat{ margin:0 0 var(--zx-space-3); }
+    .zx-drawer .bwPat .zx-field__label{ display:block; margin-bottom:var(--zx-space-1); }
     .zx-drawer .bwChanges{ margin:0; padding:0 0 0 1.2em; font-size:var(--zx-fs-sm); color:var(--zx-text-muted); overflow-wrap:anywhere; }
     .zx-drawer .bwAll{ margin:0 0 var(--zx-space-3); }
     .zx-drawer .zx-callout{ margin-bottom:var(--zx-space-3); }
@@ -1173,7 +1174,7 @@
                 chosen.changes.forEach(function(c){ ul.append($("<li></li>").append($("<b></b>").text(c.what + ": "), document.createTextNode(c.before + " → " + c.after))); });
                 live.append(ul);
             }
-            applyBtn.prop("disabled", patBusy || (chosen.requiresAllSites && !allBox.find("input").prop("checked")));
+            applyBtn.prop("disabled", !!(patBusy || (chosen.requiresAllSites && !allBox.find("input").prop("checked"))));
         }
         // the pattern was edited: ask the server for the exact preview of the new value (it validates, and the previewId binds it)
         patBox.find("input").on("input", function(){
