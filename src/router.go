@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gorilla/csrf"
+	"imuslab.com/zoraxy/mod/auth"
 	"imuslab.com/zoraxy/mod/sshprox"
 )
 
@@ -45,6 +46,11 @@ func FSHandler(handler http.Handler) http.Handler {
 		//Read-only (viewer) accounts must not reach plugin UIs or the web terminal
 		if !authAgent.RoleGuard(w, r) {
 			return
+		}
+
+		//Sliding session expiry (off by default): page loads count as activity, not plugin / terminal traffic
+		if requireAuth && !strings.HasPrefix(r.URL.Path, "/plugin.ui/") && !strings.HasPrefix(r.URL.Path, "/web.ssh/") && auth.IsActivityRequest(r) {
+			authAgent.RefreshSession(w, r)
 		}
 
 		//For Plugin Routing

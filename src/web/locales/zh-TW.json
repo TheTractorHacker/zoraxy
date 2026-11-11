@@ -3,8 +3,8 @@
   "language": "Traditional Chinese",
   "reviewed": false,
   "author": "machine-assisted (Claude)",
-  "coverage": 20.8,
-  "coreCoverage": 40.9
+  "coverage": 20.5,
+  "coreCoverage": 39.7
  },
  "strings": {
   "\"Add Redirection Rule\"": "「新增重新導向規則」",

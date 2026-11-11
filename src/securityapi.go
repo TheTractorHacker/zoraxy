@@ -2,7 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 
 	"imuslab.com/zoraxy/mod/auth"
@@ -18,6 +21,7 @@ import (
 	  GET  /api/botrules/get                   active bot rule config + available categories / good bots
 	  POST /api/botrules/set                   config (JSON)
 	  POST /api/botrules/endpoint              ep, policy ("", "on", "off")
+	  POST /api/botrules/allowua               ep, op ("add"|"remove"), pattern: the per-site User-Agent allow list (ProxyEndpoint.BotAllowUA)
 	  GET  /api/headerrules/get?ep=<rule>      header rules of a proxy rule
 	  POST /api/headerrules/set                ep, rules (JSON array of HeaderRule)
 */
@@ -42,6 +46,7 @@ func RegisterSecurityAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/botrules/get", HandleBotRulesGet)
 	authRouter.HandleFunc("/api/botrules/set", HandleBotRulesSet)
 	authRouter.HandleFunc("/api/botrules/endpoint", HandleBotRulesEndpoint)
+	authRouter.HandleFunc("/api/botrules/allowua", HandleBotAllowUA)
 	authRouter.HandleFunc("/api/headerrules/get", HandleHeaderRulesGet)
 	authRouter.HandleFunc("/api/headerrules/set", HandleHeaderRulesSet)
 }
@@ -114,6 +119,63 @@ func HandleBotRulesEndpoint(w http.ResponseWriter, r *http.Request) {
 		e.BotPolicy = policy
 		return nil
 	}); err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
+	}
+	utils.SendOK(w)
+}
+
+// HandleBotAllowUA edits the per-site User-Agent allow list (the site editor lists it with remove buttons)
+func HandleBotAllowUA(w http.ResponseWriter, r *http.Request) {
+	ep, ok := networkingPostEndpoint(w, r)
+	if !ok {
+		return
+	}
+	if blockViewer(r) {
+		http.Error(w, "403 - Read-only account (viewer role)", http.StatusForbidden)
+		return
+	}
+	op, _ := utils.PostPara(r, "op")
+	pattern, _ := utils.PostPara(r, "pattern")
+	var err error
+	switch op {
+	case "add":
+		var norm string
+		if norm, err = botrules.NormalizeAllowUA(pattern); err != nil {
+			break
+		}
+		err = mutateBotAllowUA(ep, func(list []string) ([]string, error) {
+			for _, h := range list {
+				if h == norm {
+					return list, nil
+				}
+			}
+			if len(list) >= botrules.MaxAllowUAs {
+				return nil, fmt.Errorf("too many allowed User-Agents (max %d)", botrules.MaxAllowUAs)
+			}
+			return append(list, norm), nil
+		})
+	case "remove":
+		want := strings.ToLower(strings.TrimSpace(pattern))
+		err = mutateBotAllowUA(ep, func(list []string) ([]string, error) {
+			out := make([]string, 0, len(list))
+			for _, h := range list {
+				if h != want {
+					out = append(out, h)
+				}
+			}
+			if len(out) == len(list) {
+				return nil, errors.New("this User-Agent is not on the list (it may have been removed already)")
+			}
+			if len(out) == 0 {
+				return nil, nil
+			}
+			return out, nil
+		})
+	default:
+		err = errors.New("op must be add or remove")
+	}
+	if err != nil {
 		utils.SendErrorResponse(w, err.Error())
 		return
 	}

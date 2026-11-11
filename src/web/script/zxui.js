@@ -401,7 +401,7 @@
             mount:     optional element; the bar is appended here (default: the page container of the form, so it
                        sticks to the bottom of the viewport while the page is scrolled)
             ignore:    optional selector of controls that are not part of the form state
-            saveLabel / discardLabel / successText / historyObject (substring of the History "Object" filter, e.g. "WAF")
+            saveLabel / discardLabel / successText / noHistory (no "View history" toast: the setting is not versioned) / historyObject (substring of the History "Object" filter, e.g. "WAF")
         })
         -> bar: {reset(), isDirty(), save(), discard(), tracker, destroy()}
         Call bar.reset() after the page loaded its values from the API, and after changing values from code.
@@ -485,7 +485,7 @@
                 tracker.reset();
                 state = "success";
                 render();
-                if (window.ZxHistory && window.ZxHistory.savedToast) { window.ZxHistory.savedToast(o.successText || tr(N_("Saved")), o.historyObject); }
+                if (!o.noHistory && window.ZxHistory && window.ZxHistory.savedToast) { window.ZxHistory.savedToast(o.successText || tr(N_("Saved")), o.historyObject); }
                 return true;
             }, function (e) { fail(e); return false; });
         }

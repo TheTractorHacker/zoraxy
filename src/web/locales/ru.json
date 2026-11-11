@@ -3,8 +3,8 @@
   "language": "Russian",
   "reviewed": false,
   "author": "machine-assisted (Claude)",
-  "coverage": 21.0,
-  "coreCoverage": 41.4
+  "coverage": 20.7,
+  "coreCoverage": 40.1
  },
  "strings": {
   "\"Add Redirection Rule\"": "«Добавить правило перенаправления»",

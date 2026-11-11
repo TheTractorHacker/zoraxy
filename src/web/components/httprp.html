@@ -816,6 +816,11 @@
                                 </div>
                             </div>
                              <small style="opacity:0.7;">Select how the system should respond when malicious or automated traffic is detected.</small>
+                            <div class="hrpBotAllow" hidden>
+                                <label class="hrpBotAllowTitle">Allowed User-Agents (bot rules)</label>
+                                <ul class="hrpBotAllowList"></ul>
+                                <small class="hrpBotAllowHelp">Requests whose User-Agent contains one of these skip the bot rules on this site only. Added from the Blocked requests page. A User-Agent can be faked, so this is a convenience, not security. Removing applies at once.</small>
+                            </div>
 </div>
 </section>
 <section class="zx-card hrp-card" data-hrp-card="waf" rpcfg="waf" data-hrp-nd="waf" aria-labelledby="hrpc-waf">
@@ -1897,6 +1902,36 @@
         return decodeURIComponent(hostname);
     }
 
+    // Per-site User-Agent allow list of the bot rules (added from Statistics > Blocked): read-only list with a remove button each
+    function renderBotAllowUA(editor, subd){
+        let list = subd.BotAllowUA || [];
+        let box = editor.find(".hrpBotAllow");
+        let ul = box.find(".hrpBotAllowList").empty();
+        box.prop("hidden", list.length == 0);
+        list.forEach(function(p){
+            let btn = $('<button type="button" class="zx-btn zx-btn--ghost zx-btn--sm zx-btn--icon" data-ua-remove></button>')
+                .attr({"aria-label": tf("Remove {0}", p), "title": tf("Remove {0}", p)}).append('<i class="close icon" aria-hidden="true"></i>');
+            btn.on("click", function(){
+                btn.prop("disabled", true);
+                $.cjax({
+                    url: "/api/botrules/allowua", method: "POST", dataType: "json",
+                    data: {ep: subd.RootOrMatchingDomain, op: "remove", pattern: p},
+                    success: function(data){
+                        if (data && data.error){ btn.prop("disabled", false); msgbox(data.error, false, 5000); return; }
+                        let rest = (subd.BotAllowUA || []).filter(x => x !== p);
+                        subd.BotAllowUA = rest.length ? rest : undefined;
+                        let cached = httpProxyList.find(x => x.RootOrMatchingDomain === subd.RootOrMatchingDomain);
+                        if (cached){ cached.BotAllowUA = subd.BotAllowUA; }
+                        renderBotAllowUA(editor, subd);
+                        msgbox(tf("Removed {0}", p));
+                    },
+                    error: function(x){ btn.prop("disabled", false); msgbox(tf("Request failed (HTTP {0})", x.status), false, 5000); }
+                });
+            });
+            ul.append($("<li></li>").append($('<code class="hrpBotAllowItem"></code>').text(p), btn));
+        });
+    }
+
     function getEditingHttpProxyCachedSubd(){
         let hostname = getEditingHttpProxyHostname();
         if (hostname == null){
@@ -2011,6 +2046,8 @@
         editor.find(".BlockAICrawlers").on("change", function() {
             hrpEdited(uuid, this);
         });
+
+        renderBotAllowUA(editor, subd);
 
         editor.find(".mitigationActionDropdown").off('change');
         editor.find(".mitigationActionDropdown input[type='hidden']").val((subd.MitigationAction || 0).toString());

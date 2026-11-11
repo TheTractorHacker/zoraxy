@@ -102,6 +102,9 @@ func (router *RouterDef) HandleFunc(endpoint string, handler func(http.ResponseW
 				if !authAgent.RoleGuard(w, r) {
 					return
 				}
+				if IsActivityRequest(r) {
+					authAgent.RefreshSession(w, r) //sliding expiry (off by default)
+				}
 				handler(w, r)
 			})
 		} else {

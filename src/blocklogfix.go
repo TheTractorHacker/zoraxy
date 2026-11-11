@@ -63,6 +63,18 @@ type fixOption struct {
 	Changes          []fixChange `json:"changes"`
 	RequiresAllSites bool        `json:"requiresAllSites,omitempty"` // global by nature: the request must say allSites=true
 	PreviewID        string      `json:"previewId"`
+	Warning          string      `json:"warning,omitempty"` // shown with the preview, e.g. "a User-Agent is trivially spoofable"
+	Input            *fixInput   `json:"input,omitempty"`   // an editable value of the fix (the preview is asked again when it changes)
+}
+
+// fixInput is the one value of a fix the admin may edit before applying (so far the User-Agent pattern).
+// Error is the reason the current value cannot be applied; the fix then has no changes and Apply stays disabled.
+type fixInput struct {
+	Name  string `json:"name"`
+	Label string `json:"label"`
+	Value string `json:"value"`
+	Help  string `json:"help,omitempty"`
+	Error string `json:"error,omitempty"`
 }
 
 type fixCandidate struct {
@@ -96,6 +108,7 @@ type blockExplanation struct {
 	CanFix      bool                `json:"canFix"`
 	Fixes       []fixOption         `json:"fixes"`
 	NoFixReason string              `json:"noFixReason,omitempty"`
+	Note        string              `json:"note,omitempty"` // why a fix that one would expect is not offered
 }
 
 /* ---------- undo tokens (memory only) ---------- */
@@ -362,7 +375,7 @@ func quoteUA(ua string) string {
 
 // buildBlockFixes lists the fixes that have a clean write path for this entry, as they would apply
 // right now. Each carries a PreviewID over its exact content.
-func buildBlockFixes(e blocklog.Entry) ([]fixCandidate, string) {
+func buildBlockFixes(e blocklog.Entry, pattern string) ([]fixCandidate, string) {
 	ep := siteOf(e)
 	if ep == nil {
 		return nil, "The site this request went to no longer exists, so there is nothing to change from here."
@@ -377,7 +390,7 @@ func buildBlockFixes(e blocklog.Entry) ([]fixCandidate, string) {
 
 	switch e.Reason {
 	case blocklog.ReasonBot:
-		out = append(out, botFixes(e, ep, site)...)
+		out = append(out, botFixes(e, ep, site, pattern)...)
 	case blocklog.ReasonWhitelist, blocklog.ReasonBlacklist:
 		if ipOK {
 			out = append(out, accessFixes(e, ep, site)...)
@@ -399,8 +412,11 @@ func buildBlockFixes(e blocklog.Entry) ([]fixCandidate, string) {
 	return out, ""
 }
 
-func botFixes(e blocklog.Entry, ep *dynamicproxy.ProxyEndpoint, site string) []fixCandidate {
+func botFixes(e blocklog.Entry, ep *dynamicproxy.ProxyEndpoint, site, pattern string) []fixCandidate {
 	var out []fixCandidate
+	if c := botUAAllowFix(e, ep, site, pattern); c != nil {
+		out = append(out, *c)
+	}
 	if ep.BotPolicy != "off" {
 		prev := ep.BotPolicy
 		out = append(out, fixCandidate{
@@ -721,11 +737,12 @@ func HandleBlockedExplain(w http.ResponseWriter, r *http.Request) {
 	}
 	ex.RuleLink = ruleLink{Tab: ex.Reason.Tab, Sec: ex.Reason.Sec, Label: ex.Reason.Where, Rule: e.RuleID, Site: e.Rule}
 	if ex.CanFix {
-		cands, why := buildBlockFixes(e)
+		cands, why := buildBlockFixes(e, strings.TrimSpace(q.Get("pattern")))
 		for _, c := range cands {
 			ex.Fixes = append(ex.Fixes, c.fixOption)
 		}
 		ex.NoFixReason = why
+		ex.Note = botUAAllowNote(e)
 	}
 	visitorJSON(w, ex)
 }
@@ -737,6 +754,7 @@ type blockFixRequest struct {
 	PreviewID string `json:"previewId"`
 	AllSites  bool   `json:"allSites"`
 	UndoToken string `json:"undoToken"`
+	Pattern   string `json:"pattern"` // bot-ua-allow: the User-Agent pattern (default: the product token of the request)
 }
 
 func readBlockFixRequest(w http.ResponseWriter, r *http.Request) (blockFixRequest, bool) {
@@ -757,6 +775,7 @@ func readBlockFixRequest(w http.ResponseWriter, r *http.Request) (blockFixReques
 	req.Ref, req.FixID, req.PreviewID = r.PostFormValue("ref"), r.PostFormValue("fixId"), r.PostFormValue("previewId")
 	req.AllSites = r.PostFormValue("allSites") == "true"
 	req.UndoToken = r.PostFormValue("undoToken")
+	req.Pattern = r.PostFormValue("pattern")
 	return req, true
 }
 
@@ -802,7 +821,7 @@ func HandleBlockedFix(w http.ResponseWriter, r *http.Request) {
 	}
 	blockFixMu.Lock()
 	defer blockFixMu.Unlock()
-	cands, _ := buildBlockFixes(e)
+	cands, _ := buildBlockFixes(e, req.Pattern)
 	var c *fixCandidate
 	for i := range cands {
 		if cands[i].ID == req.FixID {
@@ -815,6 +834,10 @@ func HandleBlockedFix(w http.ResponseWriter, r *http.Request) {
 	}
 	if c.PreviewID != req.PreviewID {
 		utils.SendErrorResponse(w, "the configuration changed since the preview; open the entry again")
+		return
+	}
+	if c.Input != nil && c.Input.Error != "" {
+		utils.SendErrorResponse(w, c.Input.Error)
 		return
 	}
 	if c.RequiresAllSites && !req.AllSites {

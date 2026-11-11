@@ -501,3 +501,24 @@ body.zx-has-savebar .zx-toasts { bottom: 6.5rem; }
 .zx-footer-text { color: var(--zx-text-muted); }
 .zx-footer-text a { color: var(--zx-link); }
 body.darkTheme .ui.basic.red.button, body.darkTheme .ui.basic.red.buttons .button { color: #ff9b94 !important; box-shadow: 0 0 0 1px #ff9b94 inset !important; }
+
+/* ===================================================================================== session expired banner (script/uxkit.js) */
+.zx-session-banner {
+    position: fixed; z-index: 2000; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + var(--zx-space-4));
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--zx-space-2) var(--zx-space-4);
+    width: max-content; max-width: calc(100vw - 2 * var(--zx-space-4)); box-sizing: border-box;
+    padding: var(--zx-space-3) var(--zx-space-4); border-radius: var(--zx-radius-md);
+    background: var(--zx-warn-bg); color: var(--zx-warn-text); border: 1px solid var(--zx-warn-line); border-left-width: 4px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, .25); font-size: var(--zx-fs-md); font-weight: 600;
+}
+.zx-session-banner__link { text-decoration: none; }
+body.zx-has-savebar .zx-session-banner { bottom: calc(env(safe-area-inset-bottom, 0px) + 5.5rem); } /* above the Save bar */
+
+/* number input with a unit after it (Sign-in session card) */
+.zx-inputgroup { display: flex; align-items: stretch; max-width: 100%; }
+.ui.form .zx-inputgroup input[type="number"] { flex: 1 1 auto; min-width: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.zx-inputgroup__unit {
+    flex: 0 0 auto; display: flex; align-items: center; padding: 0 var(--zx-space-3); white-space: nowrap;
+    background: var(--zx-surface-2); color: var(--zx-text-muted); border: 1px solid var(--zx-border-strong); border-left: 0;
+    border-radius: 0 var(--zx-radius-md) var(--zx-radius-md) 0; font-size: var(--zx-fs-md); font-weight: 600;
+}
