@@ -36,10 +36,10 @@ func newPrefManager(t *testing.T, behavior *HostSpecificTlsBehavior) *Manager {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, n := range []string{"a", "b"} {
-		cn := n + ".test.local"
-		//both certificates cover test.local, so only the preference can tell them apart
-		if err := m.GenerateSelfSignedCertificate(cn, []string{"test.local", "*.wild.local"}, n+".pem", n+".key"); err != nil {
+	//only a covers test.local, so the automatic choice is a (the scan order of several matches is not defined)
+	//and only the preference can make b the served certificate
+	for n, sans := range map[string][]string{"a": {"test.local"}, "b": {"b.other.local", "*.wild.local"}} {
+		if err := m.GenerateSelfSignedCertificate(n+".test.local", sans, n+".pem", n+".key"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -52,7 +52,7 @@ func newPrefManager(t *testing.T, behavior *HostSpecificTlsBehavior) *Manager {
 func TestPreferredCertificateOnlyHonouredWithoutSNI(t *testing.T) {
 	prefs := map[string]string{"test.local": "b"}
 	m := newPrefManager(t, &HostSpecificTlsBehavior{DisableSNI: false, PreferredCertificate: prefs})
-	if got := servedCN(t, m, "test.local"); got == "b.test.local" {
+	if got := servedCN(t, m, "test.local"); got != "a.test.local" {
 		t.Fatalf("with SNI enabled the preference must be ignored (today's behaviour), served %s", got)
 	}
 	m = newPrefManager(t, &HostSpecificTlsBehavior{DisableSNI: true, PreferredCertificate: prefs})
