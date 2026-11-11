@@ -405,6 +405,7 @@ type ProxyEndpoint struct {
 	PathRules         []*PathRule       `json:",omitempty"` //Ordered path scoped access control / rate limit rules
 	AllowedPeerCIDRs  []string          `json:",omitempty"` //Only accept connections whose TCP peer is in this set (empty = any)
 	BotPolicy         string            `json:",omitempty"` //Bot rules: "" follow the global switch, "on" apply even if globally off, "off" skip (bot_hook.go)
+	BotAllowUA        []string          `json:",omitempty"` //Bot rules: User-Agent substrings (lower case) whose requests skip the bot rules on this endpoint only (bot_hook.go, botrules/allowua.go)
 	HeaderRules       []*HeaderRule     `json:",omitempty"` //Header based access rules (headerrules.go)
 	SecondaryPortsTLS bool              //Serve the secondary listening ports of this endpoint over TLS
 

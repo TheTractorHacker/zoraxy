@@ -58,6 +58,7 @@ var routeTable = []routeLabel{
 	{"/api/cert/", "Certificate settings changed"},
 	{"/api/acme/", "ACME settings changed"},
 	{"/api/abuse/", "Auto-ban settings changed"},
+	{"/api/botrules/allowua", "Allowed User-Agents of a site changed"},
 	{"/api/botrules/", "Bot rules changed"},
 	{"/api/basicauth/", "Basic auth lists changed"},
 	{"/api/headerrules/", "Header rules changed"},
