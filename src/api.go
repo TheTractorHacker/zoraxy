@@ -494,6 +494,8 @@ func initAPIs(targetMux *http.ServeMux) {
 	RegisterBasicAuthExtAPIs(authRouter)
 	RegisterAuthAuditAPIs(authRouter)
 	RegisterAccessRuleExtraAPIs(authRouter)
+	authRouter.HandleFunc("/api/auth/sessionSettings", authAgent.HandleSessionSettingsGet)
+	authRouter.HandleFunc("/api/auth/sessionSettings/set", authAgent.HandleSessionSettingsSet)
 	authRouter.HandleFunc("/api/users/list", authAgent.HandleUserList)
 	authRouter.HandleFunc("/api/users/action", authAgent.HandleUserAction)
 

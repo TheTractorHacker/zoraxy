@@ -22,6 +22,31 @@
     </div>
 </div>
 <div class="ui divider"></div>
+<section class="zx-card" id="sesCard" aria-labelledby="sesTitle" hidden>
+    <div class="zx-card__head"><h3 class="zx-card__title" id="sesTitle">Sign-in session</h3></div>
+    <p class="zx-card__desc">How long an admin stays signed in on this browser. A new value applies to every sign-in from now on, no restart needed.
+        <b>Accounts that are already signed in keep the expiry they got when they signed in.</b></p>
+    <div class="zx-card__body">
+        <div class="ui form" id="sesForm">
+            <div class="two fields">
+                <div class="field zx-field">
+                    <label for="sesMin">Stay signed in for</label>
+                    <div class="zx-inputgroup"><input type="number" id="sesMin" min="5" max="43200" step="1" inputmode="numeric"><span class="zx-inputgroup__unit">minutes</span></div>
+                    <p class="zx-help" id="sesMinHelp">5 to 43200 (30 days)</p>
+                </div>
+                <div class="field zx-field">
+                    <label for="sesDays">Remember me keeps me signed in for</label>
+                    <div class="zx-inputgroup"><input type="number" id="sesDays" min="1" max="365" step="1" inputmode="numeric"><span class="zx-inputgroup__unit">days</span></div>
+                    <p class="zx-help" id="sesDaysHelp">1 to 365</p>
+                </div>
+            </div>
+            <div class="inline field"><div class="ui checkbox"><input type="checkbox" id="sesSlide"><label for="sesSlide">Keep me signed in while I am active</label></div></div>
+            <p class="zx-help" style="margin-top:-.5em">Opening a page or changing something extends the session (checked every few minutes). A page left open that only refreshes its numbers does not count, so an idle admin is still signed out.</p>
+        </div>
+        <p class="zx-help" id="sesNow" role="status" style="margin-top:1em"></p>
+    </div>
+</section>
+<div class="ui divider"></div>
 <h4>Audit log (recent)</h4>
 <div style="overflow-x:auto">
     <table class="ui unstackable very basic compact table">
@@ -70,6 +95,45 @@
         if (a === "rename") { d.newUsername = prompt("New username for " + u); if (!d.newUsername) { return; } }
         if (a === "setRole") { d.role = $(this).attr("data-r"); }
         act(d);
+    });
+    /* Sign-in session lifetime (admin only) */
+    var ses = null;
+    function sesLoad() {
+        $.get("/api/auth/sessionSettings", function (d) {
+            ses = d;
+            $("#sesMin").val(d.Settings.LifetimeMinutes).attr({ min: d.MinMinutes, max: d.MaxMinutes });
+            $("#sesDays").val(d.Settings.RememberDays).attr({ min: d.MinRememberDay, max: d.MaxRememberDay });
+            $("#sesSlide").prop("checked", !!d.Settings.SlidingExtend);
+            $("#sesMinHelp").text(tf("{0} to {1} (30 days)", d.MinMinutes, d.MaxMinutes));
+            $("#sesDaysHelp").text(tf("{0} to {1}", d.MinRememberDay, d.MaxRememberDay));
+            $("#sesNow").text(tf("In effect now for new sign-ins: {0}; with Remember me {1}; extended while active: {2}. Default: {3} minutes, {4} days, off.",
+                d.LifetimeText, d.RememberText, d.Settings.SlidingExtend ? t("on") : t("off"), d.Defaults.LifetimeMinutes, d.Defaults.RememberDays));
+            if (window.zxSecBar) { window.zxSecBar.reset(); }
+        });
+    }
+    function sesWhole(v) { return /^\d+$/.test(String(v).trim()); }
+    function sesCheck() {
+        var ok = true;
+        function need(sel, good, msg) { var f = ZxUI.field(sel); if (good) { f.clearError(); } else { f.setError(t(msg)); if (ok) { $(sel).focus(); } ok = false; } }
+        var m = $("#sesMin").val(), dd = $("#sesDays").val();
+        need("#sesMin", sesWhole(m) && +m >= ses.MinMinutes && +m <= ses.MaxMinutes, "Enter a whole number of minutes from 5 to 43200");
+        need("#sesDays", sesWhole(dd) && +dd >= ses.MinRememberDay && +dd <= ses.MaxRememberDay, "Enter a whole number of days from 1 to 365");
+        return ok;
+    }
+    function sesSave() {
+        if (!ses || !sesCheck()) { return { error: t("Some values are out of range. Fix the highlighted fields and save again.") }; }
+        return $.cjax({ type: "POST", url: "/api/auth/sessionSettings/set", data: { minutes: +$("#sesMin").val(), days: +$("#sesDays").val(), sliding: $("#sesSlide").prop("checked") } }).then(function (d) {
+            if (!(d && d.error)) { sesLoad(); }
+            return d;
+        });
+    }
+    $("#sesForm").on("input", "input", function () { ZxUI.field(this).clearError(); });
+    $.get("/api/auth/role", function (role) {
+        if (role !== "admin") { return; }
+        $("#sesCard").prop("hidden", false);
+        if (window.zxSecBar) { window.zxSecBar.destroy(); }
+        window.zxSecBar = ZxUI.saveBar({ form: "#sesForm", id: "admin-session", noHistory: true, onSave: sesSave });
+        sesLoad();
     });
     $.get("/api/auth/authEnabled", function (on) {
         if (on === false) {
