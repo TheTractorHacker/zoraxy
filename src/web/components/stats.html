@@ -93,6 +93,43 @@
     #statsPage .sSkel{ height:1em; border-radius:.3em; background:rgba(128,128,128,.18); animation:sPulse 1.4s ease-in-out infinite; }
     @keyframes sPulse{ 50%{ opacity:.45; } }
     @media (prefers-reduced-motion: reduce){ #statsPage .sSkel{ animation:none; } }
+    /* Blocked: row drawer ("Why was this blocked?"), User-Agent column, search states */
+    #statsPage table.sTable tbody tr.sbRow{ cursor:pointer; }
+    #statsPage .sbRef{ display:block; font-size:.8em; color:var(--s-muted); letter-spacing:.02em; }
+    #statsPage .sbUa{ display:block; max-width:15em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--s-muted); font-size:.92em; }
+    #statsPage .sbGo{ color:var(--s-muted); padding:.2em .35em; border-radius:.3em; }
+    #statsPage tr.sbRow:hover .sbGo, #statsPage .sbGo:focus-visible{ color:var(--text_color); }
+    #statsPage td.sbcReason .sDetail{ display:inline; margin-left:.45em; }
+    #statsPage .sbNote{ color:var(--s-muted); font-size:.85em; }
+    #statsPage .sRefTag{ display:inline-flex; align-items:center; gap:.4em; padding:.25em .3em .25em .7em; border-radius:1em; border:1px solid var(--s-blue); color:var(--s-blue); font-size:.9em; }
+    #statsPage .sRefTag button{ border:0; background:none; cursor:pointer; color:inherit; font:inherit; padding:0 .3em; }
+    #statsPage #sbNotFound .sbNfActions{ margin-top:.8em; display:flex; gap:.8em; justify-content:center; flex-wrap:wrap; }
+    @media (max-width: 899px){ #statsPage .sbcUa{ display:none; } }
+    /* the drawer lives on <body> (ZxUI.drawer), so these rules are not scoped to #statsPage */
+    .zx-drawer .mono{ font-family:var(--zx-font-mono); font-size:.95em; }
+    .zx-drawer .bwTop{ display:flex; flex-wrap:wrap; align-items:center; gap:var(--zx-space-2); margin:0 0 var(--zx-space-3); }
+    .zx-drawer .bwRef{ font-weight:700; letter-spacing:.03em; color:var(--zx-text); }
+    .zx-drawer .bwSentence{ margin:0 0 var(--zx-space-4); font-size:var(--zx-fs-lg); line-height:1.5; color:var(--zx-text); overflow-wrap:anywhere; }
+    .zx-drawer .bwFacts{ display:grid; grid-template-columns:max-content minmax(0,1fr); gap:var(--zx-space-1) var(--zx-space-4); margin:0 0 var(--zx-space-4); padding:var(--zx-space-3); background:var(--zx-surface-2); border-radius:var(--zx-radius-md); font-size:var(--zx-fs-sm); }
+    .zx-drawer .bwFacts dt{ color:var(--zx-text-muted); }
+    .zx-drawer .bwFacts dd{ margin:0; color:var(--zx-text); overflow-wrap:anywhere; }
+    .zx-drawer .bwH{ margin:var(--zx-space-4) 0 var(--zx-space-2); font-size:var(--zx-fs-md); font-weight:700; color:var(--zx-text); }
+    .zx-drawer .bwFixes{ border:0; margin:0 0 var(--zx-space-3); padding:0; min-width:0; }
+    .zx-drawer .bwFixes legend{ padding:0; margin:0 0 var(--zx-space-2); font-weight:700; color:var(--zx-text); }
+    .zx-drawer .bwFix{ display:flex; gap:var(--zx-space-3); align-items:flex-start; padding:var(--zx-space-3); margin:0 0 var(--zx-space-2); border:1px solid var(--zx-border-strong); border-radius:var(--zx-radius-md); cursor:pointer; color:var(--zx-text); }
+    .zx-drawer .bwFix:has(input:checked){ border-color:var(--zx-primary); background:var(--zx-primary-soft); color:var(--zx-primary-soft-text); }
+    .zx-drawer .bwFix:has(input:focus-visible){ box-shadow:var(--zx-focus-ring); }
+    .zx-drawer .bwFix input{ margin:.2em 0 0; width:18px; height:18px; flex:0 0 auto; accent-color:var(--zx-primary); }
+    .zx-drawer .bwFixMain{ display:flex; flex-direction:column; gap:var(--zx-space-1); min-width:0; }
+    .zx-drawer .bwFixLabel{ font-weight:600; overflow-wrap:anywhere; }
+    .zx-drawer .bwFixMeta{ display:flex; flex-wrap:wrap; gap:var(--zx-space-1); }
+    .zx-drawer .bwPreview{ margin:0 0 var(--zx-space-3); color:var(--zx-text); }
+    .zx-drawer .bwPreview:empty{ display:none; }
+    .zx-drawer .bwPrev{ margin:0 0 var(--zx-space-2); padding:var(--zx-space-3); border-left:4px solid var(--zx-info-solid); background:var(--zx-info-bg); color:var(--zx-info-text); border-radius:var(--zx-radius-sm); overflow-wrap:anywhere; }
+    .zx-drawer .bwChanges{ margin:0; padding:0 0 0 1.2em; font-size:var(--zx-fs-sm); color:var(--zx-text-muted); overflow-wrap:anywhere; }
+    .zx-drawer .bwAll{ margin:0 0 var(--zx-space-3); }
+    .zx-drawer .zx-callout{ margin-bottom:var(--zx-space-3); }
+    .zx-drawer [hidden]{ display:none !important; }
     @media (max-width: 600px){
         #statsPage .sBar .sSeg{ width:100%; }
         #statsPage .sBar .sSeg button{ flex:1 1 auto; padding:.5em .3em; }
@@ -103,8 +140,12 @@
         #statsPage #sbTable, #statsPage #sbTable tbody{ display:block; }
         #statsPage #sbTable tr{ display:block; padding:.55em 0; border-bottom:1px solid var(--divider_color); }
         #statsPage #sbTable td{ display:inline-block; border:0; padding:.1em .6em .1em 0; vertical-align:middle; }
-        #statsPage #sbTable td:nth-child(3){ color:var(--s-muted); }
-        #statsPage #sbTable td:nth-child(4), #statsPage #sbTable td:nth-child(6){ display:block; }
+        #statsPage #sbTable td.sbcHost{ color:var(--s-muted); }
+        #statsPage #sbTable td.sbcUa{ display:none; }
+        #statsPage #sbTable td.sbcReq, #statsPage #sbTable td.sbcReason{ display:block; }
+        #statsPage #sbTable .sbRef{ display:inline; margin-left:.4em; }
+        #statsPage #sbTable tr.sbRow{ position:relative; padding-right:2.2em; }
+        #statsPage #sbTable td.sbcGo{ position:absolute; right:0; top:.5em; display:block; padding:0; }
     }
 </style>
 
@@ -281,13 +322,15 @@
             </div>
             <select id="sbReason" aria-label="Reason"><option value="">All reasons</option></select>
             <select id="sbHost" aria-label="Host"><option value="">All hosts</option></select>
-            <input type="search" class="sGrow" id="sbSearch" maxlength="300" placeholder="Search IP, host, path, rule..." aria-label="Search blocked requests" autocomplete="off">
+            <input type="search" class="sGrow" id="sbSearch" maxlength="300" placeholder="Reference ID or IP, or host, path, rule..." aria-label="Search by Reference ID or IP, or filter by host, path or rule" autocomplete="off" spellcheck="false">
+            <span class="sRefTag" id="sbRefTag" style="display:none;"><span class="mono" id="sbRefVal"></span><button type="button" id="sbRefClear" aria-label="Clear Reference ID filter">&times;</button></span>
             <span class="sIpTag" id="sbIpTag" style="display:none;"><span class="mono" id="sbIpVal"></span><button type="button" id="sbIpClear" aria-label="Clear IP filter">&times;</button></span>
             <button type="button" class="sBtn" id="sbReload" title="Reload"><i class="sync alternate icon"></i></button>
         </div>
 
         <div id="sbRecordingOff" class="sInfo" role="note" style="display:none; border-left-color:var(--s-amber);"><b>Recording is switched off.</b> New blocked requests are not added to this list; it shows what was kept before. Switch it on again with "Record blocked requests" below.</div>
         <div id="sbEmpty" class="sEmpty" style="display:none;"></div>
+        <div id="sbNotFound" class="sEmpty" role="status" style="display:none;"></div>
 
         <div id="sbData">
           <div id="sbMain">
@@ -309,7 +352,7 @@
                     <p class="sub">Last 24 hours.</p>
                     <div class="sChart"><canvas id="sbHourly" role="img" aria-label="Blocked requests per hour over the last 24 hours"></canvas></div>
                 </div>
-                <div class="sCard">
+                <div class="sCard" id="sbTopIpsCard">
                     <h4>Top IPs</h4>
                     <p class="sub">Select an address to filter. The arrow opens it in Visitors.</p>
                     <ul class="sRank" id="sbTopIps"></ul>
@@ -327,7 +370,7 @@
                 <p class="sub" id="sbListSub">Newest first.</p>
                 <div class="sTableWrap">
                     <table class="sTable" id="sbTable">
-                        <thead><tr><th>Time</th><th>IP address</th><th>Host</th><th>Request</th><th>Status</th><th>Reason</th></tr></thead>
+                        <thead><tr><th>Time</th><th>IP address</th><th>Host</th><th>Request</th><th class="sbcUa">User-Agent</th><th>Status</th><th>Reason</th><th class="sbcGo"><span class="zx-sr-only">Details</span></th></tr></thead>
                         <tbody id="sbBody"></tbody>
                     </table>
                 </div>
@@ -703,7 +746,7 @@
     var REASON_COLOR = {"blacklist":"#dc2626","whitelist":"#b45309","auto-ban":"#9333ea","ratelimit":"#d97706","waf":"#2563eb","exploit":"#be123c",
         "bot":"#0f766e","header-rule":"#4f46e5","captcha":"#0891b2","country-challenge":"#0e7490","path-rule":"#7c3aed","client-cert":"#475569",
         "peer":"#64748b","auth":"#c2410c","plugin":"#15803d"};
-    var B = {hours: 24, reason: "", host: "", ip: "", q: "", info: {}, items: [], next: 0, total: 0, loaded: false, lastKey: "", busy: false, hostsKey: "", seq: 0};
+    var B = {hours: 24, reason: "", host: "", ip: "", q: "", ref: "", notFound: false, info: {}, items: [], next: 0, total: 0, loaded: false, lastKey: "", busy: false, hostsKey: "", seq: 0};
 
     function reasonInfo(k){ return B.info[k] || {key: k, label: k, why: "", tab: "", where: ""}; }
     function chip(k){
@@ -720,6 +763,7 @@
     function blockedQuery(extra){
         var p = [];
         function add(k, v){ if (v !== "" && v != null) p.push(k + "=" + encodeURIComponent(v)); }
+        if (B.ref){ add("ref", B.ref); return p.join("&") + (extra ? "&" + extra : ""); }   // one block by its ID: no time window or other filter
         add("since", B.hours); add("reason", B.reason); add("host", B.host); add("ip", B.ip); add("q", B.q);
         return p.join("&") + (extra ? "&" + extra : "");
     }
@@ -747,16 +791,43 @@
         zrAI.mount(box, "blocked", $(this).attr("data-seq"));
     });
 
+    /* "ZX-V2DF-KCTE" from the 8 stored characters */
+    function fmtRef(r){ r = String(r || ""); return r.length === 8 ? "ZX-" + r.slice(0, 4) + "-" + r.slice(4) : r; }
+    var REF_RE = /^zx[-\s]?[0-9a-z]{4}[-\s]?[0-9a-z]{4}$/i;
+    var IP_RE = /^(\d{1,3}\.){3}\d{1,3}$|^(?=[0-9a-f:.]*:)[0-9a-f:.]{3,45}$/i;
+    /* "http_library (challenge, no CAPTCHA, acted as block)" -> {name: "http_library", note: "challenge, no CAPTCHA, acted as block"} */
+    function splitDetail(d){
+        d = String(d || "");
+        var m = /^(.*?)\s*\((.+)\)$/.exec(d);
+        if (m) return {name: m[1], note: m[2]};
+        return /^challenge/.test(d) ? {name: "", note: d} : {name: d, note: ""};
+    }
+    function reasonCell(e){
+        var out = chip(e.reason), info = reasonInfo(e.reason);
+        if (e.detail){
+            if (e.reason === "rule"){
+                out += '<button type="button" class="sLink sDetail" data-rulename="' + esc(e.detail) + '" data-rulesite="' + esc(e.rule || "") + '" title="Show this rule in Rules">' + esc(e.detail) + '</button>';
+            } else {
+                var sd = splitDetail(e.detail);
+                var nm = sd.name ? (info.tab ? '<button type="button" class="sLink" data-rule="' + esc(e.reason) + '" title="' + esc(info.where || "") + '">' + esc(sd.name) + '</button>' : esc(sd.name)) : "";
+                out += '<span class="sDetail">' + nm + (sd.name && sd.note ? ' ' : '') + (sd.note ? '<span class="sbNote">' + esc(sd.note) + '</span>' : '') + '</span>';
+            }
+        }
+        return out + aiExplainButton(e);
+    }
+
     function blockedRow(e){
-        var tr = $("<tr></tr>");
-        tr.append('<td class="nowrap" title="' + esc(new Date(e.t * 1000).toLocaleString()) + '">' + ago(e.t) + '</td>',
+        var tr = $('<tr class="sbRow"></tr>').attr("data-seq", e.seq);
+        tr.append('<td class="nowrap" title="' + esc(new Date(e.t * 1000).toLocaleString()) + '"><span class="sbAgo">' + ago(e.t) + '</span>' + (e.ref ? '<span class="sbRef mono">' + esc(fmtRef(e.ref)) + '</span>' : '') + '</td>',
             '<td class="nowrap"><span class="mono sLink" data-ip="' + esc(e.ip) + '" title="Show only this address">' + esc(e.ip) + '</span>' +
                 ' <button type="button" class="sLink" data-visitor="' + esc(e.ip) + '" title="Open in Visitors" aria-label="Open ' + esc(e.ip) + ' in Visitors"><i class="external alternate icon"></i></button>' +
                 (e.country ? ' <small style="color:var(--text_color_secondary)">' + esc(LOCAL_RE.test(e.country) ? "LAN" : e.country) + '</small>' : '') + '</td>',
-            '<td>' + esc(e.host) + '</td>',
-            '<td style="word-break:break-all;"><b>' + esc(e.method) + '</b> <span class="mono">' + esc(dec(e.path)) + '</span></td>',
+            '<td class="sbcHost">' + esc(e.host) + '</td>',
+            '<td class="sbcReq" style="word-break:break-all;"><b>' + esc(e.method) + '</b> <span class="mono">' + esc(dec(e.path)) + '</span></td>',
+            '<td class="sbcUa">' + (e.ua ? '<span class="sbUa" title="' + esc(e.ua) + '">' + esc(e.ua) + '</span>' : '<span class="sbUa">-</span>') + '</td>',
             '<td class="nowrap">' + statusCell(e.status) + '</td>',
-            '<td>' + chip(e.reason) + (e.detail ? (e.reason === "rule" ? '<button type="button" class="sLink sDetail" data-rulename="' + esc(e.detail) + '" data-rulesite="' + esc(e.rule || "") + '" title="Show this rule in Rules">' + esc(e.detail) + '</button>' : '<span class="sDetail">' + esc(e.detail) + '</span>') : '') + aiExplainButton(e) + '</td>');
+            '<td class="sbcReason">' + reasonCell(e) + '</td>',
+            '<td class="sbcGo"><button type="button" class="sLink sbGo" data-why="' + esc(e.seq) + '" title="' + esc(t("Why was this blocked?")) + '" aria-label="' + esc(t("Why was this blocked?")) + '"><i class="angle right icon"></i></button></td>');
         return tr;
     }
 
@@ -805,10 +876,11 @@
             var m = {}; (list || []).forEach(function(c){ m[c.key] = c.n; });
             renderRank(sel, m, o);
         }
+        $("#sbTopIpsCard").toggle((s.topIPs || []).length > 1);   // one address only: the card repeats the filter tag and wastes a whole column
         rank("#sbTopIps", s.topIPs, {raw: true, limit: 6, click: function(ip){ setIP(ip); },
             label: function(k){ return '<span class="mono">' + esc(k) + '</span> <button type="button" class="sLink" data-visitor="' + esc(k) + '" title="Open in Visitors" aria-label="Open in Visitors"><i class="external alternate icon"></i></button>'; }});
-        rank("#sbTopHosts", s.topHosts, {raw: true, limit: 5, click: function(h){ B.host = h; $("#sbHost").val(h); loadBlocked(true); }});
-        rank("#sbTopPaths", s.topPaths, {limit: 5, click: function(p){ $("#sbSearch").val(dec(p)); B.q = dec(p); loadBlocked(true); }});
+        rank("#sbTopHosts", s.topHosts, {raw: true, limit: 5, click: function(h){ dropRef(); B.host = h; $("#sbHost").val(h); loadBlocked(true); }});
+        rank("#sbTopPaths", s.topPaths, {limit: 5, click: function(p){ dropRef(); $("#sbSearch").val(dec(p)); B.q = dec(p); loadBlocked(true); }});
 
         // hourly chart (rebuilt only when the numbers change)
         var key = (s.hourly || []).map(function(b){ return b.n; }).join(",") + DARK();
@@ -848,6 +920,9 @@
         var html;
         if (!s.enabled){
             html = '<i class="toggle off icon"></i><b>Recording is switched off</b>Blocked requests are not being logged. Switch it on below to see what gets blocked from now on.';
+        } else if (!anyFilter && s.kept > 0 && B.hours > 0){
+            var nTitle = t("Nothing blocked in this period."), nText = t("Blocks appear here with the rule that caused them."), nAll = t("Show everything kept");
+            html = '<i class="check circle outline icon"></i><b>' + esc(nTitle) + '</b>' + esc(nText) + ' <button type="button" class="sLink" id="sbShowAll">' + esc(nAll) + '</button>';
         } else if (s.kept > 0 || anyFilter){
             html = '<i class="filter icon"></i><b>No blocked request matches this view</b>Try a longer time window or clear the filters.' +
                    ' <button type="button" class="sLink" id="sbResetFilters">Reset filters</button>';
@@ -875,7 +950,9 @@
                 if (d && d.error){ msgbox(d.error, false); return; }
                 B.loaded = true;
                 var s = d.Summary;
+                B.cap = s.capacity || B.cap; B.kept = s.kept; B.enabled = s.enabled;
                 renderBlockedSummary(s);
+                if (B.notFound) return;   // the "no block with this ID" state stays until the search changes
                 if (!s.total){
                     showBlockedEmpty(s);
                     B.items = []; B.lastKey = ""; $("#sbBody").empty();
@@ -885,7 +962,7 @@
                 // keep the table untouched when nothing changed (no flicker, keeps the text selection)
                 var key = JSON.stringify([B.hours, B.reason, B.host, B.ip, B.q, d.List.total, (d.List.items[0] || {}).seq]);
                 if (reset || key !== B.lastKey){ B.lastKey = key; renderBlockedList(d.List, false); }
-                else { $("#sbBody tr").each(function(i){ if (B.items[i]) $(this).children().first().text(ago(B.items[i].t)); }); }
+                else { $("#sbBody tr").each(function(i){ if (B.items[i]) $(this).find(".sbAgo").first().text(ago(B.items[i].t)); }); }
             },
             error: function(x){ if (seq === B.seq) msgbox("Request failed (HTTP " + x.status + ")", false); },
             complete: function(){ if (seq === B.seq) B.busy = false; }});
@@ -904,12 +981,19 @@
             renderBlockedList(l, true);
         });
     }
+    function dropRef(){
+        if (!B.ref && !B.notFound) return;
+        B.ref = ""; B.notFound = false;
+        $("#sbRefTag").hide(); $("#sbNotFound").hide();
+    }
     function setIP(ip){
+        dropRef();
         B.ip = ip || "";
         $("#sbIpTag").toggle(!!B.ip); $("#sbIpVal").text(B.ip);
         loadBlocked(true);
     }
     function resetFilters(){
+        dropRef();
         B.reason = B.host = B.ip = B.q = ""; B.hours = 24;
         $("#sbReason, #sbHost").val(""); $("#sbSearch").val("");
         $("#sbSince button").removeClass("active").filter('[data-h="24"]').addClass("active");
@@ -918,19 +1002,23 @@
     }
 
     $("#sbSince").on("click", "button", function(){
+        dropRef();
         B.hours = parseInt($(this).attr("data-h"), 10);
         $("#sbSince button").removeClass("active"); $(this).addClass("active");
         loadBlocked(true);
     });
-    $("#sbReason").on("change", function(){ B.reason = $(this).val(); loadBlocked(true); });
-    $("#sbHost").on("change", function(){ B.host = $(this).val(); loadBlocked(true); });
+    $("#sbReason").on("change", function(){ dropRef(); B.reason = $(this).val(); loadBlocked(true); });
+    $("#sbHost").on("change", function(){ dropRef(); B.host = $(this).val(); loadBlocked(true); });
     var qTimer = null;
-    $("#sbSearch").on("input", function(){ var v = $(this).val().trim(); clearTimeout(qTimer); qTimer = setTimeout(function(){ B.q = v; loadBlocked(true); }, 250); });
+    $("#sbSearch").on("input", function(){ var v = $(this).val().trim(); clearTimeout(qTimer); qTimer = setTimeout(function(){ applySearch(v); }, 250); });
+    $("#sbSearch").on("keydown", function(e){ if (e.key === "Enter"){ clearTimeout(qTimer); applySearch($(this).val().trim()); } });
+    $("#sbRefClear").on("click", function(){ dropRef(); $("#sbSearch").val(""); B.q = ""; loadBlocked(true); });
     $("#sbIpClear").on("click", function(){ setIP(""); });
     $("#sbReload").on("click", function(){ loadBlocked(true); });
     $("#sbMore").on("click", loadMore);
     $("#sBlocked").on("click", "[data-reason]", function(e){
         var k = $(this).attr("data-reason");
+        dropRef();
         B.reason = (B.reason === k) ? "" : k;
         $("#sbReason").val(B.reason);
         loadBlocked(true);
@@ -941,6 +1029,198 @@
     /* RULES-BUILDER: the rule name of a rules-engine block opens the Rules page filtered to that rule */
     $("#sBlocked").on("click", "[data-rulename]", function(e){ e.stopPropagation(); if (window.RulesUI) RulesUI.openFiltered($(this).attr("data-rulename"), $(this).attr("data-rulesite")); });
     $("#sBlocked").on("click", "#sbResetFilters", resetFilters);
+    $("#sBlocked").on("click", "#sbShowAll", function(){ B.hours = 0; $("#sbSince button").removeClass("active").filter('[data-h="0"]').addClass("active"); loadBlocked(true); });
+
+    /* ---------- search: a Reference ID (ZX-XXXX-XXXX) or an IP address finds one block / one visitor, anything else filters host, path and rule ---------- */
+    function showNotFound(kind, q, d){
+        B.notFound = true;
+        var cap = (d && d.capacity) || B.cap || 2000, off = d && d.enabled === false;
+        var title = kind === "ref" ? t("No block with this ID") : t("No blocked request from this address");
+        var box = $("#sbNotFound").empty().append('<i class="search icon"></i>');
+        box.append($("<b></b>").text(title));
+        var keepTxt = tf("The log keeps the last {0} entries; it may have rolled over, or logging is off.", num(cap)), offTxt = t("Logging is off right now.");
+        box.append($("<span></span>").text(keepTxt + (off ? " " + offTxt : "")));
+        box.append($('<div class="sbNfActions"></div>')
+            .append($('<button type="button" class="sLink" id="sbNfSettings"></button>').text(t("Open the log settings")))
+            .append($('<button type="button" class="sBtn" id="sbNfClear"></button>').text(t("Clear search"))));
+        box.show();
+        $("#sbEmpty").hide(); $("#sbMain").hide();
+    }
+    function applySearch(v){
+        v = String(v || "").trim();
+        dropRef();
+        $("#sbNotFound").hide();
+        if (REF_RE.test(v) || IP_RE.test(v)){
+            var isRef = REF_RE.test(v);
+            $.getJSON("./api/blocked/lookup?q=" + encodeURIComponent(v), function(d){
+                if ($("#sbSearch").val().trim() !== v) return;   // typed on meanwhile
+                if (d && d.error){ msgbox(d.error, false); return; }
+                if (!d.found || !(d.entries || []).length){ showNotFound(isRef ? "ref" : "ip", v, d); return; }
+                B.q = "";
+                if (isRef){
+                    var e = d.entries[0];
+                    B.reason = B.host = B.ip = ""; $("#sbReason, #sbHost").val(""); $("#sbIpTag").hide();
+                    B.ref = e.ref; $("#sbRefVal").text(fmtRef(e.ref)); $("#sbRefTag").css("display", "");
+                    $("#sbSearch").val("");
+                    loadBlocked(true);
+                    openWhy(e.seq, $("#sbSearch")[0]);
+                } else {
+                    $("#sbSearch").val(""); setIP(v);
+                }
+            }).fail(function(x){ msgbox("Request failed (HTTP " + x.status + ")", false); });
+            return;
+        }
+        B.q = v;
+        loadBlocked(true);
+    }
+    $("#sBlocked").on("click", "#sbNfClear", function(){ $("#sbSearch").val(""); B.q = ""; dropRef(); loadBlocked(true); });
+    $("#sBlocked").on("click", "#sbNfSettings", function(){
+        var el = document.getElementById("sbEnabled");
+        if (!el) return;
+        try { el.scrollIntoView({block: "center", behavior: "smooth"}); } catch (x) { el.scrollIntoView(); }
+        el.focus({preventScroll: true});
+    });
+
+    /* ---------- row drawer: why was this blocked, and a safe fix with a preview and an Undo ---------- */
+    function copyText(txt){
+        function fallback(){
+            var ta = document.createElement("textarea"); ta.value = txt; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+            document.body.appendChild(ta); ta.select();
+            var ok = false; try { ok = document.execCommand("copy"); } catch (x) { ok = false; }
+            document.body.removeChild(ta); return ok;
+        }
+        function done(ok){ ZxUI.toast(ok ? t("Copied") : t("Could not copy, select the text instead"), {type: ok ? "success" : "warn", duration: 2500}); }
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(function(){ done(true); }, function(){ done(fallback()); });
+        else done(fallback());
+    }
+    function openRuleLink(ex){
+        var l = ex.ruleLink || {}, ent = ex.entry || {};
+        if (ent.reason === "rule" && ent.detail && window.RulesUI){ RulesUI.openFiltered(ent.detail, ent.rule || ""); return; }
+        if (!l.tab) return;
+        openTabById(l.tab);
+        if (l.sec) setTimeout(function(){ $('#secTabs .item[data-sec="' + l.sec + '"]').trigger("click"); }, 200);
+    }
+    function N_(s){ return s; }
+    var RISK = {low: [N_("Low risk"), "ok"], medium: [N_("Medium risk"), "warn"], high: [N_("High risk"), "danger"]};
+    var SCOPE = {site: N_("This site only"), "access-rule": N_("This access rule"), all: N_("All sites")};
+    function dl(rows){
+        var d = $('<dl class="bwFacts"></dl>');
+        rows.forEach(function(r){ if (r[1] === "" || r[1] == null) return; d.append($("<dt></dt>").text(r[0]), $("<dd></dd>").append(r[2] ? $('<span class="mono"></span>').text(r[1]) : document.createTextNode(r[1]))); });
+        return d;
+    }
+    function openWhy(seq, opener){
+        var drw = ZxUI.drawer({title: t("Why was this blocked?"), returnFocus: opener});
+        var body = $(drw.body).empty(), foot = $(drw.foot).empty();
+        var stop = ZxUI.skeleton(drw.body, {lines: 5, title: true});
+        $.getJSON("./api/blocked/explain?seq=" + encodeURIComponent(seq), function(ex){
+            stop();
+            if (!drw.isOpen()) return;
+            if (ex && ex.error){ body.append($('<div class="zx-callout zx-callout--danger" role="alert"></div>').append($('<div class="zx-callout__body"></div>').text(ex.error))); return; }
+            renderWhy(drw, ex, opener);
+        }).fail(function(x){
+            stop();
+            body.append($('<div class="zx-callout zx-callout--danger" role="alert"></div>').append($('<div class="zx-callout__body"></div>').text(tf("Request failed (HTTP {0})", x.status))));
+        });
+    }
+    function renderWhy(drw, ex, opener){
+        var e = ex.entry || {}, body = $(drw.body).empty(), foot = $(drw.foot).empty();
+        // who / what: the reason, the Reference ID and when
+        var top = $('<div class="bwTop"></div>').appendTo(body);
+        top.append($('<span class="zx-badge zx-badge--danger"></span>').text((ex.reason && ex.reason.label) || e.reason));
+        if (ex.ref){
+            top.append($('<span class="bwRef mono"></span>').text(ex.ref));
+            top.append($('<button type="button" class="zx-btn zx-btn--ghost zx-btn--sm zx-btn--icon" data-bw-copy></button>').attr("aria-label", t("Copy the Reference ID")).attr("title", t("Copy the Reference ID")).append('<i class="copy outline icon" aria-hidden="true"></i>').on("click", function(){ copyText(ex.ref); }));
+        }
+        body.append($('<p class="bwSentence"></p>').text(ex.plainText || ""));
+
+        // fix choices
+        var fixes = ex.fixes || [];
+        var applyBtn = $('<button type="button" class="zx-btn zx-btn--primary" data-bw-apply></button>').text(t("Apply"));
+        var ruleBtn = $('<button type="button" class="zx-btn zx-btn--secondary" data-bw-rule></button>').text(t("Open rule")).on("click", function(){ drw.close(); openRuleLink(ex); });
+        if (!(ex.ruleLink && ex.ruleLink.tab) && !(e.reason === "rule" && e.detail)) ruleBtn.prop("disabled", true).attr("title", t("This block has no page of its own"));
+        var live = $('<div class="bwPreview" aria-live="polite"></div>');
+        var allBox = $('<label class="zx-check bwAll" hidden><input type="checkbox"><span></span></label>');
+        allBox.find("span").text(t("This changes every site. I understand."));
+        var errBox = $('<div class="zx-callout zx-callout--danger" role="alert" hidden><div class="zx-callout__body"></div></div>');
+        var chosen = null;
+        function refresh(){
+            live.empty();
+            allBox.prop("hidden", !(chosen && chosen.requiresAllSites));
+            if (!chosen){ applyBtn.prop("disabled", true); return; }
+            live.append($('<p class="bwPrev"></p>').text(chosen.preview || ""));
+            if ((chosen.changes || []).length){
+                var ul = $('<ul class="bwChanges"></ul>');
+                chosen.changes.forEach(function(c){ ul.append($("<li></li>").append($("<b></b>").text(c.what + ": "), document.createTextNode(c.before + " → " + c.after))); });
+                live.append(ul);
+            }
+            applyBtn.prop("disabled", chosen.requiresAllSites && !allBox.find("input").prop("checked"));
+        }
+        if (ex.canFix && fixes.length){
+            var fs = $('<fieldset class="bwFixes"></fieldset>').append($("<legend></legend>").text(t("Fix this block")));
+            var gname = "bwfix" + Date.now();
+            var first = null;
+            fixes.forEach(function(f, i){
+                var risk = RISK[f.risk] || RISK.medium;
+                var lab = $('<label class="bwFix"></label>');
+                var inp = $('<input type="radio">').attr({name: gname, value: f.id});
+                if (!first && !f.requiresAllSites) first = inp;
+                inp.on("change", function(){ chosen = f; allBox.find("input").prop("checked", false); errBox.prop("hidden", true); refresh(); });
+                var main = $('<span class="bwFixMain"></span>').append($('<span class="bwFixLabel"></span>').text(f.label),
+                    $('<span class="bwFixMeta"></span>').append($('<span class="zx-badge zx-badge--' + risk[1] + '"></span>').text(t(risk[0])), $('<span class="zx-badge"></span>').text(t(SCOPE[f.scope] || f.scope))));
+                fs.append(lab.append(inp, main));
+            });
+            body.append(fs, live, allBox, errBox);
+            allBox.find("input").on("change", refresh);
+            if (first){ first.prop("checked", true).trigger("change"); } else refresh();
+        } else {
+            body.append($('<div class="zx-callout"></div>').append($('<div class="zx-callout__body"></div>').text(ex.noFixReason || t("There is no safe fix to offer for this block. Open the rule to change it."))));
+        }
+        body.append($('<h3 class="bwH"></h3>').text(t("Details")), dl([[t("Time"), e.t ? new Date(e.t * 1000).toLocaleString() : ""], [t("Site"), e.host], [t("IP address"), e.ip, true],
+            [t("Request"), (e.method || "") + " " + dec(e.path || ""), true], [t("Status"), e.status === 444 ? t("444 dropped") : e.status], [t("User-Agent"), e.ua, true]]));
+        if (ex.canFix && fixes.length) foot.append(applyBtn);
+        foot.append(ruleBtn);
+
+        applyBtn.on("click", function(){
+            if (!chosen || applyBtn.prop("disabled")) return;
+            ZxUI.setLoading(applyBtn, true);
+            errBox.prop("hidden", true);
+            $.cjax({url: "./api/blocked/fix", method: "POST", contentType: "application/json", dataType: "json",
+                data: JSON.stringify({seq: e.seq, fixId: chosen.id, previewId: chosen.previewId, allSites: !!chosen.requiresAllSites && allBox.find("input").prop("checked")}),
+                success: function(d){
+                    ZxUI.setLoading(applyBtn, false);
+                    if (!d || d.error){
+                        errBox.find(".zx-callout__body").text((d && d.error) || t("The fix could not be applied"));
+                        errBox.prop("hidden", false);
+                        if (d && /changed since the preview/i.test(d.error || "")) { $.getJSON("./api/blocked/explain?seq=" + encodeURIComponent(e.seq), function(x){ if (drw.isOpen() && x && !x.error){ renderWhy(drw, x, opener); $(drw.body).prepend($('<div class="zx-callout zx-callout--warn" role="alert"></div>').append($('<div class="zx-callout__body"></div>').text(t("The configuration changed since the preview. The choices were reloaded, check them and apply again.")))); } }); }
+                        return;
+                    }
+                    drw.close();
+                    ZxUI.toast(tf("Applied: {0}", d.label || chosen.label), {type: "success", duration: 15000, undo: function(){ undoFix(d.undoToken, d.label); }, undoLabel: t("Undo"),
+                        action: {label: t("History"), run: function(){ openTabById("history"); }}});
+                    loadBlocked(true);
+                },
+                error: function(x){ ZxUI.setLoading(applyBtn, false); errBox.find(".zx-callout__body").text(tf("Request failed (HTTP {0})", x.status)); errBox.prop("hidden", false); }});
+        });
+        // keep the focus inside the panel: the first choice (or the Open rule button) is the natural start
+        var f0 = body.find("input[type=radio]:checked, input[type=radio]").first();
+        (f0.length ? f0 : ruleBtn)[0].focus();
+    }
+    function undoFix(token, label){
+        $.cjax({url: "./api/blocked/undo", method: "POST", contentType: "application/json", dataType: "json", data: JSON.stringify({undoToken: token}),
+            success: function(d){
+                if (!d || d.error){ ZxUI.toast((d && d.error) || t("Undo failed"), {type: "error", duration: 10000, action: {label: t("History"), run: function(){ openTabById("history"); }}}); return; }
+                ZxUI.toast(tf("Undone: {0}", label || d.label || ""), {type: "success", duration: 6000});
+                loadBlocked(true);
+            },
+            error: function(x){ ZxUI.toast(tf("Request failed (HTTP {0})", x.status), {type: "error"}); }});
+    }
+    $("#sBlocked").on("click", "tr.sbRow", function(e){
+        if ($(e.target).closest("a,button,input,select,summary,[data-ip],[data-reason],[data-rule],[data-rulename]").not("[data-why]").length) return;
+        if (window.getSelection && String(window.getSelection()).length) return;   // selecting text is not a click on the row
+        openWhy($(this).attr("data-seq"), this);
+    });
+    $("#sBlocked").on("click", "[data-why]", function(e){ e.stopPropagation(); openWhy($(this).attr("data-why"), this); });
+
     $("#sBlocked").on("click", "#sbOpenFilters", openFilters);
     $("#sbVisitorsLink").on("click", function(e){ e.preventDefault(); openTabById("visitors"); });
     $("#sbEnabled").on("change", function(){
@@ -975,8 +1255,10 @@
             $("#sbSince button").removeClass("active").filter('[data-h="' + B.hours + '"]').addClass("active");
             $("#sbIpTag").toggle(!!B.ip); $("#sbIpVal").text(B.ip);
         }
+        if (opts.reset !== false){ dropRef(); }
         openTabById("stats");
         setTab("blocked");
+        if (opts.search){ $("#sbSearch").val(opts.search); applySearch(opts.search); }
     };
 
     /* ---------- start ---------- */

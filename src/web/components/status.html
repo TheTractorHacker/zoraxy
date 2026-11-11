@@ -397,6 +397,9 @@
     #status .kpiLinked{ cursor: pointer; transition: border-color .15s, box-shadow .15s; }
     #status .kpiLinked:hover, #status .kpiLinked:focus-visible{ border-color: var(--kpi-accent, #94a3b8); box-shadow: 0 2px 8px rgba(0,0,0,0.10); outline: none; }
     #status .kpiGo{ float: right; margin: 0; opacity: 0.55; }
+    #status .kpiWhy{ float: right; font-weight: 600; font-size: .9em; color: var(--zx-link, #1a56c4); white-space: nowrap; }
+    #status .kpiWhy i.icon{ margin: 0; }
+    #status .kpiLinked:hover .kpiWhy{ text-decoration: underline; }
     #status .legendLink{ color: inherit; }
     #status .legendLink:hover{ color: var(--text_color); text-decoration: underline; }
     #status .kpiLabel{ font-size: 0.85em; color: var(--text_color_secondary); }
@@ -526,8 +529,8 @@
             <span class="kpiValue" id="glanceErr">-</span>
             <span class="kpiSub" id="glanceErrSub"></span>
         </div>
-        <div class="kpiCard skel kpiLinked" id="kpiBlocked" role="link" tabindex="0" title="See what was blocked and why">
-            <span class="kpiLabel"><i class="ban icon"></i> Blocked today <i class="angle right icon kpiGo"></i></span>
+        <div class="kpiCard skel kpiLinked" id="kpiBlocked" role="link" tabindex="0" title="See what was blocked and why" aria-label="Blocked today: see why">
+            <span class="kpiLabel"><i class="ban icon"></i> Blocked today <span class="kpiWhy">See why <i class="angle right icon"></i></span></span>
             <span class="kpiValue" id="glanceBlocked">-</span>
             <span class="kpiSub" id="glanceBlockedSub"></span>
         </div>

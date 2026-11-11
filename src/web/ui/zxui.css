@@ -91,6 +91,7 @@
     --zx-touch: 44px;       /* minimum touch target on phones */
     --zx-z-savebar: 40;
     --zx-z-popover: 60;
+    --zx-z-drawer: 1100;
     --zx-z-dialog: 1200;
     --zx-z-toast: 1300;
     --zx-z-palette: 1400;
@@ -441,6 +442,32 @@ body.zx-has-savebar .zx-toasts { bottom: 6.5rem; }
 .zx-dialog__text { margin: 0 0 var(--zx-space-4); color: var(--zx-text-muted); overflow-wrap: anywhere; }
 .zx-dialog__typed { margin: 0 0 var(--zx-space-4); }
 .zx-dialog__foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--zx-space-2); }
+
+/* ===================================================================================== drawer (ZxUI.drawer) */
+.zx-drawer-backdrop { position: fixed; inset: 0; z-index: var(--zx-z-drawer, 1100); background: var(--zx-overlay); display: flex; justify-content: flex-end; animation: zx-fade-in 0.15s ease-out; }
+.zx-drawer {
+    display: flex; flex-direction: column; width: min(32rem, 100%); height: 100%; max-height: 100%;
+    background: var(--zx-surface); color: var(--zx-text); border-left: 1px solid var(--zx-border-strong); box-shadow: var(--zx-shadow-3);
+    animation: zx-drawer-in 0.2s ease-out; outline: none;
+}
+.zx-drawer__head { flex: 0 0 auto; display: flex; align-items: flex-start; gap: var(--zx-space-3); padding: var(--zx-space-4) var(--zx-space-4) var(--zx-space-3) var(--zx-space-5); border-bottom: 1px solid var(--zx-border); }
+.zx-drawer__title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: var(--zx-fs-xl); font-weight: 700; line-height: 1.3; color: var(--zx-text); overflow-wrap: anywhere; }
+.zx-drawer__close { flex: 0 0 auto; }
+.zx-drawer__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--zx-space-4) var(--zx-space-5); }
+.zx-drawer__foot { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: var(--zx-space-2); padding: var(--zx-space-3) var(--zx-space-5); padding-bottom: calc(var(--zx-space-3) + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--zx-border); background: var(--zx-surface); }
+.zx-drawer__foot:empty { display: none; }
+@keyframes zx-drawer-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes zx-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@media (max-width: 600px) {
+    .zx-drawer-backdrop { align-items: flex-end; justify-content: stretch; }
+    .zx-drawer { width: 100%; height: auto; max-height: 88vh; max-height: 88dvh; border-left: 0; border-top: 1px solid var(--zx-border-strong); border-radius: var(--zx-radius-lg) var(--zx-radius-lg) 0 0; animation-name: zx-sheet-in; }
+    .zx-drawer__head { padding: var(--zx-space-3) var(--zx-space-3) var(--zx-space-2) var(--zx-space-4); }
+    .zx-drawer__body { padding: var(--zx-space-3) var(--zx-space-4); }
+    .zx-drawer__foot { padding-left: var(--zx-space-4); padding-right: var(--zx-space-4); }
+    .zx-drawer__foot .zx-btn { flex: 1 1 8rem; }
+}
+@keyframes zx-sheet-in { from { transform: translateY(32px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .zx-drawer, .zx-drawer-backdrop { animation: none; } }
 
 /* ===================================================================================== skeleton */
 .zx-skeleton { display: block; border-radius: var(--zx-radius-sm); background: linear-gradient(90deg, var(--zx-surface-2) 25%, var(--zx-surface-3) 50%, var(--zx-surface-2) 75%); background-size: 200% 100%; animation: zx-shimmer 1.4s linear infinite; }
