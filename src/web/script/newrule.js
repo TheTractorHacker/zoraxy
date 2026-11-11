@@ -135,7 +135,8 @@
 
         $f("nrDomain").on("input", function () { validateDomain(false); scheduleCertPaint(); });
         $f("nrCert").on("change", paintCertHint);
-        $f("nrDomain").on("blur", function () { cleanDomain(); validateDomain(true); });
+        // an empty Domain is reported on Create, not on blur: the extra line moved the controls under a click in progress
+        $f("nrDomain").on("blur", function () { cleanDomain(); validateDomain($f("nrDomain").val().trim() !== ""); });
         $f("nrUpstream").on("input", function () { validateUpstream(false); scheduleTest(900); });
         $f("nrUpstream").on("blur", function () { cleanUpstream(); validateUpstream(true); scheduleTest(0); });
         $f("nrUpstream").on("paste", function () { var el = this; setTimeout(function () { cleanUpstream(); validateUpstream(false); scheduleTest(200); }, 0); });
