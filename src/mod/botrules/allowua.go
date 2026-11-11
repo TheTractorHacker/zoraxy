@@ -33,6 +33,12 @@ var genericUATokens = []string{
 	"bot", "spider", "crawler", "crawl", "http", "https", "www", "agent", "client", "browser", "user", "test", "version",
 }
 
+// browserProductTokens are the "name/" parts a browser sends; an entry containing one would match browsers
+var browserProductTokens = []string{
+	"chrome/", "chromium/", "safari/", "firefox/", "applewebkit/", "gecko/", "edg/", "edge/", "edga/", "edgios/", "opr/", "opera/",
+	"crios/", "fxios/", "version/", "mobile/", "trident/", "khtml", "msie",
+}
+
 // referenceBrowserUAs: no entry may be a part of what an ordinary browser sends
 var referenceBrowserUAs = []string{
 	"mozilla/5.0 (windows nt 10.0; win64; x64) applewebkit/537.36 (khtml, like gecko) chrome/126.0.0.0 safari/537.36 edg/126.0.0.0 opr/110.0.0.0",
@@ -67,6 +73,12 @@ func NormalizeAllowUA(p string) (string, error) {
 	for _, g := range genericUATokens {
 		if p == g || p == g+"/" || p == g+"-" {
 			return "", fmt.Errorf("%q is a generic token that many clients send, so it is not accepted", p)
+		}
+	}
+	// a browser product token with any version ("chrome/9", "firefox/1") is as broad as the browser itself
+	for _, b := range browserProductTokens {
+		if strings.Contains(p, b) {
+			return "", fmt.Errorf("%q is a browser product token, so it is not accepted", p)
 		}
 	}
 	if strings.HasPrefix(p, "mozilla") {

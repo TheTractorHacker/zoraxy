@@ -1201,7 +1201,7 @@
                 var lab = $('<label class="bwFix"></label>');
                 var inp = $('<input type="radio">').attr({name: gname, value: f.id});
                 if (!first && !f.requiresAllSites) first = inp;
-                inp.on("change", function(){ chosen = f; allBox.find("input").prop("checked", false); errBox.prop("hidden", true); refresh(); });
+                inp.on("change", function(){ chosen = f; patSeq++; patBusy = false; clearTimeout(patTimer); allBox.find("input").prop("checked", false); errBox.prop("hidden", true); refresh(); });
                 f._lab = $('<span class="bwFixLabel"></span>').text(f.label);
                 var main = $('<span class="bwFixMain"></span>').append(f._lab,
                     $('<span class="bwFixMeta"></span>').append($('<span class="zx-badge zx-badge--' + risk[1] + '"></span>').text(t(risk[0])), $('<span class="zx-badge"></span>').text(t(SCOPE[f.scope] || f.scope))));

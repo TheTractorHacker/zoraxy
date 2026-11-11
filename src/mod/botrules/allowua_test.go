@@ -21,6 +21,19 @@ func TestNormalizeAllowUA(t *testing.T) {
 	}
 }
 
+func TestNormalizeAllowUARejectsBrowserTokens(t *testing.T) {
+	for _, in := range []string{"chrome/9", "firefox/9", "safari/1", "edg/99", "opr/1", "crios/1", "xx chrome/1", "msie 9"} {
+		if got, err := NormalizeAllowUA(in); err == nil {
+			t.Errorf("%q should be refused, got %q", in, got)
+		}
+	}
+	for _, in := range []string{"curl/", "python-requests/", "itflow-agent/"} {
+		if _, err := NormalizeAllowUA(in); err != nil {
+			t.Errorf("%q should be accepted: %v", in, err)
+		}
+	}
+}
+
 func TestAllowUAToken(t *testing.T) {
 	good := map[string]string{"curl/8.18.0": "curl/", "python-requests/2.31.0": "python-requests/", "Wget/1.21.4 (linux-gnu)": "wget/", "okhttp/4.12.0": "okhttp/",
 		"Go-http-client/1.1": "go-http-client/", "Java/17.0.2": "java/", "Dalvik/2.1.0 (Linux; U; Android 13)": "dalvik/"}
