@@ -97,6 +97,10 @@ ZxUI.confirm({title: "Delete rule?", message: "app.example.com stops working.", 
 ```
 Danger puts the initial focus on Cancel. `typed` keeps the confirm button disabled until that exact text is typed; use it for irreversible actions on one named object. Escape cancels, Tab is trapped, focus returns to the opener.
 
+### 2.4 Drawer
+
+`ZxUI.drawer({title, label, onClose, returnFocus})` returns `{el, body, foot, setTitle, close, isOpen}`. A modal panel from the right edge, a bottom sheet at 600px and narrower (max 88% of the height, safe-area aware). Esc, the close button and a click on the dimmed area close it; Tab is trapped; focus returns to `returnFocus` (default: the element that was focused). One drawer at a time. Layer `--zx-z-drawer` (1100), below dialogs, toasts (an Undo toast stays visible above it) and the palette. Fill `body` and `foot` yourself; `foot` hides while empty. First user: "Why was this blocked?" on Statistics > Blocked (docs/ux/why-blocked.md).
+
 ## 3. Navigation
 
 ### 3.1 Menu definition
