@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/mail"
 	"strings"
+	"time"
 
 	"encoding/hex"
 
@@ -34,6 +35,9 @@ type AuthAgent struct {
 
 	cache userCache //account state cache (role / disabled / session generation), see users.go
 	audit auditLog  //admin account audit log, see users.go
+
+	sessConf sessionConf      //session lifetime settings, see session_settings.go
+	nowFn    func() time.Time //test hook, nil = time.Now
 }
 
 type AuthEndpoints struct {
@@ -49,11 +53,15 @@ func NewAuthenticationAgent(sessionName string, key []byte, sysdb *db.Database, 
 	store := sessions.NewCookieStore(key)
 	store.Options.HttpOnly = true
 	store.Options.SameSite = http.SameSiteLaxMode
+	//securecookie rejects cookies older than its own MaxAge (30 days by default): raise it so the
+	//configured "remember me" lifetime (up to a year) is honoured; the real lifetime is checked via "exp"
+	store.MaxAge(sessionStoreMaxAge)
 	err := sysdb.NewTable("auth")
 	if err != nil {
 		systemLogger.Println("Failed to create auth database. Terminating.")
 		panic(err)
 	}
+	sysdb.NewTable("settings")
 
 	//Create a new AuthAgent object
 	newAuthAgent := AuthAgent{
@@ -63,6 +71,8 @@ func NewAuthenticationAgent(sessionName string, key []byte, sysdb *db.Database, 
 		LoginRedirectionHandler: loginRedirectionHandler,
 		Logger:                  systemLogger,
 	}
+
+	newAuthAgent.loadSessionSettings()
 
 	//Return the authAgent
 	return &newAuthAgent
@@ -199,12 +209,8 @@ func (a *AuthAgent) LoginUserByRequest(w http.ResponseWriter, r *http.Request, u
 	session.Values["rememberMe"] = rememberme
 	session.Values["sessver"] = a.loadState(username).ver
 
-	//Check if remember me is clicked. If yes, set the maxage to 1 week.
-	if rememberme {
-		session.Options = newSessionOptions(r, 3600*24*7) //One week
-	} else {
-		session.Options = newSessionOptions(r, 3600*1) //One hour
-	}
+	//Lifetime comes from the session settings (default: 1 hour, 7 days with remember me)
+	session.Options = newSessionOptions(r, a.stampSession(session.Values, rememberme))
 	session.Save(r, w)
 }
 
