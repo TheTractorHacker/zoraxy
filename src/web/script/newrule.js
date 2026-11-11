@@ -14,7 +14,7 @@
     "use strict";
 
     var $m = null;
-    var st = { templates: null, testSeq: 0, tlsTouched: false, skipTouched: false, existing: {}, submitting: false, lastTest: null, testTimer: null };
+    var st = { templates: null, testSeq: 0, tlsTouched: false, skipTouched: false, existing: {}, certs: null, certTimer: null, submitting: false, lastTest: null, testTimer: null };
 
     var CSS = [
         "#newRuleModal.ui.modal{ max-width:46em; }",
@@ -30,6 +30,11 @@
         "#newRuleModal .nrTestRes.ok{ color:#21ba45; }",
         "#newRuleModal .nrTestRes.warn{ color:#b58105; }",
         "#newRuleModal .nrTestRes.bad{ color:#db2828; }",
+        "#newRuleModal #nrCert{ width:100%; box-sizing:border-box; max-width:100%; text-overflow:ellipsis; }",
+        "#newRuleModal .nrCertHint > div{ margin-top:0.2em; }",
+        "#newRuleModal .nrCertHint a{ color:#4b75ff; text-decoration:underline; }",
+        "#newRuleModal .nrCertHint .warn{ color:#b58105; }",
+        "#newRuleModal .nrCertHint .warn i.icon{ margin-right:0.25em; }",
         "#newRuleModal .nrTls{ display:flex; flex-wrap:wrap; gap:0.4em 1.4em; align-items:center; margin-top:0.6em; }",
         "#newRuleModal .nrAuto{ font-size:0.75em; padding:0.15em 0.55em; border-radius:2em; background:rgba(75,117,255,0.14); color:#4b75ff; margin-left:0.4em; }",
         "#newRuleModal .nrTplGrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(13em,1fr)); gap:0.6em; }",
@@ -71,6 +76,9 @@
         '<input type="text" id="nrDomain" placeholder="app.example.com" autocapitalize="off" spellcheck="false">' +
         '<span class="nrHint">Use <code>*.example.com</code> for a wildcard. Separate extra hostnames (aliases) with commas.</span>' +
         '<div class="nrErr" id="nrDomainErr"></div></div>' +
+        '<div class="field" id="nrFCert"><label for="nrCert">HTTPS certificate</label>' +
+        '<select id="nrCert" aria-describedby="nrCertHint"><option value="">Automatic (match by hostname)</option></select>' +
+        '<div class="nrHint nrCertHint" id="nrCertHint" role="status" aria-live="polite"></div></div>' +
         '<div class="field" id="nrFUp"><label for="nrUpstream">Upstream (where the app runs)</label>' +
         '<div class="nrUpRow"><div class="ui input"><input type="text" id="nrUpstream" placeholder="192.168.1.20:8080" autocapitalize="off" spellcheck="false"></div>' +
         '<button type="button" class="ui basic button" id="nrTest"><i class="plug icon"></i> Test connection</button></div>' +
@@ -124,7 +132,8 @@
         $f("nrRate").on("change", function () { $f("nrRateNum").prop("disabled", !this.checked); });
         $f("nrUtm").on("change", function () { $f("nrUtmUri").prop("disabled", !this.checked); });
 
-        $f("nrDomain").on("input", function () { validateDomain(false); });
+        $f("nrDomain").on("input", function () { validateDomain(false); scheduleCertPaint(); });
+        $f("nrCert").on("change", paintCertHint);
         $f("nrDomain").on("blur", function () { cleanDomain(); validateDomain(true); });
         $f("nrUpstream").on("input", function () { validateUpstream(false); scheduleTest(900); });
         $f("nrUpstream").on("blur", function () { cleanUpstream(); validateUpstream(true); scheduleTest(0); });
@@ -204,6 +213,93 @@
             var cur = $f("nrAccess").val();
             $f("nrAccess").html(data.map(function (a) { return '<option value="' + esc(a.ID) + '">' + esc(a.ID === "default" ? "Default (allow all)" : a.Name) + "</option>"; }).join("")).val(cur || "default");
         });
+    }
+
+    // The certificates Zoraxy has: the same list the TLS tab uses (/api/cert/list), with expiry, plus the names each covers
+    function loadCerts() {
+        var list = null, names = null, pending = 2;
+        function done() {
+            if (--pending) { return; }
+            st.certs = null;
+            if (list && list.forEach) {
+                st.certs = list.map(function (c) {
+                    return { name: c.Filename, expire: String(c.ExpireDate || "").slice(0, 10), days: c.RemainingDays, fallback: !!c.IsFallback, names: ((names || {})[c.Filename] || []).slice().sort() };
+                });
+            }
+            paintCerts();
+        }
+        $.get("/api/cert/list?date=true", function (r) { if (r && r.forEach) { list = r; } }).always(done);
+        $.get("/api/cert/listdomains?compact=true", function (r) { if (r && !r.error) { names = r; } }).always(done);
+    }
+    function ruleHosts() {
+        return $f("nrDomain").val().split(",").map(function (x) { return x.trim().toLowerCase(); }).filter(function (x) { return x && HOST_RE.test(x); });
+    }
+    // does a certificate name list cover the host? A wildcard certificate covers one label; a wildcard rule host needs the identical name
+    function nameCovers(certNames, host) {
+        var set = {};
+        (certNames || []).forEach(function (n) { set[String(n).replace(/^_\./, "*.").toLowerCase()] = true; });
+        if (set[host]) { return true; }
+        if (host.charAt(0) === "*") { return false; }
+        var i = host.indexOf(".");
+        return i > 0 && !!set["*" + host.slice(i)];
+    }
+    function certCovers(c, hosts) { return hosts.length > 0 && hosts.every(function (h) { return nameCovers(c.names, h); }); }
+    function certById(name) { return (st.certs || []).filter(function (c) { return c.name === name; })[0]; }
+
+    function certLabel(c, mark) {
+        var bits = [c.name];
+        if (c.fallback) { bits.push(t("default certificate")); }
+        if (c.days < 0) { bits.push(t("expired")); } else if (c.expire) { bits.push(tf("expires {0}", c.expire)); }
+        return (mark ? "\u2713 " : "") + bits[0] + (bits.length > 1 ? " (" + bits.slice(1).join(", ") + ")" : "");
+    }
+    function paintCerts() {
+        var $s = $f("nrCert"), cur = $s.val() || "", hosts = ruleHosts(), certs = st.certs || [];
+        var cover = certs.filter(function (c) { return certCovers(c, hosts); });
+        var other = certs.filter(function (c) { return cover.indexOf(c) < 0; });
+        function opt(c, mark) { return '<option value="' + esc(c.name) + '"' + (c.names.length ? ' title="' + esc(c.names.join(", ")) + '"' : "") + ">" + esc(certLabel(c, mark)) + "</option>"; }
+        var h = '<option value="">' + esc(t("Automatic (match by hostname)")) + "</option>";
+        if (cover.length && other.length) {
+            h += '<optgroup label="' + esc(tf("Covers {0}", hosts.join(", "))) + '">' + cover.map(function (c) { return opt(c, true); }).join("") + "</optgroup>";
+            h += '<optgroup label="' + esc(t("Other certificates")) + '">' + other.map(function (c) { return opt(c, false); }).join("") + "</optgroup>";
+        } else {
+            h += certs.map(function (c) { return opt(c, cover.indexOf(c) >= 0); }).join("");
+        }
+        $s.html(h);
+        $s.val(certById(cur) ? cur : "");
+        paintCertHint();
+    }
+    function scheduleCertPaint() {
+        clearTimeout(st.certTimer);
+        st.certTimer = setTimeout(function () { if (st.certs && st.certs.length) { paintCerts(); } }, 250);
+    }
+    function certLine(cls, icon, text) {
+        var $d = $("<div>").addClass(cls || "");
+        if (icon) { $d.append($("<i>").addClass(icon + " icon")); }
+        return $d.append(document.createTextNode(text));
+    }
+    function paintCertHint() {
+        var $h = $f("nrCertHint").empty(), v = $f("nrCert").val() || "", c = certById(v), hosts = ruleHosts();
+        if (!st.certs) { return; }
+        if (!st.certs.length) {
+            var $d = $("<div>").append(document.createTextNode(t("No certificates yet. Upload one, request one from an ACME provider or make a self-signed one on the Certificates page. Your entries here are kept.") + " "));
+            $d.append($('<a href="#">').text(t("Open Certificates")).on("click", function (e) { e.preventDefault(); openCertsPage(); }));
+            $h.append($d);
+            return;
+        }
+        if (!c) { $h.append(certLine("", "", t("Zoraxy serves the certificate that matches the hostname."))); return; }
+        var shown = c.names.slice(0, 6).join(", ");
+        if (c.names.length > 6) { shown = tf("{0} and {1} more", shown, c.names.length - 6); }
+        $h.append(certLine("", "", c.names.length ? tf("Covers: {0}.", shown) : t("This certificate lists no names.")));
+        var bad = hosts.filter(function (x) { return !nameCovers(c.names, x); });
+        if (bad.length) { $h.append(certLine("warn", "exclamation triangle", tf("This certificate does not cover {0}. Visitors will see a certificate warning. You can still create the rule.", bad.join(", ")))); }
+        if (c.days < 0) { $h.append(certLine("warn", "exclamation triangle", t("This certificate has expired."))); }
+        $h.append(certLine("", "", t("Zoraxy will serve it for every hostname of this rule and turn off automatic certificate matching (SNI) for this rule only.")));
+    }
+    function openCertsPage() {
+        var d = $f("nrDomain").val(), u = $f("nrUpstream").val();
+        $m.modal("hide");
+        if (typeof openTabById === "function") { openTabById("cert"); }
+        toast(t("Add a certificate, then come back to the new rule."), [{ label: t("Back to the new rule"), fn: function () { openNewRuleDialog({ keep: true, domain: d, upstream: u }); } }]);
     }
 
     /* ---------------------------------------------------------------- validation */
@@ -339,6 +435,8 @@
             blockCommonExploits: $f("nrExploit").is(":checked"), blockAICrawlers: false, mitigationAction: 0,
             disableWebSocket: false, websocketTimeout: 0, enableTimeoutRefreshOnActivity: false
         };
+        var cert = $f("nrCert").val() || "";
+        if (cert) { payload.certificate = cert; } //absent = automatic, the request is exactly what it was before this field
         st.submitting = true;
         $f("nrCreate").addClass("loading disabled");
         $.cjax({
@@ -346,8 +444,8 @@
             success: function (data) {
                 st.submitting = false;
                 $f("nrCreate").removeClass("loading disabled");
-                if (data && data.error !== undefined) { showFormError(String(data.error)); return; }
-                created(primary, rootname, $f("nrAgain").is(":checked"));
+                if (data && data.error !== undefined) { showFormError(String(data.error)); if (cert) { loadCerts(); } return; }
+                created(primary, rootname, $f("nrAgain").is(":checked"), cert);
             },
             error: function () { st.submitting = false; $f("nrCreate").removeClass("loading disabled"); showFormError("The request failed. Check the connection and try again."); }
         });
@@ -365,7 +463,7 @@
         return false;
     }
 
-    function created(primary, rootname, again) {
+    function created(primary, rootname, again, cert) {
         $m.modal("hide");
         if (typeof initQuickStartState === "function") { initQuickStartState(); }
         if (typeof reloadUptimeList === "function") { try { reloadUptimeList(); } catch (e) { } }
@@ -379,9 +477,10 @@
             { label: "Open rule", fn: function () { if (window.ProxyTable) { window.ProxyTable.reload(true).then(function () { var r = window.httpProxyList.filter(function (x) { return x.RootOrMatchingDomain === primary; })[0]; if (r) { initHttpProxyRuleEditorModal(JSON.parse(JSON.stringify(r))); } }); } } },
             { label: "Add another", fn: function () { openNewRuleDialog({ keep: true }); } }
         ];
-        var msg = "Created " + primary;
+        var msg = cert ? tf("Created {0}, serving certificate {1}", primary, cert) : "Created " + primary;
         if (again) { setTimeout(function () { openNewRuleDialog({ keep: true }); }, 350); }
-        if (tlsListening() && primary.indexOf("*") < 0 && /[a-z]/i.test(primary) && primary.indexOf(".") > 0) {
+        // a certificate was chosen: do not offer to create another one for the host
+        if (!cert && tlsListening() && primary.indexOf("*") < 0 && /[a-z]/i.test(primary) && primary.indexOf(".") > 0) {
             $.get("/api/cert/list", function (names) {
                 if (!hasCertificateFor(primary, names)) {
                     actions.push({ label: "Create certificate for this host", fn: function () { requestCert(primary); } });
@@ -460,7 +559,7 @@
         syncTlsUi();
         $f("nrRateNum").prop("disabled", !$f("nrRate").is(":checked"));
         $f("nrUtmUri").prop("disabled", !$f("nrUtm").is(":checked"));
-        loadTemplates(); loadExisting(); loadAccessRules();
+        loadTemplates(); loadExisting(); loadAccessRules(); loadCerts();
         $m.find(".ui.checkbox").checkbox();
         $m.modal("show");
         setTimeout(function () { $f("nrDomain").trigger("focus"); }, 250);

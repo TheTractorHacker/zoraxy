@@ -37,6 +37,7 @@ ap.add_argument("--netsys-only", action="store_true", help="run only the Network
 ap.add_argument("--central-captcha-only", action="store_true", help="run only the central CAPTCHA provider scenario (central_captcha_smoke.py)")
 ap.add_argument("--overview-only", action="store_true", help="run only the Status / Security overview / History / palette / navigation fix scenario")
 ap.add_argument("--blocked-only", action="store_true", help="run only the Statistics > Blocked scenario (Reference ID search, row drawer, fix + Undo, palette, Status tile)")
+ap.add_argument("--newrule-cert-only", action="store_true", help="run only the New proxy rule certificate choice scenario (newrule_cert_smoke.py)")
 ap.add_argument("--zrok-fake", default=os.environ.get("SMOKE_ZROK_FAKE", ""), help="path of a fake zrok script; enables the zrok flow (the instance needs -allow_external_tools)")
 ap.add_argument("--allow", action="append", default=[], help="regex of messages whose failure is tolerated")
 args = ap.parse_args()
@@ -2821,6 +2822,7 @@ def _network_system_body(pg, ctx, args, after, shot, dialogs, api, toast_text, w
         fail("dialog", f"native dialogs used on the Network / System pages: {dialogs}")
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "overview_smoke.py")).read(), "overview_smoke.py", "exec"))  # defines overview_ui
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "blocked_smoke.py")).read(), "blocked_smoke.py", "exec"))  # defines blocked_ui
+exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "newrule_cert_smoke.py")).read(), "newrule_cert_smoke.py", "exec"))  # defines newrule_cert_ui
 
 
 def main():
@@ -2841,6 +2843,10 @@ def main():
         if pg.evaluate("location.hash") != want:
             fail("quickstart", f"landed on {pg.evaluate('location.hash')}, expected {want} (quickstart state {qs})")
 
+        if args.newrule_cert_only:
+            newrule_cert_ui(pg, ctx)
+            b.close()
+            return
         if args.blocked_only:
             blocked_ui(pg, ctx)
             b.close()

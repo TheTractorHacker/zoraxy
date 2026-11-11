@@ -93,6 +93,7 @@ paths:
                 tlsval: {type: boolean, description: "Skip upstream TLS validation"}
                 access: {type: string, description: "Access rule ID (default: default)"}
                 tags: {type: string}
+                certificate: {type: string, description: "Name of a stored certificate (as listed by GET /api/v1/certificates, Filename) to serve for this rule's hostnames. Also turns SNI matching off for this rule, because the server only honours a chosen certificate then. Unknown name: 400 and nothing is created. Omit for automatic matching by hostname."}
       responses:
         "201": {description: Created}
         "400": {$ref: "#/components/responses/BadRequest"}
