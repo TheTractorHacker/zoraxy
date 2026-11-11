@@ -4,7 +4,7 @@
   "reviewed": false,
   "author": "machine-assisted (Claude)",
   "coverage": 20.7,
-  "coreCoverage": 40.7
+  "coreCoverage": 40.6
  },
  "strings": {
   "\"Add Redirection Rule\"": "\"Adicionar regra de redirecionamento\"",
@@ -730,7 +730,6 @@
   "Heading": "Título",
   "Health check path, e.g. /healthz": "Caminho de verificação, ex.: /healthz",
   "Hide": "Ocultar",
-  "Hide the \"Performance & security by Zoraxy\" footer": "Ocultar o rodapé \"Performance & security by Zoraxy\"",
   "High": "Alto",
   "Host": "Host",
   "Hostname": "Nome de host",

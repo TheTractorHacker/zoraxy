@@ -200,7 +200,9 @@ func buildData(cfg *Config, kind PageKind, domain, nonce string, opts RenderOpti
 		Lang:       i18n.HTMLLang(opts.Lang),
 		Accent:     DefaultAccentColor,
 		Theme:      ThemeAuto,
-		ShowFooter: !b.HideFooter,
+		// "hide footer" removes the built-in Zoraxy credit; a footer the admin
+		// wrote themselves is still shown
+		ShowFooter: !b.HideFooter || b.FooterText != "" || b.FooterLinkText != "" || b.FooterLinkURL != "",
 		LogoURL:    safeLogo(b.LogoURL),
 		RetryURL:   opts.RetryURL,
 	}

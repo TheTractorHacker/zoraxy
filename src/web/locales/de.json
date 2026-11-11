@@ -3,7 +3,7 @@
   "language": "German",
   "reviewed": false,
   "author": "machine-assisted (Claude)",
-  "coverage": 20.5,
+  "coverage": 20.4,
   "coreCoverage": 40.7
  },
  "strings": {
@@ -717,7 +717,6 @@
   "Heading": "Überschrift",
   "Health check path, e.g. /healthz": "Pfad der Integritätsprüfung, z. B. /healthz",
   "Hide": "Ausblenden",
-  "Hide the \"Performance & security by Zoraxy\" footer": "Fußzeile „Performance & security by Zoraxy“ ausblenden",
   "High": "Hoch",
   "Host": "Host",
   "Hostname": "Hostname",

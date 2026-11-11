@@ -495,10 +495,15 @@ func TestCustomFooter(t *testing.T) {
 	if !strings.Contains(def, "https://zoraxy.aroz.org") || !strings.Contains(def, ">Zoraxy</a>") {
 		t.Error("default footer changed")
 	}
-	// hide still wins
+	// hide removes the built-in Zoraxy credit but keeps a footer the admin wrote
 	cfg.Branding.HideFooter = true
-	if strings.Contains(render(t, cfg, PageChallenge).Body.String(), "Acme IT") {
-		t.Error("hidden footer shown")
+	if !strings.Contains(render(t, cfg, PageChallenge).Body.String(), "Acme IT") {
+		t.Error("custom footer must still show when the default footer is hidden")
+	}
+	// hide with no custom footer removes the footer entirely
+	plain := render(t, &Config{Provider: ProviderCloudflare, SiteKey: "SK", Branding: &Branding{HideFooter: true}}, PageChallenge).Body.String()
+	if strings.Contains(plain, "<footer") {
+		t.Error("hidden default footer shown")
 	}
 	// unsafe link rejected by validation
 	for _, u := range []string{"javascript:alert(1)", "data:text/html,x", "//evil.example", "ftp://x.example"} {

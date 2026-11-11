@@ -4,7 +4,7 @@
   "reviewed": false,
   "author": "machine-assisted (Claude)",
   "coverage": 74.4,
-  "coreCoverage": 75.3
+  "coreCoverage": 75.2
  },
  "strings": {
   "\"Add Redirection Rule\"": "“添加重定向规则”",
@@ -1678,7 +1678,6 @@
   "Held in memory (last 1000, cleared on restart). The full audit trail is in the": "保存在内存中（最近 1000 条，重启后清除）。完整审计记录位于",
   "Hidden": "已隐藏",
   "Hide": "隐藏",
-  "Hide the \"Performance & security by Zoraxy\" footer": "隐藏“Performance & security by Zoraxy”页脚",
   "Hide the map (also stops its updates)": "隐藏地图（同时停止其更新）",
   "Hide the text under the watermark icon on the login page panel art.": "隐藏登录页面插图面板上水印图标下方的文字。",
   "Hide the watermark logo on the login page panel art, leaving the artwork on its own.": "隐藏登录页面插图面板上的水印标志，仅保留插图本身。",
@@ -1962,7 +1961,6 @@
   "Least connections": "最少连接",
   "Least response time": "最短响应时间",
   "Leave blank to keep": "留空则保持不变",
-  "Leave empty for the default. Ignored when the footer is hidden.": "留空则使用默认值。隐藏页脚时此项无效。",
   "Leave empty to protect all paths on this endpoint. One prefix per line, comma or semicolon is also supported.": "留空则保护此端点上的所有路径。每行一个前缀，也支持逗号或分号分隔。",
   "Leave empty to protect every path. One prefix per line.": "留空则保护所有路径。每行一个前缀。",
   "Leave empty to use the built-in page.": "留空则使用内置页面。",

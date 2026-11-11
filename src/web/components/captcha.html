@@ -209,8 +209,8 @@
                             <div class="field"><label>Footer link label</label><input type="text" data-cp="captchaFooterLinkText" maxlength="120" placeholder="Zoraxy"></div>
                             <div class="field"><label>Footer link URL</label><input type="url" data-cp="captchaFooterLinkURL" maxlength="512" placeholder="https://zoraxy.aroz.org"></div>
                         </div>
-                        <div class="cpHelp">Leave empty for the default. Ignored when the footer is hidden.</div>
-                        <div class="field" style="margin-top:.8em"><div class="ui checkbox"><input type="checkbox" data-cp="captchaHideFooter"><label>Hide the "Performance &amp; security by Zoraxy" footer</label></div></div>
+                        <div class="cpHelp">Leave empty for the default. A footer you fill in here is still shown when the Zoraxy footer is hidden.</div>
+                        <div class="field" style="margin-top:.8em"><div class="ui checkbox"><input type="checkbox" data-cp="captchaHideFooter"><label>Hide the default "Performance &amp; security by Zoraxy" footer (your own footer text above still shows)</label></div></div>
                     </div>
 
                     <div class="ui segment cpRuleOnly cpTurnstileSeg">
@@ -501,8 +501,14 @@
     }
     function updateLogoInfo() {
         var v = $(".cqLogo").val() || "";
-        $(".cqLogoInfo").text(v.indexOf("data:") === 0 ? "Uploaded image (" + Math.round(v.length * 0.75 / 1024) + " KiB)" :
-            "HTTPS URL, or upload a PNG / JPEG / GIF / WebP image (max 256 KiB, checked by content). SVG is not accepted.");
+        var isData = v.indexOf("data:") === 0;
+        $(".cqLogo").prop("readonly", isData).css("text-overflow", "ellipsis");
+        var info = $(".cqLogoInfo").empty();
+        if (isData && /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+\/=]+$/.test(v)) {
+            info.append($("<img>").attr({ src: v, alt: "Logo preview" }).css({ maxHeight: "3em", maxWidth: "8em", verticalAlign: "middle", marginRight: ".6em" }));
+        }
+        info.append(document.createTextNode(isData ? "Uploaded image (" + Math.round(v.length * 0.75 / 1024) + " KiB). Use \"remove logo\" to change it." :
+            "HTTPS URL, or upload a PNG / JPEG / GIF / WebP image (max 256 KiB, checked by content). SVG is not accepted."));
         $(".cqLogoClear").toggle(v !== "");
     }
     function openEditor(ep, enable) {
