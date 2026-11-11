@@ -144,6 +144,16 @@ func TestAddRuleWithUnknownCertificateCreatesNothing(t *testing.T) {
 	}
 }
 
+// A certificate only means something for a host rule. Any other type must say so instead of ignoring the field.
+func TestAddRuleCertificateOnNonHostRuleIsRefused(t *testing.T) {
+	setupNewCertTest(t)
+	f := addRuleForm("test.local", "cert-a")
+	f.Set("type", "root")
+	if got := postAddRule(f); !strings.Contains(got, "error") {
+		t.Errorf("a certificate on a root rule must be refused, got %s", got)
+	}
+}
+
 // Without a choice the rule is exactly what it was before this field existed.
 func TestAddRuleWithoutCertificateIsUnchanged(t *testing.T) {
 	m := setupNewCertTest(t)

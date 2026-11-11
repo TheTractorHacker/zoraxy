@@ -674,6 +674,11 @@ func ReverseProxyHandleAddEndpoint(w http.ResponseWriter, r *http.Request) {
 	certificateChoice, _ := utils.PostPara(r, "certificate")
 	certificateChoice = strings.TrimSpace(certificateChoice)
 
+	if certificateChoice != "" && eptype != "host" {
+		utils.SendErrorResponse(w, "a certificate can only be chosen for a host rule")
+		return
+	}
+
 	var proxyEndpointCreated *dynamicproxy.ProxyEndpoint
 	switch eptype {
 	case "host":

@@ -59,7 +59,8 @@
         "#newRuleModal .nrCheck{ margin:0.35em 0 !important; }",
         "#newRuleModal .nrFormErr{ display:none; margin-top:0.8em; }",
         "#newRuleModal .actions .nrAgain{ float:left; margin-top:0.55em; }",
-        "#nrToast{ position:fixed; left:50%; bottom:1.5em; transform:translate(-50%,2em); opacity:0; pointer-events:none; z-index:2002; background:var(--theme_bg_inverted); color:var(--text_color_inverted); border-radius:0.6em; padding:0.75em 1em; box-shadow:0 6px 20px rgba(0,0,0,0.3); display:flex; flex-wrap:wrap; gap:0.4em 1em; align-items:center; transition:opacity .2s, transform .2s; max-width:calc(100vw - 2em); }",
+        "#nrToast{ position:fixed; left:50%; bottom:1.5em; transform:translate(-50%,2em); opacity:0; pointer-events:none; z-index:2002; background:#27292d; color:#fcfcfc; border-radius:0.6em; padding:0.75em 1em; box-shadow:0 6px 20px rgba(0,0,0,0.3); display:flex; flex-wrap:wrap; gap:0.4em 1em; align-items:center; transition:opacity .2s, transform .2s; max-width:calc(100vw - 2em); }",
+        "#nrToast span{ min-width:0; overflow-wrap:anywhere; }",
         "#nrToast.show{ opacity:1; transform:translate(-50%,0); pointer-events:auto; }",
         "#nrToast button{ border:0; background:transparent; color:#7aa2ff; font:inherit; font-weight:700; cursor:pointer; padding:0; }",
         "#nrToast button:hover{ text-decoration:underline; }",
@@ -254,6 +255,7 @@
     }
     function paintCerts() {
         var $s = $f("nrCert"), cur = $s.val() || "", hosts = ruleHosts(), certs = st.certs || [];
+        certs = certs.slice().sort(function (a, b) { return a.name < b.name ? -1 : (a.name > b.name ? 1 : 0); });
         var cover = certs.filter(function (c) { return certCovers(c, hosts); });
         var other = certs.filter(function (c) { return cover.indexOf(c) < 0; });
         function opt(c, mark) { return '<option value="' + esc(c.name) + '"' + (c.names.length ? ' title="' + esc(c.names.join(", ")) + '"' : "") + ">" + esc(certLabel(c, mark)) + "</option>"; }
@@ -264,8 +266,10 @@
         } else {
             h += certs.map(function (c) { return opt(c, cover.indexOf(c) >= 0); }).join("");
         }
+        // a choice the server refused stays selected (marked) so it is never dropped silently
+        if (cur && !certById(cur) && st.refusedCert === cur) { h += '<option value="' + esc(cur) + '">' + esc(tf("{0} (not available)", cur)) + "</option>"; }
         $s.html(h);
-        $s.val(certById(cur) ? cur : "");
+        $s.val(certById(cur) || (cur && st.refusedCert === cur) ? cur : "");
         paintCertHint();
     }
     function scheduleCertPaint() {
@@ -277,6 +281,7 @@
         if (icon) { $d.append($("<i>").addClass(icon + " icon")); }
         return $d.append(document.createTextNode(text));
     }
+    function shortList(a) { return a.length > 6 ? tf("{0} and {1} more", a.slice(0, 6).join(", "), a.length - 6) : a.join(", "); }
     function paintCertHint() {
         var $h = $f("nrCertHint").empty(), v = $f("nrCert").val() || "", c = certById(v), hosts = ruleHosts();
         if (!st.certs) { return; }
@@ -287,11 +292,12 @@
             return;
         }
         if (!c) { $h.append(certLine("", "", t("Zoraxy serves the certificate that matches the hostname."))); return; }
+        $h.append(certLine("", "", tf("Certificate: {0}", c.name)));
         var shown = c.names.slice(0, 6).join(", ");
         if (c.names.length > 6) { shown = tf("{0} and {1} more", shown, c.names.length - 6); }
         $h.append(certLine("", "", c.names.length ? tf("Covers: {0}.", shown) : t("This certificate lists no names.")));
         var bad = hosts.filter(function (x) { return !nameCovers(c.names, x); });
-        if (bad.length) { $h.append(certLine("warn", "exclamation triangle", tf("This certificate does not cover {0}. Visitors will see a certificate warning. You can still create the rule.", bad.join(", ")))); }
+        if (bad.length) { $h.append(certLine("warn", "exclamation triangle", tf("This certificate does not cover {0}. Visitors will see a certificate warning. You can still create the rule.", shortList(bad)))); }
         if (c.days < 0) { $h.append(certLine("warn", "exclamation triangle", t("This certificate has expired."))); }
         $h.append(certLine("", "", t("Zoraxy will serve it for every hostname of this rule and turn off automatic certificate matching (SNI) for this rule only.")));
     }
@@ -444,7 +450,7 @@
             success: function (data) {
                 st.submitting = false;
                 $f("nrCreate").removeClass("loading disabled");
-                if (data && data.error !== undefined) { showFormError(String(data.error)); if (cert) { loadCerts(); } return; }
+                if (data && data.error !== undefined) { showFormError(String(data.error)); if (cert) { st.refusedCert = cert; loadCerts(); } return; }
                 created(primary, rootname, $f("nrAgain").is(":checked"), cert);
             },
             error: function () { st.submitting = false; $f("nrCreate").removeClass("loading disabled"); showFormError("The request failed. Check the connection and try again."); }
@@ -554,7 +560,7 @@
         $f("nrTestRes").removeClass("ok warn bad").text("");
         $f("nrAuto").hide();
         showFormError("");
-        st.tlsTouched = false; st.skipTouched = false; st.lastTest = null; st.testSeq++;
+        st.tlsTouched = false; st.skipTouched = false; st.lastTest = null; st.refusedCert = null; st.testSeq++;
         $f("nrTlsOn").prop("checked", false); $f("nrSkipVerify").prop("checked", false);
         syncTlsUi();
         $f("nrRateNum").prop("disabled", !$f("nrRate").is(":checked"));

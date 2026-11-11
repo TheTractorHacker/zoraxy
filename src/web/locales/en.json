@@ -1088,6 +1088,7 @@
   "Certificate {0} has expired.": "Certificate {0} has expired.",
   "Certificate {0} installed": "Certificate {0} installed",
   "Certificate {0} is served for this name.": "Certificate {0} is served for this name.",
+  "Certificate: {0}": "Certificate: {0}",
   "Certificates": "Certificates",
   "Certificates and encryption.": "Certificates and encryption.",
   "Certificates by hostname": "Certificates by hostname",

@@ -76,6 +76,28 @@ func TestPreferredCertificateWildcardAndIDNKeys(t *testing.T) {
 	}
 }
 
+// A stored certificate whose name contains two dots in a row is a plain file name and can be chosen.
+func TestCertExistsAllowsDoubleDotInsideName(t *testing.T) {
+	m := newPrefManager(t, GetDefaultHostSpecificTlsBehavior())
+	for _, ext := range []string{".pem", ".key"} {
+		b, err := os.ReadFile(filepath.Join(m.CertStore, "a"+ext))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(m.CertStore, "foo..bar"+ext), b, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := m.CertExists("foo..bar"); err != nil {
+		t.Errorf("foo..bar must be accepted: %v", err)
+	}
+	for _, bad := range []string{".", "..", "../foo..bar"} {
+		if err := m.CertExists(bad); err == nil {
+			t.Errorf("%q must be refused", bad)
+		}
+	}
+}
+
 func TestCertExists(t *testing.T) {
 	m := newPrefManager(t, GetDefaultHostSpecificTlsBehavior())
 	if err := m.CertExists("a"); err != nil {

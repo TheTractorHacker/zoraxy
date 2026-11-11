@@ -320,7 +320,7 @@ func preferredCertificateFor(prefs map[string]string, hostname string) string {
 // CertExists reports whether a stored certificate (name without extension) has both its certificate and
 // its key file. The name must be a plain file name.
 func (m *Manager) CertExists(certName string) error {
-	if certName == "" || certName != filepath.Base(certName) || strings.ContainsAny(certName, "/\\") || strings.Contains(certName, "..") {
+	if certName == "" || certName != filepath.Base(certName) || strings.ContainsAny(certName, "/\\") || certName == "." || certName == ".." {
 		return errors.New("invalid certificate name")
 	}
 	if !utils.FileExists(filepath.Join(m.CertStore, certName+".pem")) || !utils.FileExists(filepath.Join(m.CertStore, certName+".key")) {
