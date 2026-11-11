@@ -573,6 +573,11 @@
                                     <label>Protected Path Prefixes (Optional)</label>
                                     <textarea class="CaptchaPathPrefixes" rows="3" placeholder="/form&#10;/api" style="width: 100%; resize: vertical;"></textarea>
                                     <small style="opacity:0.7;">Leave empty to protect all paths on this endpoint. One prefix per line, comma or semicolon is also supported.</small>
+                                    <div class="ui checkbox" style="display:block; margin-top:.6em;">
+                                        <input type="checkbox" class="CaptchaLimitChallenges">
+                                        <label>Apply these paths to every CAPTCHA trigger, not only "Require CAPTCHA"</label>
+                                    </div>
+                                    <small style="opacity:0.7; display:block;">When ticked, exploit / crawler blocking, country challenges, WAF challenges and rules-engine challenges also skip every path outside the list (for example /api), so API clients are never shown a CAPTCHA page. Those requests are let through, not blocked. Off: those triggers challenge any path.</small>
                                 </div>
                                 <button class="ui basic compact small button editCaptchaExceptionsBtn" style="margin-top: 0.8em;"><i class="ui yellow shield alternate icon"></i> CAPTCHA Exceptions</button>
                                 <button class="ui basic compact small button openCaptchaPageBtn" style="margin-top: 0.8em;"><i class="paint brush icon"></i> Customise bot-check page</button> <!-- feat/ui-audit-captcha-waf -->
@@ -1509,6 +1514,7 @@
         let captchaRecaptchaVersion = $(editor).find(".recaptchaVersionDropdown").dropdown("get value");
         let captchaRecaptchaScore = $(editor).find(".RecaptchaScore").val();
         let captchaPathPrefixes = $(editor).find(".CaptchaPathPrefixes").val();
+        let captchaLimitChallenges = $(editor).find(".CaptchaLimitChallenges").is(":checked");
         let captchaPageFields = collectCaptchaPageFields($(editor));
 
         let tags = getTagsArrayFromEndpoint(uuid);
@@ -1558,6 +1564,7 @@
                 "captchaRecaptchaVersion": captchaRecaptchaVersion,
                 "captchaRecaptchaScore": captchaRecaptchaScore,
                 "captchaPathPrefixes": captchaPathPrefixes,
+                "captchaLimitChallenges": captchaLimitChallenges,
                 "tags": tags,
             };
         Object.assign(cfgPayload, captchaPageFields);
@@ -2329,6 +2336,7 @@
             editor.find(".recaptchaVersionDropdown input[type='hidden']").val(subd.CaptchaConfig.RecaptchaVersion || "v2");
             editor.find(".RecaptchaScore").val(subd.CaptchaConfig.RecaptchaScore || 0.5);
             editor.find(".CaptchaPathPrefixes").val((subd.CaptchaConfig.ProtectedPathPrefixes || []).join("\n"));
+            editor.find(".CaptchaLimitChallenges").prop("checked", !!subd.CaptchaConfig.LimitChallengesToPaths);
 
             // Show/hide Google reCAPTCHA specific settings
             if (subd.CaptchaConfig.Provider == 1) {
@@ -2350,6 +2358,7 @@
             editor.find(".recaptchaVersionDropdown input[type='hidden']").val("v2");
             editor.find(".RecaptchaScore").val("0.5");
             editor.find(".CaptchaPathPrefixes").val("");
+            editor.find(".CaptchaLimitChallenges").prop("checked", false);
             editor.find(".googleRecaptchaSettings").hide();
         }
 
@@ -2421,6 +2430,9 @@
             hrpEdited(uuid, this);
         });
         editor.find(".CaptchaPathPrefixes").off("change").on("change", function() {
+            hrpEdited(uuid, this);
+        });
+        editor.find(".CaptchaLimitChallenges").off("change").on("change", function() {
             hrpEdited(uuid, this);
         });
         editor.find(".RecaptchaScore").off("change").on("change", function() {

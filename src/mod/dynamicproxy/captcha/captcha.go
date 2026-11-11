@@ -77,6 +77,13 @@ type Config struct {
 	AltchaMaxNumber    int               `json:"AltchaMaxNumber,omitempty"`    // Altcha only: work factor (max secret number), default 100000
 	FriendlyEndpoint   string            `json:"FriendlyEndpoint,omitempty"`   // Friendly Captcha only: "global" (default) or "eu"
 	VerifyHostname     bool              `json:"VerifyHostname,omitempty"`     // reject tokens whose siteverify hostname differs from the requested host
+
+	// LimitChallengesToPaths makes ProtectedPathPrefixes apply to every CAPTCHA
+	// trigger of the endpoint (exploit / crawler blocking, country challenge, WAF
+	// challenge, rules-engine challenge), not only the plain "require CAPTCHA"
+	// gate. Requests outside the prefixes are never challenged by those triggers
+	// (other blocking features still apply). Off by default.
+	LimitChallengesToPaths bool `json:"LimitChallengesToPaths,omitempty"`
 }
 
 // ExceptionRule defines rules for bypassing CAPTCHA
@@ -327,6 +334,17 @@ func ShouldEnforcePath(requestPath string, config *Config) bool {
 	}
 
 	return false
+}
+
+// ChallengeAllowedOnPath reports whether a challenge triggered by something other
+// than the plain "require CAPTCHA" gate (exploit, country, WAF, rule) may be shown
+// for requestPath. It is always true unless LimitChallengesToPaths is on and the
+// path is outside ProtectedPathPrefixes.
+func (c *Config) ChallengeAllowedOnPath(requestPath string) bool {
+	if c == nil || !c.LimitChallengesToPaths {
+		return true
+	}
+	return ShouldEnforcePath(requestPath, c)
 }
 
 // HandleVerification processes CAPTCHA verification requests. clientIP is

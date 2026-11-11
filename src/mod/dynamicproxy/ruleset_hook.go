@@ -2,6 +2,7 @@ package dynamicproxy
 
 import (
 	"context"
+	"imuslab.com/zoraxy/mod/pathmatch"
 	"net/http"
 	"strconv"
 	"time"
@@ -262,7 +263,7 @@ func (router *Router) ruleChallenge(w http.ResponseWriter, r *http.Request, sep 
 		serveProxyRequestError(w, r, http.StatusForbidden, router, ErrorTemplateForbidden)
 		return true
 	}
-	if router.ruleChallengeValid(r, sep, clientIP) {
+	if router.ruleChallengeValid(r, sep, clientIP) || !sep.CaptchaConfig.ChallengeAllowedOnPath(pathmatch.RequestTarget(r)) {
 		return false
 	}
 	abuseNoteKind(r, "") //a challenge is not a block

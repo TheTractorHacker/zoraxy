@@ -157,3 +157,23 @@ func TestShouldEnforcePathEdgeCases(t *testing.T) {
 		t.Error("a whitespace-only prefix should not protect anything")
 	}
 }
+
+func TestChallengeAllowedOnPath(t *testing.T) {
+	var nilCfg *Config
+	if !nilCfg.ChallengeAllowedOnPath("/api/x") {
+		t.Fatal("nil config must allow")
+	}
+	cfg := &Config{ProtectedPathPrefixes: []string{"/client", "/agent"}}
+	if !cfg.ChallengeAllowedOnPath("/api/v1/x") {
+		t.Fatal("off by default: other triggers challenge any path")
+	}
+	cfg.LimitChallengesToPaths = true
+	for p, want := range map[string]bool{"/client": true, "/client/a": true, "/agent/x": true, "/api/v1/agent_build_host": false, "/clientele": false} {
+		if got := cfg.ChallengeAllowedOnPath(p); got != want {
+			t.Errorf("%s: got %v want %v", p, got, want)
+		}
+	}
+	if !(&Config{LimitChallengesToPaths: true}).ChallengeAllowedOnPath("/api") {
+		t.Fatal("no prefixes means every path")
+	}
+}

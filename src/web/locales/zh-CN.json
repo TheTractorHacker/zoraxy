@@ -4,7 +4,7 @@
   "reviewed": false,
   "author": "machine-assisted (Claude)",
   "coverage": 74.4,
-  "coreCoverage": 75.2
+  "coreCoverage": 75.1
  },
  "strings": {
   "\"Add Redirection Rule\"": "“添加重定向规则”",

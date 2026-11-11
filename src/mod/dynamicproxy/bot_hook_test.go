@@ -118,3 +118,31 @@ func TestBotRulesDuplicateUserAgentHeaders(t *testing.T) {
 		t.Fatalf("bot hidden behind a second header: %d", w.Code)
 	}
 }
+
+func TestBotChallengeLimitedToProtectedPaths(t *testing.T) {
+	router, sep, _ := newBotRouter(t, func(c *botrules.Config) {
+		c.Categories["scanner"] = botrules.CategoryCfg{Enabled: true, Action: botrules.ActionChallenge}
+	})
+	router.captchaSessionStore = captcha.NewSessionStore()
+	sep.CaptchaConfig = &captcha.Config{Provider: captcha.ProviderCloudflare, SiteKey: "k", SecretKey: "s",
+		ProtectedPathPrefixes: []string{"/client", "/agent"}}
+	get := func(path string) int {
+		r := httptest.NewRequest(http.MethodGet, "http://app.example.com"+path, nil)
+		r.RemoteAddr = "198.51.100.1:1"
+		r.Header.Set("User-Agent", "nikto")
+		rec := httptest.NewRecorder()
+		router.handleNonTLSRequest(rec, r, sep)
+		return rec.Code
+	}
+	// default: the challenge is shown on any path (unchanged behaviour)
+	if c := get("/api/v1/agent_build_host"); c != 403 {
+		t.Fatalf("default must still challenge: %d", c)
+	}
+	sep.CaptchaConfig.LimitChallengesToPaths = true
+	if c := get("/api/v1/agent_build_host"); c != 299 {
+		t.Fatalf("outside the protected paths must not be challenged: %d", c)
+	}
+	if c := get("/client/x"); c != 403 {
+		t.Fatalf("inside the protected paths must still be challenged: %d", c)
+	}
+}

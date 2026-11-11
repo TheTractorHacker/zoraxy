@@ -1,6 +1,7 @@
 package dynamicproxy
 
 import (
+	"imuslab.com/zoraxy/mod/pathmatch"
 	"net/http"
 
 	"imuslab.com/zoraxy/mod/access"
@@ -33,6 +34,9 @@ func (router *Router) captchaChallenge(w http.ResponseWriter, r *http.Request, s
 		router.Option.Metrics.Event(metrics.EventAccessBlocked, endpointLabel(sep), why+"-challenge-unavailable")
 		router.logRequest(r, false, 403, why+"-challenge-unavailable", r.Host, "", sep)
 		return true
+	}
+	if !sep.CaptchaConfig.ChallengeAllowedOnPath(pathmatch.RequestTarget(r)) {
+		return false // outside the protected paths of this site: not challenged
 	}
 	clientIP := router.GetClientIPForEndpoint(r, sep)
 

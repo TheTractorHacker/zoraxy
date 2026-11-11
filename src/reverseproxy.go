@@ -176,6 +176,7 @@ func buildCaptchaConfigFromRequest(r *http.Request) (*dynamicproxy.CaptchaConfig
 		RecaptchaScore:        captchaRecaptchaScore,
 		ProtectedPathPrefixes: protectedPathPrefixes,
 	}
+	cfg.LimitChallengesToPaths, _ = utils.PostBool(r, "captchaLimitChallenges")
 	parseCaptchaPageSettings(r, cfg)
 	if err := cfg.ValidatePageSettings(); err != nil {
 		return nil, err

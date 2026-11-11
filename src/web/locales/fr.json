@@ -4,7 +4,7 @@
   "reviewed": false,
   "author": "machine-assisted (Claude)",
   "coverage": 20.3,
-  "coreCoverage": 39.5
+  "coreCoverage": 39.4
  },
  "strings": {
   "\"Add Redirection Rule\"": "« Ajouter une règle de redirection »",
