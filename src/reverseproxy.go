@@ -670,6 +670,10 @@ func ReverseProxyHandleAddEndpoint(w http.ResponseWriter, r *http.Request) {
 	}
 	enableTimeoutRefreshOnActivity, _ := utils.PostBool(r, "enableTimeoutRefreshOnActivity")
 
+	//Optional: the stored certificate this rule should serve for its hostnames (empty = automatic, as before)
+	certificateChoice, _ := utils.PostPara(r, "certificate")
+	certificateChoice = strings.TrimSpace(certificateChoice)
+
 	var proxyEndpointCreated *dynamicproxy.ProxyEndpoint
 	switch eptype {
 	case "host":
@@ -797,6 +801,13 @@ func ReverseProxyHandleAddEndpoint(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		//Optional certificate for this rule's hostnames. Applied last so a template cannot undo the choice,
+		//and before anything goes live so an unknown name leaves nothing behind
+		if err := applyNewRuleCertificate(tlsCertManager, dynamicProxyRouter, &thisProxyEndpoint, certificateChoice); err != nil {
+			utils.SendErrorResponse(w, err.Error())
+			return
+		}
+
 		preparedEndpoint, err := dynamicProxyRouter.PrepareProxyRoute(&thisProxyEndpoint)
 		if err != nil {
 			utils.SendErrorResponse(w, "unable to prepare proxy route to target endpoint: "+err.Error())
@@ -893,6 +904,33 @@ func ReverseProxyHandleAddEndpoint(w http.ResponseWriter, r *http.Request) {
 	UpdateUptimeMonitorTargets()
 
 	utils.SendOK(w)
+}
+
+// applyNewRuleCertificate makes a new proxy rule serve the stored certificate certName for every hostname it
+// answers to. The server only looks at a rule's preferred certificates when SNI matching is switched off for
+// that rule (mod/tlscert GetCertificateByHostname), so the choice also sets DisableSNI on this rule. An empty
+// name changes nothing at all. It stores the preference with the same setter as /api/cert/setPreferredCertificate.
+func applyNewRuleCertificate(m *tlscert.Manager, router *dynamicproxy.Router, ept *dynamicproxy.ProxyEndpoint, certName string) error {
+	if certName == "" {
+		return nil
+	}
+	if m == nil {
+		return errors.New("certificate store is not available")
+	}
+	if err := m.CertExists(certName); err != nil {
+		return err
+	}
+	if ept.TlsOptions == nil {
+		ept.TlsOptions = tlscert.GetDefaultHostSpecificTlsBehavior()
+	}
+	hosts := append([]string{ept.RootOrMatchingDomain}, ept.MatchingDomainAlias...)
+	for _, h := range hosts {
+		if err := router.SetPreferredCertificateForDomain(ept, h, certName); err != nil {
+			return err
+		}
+	}
+	ept.TlsOptions.DisableSNI = true
+	return nil
 }
 
 // authMethodFromRequest reads the "authprovider" form parameter of a proxy rule edit.

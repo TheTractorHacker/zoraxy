@@ -4,12 +4,14 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"embed"
+	"errors"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"imuslab.com/zoraxy/mod/info/logger"
@@ -284,6 +286,49 @@ func (m *Manager) GetCert(helloInfo *tls.ClientHelloInfo) (*tls.Certificate, err
 	return &cer, nil
 }
 
+// preferredCertificateFor finds the preferred certificate of a hostname. An exact key wins. Otherwise a key
+// that names the same host in another spelling (Unicode / punycode) or a wildcard key ("*.example.com", the
+// way a wildcard proxy rule is stored) that matches the hostname is used, so a choice made for a rule is
+// also honoured for the names the rule answers to.
+func preferredCertificateFor(prefs map[string]string, hostname string) string {
+	if len(prefs) == 0 {
+		return ""
+	}
+	if c, ok := prefs[hostname]; ok {
+		return c
+	}
+	keys := make([]string, 0, len(prefs))
+	for k := range prefs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		if utils.NormalizeHostname(strings.ToLower(k)) == hostname {
+			return prefs[k]
+		}
+	}
+	for _, k := range keys {
+		if strings.HasPrefix(k, "*.") {
+			if ok, err := filepath.Match(utils.NormalizeHostname(strings.ToLower(k)), hostname); err == nil && ok {
+				return prefs[k]
+			}
+		}
+	}
+	return ""
+}
+
+// CertExists reports whether a stored certificate (name without extension) has both its certificate and
+// its key file. The name must be a plain file name.
+func (m *Manager) CertExists(certName string) error {
+	if certName == "" || certName != filepath.Base(certName) || strings.ContainsAny(certName, "/\\") || strings.Contains(certName, "..") {
+		return errors.New("invalid certificate name")
+	}
+	if !utils.FileExists(filepath.Join(m.CertStore, certName+".pem")) || !utils.FileExists(filepath.Join(m.CertStore, certName+".key")) {
+		return errors.New("certificate not found: " + certName)
+	}
+	return nil
+}
+
 // GetCertificateByHostname returns the certificate and private key for a given hostname
 func (m *Manager) GetCertificateByHostname(hostname string) (string, string, error) {
 	//SNI always carries the punycode form of an internationalised name (upstream #458)
@@ -303,10 +348,7 @@ func (m *Manager) GetCertificateByHostname(hostname string) (string, string, err
 	if err != nil {
 		tlsBehavior, _ = defaultHostSpecificTlsBehavior(hostname)
 	}
-	preferredCertificate, ok := tlsBehavior.PreferredCertificate[hostname]
-	if !ok {
-		preferredCertificate = ""
-	}
+	preferredCertificate := preferredCertificateFor(tlsBehavior.PreferredCertificate, hostname)
 
 	if tlsBehavior.DisableSNI && preferredCertificate != "" &&
 		utils.FileExists(filepath.Join(m.CertStore, preferredCertificate+".pem")) &&
