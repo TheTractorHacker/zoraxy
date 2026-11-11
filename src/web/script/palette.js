@@ -43,7 +43,7 @@
         { label: N_("Auto-ban"), page: "seccenter", pre: "#secTabs .item[data-sec='abuse']", at: "#abEnabled", kw: "ban abuse detectors automatic block ip" },
         { label: N_("Ban duration"), page: "seccenter", pre: "#secTabs .item[data-sec='abuse']", at: "#abBan", kw: "ban time seconds escalate" },
         { label: N_("Ban allowlist"), page: "seccenter", pre: "#secTabs .item[data-sec='abuse']", at: "#abAllow", kw: "never ban exclude ip" },
-        { label: N_("Bot rules"), page: "seccenter", pre: "#secTabs .item[data-sec='bots']", at: "#brEnabled", kw: "crawler scraper user agent bad bots" },
+        { label: N_("Bot rules"), page: "seccenter", pre: "#secTabs .item[data-sec='bots']", at: "#brEnabled", kw: "crawler scraper user agent bad bots 403 blocked challenge" },
         { label: N_("Header rules"), page: "seccenter", pre: "#secTabs .item[data-sec='headers']", at: "#secTabs .item[data-sec='headers']", kw: "block request header" },
         { label: N_("Basic auth"), page: "seccenter", pre: "#secTabs .item[data-sec='basicauth']", at: "#secTabs .item[data-sec='basicauth']", kw: "password htaccess username" },
         { label: N_("Admin accounts"), page: "seccenter", pre: "#secTabs .item[data-sec='users']", at: "#secTabs .item[data-sec='users']", kw: "users viewer role management login" },
@@ -103,6 +103,8 @@
           run: function () { goPage("waf", function () { reveal("#wafQuickStart, #wafModeCards"); }); } },
         { id: "newsecrule", label: N_("New security rule"), kw: "add create rule builder when then block allow log only", icon: "filter",
           run: function () { goPage("ruleset", function () { var b = document.getElementById("rbNew"); if (b) { b.click(); } }); } },
+        { id: "blocked", label: N_("Blocked requests"), kw: "403 blocked forbidden denied why reference id ref block log bot", icon: "ban",
+          run: function () { goPage("stats", function () { if (typeof window.statsOpenBlocked === "function") { window.statsOpenBlocked({}); } }); } },
         { id: "update", label: N_("Check for updates"), kw: "upgrade new version release", icon: "download",
           run: function () { goPage("updater", function () { if (typeof window.upCheck === "function") { window.upCheck(true); } }); } },
         { id: "theme", label: N_("Toggle dark mode"), kw: "light theme night appearance", icon: "adjust",
@@ -301,6 +303,16 @@
         try { localStorage.setItem(RECENT_KEY, JSON.stringify(r.slice(0, 8))); } catch (e) { /* storage blocked */ }
     }
 
+    /* A Reference ID (ZX-XXXX-XXXX, from a visitor's 403 page) or an IP address typed in the palette finds the block in Statistics > Blocked. */
+    var REF_Q = /^zx[-\s]?[0-9a-z]{4}[-\s]?[0-9a-z]{4}$/i, IP_Q = /^(\d{1,3}\.){3}\d{1,3}$|^(?=[0-9a-f:.]*:)[0-9a-f:.]{3,45}$/i;
+    function blockedJump(q) {
+        var v = String(q || "").trim();
+        var isRef = REF_Q.test(v);
+        if (!isRef && !IP_Q.test(v)) { return null; }
+        return { type: "blockedq", key: "blockedq:" + v, raw: true, icon: "ban", label: v, sub: isRef ? tr(N_("Find this block (Reference ID)")) : tr(N_("Blocked requests from this address")),
+            run: function () { goPage("stats", function () { if (typeof window.statsOpenBlocked === "function") { window.statsOpenBlocked({ search: v }); } }); } };
+    }
+
     /* ----------------------------------------------------------------- UI */
     var root = null, input = null, list = null, status = null, rows = [], active = -1, lastFocus = null, results = [];
 
@@ -399,6 +411,8 @@
             groups.push([N_("Actions"), all.filter(function (i) { return i.type === "action"; }).slice(0, 5)]);
         } else {
             var res = search(q);
+            var jump = blockedJump(q);   // a Reference ID or an IP address: offered first, it opens Statistics > Blocked with that search
+            if (jump) { jump.score = 1000; groups.push([N_("Blocked requests"), [jump]]); }
             GROUPS.forEach(function (g) {
                 var sel = res.filter(function (i) { return i.type === g[0]; }).slice(0, g[2]);
                 if (sel.length) { groups.push([g[1], sel]); }

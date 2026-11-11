@@ -3,6 +3,7 @@
     can be allowed and are verified by reverse DNS so a faked User-Agent is not trusted. A User-Agent is easy to fake:
     this stops lazy bots and scanners, not determined attackers. <b>Challenge</b> needs a CAPTCHA on the proxy rule (otherwise it blocks).
     The AI crawler list is the same list the exploit detector's "block AI crawlers" option uses. Disabled by default.</p>
+<div class="ui warning message" id="brChallengeNote" role="status" style="display:none;"><span id="brChallengeText"></span> <a href="#" id="brChallengeLink">Open CAPTCHA</a></div>
 <div class="ui form">
     <div class="ui toggle checkbox"><input type="checkbox" id="brEnabled"><label>Enable for all proxy rules (a proxy rule can opt in or out below)</label></div>
     <h4>Managed lists</h4>
@@ -40,6 +41,7 @@
     function load() {
         $.get("/api/botrules/get", function (d) {
             data = d; var c = d.Config;
+            challengeNote(d);
             $("#brEnabled").prop("checked", c.Enabled); $("#brVerify").prop("checked", c.VerifyBots);
             $("#brCats").html(d.Categories.map(function (k) {
                 var cc = (c.Categories || {})[k.ID] || { Enabled: false, Action: "block" };
@@ -57,6 +59,19 @@
             }).join("") || "<tr><td>No proxy rules.</td></tr>");
         });
     }
+    // Challenge needs a CAPTCHA on the site; without one it blocks. One read-only line, only when it applies.
+    function challengeNote(d) {
+        var c = d.Config || {}, n = 0, anyOn = !!c.Enabled;
+        Object.keys(c.Categories || {}).forEach(function (k) { var x = c.Categories[k]; if (x && x.Enabled && x.Action === "challenge") { n++; } });
+        (c.Custom || []).forEach(function (r) { if (r && r.Action === "challenge") { n++; } });
+        if (c.FakeBotAction === "challenge") { n++; }
+        if (c.BlockEmptyUA === "challenge") { n++; }
+        Object.keys(d.Policies || {}).forEach(function (k) { if (d.Policies[k] === "on") { anyOn = true; } });
+        var show = n > 0 && anyOn && !(d.CaptchaSites > 0);
+        $("#brChallengeNote").toggle(show);
+        if (show) { $("#brChallengeText").text(n === 1 ? t("1 bot rule is set to challenge, but no site has a CAPTCHA, so it blocks.") : tf("{0} bot rules are set to challenge, but no site has a CAPTCHA, so they block.", n)); }
+    }
+    $("#brChallengeLink").on("click", function (e) { e.preventDefault(); if (window.openTabById) { openTabById("captcha"); } });
     $("#brAddRule").on("click", function () { $("#brCustom").append(customRow()); });
     $("#brCustom").on("click", ".brDel", function () { $(this).closest("tr").remove(); });
     $("#brSave").on("click", function () {

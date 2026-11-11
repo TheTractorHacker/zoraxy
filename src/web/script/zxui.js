@@ -14,6 +14,7 @@
       ZxUI.skeleton(container, opts)                           loading placeholder, returns a function that removes it
       ZxUI.field(el).setError(text) / .clearError()            form row validation text
       ZxUI.tabs(el, opts), ZxUI.segmented(el, opts)            keyboard accessible tabs / segmented control
+      ZxUI.drawer({title, onClose})                            side panel (bottom sheet on phones) with focus trap and Esc
       ZxUI.esc(text)                                           HTML-escape (use for anything that came from a user or API)
 
     Strings: written as plain English, translated at runtime by script/i18n.js like the rest of the UI.
@@ -647,5 +648,70 @@
         c.setAttribute("aria-busy", "true");
         c.appendChild(wrap);
         return function remove() { c.removeAttribute("aria-busy"); if (wrap.parentNode) { wrap.parentNode.removeChild(wrap); } };
+    };
+    /* ------------------------------------------------------------------ drawer */
+    /*
+        ZxUI.drawer({title, label, onClose, returnFocus}) -> {el, body, foot, setTitle(text), close(), isOpen()}
+        A panel from the right edge (a bottom sheet at 600px and narrower) for the details of one table row.
+        Modal: the background is dimmed, Tab stays inside, Esc / the close button / a click on the dimmed area close it and the
+        focus returns to the element that opened it. One drawer at a time (opening another closes the first).
+        Fill `body` (and `foot`, the sticky button row; it is hidden while empty) with your own nodes; text from data goes through textContent.
+    */
+    var openDrawer = null;
+    ZxUI.drawer = function (o) {
+        o = o || {};
+        if (openDrawer) { openDrawer.close(); }
+        var previous = o.returnFocus || document.activeElement;
+        var id = nextId("zxdrw");
+        var back = document.createElement("div");
+        back.className = "zx-drawer-backdrop";
+        back.innerHTML =
+            "<aside class=\"zx-drawer\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"" + id + "-t\" tabindex=\"-1\">" +
+            "<header class=\"zx-drawer__head\"><h2 class=\"zx-drawer__title\" id=\"" + id + "-t\"></h2>" +
+            "<button type=\"button\" class=\"zx-btn zx-btn--ghost zx-btn--icon zx-drawer__close\" aria-label=\"" + ZxUI.esc(tr(N_("Close"))) + "\"><i class=\"times icon\" aria-hidden=\"true\"></i></button></header>" +
+            "<div class=\"zx-drawer__body\"></div><footer class=\"zx-drawer__foot\"></footer></aside>";
+        var panel = back.firstChild;
+        var body = panel.querySelector(".zx-drawer__body"), foot = panel.querySelector(".zx-drawer__foot");
+        var titleEl = panel.querySelector(".zx-drawer__title");
+        titleEl.textContent = o.title || "";
+        if (o.label) { panel.setAttribute("aria-label", o.label); panel.removeAttribute("aria-labelledby"); }
+        var closed = false;
+        function close() {
+            if (closed) { return; }
+            closed = true;
+            document.removeEventListener("keydown", onKey, true);
+            window.removeEventListener("hashchange", onNav);
+            if (openDrawer === api) { openDrawer = null; }
+            if (back.parentNode) { back.parentNode.removeChild(back); }
+            if (previous && previous.focus && previous.isConnected !== false) { try { previous.focus({ preventScroll: true }); } catch (e) { /* element gone */ } }
+            if (typeof o.onClose === "function") { try { o.onClose(); } catch (e) { console.error("drawer onClose failed", e); } }
+        }
+        function onKey(e) {
+            if (document.body.classList.contains("zx-palette-open") || document.querySelector(".zx-dialog-backdrop")) { return; }   // a layer above owns the keys
+            if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); return; }
+            if (e.key !== "Tab") { return; }
+            var f = Array.prototype.filter.call(panel.querySelectorAll(FOCUSABLE), function (n) { return n.offsetParent !== null; });
+            if (!f.length) { e.preventDefault(); panel.focus(); return; }
+            var first = f[0], last = f[f.length - 1];
+            if (!panel.contains(document.activeElement) || document.activeElement === panel) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+            else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
+        panel.querySelector(".zx-drawer__close").addEventListener("click", close);
+        back.addEventListener("mousedown", function (e) { if (e.target === back) { close(); } });
+        document.addEventListener("keydown", onKey, true);
+        // leaving the page (Back, a tab or menu switch) leaves nothing of the drawer behind
+        function onNav() { window.removeEventListener("hashchange", onNav); close(); }
+        window.addEventListener("hashchange", onNav);
+        document.body.appendChild(back);
+        panel.focus({ preventScroll: true });
+        var api = {
+            el: panel, body: body, foot: foot,
+            setTitle: function (t) { titleEl.textContent = t; },
+            close: close,
+            isOpen: function () { return !closed; }
+        };
+        openDrawer = api;
+        return api;
     };
 })();

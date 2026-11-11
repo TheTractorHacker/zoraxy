@@ -381,20 +381,32 @@ func (m *Manager) CacheSize() int {
 // Stats returns a snapshot of the counters
 func (m *Manager) Stats() Stats { return m.events.stats() }
 
+// mainHit is the rule that decided the event (the anomaly score evaluation only when nothing else matched)
+func (ev Event) mainHit() *RuleHit {
+	for i := range ev.Rules {
+		if ev.Rules[i].ID != anomalyEvaluationRuleID {
+			return &ev.Rules[i]
+		}
+	}
+	if len(ev.Rules) > 0 {
+		return &ev.Rules[0]
+	}
+	return nil
+}
+
+// BlockRuleID is the ID of the rule that decided the event, 0 when none matched (API protection events)
+func (ev Event) BlockRuleID() int {
+	if m := ev.mainHit(); m != nil {
+		return m.ID
+	}
+	return 0
+}
+
 // BlockSummary returns a short human readable description of the rules that decided the event: the
 // matched rules other than the generic anomaly score evaluation first, e.g.
 // "942100 SQL Injection Attack Detected via libinjection (+2 more) [tx abc]".
 func (ev Event) BlockSummary() string {
-	var main *RuleHit
-	for i := range ev.Rules {
-		if ev.Rules[i].ID != anomalyEvaluationRuleID {
-			main = &ev.Rules[i]
-			break
-		}
-	}
-	if main == nil && len(ev.Rules) > 0 {
-		main = &ev.Rules[0]
-	}
+	main := ev.mainHit()
 	if main == nil {
 		return "tx " + ev.TransactionID
 	}

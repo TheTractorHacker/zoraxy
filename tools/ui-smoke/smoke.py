@@ -35,6 +35,7 @@ ap.add_argument("--securityfix-only", action="store_true", help="run only the se
 ap.add_argument("--certs-traffic-only", action="store_true", help="run only the Certificates / ACME / Statistics / Visitors / Uptime scenario (certs_traffic_smoke.py)")
 ap.add_argument("--netsys-only", action="store_true", help="run only the Network / System pages scenario (ux-fix-network-system audit)")
 ap.add_argument("--overview-only", action="store_true", help="run only the Status / Security overview / History / palette / navigation fix scenario")
+ap.add_argument("--blocked-only", action="store_true", help="run only the Statistics > Blocked scenario (Reference ID search, row drawer, fix + Undo, palette, Status tile)")
 ap.add_argument("--zrok-fake", default=os.environ.get("SMOKE_ZROK_FAKE", ""), help="path of a fake zrok script; enables the zrok flow (the instance needs -allow_external_tools)")
 ap.add_argument("--allow", action="append", default=[], help="regex of messages whose failure is tolerated")
 args = ap.parse_args()
@@ -2817,6 +2818,7 @@ def _network_system_body(pg, ctx, args, after, shot, dialogs, api, toast_text, w
     if dialogs:
         fail("dialog", f"native dialogs used on the Network / System pages: {dialogs}")
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "overview_smoke.py")).read(), "overview_smoke.py", "exec"))  # defines overview_ui
+exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "blocked_smoke.py")).read(), "blocked_smoke.py", "exec"))  # defines blocked_ui
 
 
 def main():
@@ -2837,6 +2839,10 @@ def main():
         if pg.evaluate("location.hash") != want:
             fail("quickstart", f"landed on {pg.evaluate('location.hash')}, expected {want} (quickstart state {qs})")
 
+        if args.blocked_only:
+            blocked_ui(pg, ctx)
+            b.close()
+            return
         if args.sites_only:
             sites_ui(pg, ctx)
             b.close()

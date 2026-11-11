@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"imuslab.com/zoraxy/mod/abuse"
+	"imuslab.com/zoraxy/mod/blocklog"
 	"imuslab.com/zoraxy/mod/dynamicproxy/captcha"
 	"imuslab.com/zoraxy/mod/metrics"
 	"imuslab.com/zoraxy/mod/ruleset"
@@ -186,7 +187,7 @@ func (router *Router) ruleBlock(w http.ResponseWriter, r *http.Request, sep *Pro
 	a := &m.Action
 	status := a.StatusOr(http.StatusForbidden)
 	router.Option.Metrics.Event(metrics.EventAccessBlocked, endpointLabel(sep), "rule")
-	router.logRequestDetail(r, false, status, "rule-block", r.Host, "", sep, m.Name)
+	router.logRequestRule(r, false, status, "rule-block", r.Host, "", sep, m.Name, "rule:"+m.Name)
 	//Only a rule that asks for it feeds the automatic ban. An empty kind is "noted, nothing to report",
 	//which also stops the 403 status from being counted as a plain forbidden response.
 	if a.ReportAbuse {
@@ -227,7 +228,7 @@ func (router *Router) ruleRateLimited(w http.ResponseWriter, r *http.Request, se
 	a := &m.Action
 	status := a.StatusOr(http.StatusTooManyRequests)
 	router.Option.Metrics.Event(metrics.EventRateLimited, endpointLabel(sep), "rule")
-	router.logRequestDetail(r, false, status, "rule-ratelimit", r.Host, "", sep, m.Name)
+	router.logRequestRule(r, false, status, "rule-ratelimit", r.Host, "", sep, m.Name, "rule:"+m.Name)
 	applyRespHeaders(w, r)
 	w.Header().Set("Retry-After", "1")
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -257,7 +258,7 @@ func (router *Router) ruleChallenge(w http.ResponseWriter, r *http.Request, sep 
 		//No CAPTCHA provider (or no session store): a challenge cannot be solved, so refuse. Failing open would
 		//let exactly the requests the rule wants to hold back through.
 		router.Option.Metrics.Event(metrics.EventAccessBlocked, endpointLabel(sep), "rule")
-		router.logRequestDetail(r, false, http.StatusForbidden, "rule-challenge-unavailable", r.Host, "", sep, m.Name)
+		router.logRequestRule(r, false, http.StatusForbidden, "rule-challenge-unavailable", r.Host, "", sep, blocklog.ChallengeDetail(m.Name, true), "rule:"+m.Name)
 		abuseNoteKind(r, "")
 		applyRespHeaders(w, r)
 		serveProxyRequestError(w, r, http.StatusForbidden, router, ErrorTemplateForbidden)
@@ -275,7 +276,7 @@ func (router *Router) ruleChallenge(w http.ResponseWriter, r *http.Request, sep 
 	}
 	captcha.RenderChallenge(w, r, sep.CaptchaConfig, domain, router.Option.WebDirectory)
 	router.Option.Metrics.Event(metrics.EventCaptchaChallenge, endpointLabel(sep), "rule-challenge")
-	router.logRequestDetail(r, false, http.StatusForbidden, "rule-challenge", r.Host, "", sep, m.Name)
+	router.logRequestRule(r, false, http.StatusForbidden, "rule-challenge", r.Host, "", sep, blocklog.ChallengeDetail(m.Name, false), "rule:"+m.Name)
 	return true
 }
 

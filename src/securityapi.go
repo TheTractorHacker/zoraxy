@@ -65,12 +65,16 @@ func HandleBotRulesGet(w http.ResponseWriter, r *http.Request) {
 	}
 	//Per proxy rule policy
 	policies := map[string]string{}
+	captchaSites := 0 //sites with a working CAPTCHA: a Challenge action only challenges there, everywhere else it blocks
 	if dynamicProxyRouter != nil {
 		for name, ep := range dynamicProxyRouter.GetProxyEndpointsAsMap() {
 			policies[name] = ep.BotPolicy
+			if ep.CaptchaConfig != nil && ep.CaptchaConfig.IsConfigured() {
+				captchaSites++
+			}
 		}
 	}
-	js, _ := json.Marshal(map[string]interface{}{"Config": cfg, "Categories": cats, "GoodBots": bots, "Policies": policies})
+	js, _ := json.Marshal(map[string]interface{}{"Config": cfg, "Categories": cats, "GoodBots": bots, "Policies": policies, "CaptchaSites": captchaSites})
 	utils.SendJSONResponse(w, string(js))
 }
 

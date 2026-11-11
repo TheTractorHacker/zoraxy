@@ -33,16 +33,16 @@ func (h *ProxyHandler) handleAccessRouting(ruleID string, w http.ResponseWriter,
 		accessRule.SanitiseClientIPHeaders(r)
 	}
 
-	isBlocked, blockedReason := accessRequestBlocked(accessRule, h.Parent.Option.WebDirectory, w, r)
+	isBlocked, blockedReason := accessRequestBlocked(h.Parent, accessRule, h.Parent.Option.WebDirectory, w, r)
 	if isBlocked {
 		h.Parent.Option.Metrics.Event(metrics.EventAccessBlocked, endpointLabel(sep), blockedReason)
 		if accessRule.DropOnBlock {
 			//Opt-in (upstream #908): no response at all, the page was not written
-			h.Parent.logRequest(r, false, 444, blockedReason+"-dropped", r.Host, "", sep)
+			h.Parent.logRequestRule(r, false, 444, blockedReason+"-dropped", r.Host, "", sep, "", AccessRuleKey(accessRule))
 			dropConnection(w)
 			return true
 		}
-		h.Parent.logRequest(r, false, 403, blockedReason, r.Host, "", sep)
+		h.Parent.logRequestRule(r, false, 403, blockedReason, r.Host, "", sep, "", AccessRuleKey(accessRule))
 		return true
 	}
 
@@ -55,19 +55,17 @@ func (h *ProxyHandler) handleAccessRouting(ruleID string, w http.ResponseWriter,
 
 // Return boolean, return true if access is blocked
 // For string, it will return the blocked reason (if any)
-func accessRequestBlocked(accessRule *access.AccessRule, templateDirectory string, w http.ResponseWriter, r *http.Request) (bool, string) {
+func accessRequestBlocked(router *Router, accessRule *access.AccessRule, templateDirectory string, w http.ResponseWriter, r *http.Request) (bool, string) {
 	//Check if this ip is in blacklist
 	clientIpAddr := accessRule.GetClientIP(r)
 	if accessRule.IsBlacklisted(clientIpAddr) {
 		if !accessRule.DropOnBlock {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.WriteHeader(http.StatusForbidden)
 			template, err := os.ReadFile(filepath.Join(templateDirectory, "templates/blacklist.html"))
 			if err != nil {
-				w.Write(localizedPage(r, page_forbidden))
-			} else {
-				w.Write(template)
+				template = localizedPage(r, page_forbidden)
 			}
+			//a country on the blacklist (and not the address itself) is what the "region" sentence is about
+			router.writeForbiddenPage(w, r, http.StatusForbidden, template, !accessRule.IsIPBlacklisted(clientIpAddr))
 		}
 
 		// Emit blacklisted IP blocked event
@@ -93,14 +91,11 @@ func accessRequestBlocked(accessRule *access.AccessRule, templateDirectory strin
 	//Check if this ip is in whitelist
 	if !accessRule.IsWhitelisted(clientIpAddr) {
 		if !accessRule.DropOnBlock {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.WriteHeader(http.StatusForbidden)
 			template, err := os.ReadFile(filepath.Join(templateDirectory, "templates/whitelist.html"))
 			if err != nil {
-				w.Write(localizedPage(r, page_forbidden))
-			} else {
-				w.Write(template)
+				template = localizedPage(r, page_forbidden)
 			}
+			router.writeForbiddenPage(w, r, http.StatusForbidden, template, len(accessRule.GetAllWhitelistedCountryCode()) > 0)
 		}
 		return true, "whitelist"
 	}
@@ -130,4 +125,15 @@ func (router *Router) GetClientIPForEndpoint(r *http.Request, pe *ProxyEndpoint)
 
 	//Access rule not available. Fallback to the connection address only
 	return netutils.GetRequesterIPUntrusted(r)
+}
+
+// AccessRuleKey is the machine key of an access rule block in the blocked-request log
+func AccessRuleKey(rule *access.AccessRule) string {
+	if rule == nil {
+		return ""
+	}
+	if rule.Name != "" {
+		return "access:" + rule.Name
+	}
+	return "access:" + rule.ID
 }

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"imuslab.com/zoraxy/mod/dynamicproxy/waf"
@@ -207,17 +208,17 @@ func (router *Router) wafInspect(w http.ResponseWriter, r *http.Request, sep *Pr
 	if rt.inst == nil {
 		return false
 	}
-	detail := ""
+	detail, wafRule := "", 0
 	challenged := false
 	info := waf.RequestInfo{
-		OnEvent:  func(ev waf.Event) { detail = ev.BlockSummary() },
+		OnEvent:  func(ev waf.Event) { detail, wafRule = ev.BlockSummary(), ev.BlockRuleID() },
 		Endpoint: sep.RootOrMatchingDomain,
 		ClientIP: clientIP,
 		Source:   rt.res.Label,
 		OnBlock: func(w http.ResponseWriter, r *http.Request, txID string) {
 			// Same 403 page (and template override) as the other access blocks.
 			// Rule details are logged server side only, never sent to the client.
-			serveWAFBlockPage(w, router, txID)
+			serveWAFBlockPage(w, r, router, txID)
 		},
 	}
 	// Graduated response: the challenge band needs a CAPTCHA provider on the endpoint, else it blocks
@@ -233,14 +234,14 @@ func (router *Router) wafInspect(w http.ResponseWriter, r *http.Request, sep *Pr
 	}
 	blocked := rt.inst.Inspect(w, r, info)
 	if blocked && !challenged {
-		router.logRequestDetail(r, false, http.StatusForbidden, "waf-blocked", r.Host, "", sep, detail)
+		router.logRequestRule(r, false, http.StatusForbidden, "waf-blocked", r.Host, "", sep, detail, wafRuleKey(wafRule))
 	}
 	return blocked
 }
 
 // serveWAFBlockPage writes the 403 page (honouring templates/forbidden.html in
 // the web root) with the transaction ID so an admin can find the audit event.
-func serveWAFBlockPage(w http.ResponseWriter, router *Router, txID string) {
+func serveWAFBlockPage(w http.ResponseWriter, r *http.Request, router *Router, txID string) {
 	page, name := ErrorTemplateForbidden.getTemplateContent()
 	if router != nil && router.Option != nil && router.Option.WebDirectory != "" {
 		if custom, err := os.ReadFile(filepath.Join(router.Option.WebDirectory, "templates", name)); err == nil {
@@ -254,8 +255,14 @@ func serveWAFBlockPage(w http.ResponseWriter, router *Router, txID string) {
 	} else {
 		body += marker
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("X-Request-Id", txID)
-	w.WriteHeader(http.StatusForbidden)
-	w.Write([]byte(body))
+	router.writeForbiddenPage(w, r, http.StatusForbidden, []byte(body), false)
+}
+
+// wafRuleKey is the machine key of a WAF block in the blocked-request log ("waf:941100")
+func wafRuleKey(id int) string {
+	if id == 0 {
+		return "waf"
+	}
+	return "waf:" + strconv.Itoa(id)
 }

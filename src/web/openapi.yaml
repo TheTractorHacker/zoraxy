@@ -28,7 +28,10 @@ info:
     the updater (`/api/updater/*`), API token management (`/api/apitoken/*`),
     configuration backup and restore, certificate upload and ACME, cluster and fleet
     management, SSO / OAuth2 providers, scripting, plugins, and user or role
-    administration. Create or change those objects in the admin panel; the
+    administration, and the "Why was this blocked?" helpers of Statistics > Blocked
+    (`/api/blocked/lookup`, `/api/blocked/explain`, `/api/blocked/fix`, `/api/blocked/undo`: they
+    change the configuration or expose it, so they stay admin login only; the log itself is
+    readable with a token, see `/api/v1/stats/blocked`). Create or change those objects in the admin panel; the
     proxy-rule endpoints below carry the common rule fields only. The rules engine can be read with a
     token (`/api/v1/ruleset/*`); its rules and lists are created and changed in the admin panel (`/api/ruleset/*`).
 servers:
@@ -208,8 +211,17 @@ paths:
         Summary (counts by reason, top client IPs, hosts and paths, hourly series of the last 24 hours) plus one
         page of the bounded blocked-request log (the last 2000 entries, newest first). Honours the statistics
         exclusion settings; query strings are only kept when the visitor list keeps them.
+
+        Every entry carries `ref` (the reference ID the visitor was shown on the block page and in the
+        `X-Zoraxy-Ref` response header, stored as 8 characters, shown as `ZX-XXXX-XXXX`) and `rid` (the machine
+        key of what fired, for example `bot:http_library`, `access:Office only`, `waf:941100`). Both are absent
+        on entries recorded by older versions.
       operationId: getBlockedRequests
       parameters:
+        - name: ref
+          in: query
+          description: Only the entry with this reference ID (ZX-XXXX-XXXX, any case, dashes optional)
+          schema: {type: string}
         - name: reason
           in: query
           description: Only this reason (blacklist, whitelist, auto-ban, ratelimit, waf, exploit, bot, header-rule, captcha, country-challenge, path-rule, client-cert, peer, auth, plugin)

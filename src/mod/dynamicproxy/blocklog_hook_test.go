@@ -162,8 +162,8 @@ func TestBlockLogHonoursStatisticsFilters(t *testing.T) {
 		rule.AddIPToBlackList(ip, "t")
 	}
 	hit := func(ip string) { serveNonTLS(router, sep, "http://app.example.com/", ip+":1") }
-	hit("198.51.100.2") // excluded network
-	hit("198.51.100.3") // recorded
+	hit("198.51.100.2")   // excluded network
+	hit("198.51.100.3")   // recorded
 	waitBlocked(t, bl, 1) // the log is written asynchronously: let it finish before any setting below changes
 	sep.DisableStatisticCollection = true
 	hit("198.51.100.4") // rule opted out of statistics

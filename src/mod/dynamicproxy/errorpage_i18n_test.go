@@ -31,8 +31,17 @@ func TestBuiltinErrorPagesFollowAcceptLanguage(t *testing.T) {
 		w = httptest.NewRecorder()
 		serveProxyRequestError(w, httptest.NewRequest("GET", "http://x.example/", nil), tt.status, nil, tt.tmpl)
 		emb, _ := tt.tmpl.getTemplateContent()
-		if w.Body.String() != string(emb) {
+		if want := tt.tmpl.renderForTest(emb); w.Body.String() != want {
 			t.Errorf("English page changed for template %d", tt.tmpl)
 		}
 	}
+}
+
+// renderForTest is what a request without a reference ID gets from the built-in page: the markers and
+// placeholders are resolved, nothing else changes
+func (e ErrorTemplateType) renderForTest(emb []byte) string {
+	if e == ErrorTemplateForbidden {
+		return string(renderErrorPage(emb, "", false))
+	}
+	return string(emb)
 }
