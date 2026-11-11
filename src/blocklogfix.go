@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"imuslab.com/zoraxy/mod/access"
+	"imuslab.com/zoraxy/mod/netutils"
 	"net/http"
 	"net/netip"
 	"strconv"
@@ -272,7 +274,7 @@ func describeBlock(e blocklog.Entry) (string, map[string]string) {
 			}
 		}
 		switch {
-		case strings.Contains(e.Detail, "no CAPTCHA"):
+		case noCaptchaDetail(e.Detail):
 			facts["challengeUnavailable"] = "true"
 			text += " Its action is Challenge, but this site has no CAPTCHA, so it was blocked."
 		case strings.Contains(e.Detail, "(challenge)") || e.Detail == "challenge":
@@ -288,7 +290,7 @@ func describeBlock(e blocklog.Entry) (string, map[string]string) {
 	case blocklog.ReasonWhitelist:
 		return fmt.Sprintf("The access rule %q only admits addresses on its allow list, and %s is not on it.", ruleName, e.IP), facts
 	case blocklog.ReasonCountryChallenge:
-		if strings.Contains(e.Detail, "no CAPTCHA") {
+		if noCaptchaDetail(e.Detail) {
 			facts["challengeUnavailable"] = "true"
 			return fmt.Sprintf("The country of %s has to solve a CAPTCHA (access rule %q), but this site has no CAPTCHA, so the request was blocked.", e.IP, ruleName), facts
 		}
@@ -304,7 +306,7 @@ func describeBlock(e blocklog.Entry) (string, map[string]string) {
 		if name == "" {
 			name = e.Detail
 		}
-		if strings.Contains(e.Detail, "no CAPTCHA") {
+		if noCaptchaDetail(e.Detail) {
 			facts["challengeUnavailable"] = "true"
 			return fmt.Sprintf("The rule %q asks for a CAPTCHA, but this site has no CAPTCHA, so the request was blocked.", name), facts
 		}
@@ -317,11 +319,43 @@ func describeBlock(e blocklog.Entry) (string, map[string]string) {
 	return t, facts
 }
 
+// noCaptchaDetail reports whether the log detail says a challenge could not be served because the
+// site has no CAPTCHA: the readable form, and "challenge-unavailable" as older log files wrote it.
+func noCaptchaDetail(detail string) bool {
+	return strings.Contains(detail, "no CAPTCHA") || strings.Contains(detail, "challenge-unavailable")
+}
+
+// otherBlacklistMatch names another entry of the rule's blacklist (a range or wildcard) that would
+// still match ip once its exact entry is gone, or says so when country entries exist. "" when none.
+func otherBlacklistMatch(rule *access.AccessRule, ip string) string {
+	if rule.BlackListIP != nil {
+		for k := range *rule.BlackListIP {
+			if k == ip {
+				continue
+			}
+			if strings.Contains(k, "/") && netutils.MatchIpCIDR(ip, k) || strings.Contains(k, "*") && netutils.MatchIpWildcard(ip, k) {
+				return "The range " + k + " also covers it."
+			}
+		}
+	}
+	if rule.BlackListContryCode != nil && len(*rule.BlackListContryCode) > 0 {
+		return "Country entries on this blacklist may also apply."
+	}
+	return ""
+}
+
+const maxUAInSentence = 80
+
+// quoteUA puts the User-Agent in quotes for the explain sentence and shortens a long one with an
+// ellipsis (the whole text is in the details).
 func quoteUA(ua string) string {
 	if ua == "" {
 		return "(empty)"
 	}
-	return ua
+	if r := []rune(ua); len(r) > maxUAInSentence {
+		ua = string(r[:maxUAInSentence]) + "…"
+	}
+	return "\"" + ua + "\""
 }
 
 /* ---------- fixes ---------- */
@@ -351,7 +385,7 @@ func buildBlockFixes(e blocklog.Entry) ([]fixCandidate, string) {
 	}
 	// A path / address exemption of the CAPTCHA, where the block was a CAPTCHA that got served
 	if (e.Reason == blocklog.ReasonCaptcha || e.Reason == blocklog.ReasonCountryChallenge || e.Reason == blocklog.ReasonBot) &&
-		!strings.Contains(e.Detail, "no CAPTCHA") && ep.CaptchaConfig != nil && ep.CaptchaConfig.IsConfigured() {
+		!noCaptchaDetail(e.Detail) && ep.CaptchaConfig != nil && ep.CaptchaConfig.IsConfigured() {
 		if e.Reason != blocklog.ReasonBot || strings.Contains(e.Detail, "challenge") {
 			out = append(out, captchaFixes(e, ep, site, ipOK)...)
 		}
@@ -503,7 +537,7 @@ func accessFixes(e blocklog.Entry, ep *dynamicproxy.ProxyEndpoint, site string) 
 		return []fixCandidate{{
 			fixOption: fixOption{
 				ID: "access-ip-unblock", Label: "Remove " + ip + " from the blacklist of " + rule.Name, Scope: "access-rule", Risk: "medium", Site: site,
-				Preview: fmt.Sprintf("After this: %s is no longer on the blacklist of %s. Other addresses unchanged.", ip, shared),
+				Preview: unblockPreview(rule, ip, shared),
 				Changes: []fixChange{{What: "Blacklist of " + rule.Name, Before: ip, After: "(removed)"}},
 			},
 			apply: func() (func() error, error) {
@@ -843,4 +877,12 @@ func registerBlockedFixAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/blocked/explain", HandleBlockedExplain)
 	authRouter.HandleFunc("/api/blocked/fix", HandleBlockedFix)
 	authRouter.HandleFunc("/api/blocked/undo", HandleBlockedUndo)
+}
+
+func unblockPreview(rule *access.AccessRule, ip, shared string) string {
+	p := fmt.Sprintf("After this: the entry %s is removed from the blacklist of %s. Other addresses unchanged.", ip, shared)
+	if overlap := otherBlacklistMatch(rule, ip); overlap != "" {
+		p += " " + overlap + " This address stays blocked until that is changed too."
+	}
+	return p
 }

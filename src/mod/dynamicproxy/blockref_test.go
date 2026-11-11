@@ -1,6 +1,7 @@
 package dynamicproxy
 
 import (
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -177,5 +178,14 @@ func TestAccessBlocksReferenceAndRegionSentence(t *testing.T) {
 	e := waitBlocked(t, bl, 1)[0]
 	if e.RuleID != "access:Office only" || blocklog.FormatRef(e.Ref) != hdr {
 		t.Errorf("entry: %+v", e)
+	}
+}
+
+func TestClientCannotChooseItsReference(t *testing.T) {
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Set(refRequestKey, "S0Q3D7BM")
+	stripInternalHeaders(r)
+	if r.Header.Get(refRequestKey) != "" {
+		t.Fatal("the internal header survived the router entry")
 	}
 }

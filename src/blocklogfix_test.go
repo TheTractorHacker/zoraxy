@@ -151,7 +151,7 @@ func TestFixBotSiteOffRoundTrip(t *testing.T) {
 	e := env.record(blocklog.Entry{IP: "198.51.100.5", Reason: blocklog.ReasonBot, RuleID: "bot:http_library", UA: "curl/8.18.0",
 		Detail: "http_library (challenge, no CAPTCHA, acted as block)"})
 	ex := explain(t, e.Seq)
-	if !strings.Contains(ex.PlainText, "curl/8.18.0 matched the bot category Generic HTTP client libraries") ||
+	if !strings.Contains(ex.PlainText, "\"curl/8.18.0\" matched the bot category Generic HTTP client libraries") ||
 		!strings.Contains(ex.PlainText, "Its action is Challenge, but this site has no CAPTCHA, so it was blocked.") {
 		t.Errorf("plain text: %s", ex.PlainText)
 	}
@@ -577,5 +577,43 @@ func TestUndoTokensExpireAndAreBounded(t *testing.T) {
 	}
 	if r := jsonPost(t, HandleBlockedUndo, map[string]interface{}{"undoToken": ""}); r["error"] == nil {
 		t.Error("empty token")
+	}
+}
+
+func TestOldChallengeUnavailableEntriesKeepTheirExplanation(t *testing.T) {
+	env := setupFixEnv(t)
+	// older log files wrote "challenge-unavailable" and no rule key; a CAPTCHA may exist by now
+	env.bl.Record(blocklog.Entry{IP: "198.51.100.7", Host: "app.example.com", Rule: "app.example.com", Method: "GET", Path: "/", Status: 403, Reason: blocklog.ReasonBot, Detail: "challenge-unavailable", UA: "curl/8"})
+	ex := explain(t, 1)
+	if !strings.Contains(ex.PlainText, "no CAPTCHA") || ex.Facts["challengeUnavailable"] != "true" {
+		t.Errorf("old entry lost its explanation: %s", ex.PlainText)
+	}
+	for _, id := range []string{"captcha-path-exempt", "captcha-ip-exempt"} {
+		if ex.fix(id) != nil {
+			t.Errorf("%s offered for a block that never served a challenge", id)
+		}
+	}
+}
+
+func TestUnblockPreviewAdmitsOverlappingEntries(t *testing.T) {
+	env := setupFixEnv(t)
+	rule := env.rule
+	rule.AddIPToBlackList("198.51.100.6", "spam")
+	rule.AddIPToBlackList("198.51.100.0/24", "range")
+	e := env.record(blocklog.Entry{IP: "198.51.100.6", Reason: blocklog.ReasonBlacklist, RuleID: "access:Office only"})
+	f := explain(t, e.Seq).fix("access-ip-unblock")
+	if f == nil || !strings.Contains(f.Preview, "198.51.100.0/24 also covers it") || strings.Contains(f.Preview, "no longer on the blacklist") {
+		t.Fatalf("preview: %+v", f)
+	}
+}
+
+func TestQuoteUAShortensLongAgents(t *testing.T) {
+	long := strings.Repeat("Segment/1.0 ", 60)
+	q := quoteUA(long)
+	if !strings.HasPrefix(q, "\"") || !strings.HasSuffix(q, "…\"") || len([]rune(q)) > maxUAInSentence+4 {
+		t.Errorf("not shortened: %q", q)
+	}
+	if quoteUA("curl/8") != "\"curl/8\"" || quoteUA("") != "(empty)" {
+		t.Error("short agents are quoted as they are")
 	}
 }

@@ -196,3 +196,13 @@ func TestClassifyKeysAndBlockedSetUnchanged(t *testing.T) {
 		}
 	}
 }
+
+func TestRepeatedRefDoesNotTakeOverTheIndex(t *testing.T) {
+	l := New("", 5, DefaultSettings())
+	l.Record(Entry{IP: "192.0.2.1", Host: "h", Reason: ReasonBot, UA: "curl/8", Ref: "S0Q3D7BM"})
+	l.Record(Entry{IP: "192.0.2.2", Host: "h", Reason: ReasonBot, UA: "sqlmap/1", Ref: "s0q3-d7bm"})
+	e, ok := l.GetByRef("ZX-S0Q3-D7BM")
+	if !ok || e.UA != "curl/8" {
+		t.Fatalf("the first entry must keep its reference: %+v %v", e, ok)
+	}
+}

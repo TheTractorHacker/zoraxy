@@ -22,6 +22,15 @@ import (
 // forwarded, so the value cannot reach an upstream.
 const refRequestKey = "X-Zoraxy-Internal-Ref"
 
+// stripInternalHeaders removes the headers Zoraxy uses internally from a request that comes from
+// the network, so a client cannot choose the reference of its own block (or have the header
+// reach an upstream).
+func stripInternalHeaders(r *http.Request) {
+	if r != nil && r.Header != nil {
+		r.Header.Del(refRequestKey)
+	}
+}
+
 // RefHeader is the response header that carries the reference ID of a block page
 const RefHeader = "X-Zoraxy-Ref"
 

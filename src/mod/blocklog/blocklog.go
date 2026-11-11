@@ -164,7 +164,11 @@ func (l *Log) Record(e Entry) {
 		delete(l.byRef, old.Ref) //the entry is about to be overwritten
 	}
 	if e.Ref != "" {
-		l.byRef[e.Ref] = e.Seq
+		if _, taken := l.byRef[e.Ref]; taken {
+			e.Ref = "" //a reference belongs to the first entry that has it, a repeat must not take it over
+		} else {
+			l.byRef[e.Ref] = e.Seq
+		}
 	}
 	l.ring[l.next] = e
 	l.next = (l.next + 1) % len(l.ring)

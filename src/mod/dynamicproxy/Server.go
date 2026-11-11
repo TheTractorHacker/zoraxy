@@ -34,6 +34,7 @@ import (
 */
 
 func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	stripInternalHeaders(r) //nothing a client sends may pose as a value Zoraxy keeps on the request
 	h.Parent.echObserve(r)
 	if h.Parent.Option.Metrics.Enabled() {
 		var done func()
