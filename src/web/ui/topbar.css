@@ -1,0 +1,140 @@
+/*
+    Top bar (window.ZxTopbar, script/topbar.js).  Markup: the .menubar block of index.html.
+
+    One control height / radius / border / focus ring for every control; status pills in the middle; menus
+    (theme, language, account, and "More" on phones) share the .zx-menu popover.  Colours only from --zx-* tokens.
+    Breakpoints: > 1180px full text; 749-1180px pills shrink to icon + number; <= 748px pills, theme, language and account
+    fold into the "More" menu (the hamburger of the page menu stays).
+*/
+:root { --zx-topbar-h: 52px; }
+
+.menubar.zx-topbar {
+    box-sizing: border-box;
+    height: var(--zx-topbar-h);
+    display: flex; align-items: center; gap: var(--zx-space-3);
+    padding: 0 var(--zx-space-4);
+    margin: 0;
+    background: var(--zx-surface);
+    border-bottom: 1px solid var(--zx-border);
+}
+body.darkTheme .menubar.zx-topbar { background: var(--zx-surface); }
+.zx-top-logo { display: inline-flex; align-items: center; flex: 0 0 auto; border-radius: var(--zx-radius-sm); }
+.zx-top-logo:focus-visible { outline: 2px solid var(--zx-focus); outline-offset: 3px; }
+.zx-topbar .logo { display: block; height: 34px; width: auto; }
+
+/* ------------------------------------------------------------------ controls */
+.zx-topbtn {
+    box-sizing: border-box;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: var(--zx-control-h); min-width: var(--zx-control-h); margin: 0; padding: 0 10px;
+    font: inherit; font-size: var(--zx-fs-sm); line-height: 1; white-space: nowrap;
+    color: var(--zx-text); background: var(--zx-surface);
+    border: 1px solid var(--zx-border-strong); border-radius: var(--zx-radius-md);
+    cursor: pointer; text-decoration: none;
+    -webkit-appearance: none; appearance: none;
+}
+.zx-topbtn:hover { background: var(--zx-surface-2); }
+.zx-topbtn[aria-expanded="true"] { background: var(--zx-surface-3); }
+.zx-topbtn:focus-visible, .zx-pill:focus-visible, .zx-menu :focus-visible { outline: 2px solid var(--zx-focus) !important; outline-offset: 2px; }
+.zx-topbtn svg { width: 16px; height: 16px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.zx-topbtn .zx-chev { width: 12px; height: 12px; opacity: .7; }
+.zx-topbtn[hidden] { display: none; }
+.zx-top-actions { display: flex; align-items: center; gap: var(--zx-space-2); margin-left: auto; flex: 0 0 auto; }
+.zx-top-actions > [hidden] { display: none !important; }
+
+.zx-top-actions .zx-searchbtn { height: var(--zx-control-h); min-width: 176px; padding: 0 10px; gap: 8px; font-size: var(--zx-fs-sm); justify-content: flex-start;
+    border: 1px solid var(--zx-primary); background: var(--zx-surface); border-radius: var(--zx-radius-md); color: var(--zx-text); }
+.zx-top-actions .zx-searchbtn:hover { background: var(--zx-primary-soft); }
+.zx-top-actions .zx-searchbtn .zx-searchbtn__text { flex: 1; text-align: left; font-size: inherit; }
+.zx-top-actions .zx-searchbtn svg { stroke: var(--zx-primary); }
+.zx-top-actions .zx-searchbtn kbd { font-size: 0.78rem; }
+
+.zx-avatar { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--zx-primary); color: var(--zx-on-primary); font-weight: 700; font-size: 0.8rem; text-transform: uppercase; flex: 0 0 auto; }
+.zx-topbtn .zx-user-name { max-width: 9em; overflow: hidden; text-overflow: ellipsis; }
+.zx-more-dot { position: absolute; top: 3px; right: 3px; width: 9px; height: 9px; border-radius: 50%; background: var(--zx-warn-solid); box-shadow: 0 0 0 2px var(--zx-surface); }
+.zx-more-dot.is-danger { background: var(--zx-danger-solid); }
+.zx-top-more { position: relative; display: none; }
+.zx-top-burger { display: none; }
+
+/* ------------------------------------------------------------------ status pills */
+.zx-top-status {
+    box-sizing: border-box; flex: 1 1 auto; min-width: 0; height: calc(var(--zx-control-h) + 8px); padding: 4px; /* room for the focus ring */
+    display: flex; flex-wrap: wrap; align-content: flex-start; align-items: center; gap: var(--zx-space-2);
+    overflow: hidden;           /* a pill that does not fit wraps into the clipped second row (lowest priority last) */
+}
+.zx-pill {
+    box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
+    height: var(--zx-control-h); padding: 0 12px; margin: 0;
+    font-size: var(--zx-fs-sm); font-weight: 600; line-height: 1; white-space: nowrap; text-decoration: none;
+    color: var(--zx-neutral-text); background: var(--zx-neutral-bg); border: 1px solid var(--zx-neutral-line); border-radius: var(--zx-radius-pill);
+}
+a.zx-pill:hover { filter: brightness(0.97); text-decoration: none; }
+body.darkTheme a.zx-pill:hover { filter: brightness(1.15); }
+.zx-pill svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+.zx-pill__dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+.zx-pill--ok { color: var(--zx-ok-text); background: var(--zx-ok-bg); border-color: var(--zx-ok-line); }
+.zx-pill--warn { color: var(--zx-warn-text); background: var(--zx-warn-bg); border-color: var(--zx-warn-line); }
+.zx-pill--danger { color: var(--zx-danger-text); background: var(--zx-danger-bg); border-color: var(--zx-danger-line); }
+.zx-pill--info { color: var(--zx-info-text); background: var(--zx-info-bg); border-color: var(--zx-info-line); }
+.zx-pill__more { font-weight: 500; opacity: .9; text-decoration: underline; text-underline-offset: 2px; }
+
+/* ------------------------------------------------------------------ menus */
+.zx-menu {
+    position: fixed; z-index: 900; box-sizing: border-box; min-width: 200px; max-width: calc(100vw - 16px);
+    max-height: calc(100vh - var(--zx-topbar-h) - 16px); max-height: calc(100dvh - var(--zx-topbar-h) - 16px); overflow-y: auto; overscroll-behavior: contain;
+    padding: 6px; color: var(--zx-text); background: var(--zx-surface); border: 1px solid var(--zx-border-strong); border-radius: var(--zx-radius-md); box-shadow: var(--zx-shadow-3);
+    font-size: var(--zx-fs-sm);
+}
+.zx-menu[hidden] { display: none; }
+.zx-menu__head { padding: 6px 10px 8px; border-bottom: 1px solid var(--zx-border); margin-bottom: 4px; }
+.zx-menu__head b { display: block; font-size: var(--zx-fs-md); overflow-wrap: anywhere; }
+.zx-menu__head span { color: var(--zx-text-muted); }
+.zx-menu__sec { padding: 8px 10px 4px; font-size: var(--zx-fs-xs); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--zx-text-muted); }
+.zx-menu__sec:first-child { padding-top: 4px; }
+.zx-menu__sep { height: 1px; margin: 4px 0; background: var(--zx-border); }
+.zx-menu__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.zx-menu__row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 0 4px 4px; }
+.zx-mi {
+    box-sizing: border-box; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; margin: 0; padding: 6px 10px;
+    font: inherit; font-size: var(--zx-fs-sm); text-align: left; text-decoration: none; color: var(--zx-text); background: transparent;
+    border: 0; border-radius: var(--zx-radius-sm); cursor: pointer;
+}
+.zx-mi:hover, .zx-mi:focus { background: var(--zx-surface-2); text-decoration: none; color: var(--zx-text); }
+.zx-mi svg { width: 16px; height: 16px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.zx-mi__t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.zx-mi__sub { color: var(--zx-text-muted); font-size: var(--zx-fs-xs); }
+.zx-mi__check { width: 16px; height: 16px; flex: 0 0 auto; }
+.zx-mi[aria-checked="true"] { background: var(--zx-primary-soft); color: var(--zx-primary-soft-text); font-weight: 600; }
+.zx-mi[aria-checked="true"]:hover, .zx-mi[aria-checked="true"]:focus { background: var(--zx-primary-soft); }
+.zx-mi--seg { flex-direction: column; justify-content: center; gap: 4px; border: 1px solid var(--zx-border); padding: 6px 4px; min-height: 44px; text-align: center; }
+.zx-mi--seg[aria-checked="true"] { border-color: var(--zx-primary); }
+.zx-mi--danger { color: var(--zx-danger-text); }
+.zx-mi--danger:hover, .zx-mi--danger:focus { background: var(--zx-danger-bg); color: var(--zx-danger-text); }
+.zx-mi .zx-pill__dot { width: 8px; height: 8px; }
+.zx-mi--ok .zx-pill__dot { color: var(--zx-ok-solid); } .zx-mi--warn .zx-pill__dot { color: var(--zx-warn-solid); }
+.zx-mi--danger .zx-pill__dot { color: var(--zx-danger-solid); } .zx-mi--info .zx-pill__dot { color: var(--zx-info-solid); }
+
+/* ------------------------------------------------------------------ responsive */
+@media (max-width: 1180px) {
+    .zx-top-actions .zx-searchbtn { min-width: var(--zx-control-h); width: var(--zx-control-h); padding: 0; justify-content: center; }
+    .zx-top-actions .zx-searchbtn .zx-searchbtn__text, .zx-top-actions .zx-searchbtn kbd { display: none; }
+    .zx-topbtn .zx-top-label, .zx-topbtn .zx-user-name { display: none; }
+    .zx-pill__t { display: none; }
+    .zx-pill { padding: 0 10px; }
+    .zx-pill__more { display: none; }
+}
+@media (max-width: 748px) {
+    .menubar.zx-topbar { padding: 0 var(--zx-space-3); gap: var(--zx-space-2); }
+    .zx-top-status, #zxThemeBtn, #zxLangBtn, #zxUserBtn { display: none !important; }
+    .zx-top-more { display: inline-flex; }
+    .zx-top-burger { display: inline-flex; }
+    .zx-topbtn { min-height: 40px; min-width: 40px; height: 40px; }
+    .zx-top-actions .zx-searchbtn { width: 40px; min-width: 40px; height: 40px; }
+    .zx-top-actions { gap: 6px; }
+    .toolbar { top: var(--zx-topbar-h) !important; height: calc(100vh - var(--zx-topbar-h)) !important; height: calc(100dvh - var(--zx-topbar-h)) !important; }
+    .zx-mi { min-height: 44px; }
+    .zx-menu { left: 8px !important; right: 8px !important; min-width: 0; }
+}
+@media (max-width: 360px) { .zx-topbar .logo { height: 28px; } }
+@media (prefers-reduced-motion: reduce) { .zx-topbtn, .zx-pill { transition: none; } }

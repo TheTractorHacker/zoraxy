@@ -7,6 +7,11 @@
     Must be included just after the start of body tag in the HTML file.
 */
 
+//The top bar (script/topbar.js) listens to this to show the current mode
+function _themeChanged(){
+    try { document.dispatchEvent(new CustomEvent("zoraxy:theme")); } catch (e) {}
+}
+
 function _whiteThemeHandleApplyChange(){
     $(".menubar .logo").attr("src", "img/logo.svg");
 }
@@ -20,8 +25,8 @@ function _darkThemeHandleApplyChange(){
  function setDarkTheme(isDarkTheme = false){
     if (isDarkTheme){
         $("body").addClass("darkTheme");
-        $("#themeColorButton").html(`<i class="ui sun icon"></i>`);
         localStorage.setItem("theme", "dark");
+        _themeChanged();
 
         //Check if the page is still loading, if not change the logo
         if (document.readyState == "complete"){
@@ -34,8 +39,8 @@ function _darkThemeHandleApplyChange(){
         }
     }else{
         $("body").removeClass("darkTheme")
-        $("#themeColorButton").html(`<i class="ui moon icon"></i>`);
         localStorage.setItem("theme", "light");
+        _themeChanged();
         //By default the page is white theme. So no need to change the logo if page is still loading
         if (document.readyState == "complete"){
             //Switching back to light theme

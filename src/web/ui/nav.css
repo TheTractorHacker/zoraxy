@@ -56,21 +56,11 @@ body.darkTheme #mainmenu .menugroup-header:hover { background-color: var(--zx-su
 }
 
 /* ----------------------------------------------------------------------------- header search button */
-.zx-searchbtn {
-    display: inline-flex; align-items: center; gap: 0.55em;
-    height: 2.6em; padding: 0 0.8em; margin: 0;
-    font: inherit; font-size: 0.95em; color: var(--zx-text);
-    background: var(--zx-surface); border: 1px solid var(--zx-border-strong); border-radius: 0.28rem; cursor: pointer;
-}
-.zx-searchbtn:hover { background: var(--zx-surface-2); }
+/* the button itself is styled by ui/topbar.css; the key cap below is shared with the palette */
 .zx-searchbtn kbd, .zx-palette kbd {
     font: 600 0.8em/1 var(--zx-font-mono); padding: 0.25em 0.45em; color: var(--zx-text-muted);
     background: var(--zx-surface-2); border: 1px solid var(--zx-border); border-radius: 4px;
 }
-.zx-searchbtn i.icon { margin: 0; }
-.zx-searchbtn:focus-visible { outline: 2px solid var(--zx-focus) !important; outline-offset: 2px; }
-@media (max-width: 1000px) { .zx-searchbtn .zx-searchbtn__text, .zx-searchbtn kbd { display: none; } .zx-searchbtn { width: 2.6em; justify-content: center; padding: 0; } }
-@media (max-width: 748px) { .zx-searchbtn { min-width: 44px; height: 38px; } }
 
 /* ----------------------------------------------------------------------------- command palette */
 .zx-palette-backdrop {

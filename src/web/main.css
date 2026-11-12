@@ -4,16 +4,6 @@
 
 /* Theme color palletes are defined in darktheme.css */
 
-/* Theme Toggle CSS */
-#themeColorButton{
-    background-color: black;
-    color: var(--text_color_inverted);
-}
-
-body.darkTheme #themeColorButton{
-    background-color: white;
-}
-
 body{
     background-color:var(--theme_bg);
 }
@@ -31,32 +21,17 @@ body{
     border-radius: 1em !important;
 }
 
+/* Top bar: layout, controls and menus live in ui/topbar.css */
 .menubar{
     width: 100%;
-    padding: 0.4em;
-    padding-left: 1.2em;
-    padding-right: 1.2em;
-    background-color: var(--theme_bg_secondary);
     margin-bottom: 1em;
-    border-bottom: 1px solid var(--theme_highlight);
     position: fixed;
     top: 0;
-    width: 100%;
     z-index: 10;
-}
-
-body.darkTheme .menubar{
-    background: rgb(18,19,23);
-    background: linear-gradient(48deg, rgba(18,19,23,1) 21%, rgba(50,59,66,1) 79%); 
 }
 
 .menubar .logo{
     height: 36px;
-}
-
-.menubar .item{
-    display: inline-block;
-    vertical-align: middle;
 }
 
 .wrapper{
@@ -93,10 +68,6 @@ body.darkTheme .menubar{
     border-radius: 1em;
     margin-right: 1em;
     flex-shrink: 0;
-}
-
-.menutoggle{
-    display: none !important;
 }
 
 .rulesInstructions, .rulesInstructions span{
@@ -276,10 +247,6 @@ body.darkTheme .menubar{
 
     .toolbar .navFilter {
         padding-top: 1em;
-    }
-
-    .menutoggle{
-        display: inline-block !important;
     }
 
     #mainmenu{
@@ -1236,9 +1203,6 @@ body.darkTheme select.i18n-picker{
     color: #e8e8e8;
     background: #1c1e22;
     border-color: rgba(255,255,255,0.18);
-}
-@media (max-width: 750px){
-    .menubar select.i18n-picker{ max-width: 8.2em; padding: 0 0.25em 0 0.4em; } /* longer names (Español, 繁體中文) stay readable */
 }
 
 /* Longer translated strings (German, Russian, CJK): let flex/grid children shrink and long words wrap */
