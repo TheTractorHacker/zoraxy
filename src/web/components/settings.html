@@ -49,6 +49,71 @@
             <button type="button" class="zx-btn zx-btn--secondary" onclick="setQuickStartDismissed(false);" title="Put the Quick Start page back in the menu"><i class="magic icon"></i> Show Quick Start again</button>
         </div>
     </section>
+
+    <!-- Database: what sys.db holds (read only), see docs/ux/changes.md and docs/db-growth.md -->
+    <section class="zx-card" id="dbUsageCard" aria-labelledby="dbUsageTitle" hidden>
+        <style>
+            #dbUsageCard .db-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: var(--zx-space-3); margin-bottom: var(--zx-space-4); }
+            #dbUsageCard .db-stats .zx-stat { box-shadow: none; padding: var(--zx-space-3); }
+            #dbUsageCard .db-name { font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+            #dbUsageCard .db-what { display: block; color: var(--zx-text-muted); font-size: var(--zx-fs-sm); margin-top: 0.15em; }
+            #dbUsageCard .db-size { white-space: nowrap; }
+            #dbUsageCard .db-bar { display: block; height: 6px; margin-top: 0.35em; min-width: 5rem; border-radius: 3px; background: var(--zx-surface-2); overflow: hidden; }
+            #dbUsageCard .db-bar > span { display: block; height: 100%; min-width: 2px; background: var(--zx-primary); border-radius: 3px; }
+            #dbUsageCard .zx-table-wrap { max-height: none; }
+            #dbUsageCard pre.db-cmd { margin: var(--zx-space-2) 0 0; padding: var(--zx-space-3); background: var(--zx-surface-2); color: var(--zx-text); border: 1px solid var(--zx-border); border-radius: var(--zx-radius-sm); overflow-x: auto; font-size: var(--zx-fs-sm); white-space: pre; }
+            #dbUsageCard details.db-compact { margin-top: var(--zx-space-4); }
+            #dbUsageCard details.db-compact > summary { cursor: pointer; font-weight: 600; }
+            #dbUsageCard .db-callout { margin-bottom: var(--zx-space-4); }
+            #dbUsageCard .db-meta { margin: var(--zx-space-3) 0 0; }
+            #dbUsageCard [hidden] { display: none !important; } /* zx-btn / table display rules would otherwise win over the attribute */
+            #dbUsageCard .db-more { margin-top: var(--zx-space-2); }
+            @media (max-width: 480px) {
+                #dbUsageCard td.db-first { display: block; text-align: left; }
+                #dbUsageCard td.db-size { white-space: normal; flex-wrap: wrap; }
+                #dbUsageCard td.db-size .db-bar { flex: 1 0 100%; order: 3; min-width: 0; }
+            }
+        </style>
+        <div class="zx-card__head">
+            <h3 class="zx-card__title" id="dbUsageTitle">Database</h3>
+            <button type="button" class="zx-btn zx-btn--secondary" id="dbUsageRefresh"><i class="sync icon"></i> Refresh</button>
+        </div>
+        <p class="zx-card__desc">What the settings database (sys.db) holds and which tables take the space. Read only: nothing is deleted or changed from here.</p>
+        <div class="zx-card__body" aria-live="polite">
+            <div id="dbUsageLoading" class="zx-help">Loading...</div>
+            <div id="dbUsageError" class="zx-callout zx-callout--warn" role="note" hidden>
+                <span class="zx-callout__icon" aria-hidden="true"><i class="exclamation circle icon"></i></span>
+                <div class="zx-callout__body" id="dbUsageErrorText"></div>
+            </div>
+            <div id="dbUsageMain" hidden>
+                <div class="db-stats">
+                    <div class="zx-stat"><div class="zx-stat__label">File size on disk</div><div class="zx-stat__value" id="dbStatFile">-</div></div>
+                    <div class="zx-stat"><div class="zx-stat__label">Data inside</div><div class="zx-stat__value" id="dbStatData">-</div></div>
+                    <div class="zx-stat"><div class="zx-stat__label">Free space inside</div><div class="zx-stat__value" id="dbStatFree">-</div></div>
+                    <div class="zx-stat"><div class="zx-stat__label">Tables</div><div class="zx-stat__value" id="dbStatTables">-</div></div>
+                </div>
+                <div id="dbLargeHint" class="zx-callout zx-callout--warn db-callout" role="note" hidden>
+                    <span class="zx-callout__icon" aria-hidden="true"><i class="exclamation triangle icon"></i></span>
+                    <div class="zx-callout__body">The database file is large. A Bolt database file never shrinks by itself: deleted data only leaves free space inside it. If most of it is free space or one table keeps growing, you can compact the file offline (steps below). Nothing is ever deleted automatically.</div>
+                </div>
+                <div class="zx-table-wrap" tabindex="0" role="region" aria-label="Tables of the database, biggest first">
+                    <table class="zx-table zx-table--compact">
+                        <thead><tr><th>Table</th><th class="zx-num">Keys</th><th class="zx-num">Size</th></tr></thead>
+                        <tbody id="dbTables"></tbody>
+                    </table>
+                </div>
+                <button type="button" class="zx-btn zx-btn--ghost db-more" id="dbMore" aria-expanded="false" hidden></button>
+                <p class="zx-help db-meta" id="dbTruncated" hidden>Counting stopped after a few seconds, so the sizes marked with a plus sign are lower bounds and some tables were not counted. Refresh to try again.</p>
+                <p class="zx-help db-meta">Size is the stored data (keys and values) of a table, not the pages it occupies. The file also holds free pages and bookkeeping.</p>
+                <details class="db-compact" id="dbCompactHelp">
+                    <summary>Compact the database file (offline)</summary>
+                    <p class="zx-help">Zoraxy must be stopped first: the compactor refuses to run while the database is in use. It keeps a timestamped backup next to the file, verifies the new file table by table and only then replaces the old one. Run these in a terminal on the server (use your own service name or stop Zoraxy any other way):</p>
+                    <pre class="db-cmd" id="dbCompactCmd" tabindex="0"></pre>
+                    <p class="zx-help">The backup file is named sys.db.bak-DATE-TIME and is kept until you delete it.</p>
+                </details>
+            </div>
+        </div>
+    </section>
 </div>
 <script>
     (function () {
@@ -85,5 +150,117 @@
         document.addEventListener("zoraxy:i18n", function (e) {
             if (e.detail && sel.value !== e.detail.lang) { sel.value = e.detail.lang; bar.reset(); }
         });
+    })();
+</script>
+<script>
+    // Database card: GET /api/system/dbusage (admin only, read only). Hidden for viewers; explained for other backends.
+    (function () {
+        var card = document.getElementById("dbUsageCard");
+        if (!card) { return; }
+        var KNOWN = {
+            "settings": t("Listener, TLS, proxy and interface settings (a few small values)"),
+            "auth": t("Admin accounts: password hashes, roles and the session key"),
+            "stats": t("Daily traffic statistics, one record per day (client IPs, URLs, user agents, referers, status codes, per site)"),
+            "statsettings": t("Statistics settings"),
+            "acme": t("Certificate renewal (ACME) state and credentials"),
+            "acmepref": t("ACME account and preferences"),
+            "redirect": t("Redirect rule options"),
+            "blocklog": t("Settings of the blocked request log (the log itself is a file in the conf folder)"),
+            "visitors": t("Settings of visitor tracking (visitor data is not stored here)"),
+            "uptime": t("Settings of uptime checks (check history is not stored here)"),
+            "dashboard": t("Daily bandwidth counter of the status page"),
+            "notifyknownip": t("Addresses admins signed in from (up to 20 per account)"),
+            "apitokens": t("API tokens (hashes only)"),
+            "ruletemplates": t("Rule templates for bulk changes"),
+            "posture": t("Security overview baseline and the journal of applied fixes"),
+            "plugins": t("Plugin settings"),
+            "plugin_hooks": t("Plugin hook records"),
+            "webserv": t("Static web server settings"),
+            "wolmac": t("Wake-on-LAN machines"),
+            "fwdproxy": t("Forward proxy settings"),
+            "geodb": t("GeoIP database update state"),
+            "oauth2": t("OAuth2 sign-in settings"),
+            "oauth2_providers": t("OAuth2 providers"),
+            "oauth2_sessions": t("OAuth2 sign-in sessions (limited to 5000, expired ones are removed)"),
+            "auth_sso_forward": t("Forward authentication settings"),
+            "zorxauth": t("Zoraxy authentication gateway settings"),
+            "zorxauth_users": t("Zoraxy authentication gateway users"),
+            "zorxauth_browser_sessions": t("Zoraxy authentication gateway browser sessions"),
+            "zorxauth_gateway_sessions": t("Zoraxy authentication gateway sessions"),
+            "authelia": t("Legacy Authelia settings"),
+            "authentik": t("Legacy Authentik settings")
+        };
+        var SHOWN = 8; // rows shown at first; the rest (mostly empty settings tables) sits behind a button
+        var showAll = false;
+        function esc(s) { return ZxUI.esc(s == null ? "" : String(s)); }
+        function human(n) {
+            if (n < 1024) { return n + " B"; }
+            var u = ["KB", "MB", "GB", "TB"], i = -1;
+            do { n = n / 1024; i++; } while (n >= 1024 && i < u.length - 1);
+            return (n >= 100 ? n.toFixed(0) : n.toFixed(1)) + " " + u[i];
+        }
+        function show(which, msg) {
+            document.getElementById("dbUsageLoading").hidden = which !== "loading";
+            document.getElementById("dbUsageError").hidden = which !== "error";
+            document.getElementById("dbUsageMain").hidden = which !== "main";
+            if (which === "error") { document.getElementById("dbUsageErrorText").textContent = msg; }
+        }
+        function applyMore(total) {
+            var more = document.getElementById("dbMore");
+            document.querySelectorAll("#dbTables tr.db-extra").forEach(function (tr) { tr.hidden = !showAll; });
+            more.textContent = showAll ? t("Show fewer tables") : tf("Show all {0} tables", total);
+            more.setAttribute("aria-expanded", showAll ? "true" : "false");
+        }
+        function render(d) {
+            var u = d.usage;
+            document.getElementById("dbStatFile").textContent = human(u.fileBytes);
+            document.getElementById("dbStatData").textContent = human(u.payloadBytes) + (u.truncated ? "+" : "");
+            document.getElementById("dbStatFree").textContent = human(u.freeBytes);
+            document.getElementById("dbStatTables").textContent = String(u.totalTables);
+            document.getElementById("dbLargeHint").hidden = !(u.fileBytes >= d.largeBytes);
+            document.getElementById("dbTruncated").hidden = !u.truncated;
+            var big = 0;
+            u.tables.forEach(function (x) { if (x.bytes > big) { big = x.bytes; } });
+            var html = "";
+            u.tables.forEach(function (x, i) {
+                var what = KNOWN[x.name] || t("Not a table Zoraxy knows (a plugin or a newer version)");
+                var size = x.truncated && !x.bytes ? esc(t("not counted")) : human(x.bytes) + (x.truncated ? "+" : "");
+                var pct = x.bytes > 0 && big > 0 ? Math.max(1, Math.round(x.bytes * 100 / big)) : 0;
+                html += "<tr" + (i >= SHOWN ? " class=\"db-extra\" hidden" : "") + "><td class=\"db-first\"><span class=\"db-name\">" + esc(x.name) + "</span><span class=\"db-what\">" + esc(what) + "</span></td>" +
+                    "<td class=\"zx-num\" data-label=\"" + esc(t("Keys")) + "\">" + (x.truncated && !x.keys ? "-" : x.keys.toLocaleString()) + "</td>" +
+                    "<td class=\"zx-num db-size\" data-label=\"" + esc(t("Size")) + "\">" + size +
+                    (pct ? "<span class=\"db-bar\" aria-hidden=\"true\"><span style=\"width:" + pct + "%\"></span></span>" : "") + "</td></tr>";
+            });
+            document.getElementById("dbTables").innerHTML = html;
+            var more = document.getElementById("dbMore");
+            more.hidden = u.tables.length <= SHOWN;
+            applyMore(u.tables.length);
+            // the exact commands for this server (the absolute path as the running instance sees it)
+            document.getElementById("dbCompactCmd").textContent =
+                "sudo systemctl stop zoraxy\n" +
+                "./zoraxy -compact-db -dbpath " + d.path + "\n" +
+                "sudo systemctl start zoraxy";
+            if (u.fileBytes >= d.largeBytes) { document.getElementById("dbCompactHelp").open = true; }
+            show("main");
+        }
+        function load() {
+            show("loading");
+            $.ajax({ url: "./api/system/dbusage", dataType: "json", cache: false }).done(function (d) {
+                card.hidden = false;
+                if (d.error) { show("error", t("Could not read the database usage: ") + d.error); return; }
+                if (!d.supported) { show("error", t("Usage details are only available for the BoltDB database backend (this instance uses {0}).").replace("{0}", d.backend)); return; }
+                render(d);
+            }).fail(function (xhr) {
+                if (xhr.status === 403 || xhr.status === 401) { card.hidden = true; return; } // viewers do not see this card
+                card.hidden = false;
+                show("error", t("Could not read the database usage: ") + "HTTP " + xhr.status);
+            });
+        }
+        document.getElementById("dbUsageRefresh").addEventListener("click", load);
+        document.getElementById("dbMore").addEventListener("click", function () {
+            showAll = !showAll;
+            applyMore(document.querySelectorAll("#dbTables tr").length);
+        });
+        load();
     })();
 </script>
