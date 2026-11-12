@@ -37,6 +37,13 @@ func isLockError(err error) bool {
 	return strings.Contains(err.Error(), "being used by another process") //windows sharing violation
 }
 
+func absPath(p string) string {
+	if a, err := filepath.Abs(p); err == nil {
+		return a
+	}
+	return p
+}
+
 func NewDB(path string) (*DB, error) {
 	//If the path is not a directory (e.g. /tmp/dbfile.db), convert the filename to directory
 	if filepath.Ext(path) != "" {
@@ -46,7 +53,7 @@ func NewDB(path string) (*DB, error) {
 	db, err := leveldb.OpenFile(path, nil)
 	if err != nil {
 		if isLockError(err) {
-			return nil, &dbinc.LockedError{Path: path, Backend: "LevelDB", Err: err}
+			return nil, &dbinc.LockedError{Path: absPath(path), Backend: "LevelDB", Err: err}
 		}
 		return nil, err
 	}

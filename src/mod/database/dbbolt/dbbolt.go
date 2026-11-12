@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	bolt "go.etcd.io/bbolt"
@@ -53,11 +54,19 @@ func openBolt(dbfile string, opt OpenOptions) (*bolt.DB, error) {
 	db, err := bolt.Open(dbfile, 0600, &o)
 	if err != nil {
 		if errors.Is(err, bolt.ErrTimeout) {
-			return nil, &dbinc.LockedError{Path: dbfile, Backend: "BoltDB", Waited: opt.Timeout, Err: err}
+			return nil, &dbinc.LockedError{Path: absPath(dbfile), Backend: "BoltDB", Waited: opt.Timeout, Err: err}
 		}
 		return nil, err
 	}
 	return db, nil
+}
+
+// absPath makes the path in the error message usable from any folder (lsof, ls)
+func absPath(p string) string {
+	if a, err := filepath.Abs(p); err == nil {
+		return a
+	}
+	return p
 }
 
 func NewBoltDatabase(dbfile string) (*Database, error) {
