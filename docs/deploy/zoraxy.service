@@ -9,6 +9,9 @@ Documentation=https://github.com/tobychui/zoraxy
 # The network must be up before Zoraxy binds addresses and talks to ACME / upstreams.
 After=network-online.target
 Wants=network-online.target
+# Do not give up restarting after a few quick failures (a held port or database often clears on its own).
+# (This key belongs in [Unit]; in [Service] systemd ignores it.)
+StartLimitIntervalSec=0
 
 [Service]
 # Zoraxy tells systemd when it is really listening (admin port and proxy ports bound).
@@ -32,8 +35,6 @@ TimeoutStopSec=30
 # Restart after a crash or a failed start, but not after a deliberate "systemctl stop".
 Restart=on-failure
 RestartSec=5
-# Do not give up restarting after a few quick failures (a held port or database often clears on its own).
-StartLimitIntervalSec=0
 
 # Stop the whole control group: Zoraxy AND every plugin process it started. Without this a plugin
 # could outlive Zoraxy and keep a port or file busy.

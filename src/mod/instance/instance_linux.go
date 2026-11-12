@@ -71,12 +71,14 @@ func findLockHolders(root, path string) (LockMatch, error) {
 	if !ok {
 		return LockMatch{}, errors.New("stat not available")
 	}
-	text, err := readProc(root, "locks")
+	//First ask each visible Zoraxy process's own fdinfo ("lock:" lines): it is exact and cheap, and it
+	//does not depend on /proc/locks, which can block for a long time on a host with a damaged kernel
+	//lock list (a read stuck in the kernel cannot be killed and would keep this process from exiting).
+	if m := holdersFromFdinfo(root, st, zoraxyPids(root)); len(m.Pids) > 0 {
+		return m, nil
+	}
+	text, err := readProc(root, "locks") //covers other users' processes and non-Zoraxy names
 	if err != nil {
-		//Fallback: ask each Zoraxy process's own fdinfo ("lock:" lines), which does not depend on /proc/locks
-		if m := holdersFromFdinfo(root, st, zoraxyPids(root)); len(m.Pids) > 0 {
-			return m, nil
-		}
 		return LockMatch{}, fmt.Errorf("cannot read /proc/locks: %w", err)
 	}
 	maj, min := DevMajorMinor(uint64(st.Dev))
@@ -113,7 +115,7 @@ func holdersFromFdinfo(root string, want *syscall.Stat_t, pids []int) LockMatch 
 				continue
 			}
 			for _, line := range strings.Split(info, "\n") {
-				if strings.HasPrefix(line, "lock:") {
+				if strings.HasPrefix(line, "lock:") && !strings.Contains(line, "->") { //"->" marks a waiter, not the holder
 					m.Pids = appendUnique(m.Pids, p.Pid)
 				}
 			}
@@ -313,6 +315,7 @@ type UnitStatus struct {
 	MainPID   int
 	Type      string
 	Fragment  string
+	TimedOut  bool // systemctl did not answer in time (systemd itself may be stuck)
 }
 
 // QueryUnit asks systemctl about a unit. It never fails: without systemctl, or without a systemd
@@ -326,7 +329,7 @@ func QueryUnit(name string) UnitStatus {
 	defer cancel()
 	out, err := exec.CommandContext(ctx, bin, "show", name, "--no-pager", "-p", "LoadState,ActiveState,SubState,MainPID,Type,FragmentPath").Output()
 	if err != nil && len(out) == 0 {
-		return UnitStatus{}
+		return UnitStatus{TimedOut: ctx.Err() != nil}
 	}
 	return ParseSystemctlShow(string(out))
 }
@@ -355,4 +358,34 @@ func ParseSystemctlShow(text string) UnitStatus {
 		}
 	}
 	return u
+}
+
+// OpensFile reports whether process pid has path open (through /proc/<pid>/fd). known is false when the
+// descriptors are not readable (another user's process without root, or the process is gone).
+func OpensFile(pid int, path string) (opens, known bool) { return opensFileAt(procRoot, pid, path) }
+
+func opensFileAt(root string, pid int, path string) (opens, known bool) {
+	want, err := os.Stat(path)
+	if err != nil {
+		return false, false
+	}
+	wst, ok := want.Sys().(*syscall.Stat_t)
+	if !ok {
+		return false, false
+	}
+	fdDir := filepath.Join(root, strconv.Itoa(pid), "fd")
+	fds, err := os.ReadDir(fdDir)
+	if err != nil {
+		return false, false
+	}
+	for _, fd := range fds {
+		fi, err := os.Stat(filepath.Join(fdDir, fd.Name()))
+		if err != nil {
+			continue
+		}
+		if st, ok := fi.Sys().(*syscall.Stat_t); ok && st.Ino == wst.Ino && st.Dev == wst.Dev {
+			return true, true
+		}
+	}
+	return false, true
 }

@@ -54,25 +54,32 @@ func signalProxyStartSettled() {
 
 // announceReady tells systemd (Type=notify) that Zoraxy is up. Call it once the admin listener is bound,
 // just before serving it. READY=1 is held back until the reverse proxy has also finished its first
-// attempt to bind (so "active" means the ports are really open), but never longer than 60 seconds.
+// attempt to bind (so "active" means the ports are really open). There is no fallback timer: if the
+// proxy start never settles, systemd keeps showing "activating (start)" with a STATUS line saying what
+// it waits for, and TimeoutStartSec turns that into a visible failure instead of a false "active".
 // A no-op when NOTIFY_SOCKET is unset.
 func announceReady(adminAddr string) {
 	if !instance.NotifyEnabled() {
 		return
 	}
 	go func() {
-		settled := true
-		select {
-		case <-proxyStartSettled:
-		case <-time.After(60 * time.Second):
-			settled = false
+		began := time.Now()
+		tick := time.NewTicker(10 * time.Second)
+		defer tick.Stop()
+		instance.NotifyStatus("Admin listening on " + adminAddr + "; waiting for the reverse proxy to bind its ports")
+	wait:
+		for {
+			select {
+			case <-proxyStartSettled:
+				break wait
+			case <-tick.C:
+				instance.NotifyStatus(fmt.Sprintf("Admin listening on %s; still waiting for the reverse proxy to bind its ports (%ds)", adminAddr, int(time.Since(began).Seconds())))
+			}
 		}
 		status := "Admin listening on " + adminAddr
 		switch {
-		case !settled:
-			status += "; reverse proxy still starting"
 		case dynamicProxyRouter == nil || !dynamicProxyRouter.Running:
-			status += "; reverse proxy not started (disabled in settings)"
+			status += "; WARNING reverse proxy NOT started (its port is in use, or the service is disabled in settings): see the log"
 		case dynamicProxyRouter.ListenError() != "":
 			status += "; WARNING reverse proxy could not bind its port: " + dynamicProxyRouter.ListenError()
 		default:

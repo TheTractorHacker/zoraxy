@@ -44,7 +44,11 @@ type UnitStatus struct {
 	MainPID   int
 	Type      string
 	Fragment  string
+	TimedOut  bool
 }
 
 // QueryUnit reports nothing off Linux.
 func QueryUnit(name string) UnitStatus { return UnitStatus{} }
+
+// OpensFile is not available off Linux.
+func OpensFile(pid int, path string) (opens, known bool) { return false, false }

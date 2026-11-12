@@ -6,7 +6,51 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
+
+// Sanitize makes text from the outside world (process names, arguments, cgroup paths, systemctl output)
+// safe to print on a terminal: control characters (including ESC, which starts terminal escape
+// sequences that can retitle the window, move the cursor or hide text), DEL, the C1 range, line and
+// paragraph separators, bidi overrides and invalid UTF-8 are replaced by a visible \xNN / \uNNNN form.
+func Sanitize(s string) string {
+	clean := true
+	for _, r := range s {
+		if unsafeRune(r) {
+			clean = false
+			break
+		}
+	}
+	if clean && utf8.ValidString(s) {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		r, n := utf8.DecodeRuneInString(s[i:])
+		switch {
+		case r == utf8.RuneError && n <= 1:
+			fmt.Fprintf(&b, "\\x%02x", s[i])
+		case unsafeRune(r) && r < 0x100:
+			fmt.Fprintf(&b, "\\x%02x", r)
+		case unsafeRune(r):
+			fmt.Fprintf(&b, "\\u%04x", r)
+		default:
+			b.WriteRune(r)
+		}
+		i += n
+	}
+	return b.String()
+}
+
+func unsafeRune(r rune) bool {
+	switch {
+	case r < 0x20, r >= 0x7f && r <= 0x9f:
+		return true
+	case r == 0x2028, r == 0x2029, r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069, r == 0x200e, r == 0x200f, r == 0xfeff:
+		return true
+	}
+	return false
+}
 
 // ClockTicks is USER_HZ, 100 on every Linux Zoraxy targets.
 const ClockTicks = 100
@@ -148,7 +192,9 @@ func ParseCgroup(text string) (unit, scope, raw string) {
 }
 
 // ExeBase returns the best executable name: the exe link, else argv[0], else comm.
-func (p ProcInfo) ExeBase() string {
+func (p ProcInfo) ExeBase() string { return Sanitize(p.exeBase()) }
+
+func (p ProcInfo) exeBase() string {
 	switch {
 	case p.Exe != "":
 		return strings.TrimSuffix(path.Base(p.Exe), " (deleted)")
@@ -159,12 +205,27 @@ func (p ProcInfo) ExeBase() string {
 }
 
 // IsZoraxyName reports whether an executable name looks like Zoraxy ("zoraxy", "zoraxy_linux_amd64", ...).
+// Plugins ship names like "Zoraxy Cloudflare WAF plugin": a space means it is not the proxy itself.
 func IsZoraxyName(name string) bool {
-	return strings.HasPrefix(strings.ToLower(name), "zoraxy")
+	n := strings.ToLower(name)
+	if strings.ContainsAny(n, " \t") {
+		return false
+	}
+	if n == "zoraxy" {
+		return true
+	}
+	for _, sep := range []string{"zoraxy_", "zoraxy-", "zoraxy."} {
+		if strings.HasPrefix(n, sep) {
+			return true
+		}
+	}
+	return false
 }
 
 // Where describes where the process lives in plain words.
-func (p ProcInfo) Where() string {
+func (p ProcInfo) Where() string { return Sanitize(p.where()) }
+
+func (p ProcInfo) where() string {
 	switch {
 	case p.Unit != "":
 		return "systemd service " + p.Unit
@@ -198,7 +259,7 @@ func FormatAge(d time.Duration) string {
 // "PID 123 (zoraxy), state: stopped (frozen, probably Ctrl+Z or SIGSTOP), running for 3m, owner: ...".
 func (p ProcInfo) Describe() string {
 	if !p.Visible {
-		n := p.Note
+		n := Sanitize(p.Note)
 		if n == "" {
 			n = "not readable"
 		}
@@ -215,6 +276,7 @@ func (p ProcInfo) Explain(intendedUnit string) (sentence string, commands []stri
 		unit = "zoraxy"
 	}
 	pid := strconv.Itoa(p.Pid)
+	p.Unit, p.Scope = Sanitize(p.Unit), Sanitize(p.Scope)
 	if !p.Visible {
 		return fmt.Sprintf("PID %d holds the lock but its details cannot be read (it is gone, or owned by another user: run -doctor with sudo).", p.Pid),
 			[]string{"sudo ./zoraxy -doctor"}

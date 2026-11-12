@@ -17,6 +17,7 @@ What you see in `systemctl status zoraxy`:
 | `activating (start)` | Zoraxy is starting. The `Status:` line says what it is doing (for example `Starting`). |
 | `active (running)` and `Status: "Admin listening on [::]:8000; reverse proxy listening on port 443"` | Ready. The ports are bound. |
 | `active (running)` and `Status: "...WARNING reverse proxy could not bind its port..."` | Zoraxy is up but another program holds the proxy port. Run `sudo ./zoraxy -doctor`. |
+| `active (running)` and `Status: "...WARNING reverse proxy NOT started..."` | Zoraxy is up (admin works) but the proxy port was already in use, or the proxy is disabled in the settings. The log says which. |
 | `failed` with `Result: timeout` after 120 s | The start never became ready (for example it waited on a locked database). `TimeoutStartSec=120` killed it. Run `sudo ./zoraxy -doctor`. |
 
 ## Switching an existing `Type=simple` unit to `Type=notify`
@@ -34,6 +35,36 @@ systemctl status zoraxy                                # "activating (start)" fo
 Only `Type=notify` (plus optionally `TimeoutStartSec=120`) is needed for the readiness check. The
 rest of the reference unit is optional. If the new unit misbehaves, copy the `.bak` back, run
 `sudo systemctl daemon-reload` and `sudo systemctl restart zoraxy`.
+
+### Without editing the main unit: drop-ins
+
+To keep the unit file that came with your install and change only a few settings, use a drop-in
+(`sudo systemctl edit zoraxy` creates it). Drop-ins live in `/etc/systemd/system/zoraxy.service.d/*.conf`
+and override single keys. For example `/etc/systemd/system/zoraxy.service.d/notify.conf`:
+
+```ini
+[Service]
+Type=notify
+TimeoutStartSec=120
+```
+
+Then `sudo systemctl daemon-reload && sudo systemctl restart zoraxy`. To go back, delete the file and
+repeat. `systemctl cat zoraxy` shows the unit with all drop-ins applied.
+
+### Slow start on a big database: tuning `TimeoutStartSec`
+
+The timer covers everything up to `READY=1`: opening the database, loading certificates and rules,
+binding ports. A very large `sys.db` or slow storage can need more than 120 seconds. Measure it
+once (`systemctl status zoraxy` while starting, or the time between the first log line and
+`Visit control panel`) and set the timeout to about three times that, with a drop-in:
+
+```ini
+[Service]
+TimeoutStartSec=600
+```
+
+`TimeoutStartSec=infinity` switches the limit off, which brings back the silent hang this unit is
+meant to prevent, so prefer a large number. The `Status:` line shows the last step reached.
 
 Do not use `Type=notify` with a Zoraxy binary older than this feature: systemd would wait for a
 `READY=1` that never comes and kill the service after the timeout.

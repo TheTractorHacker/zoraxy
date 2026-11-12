@@ -39,6 +39,7 @@ func probeFor(procs []ProcInfo, holders []int, socks []ListenSocket, unit UnitSt
 		ListZoraxy: func(int) ([]ProcInfo, int) { return procs, 0 },
 		Sockets:    func() ([]ListenSocket, int, error) { return socks, 0, nil },
 		Unit:       func(string) UnitStatus { return unit },
+		OpensFile:  func(int, string) (bool, bool) { return true, true }, //every listed process has the database open
 	}
 }
 
@@ -269,5 +270,40 @@ func TestHoldersFromFdinfoRealProc(t *testing.T) {
 	gi, _ := g.Stat()
 	if m := holdersFromFdinfo("/proc", gi.Sys().(*syscall.Stat_t), []int{os.Getpid()}); len(m.Pids) != 0 {
 		t.Fatalf("unlocked file reported held: %+v", m)
+	}
+}
+
+func TestDoctorNotAccusingOtherDatabasesPluginsZombies(t *testing.T) {
+	holder := ProcInfo{Pid: 100, PPid: 1, Comm: "zoraxy", Exe: "/x/zoraxy", State: 'S', Visible: true, Scope: "session-4.scope"}
+	other := ProcInfo{Pid: 300, PPid: 1, Comm: "zoraxy", Exe: "/live/zoraxy", State: 'S', Visible: true, Unit: "zoraxy.service"}
+	plugin := ProcInfo{Pid: 301, PPid: 300, Comm: "plugin", Exe: "/live/plugins/zoraxy_waf", State: 'S', Visible: true}
+	zombie := ProcInfo{Pid: 400, PPid: 1, Comm: "zoraxy", Exe: "/x/zoraxy", State: 'Z', Visible: true}
+	hidden := ProcInfo{Pid: 500, PPid: 1, Comm: "zoraxy", Exe: "/y/zoraxy", State: 'S', Visible: true}
+	p := probeFor([]ProcInfo{holder, other, plugin, zombie, hidden}, []int{100}, []ListenSocket{sock(8000, 0, 4096, 100)}, UnitStatus{})
+	p.OpensFile = func(pid int, _ string) (bool, bool) {
+		if pid == 500 {
+			return false, false //cannot read its descriptors
+		}
+		return false, true //opens a different database
+	}
+	r := RunDoctor(opts, p)
+	out := r.String()
+	if r.ExitCode() != 0 {
+		t.Fatalf("falsely accused:\n%s", out)
+	}
+	if strings.Contains(out, "PID 301") {
+		t.Fatalf("a plugin was listed as an instance:\n%s", out)
+	}
+	if !strings.Contains(out, "whether PID 300, PID 500") && !strings.Contains(out, "whether PID 500") {
+		t.Logf("%s", out)
+	}
+}
+
+func TestIsZoraxyName(t *testing.T) {
+	for n, want := range map[string]bool{"zoraxy": true, "Zoraxy": true, "zoraxy_linux_amd64": true, "zoraxy-fork": true, "zoraxy.exe": true,
+		"Zoraxy Cloudflare WAF plugin": false, "zoraxyfoo": false, "nginx": false} {
+		if IsZoraxyName(n) != want {
+			t.Errorf("%q want %v", n, want)
+		}
 	}
 }

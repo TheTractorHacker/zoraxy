@@ -11,8 +11,12 @@
 # To start anyway (you know what you are doing): FORCE=1 ./start.sh
 # To see what is running and who holds the database: sudo ./zoraxy -doctor
 
-if [ -z "$FORCE" ] && [ -z "$INVOCATION_ID" ]; then
-    # INVOCATION_ID is set by systemd for processes it started: a unit that runs this script is fine.
+# A unit whose ExecStart is this script runs inside zoraxy.service's own cgroup: that is fine, so the
+# guard is skipped. (INVOCATION_ID is not used for this: terminals started as user services inherit it.)
+in_unit=""
+if grep 'zoraxy\.service' /proc/self/cgroup >/dev/null 2>&1; then in_unit=1; fi
+
+if [ -z "$FORCE" ] && [ -z "$in_unit" ]; then
     refuse=""
 
     if command -v systemctl >/dev/null 2>&1; then

@@ -29,6 +29,7 @@ type Probe struct {
 	ListZoraxy  func(exclude int) ([]ProcInfo, int)
 	Sockets     func() ([]ListenSocket, int, error)
 	Unit        func(name string) UnitStatus
+	OpensFile   func(pid int, path string) (opens, known bool) //nil = cannot tell
 	IsRoot      bool
 }
 
@@ -40,6 +41,7 @@ func RealProbe() Probe {
 		ListZoraxy:  ListZoraxyProcesses,
 		Sockets:     ListenSockets,
 		Unit:        QueryUnit,
+		OpensFile:   OpensFile,
 		IsRoot:      os.Geteuid() == 0,
 	}
 }
@@ -67,9 +69,16 @@ func (r Report) ExitCode() int {
 // String renders the report.
 func (r Report) String() string { return strings.Join(r.Lines, "\n") + "\n" }
 
-func (r *Report) addf(format string, a ...any) { r.Lines = append(r.Lines, fmt.Sprintf(format, a...)) }
+// Everything that enters the report passes through Sanitize, so no byte that came from another
+// process (argv, exe path, cgroup, systemctl) can reach the terminal as an escape sequence.
+func (r *Report) addf(format string, a ...any) {
+	r.Lines = append(r.Lines, Sanitize(fmt.Sprintf(format, a...)))
+}
 func (r *Report) problem(text string, steps ...string) {
-	r.Problems = append(r.Problems, Problem{Text: text, Steps: steps})
+	for i := range steps {
+		steps[i] = Sanitize(steps[i])
+	}
+	r.Problems = append(r.Problems, Problem{Text: Sanitize(text), Steps: steps})
 }
 
 func pidSet(ps []ProcInfo) map[int]bool {
@@ -99,6 +108,16 @@ func RunDoctor(o DoctorOptions, pr Probe) Report {
 	procs, unreadable := pr.ListZoraxy(o.Self)
 	if unreadable > 0 && !pr.IsRoot {
 		cannotSee = append(cannotSee, fmt.Sprintf("%d process(es) of other users (their executable is hidden; run with sudo to see them)", unreadable))
+	}
+	{ //plugins are children of a Zoraxy and often carry the same name prefix: they are not other instances
+		ids := pidSet(procs)
+		kept := procs[:0:0]
+		for _, p := range procs {
+			if !ids[p.PPid] {
+				kept = append(kept, p)
+			}
+		}
+		procs = kept
 	}
 	known := map[int]ProcInfo{}
 	for _, p := range procs {
@@ -130,7 +149,7 @@ func RunDoctor(o DoctorOptions, pr Probe) Report {
 			r.addf("  held by %s", known[pid].Describe())
 		}
 		if m.ViaFdinfo {
-			r.addf("  (/proc/locks could not be read, so this was found through /proc/<pid>/fdinfo; only processes visible to this user are covered)")
+			r.addf("  (found through /proc/<pid>/fdinfo of the processes visible to this user; run with sudo to also see other users' processes)")
 		}
 		if holderApprox {
 			r.addf("  (matched by inode only, device numbers differ: treat as likely, not certain)")
@@ -159,7 +178,12 @@ func RunDoctor(o DoctorOptions, pr Probe) Report {
 			socksOf[o] = append(socksOf[o], s)
 		}
 	}
+	zombies := 0
 	for _, p := range all {
+		if p.Visible && p.State == 'Z' && !holderSet[p.Pid] {
+			zombies++ //exited, hold nothing: one summary line instead of a line each
+			continue
+		}
 		tag := ""
 		if holderSet[p.Pid] {
 			tag = "  [holds the database lock]"
@@ -170,24 +194,42 @@ func RunDoctor(o DoctorOptions, pr Probe) Report {
 			r.problem(s, steps...)
 		}
 	}
+	if zombies > 0 {
+		r.addf("  (%d exited Zoraxy process(es) not yet collected by their parent, they hold nothing)", zombies)
+	}
+	// A process that has the database file open but holds no lock is waiting for the lock holder.
+	// Processes whose descriptors we cannot read are counted but never accused.
 	runningProcs := 0
+	var waiting, unknownDB []string
 	for _, p := range all {
-		if p.Visible && p.State != 'Z' {
-			runningProcs++
+		if !p.Visible || p.State == 'Z' {
+			continue
+		}
+		runningProcs++
+		if holderSet[p.Pid] || p.Stopped() {
+			continue
+		}
+		if pr.OpensFile == nil {
+			unknownDB = append(unknownDB, fmt.Sprintf("PID %d", p.Pid))
+			continue
+		}
+		opens, ok := pr.OpensFile(p.Pid, o.DBPath)
+		switch {
+		case !ok:
+			unknownDB = append(unknownDB, fmt.Sprintf("PID %d", p.Pid))
+		case opens && len(holders) > 0:
+			waiting = append(waiting, fmt.Sprintf("PID %d", p.Pid))
 		}
 	}
-	if runningProcs > 1 {
-		var waiting []string
-		for _, p := range all {
-			if p.Visible && !holderSet[p.Pid] && len(holders) > 0 && len(socksOf[p.Pid]) == 0 && !p.Stopped() {
-				waiting = append(waiting, fmt.Sprintf("PID %d", p.Pid))
-			}
-		}
-		txt := fmt.Sprintf("%d Zoraxy processes are running; only one can own the database.", runningProcs)
-		if len(waiting) > 0 {
-			txt += " " + strings.Join(waiting, ", ") + " holds no lock and listens on nothing: it is most likely blocked waiting for the database lock, which is why a service can show 'active' while serving nothing."
-		}
-		r.problem(txt, "Stop the one that should not run, then: sudo systemctl restart "+unit)
+	if len(waiting) > 0 {
+		hp := known[holders[0]]
+		txt := fmt.Sprintf("%s has the database open but holds no lock while PID %d holds it: it is most likely blocked waiting for the database lock, which is why a service can show 'active' while serving nothing.", strings.Join(waiting, ", "), hp.Pid)
+		r.problem(txt, "Stop the one that should not run (see the list above), then: sudo systemctl restart "+unit)
+	} else if runningProcs > 1 && len(holders) == 0 {
+		r.addf("  note: %d Zoraxy processes run; none was seen holding %s (other instances may use other databases)", runningProcs, o.DBPath)
+	}
+	if len(unknownDB) > 0 && !pr.IsRoot {
+		cannotSee = append(cannotSee, "whether "+strings.Join(unknownDB, ", ")+" use this database (their descriptors are hidden; run with sudo)")
 	}
 
 	// 4. systemd
@@ -195,6 +237,8 @@ func RunDoctor(o DoctorOptions, pr Probe) Report {
 	r.addf("systemd unit %q", unit)
 	us := pr.Unit(unit)
 	switch {
+	case us.TimedOut:
+		r.addf("  systemctl did not answer within 4 seconds: systemd itself may be stuck. Skipped.")
 	case !us.Available:
 		r.addf("  systemctl not available (or systemd is not running): skipped")
 	case !us.Exists:

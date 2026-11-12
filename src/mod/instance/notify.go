@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 // sd_notify without a dependency. When NOTIFY_SOCKET is unset (Type=simple units, a terminal, Docker)
@@ -34,6 +35,8 @@ func Notify(state string) error {
 		return err
 	}
 	defer conn.Close()
+	//A datagram write blocks when the receiver's queue is full: never let a stuck notify socket hold up startup
+	_ = conn.SetWriteDeadline(time.Now().Add(time.Second))
 	_, err = conn.Write([]byte(state))
 	return err
 }
