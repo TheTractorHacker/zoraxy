@@ -241,10 +241,6 @@ body.darkTheme ol.ui.list li::before {
     color: var(--text_color) !important;
 }
 
-#sidemenuBtn{
-    border: 1px solid var(--button_border_color) !important;
-}
-
 /* message box */
 body.darkTheme #messageBox i{
     color: var(--text_color) !important;

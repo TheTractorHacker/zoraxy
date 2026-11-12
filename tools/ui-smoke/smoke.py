@@ -38,6 +38,8 @@ ap.add_argument("--central-captcha-only", action="store_true", help="run only th
 ap.add_argument("--overview-only", action="store_true", help="run only the Status / Security overview / History / palette / navigation fix scenario")
 ap.add_argument("--visitors-drawer-only", action="store_true", help="run only the Visitors drawer feedback scenario (visitors_drawer_smoke.py)")
 ap.add_argument("--blocked-only", action="store_true", help="run only the Statistics > Blocked scenario (Reference ID search, row drawer, fix + Undo, palette, Status tile)")
+ap.add_argument("--topnav-only", action="store_true", help="run only the top bar scenario (topnav_smoke.py: sizes, overflow, pills, language / theme / account menus, keyboard, phone More menu)")
+ap.add_argument("--topnav-auth-url", default="", help="with --topnav-only: URL of a second throw-away instance WITH authentication; adds the account menu / Log out checks (see topnav_run.sh)")
 ap.add_argument("--newrule-cert-only", action="store_true", help="run only the New proxy rule certificate choice scenario (newrule_cert_smoke.py)")
 ap.add_argument("--zrok-fake", default=os.environ.get("SMOKE_ZROK_FAKE", ""), help="path of a fake zrok script; enables the zrok flow (the instance needs -allow_external_tools)")
 ap.add_argument("--allow", action="append", default=[], help="regex of messages whose failure is tolerated")
@@ -2825,6 +2827,7 @@ exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "over
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "blocked_smoke.py")).read(), "blocked_smoke.py", "exec"))  # defines blocked_ui
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "visitors_drawer_smoke.py")).read(), "visitors_drawer_smoke.py", "exec"))  # defines visitors_drawer_ui
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "newrule_cert_smoke.py")).read(), "newrule_cert_smoke.py", "exec"))  # defines newrule_cert_ui
+exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "topnav_smoke.py")).read(), "topnav_smoke.py", "exec"))  # defines topnav_ui, topnav_auth_ui
 
 
 def main():
@@ -2845,6 +2848,12 @@ def main():
         if pg.evaluate("location.hash") != want:
             fail("quickstart", f"landed on {pg.evaluate('location.hash')}, expected {want} (quickstart state {qs})")
 
+        if args.topnav_only:
+            topnav_ui(pg, ctx)
+            if args.topnav_auth_url:
+                topnav_auth_ui(b, args.topnav_auth_url)
+            b.close()
+            return
         if args.newrule_cert_only:
             newrule_cert_ui(pg, ctx)
             b.close()

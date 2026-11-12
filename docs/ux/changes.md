@@ -2,6 +2,14 @@
 
 Newest first within each area. Each item names the page and what a user notices; design background is in [audit-2026-11.md](audit-2026-11.md), the components in [components.md](components.md).
 
+## Top bar
+* **One consistent bar**: Search, Theme, Language and Account are the same height (36px), radius, border and focus ring in light and dark (the black theme square, the native language select with its heavy border and the tiny logout icon are gone). The bar is flat (`--zx-surface`) in both themes.
+* **Theme** is a menu: Light / Dark / System, and the button shows the current mode. System follows the operating system (what a first visit used already); the Ctrl+K action "Toggle dark mode" still works.
+* **Language** is a globe button with the current code and a menu of all languages (native names, keyboard operated, scrolls when long). The select on the Settings page is unchanged.
+* **Account menu** (only when authentication is on): your user name and role, Change password, Log out. Without authentication nothing is shown.
+* **Live status in the empty middle**: "Online" (or "Proxy stopped"), "N sites down", "N certificates expiring" and "Update vX" only when something needs attention, and always "N blocked today - See why" (opens Statistics > Blocked). Every pill links to a real page and has a tooltip. One light refresh every 45 s while the tab is visible (the same two calls the Status page uses); if the data cannot be read the bar shows a neutral "Status unavailable". The update badge shows the result of your last check on the Update page; the bar never contacts GitHub by itself.
+* **Phones (748px and below)**: Search, a **More** menu (status, theme, language, account) and the page menu button. Nothing overflows or covers the page title.
+
 ## Admin sign-in session
 * **Security Center > Admin accounts > Sign-in session** (new card): how long an admin stays signed in. Two number fields (minutes without "Remember me", days with it, ranges 5 to 43200 minutes and 1 to 365 days, with the current value in words), a checkbox **Keep me signed in while I am active** (sliding expiry) and a Save bar. The defaults are exactly the old fixed values (60 minutes, 7 days, sliding off), so nothing changes until an admin saves. A new value applies to the next sign-in without a restart; accounts that are already signed in keep the expiry they got (the card says so).
 * Why this place: the setting is about admin accounts, the Admin accounts tab already holds sign-in related things (accounts, roles, audit log) and is admin-only; System settings is about the interface and visitor pages. Not added to the Security overview checks (no clear "good" value to score).

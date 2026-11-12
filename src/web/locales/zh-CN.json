@@ -3438,8 +3438,6 @@
   "SVG files are uploaded as-is because vector artwork scales to any size on its own.": "SVG 文件将原样上传，因为矢量图本身即可缩放到任意尺寸。",
   "Swaziland": "斯威士兰",
   "Sweden": "瑞典",
-  "Switch light / dark theme (follows your system until you choose)": "切换浅色 / 深色主题（在你选择之前跟随系统）",
-  "Switch light or dark theme": "切换浅色或深色主题",
   "Switch to horizontal layout": "切换到水平布局",
   "Switzerland": "瑞士",
   "Sync certificates (private keys are sent to followers; the primary should be the only ACME issuer)": "同步证书（私钥会发送给从节点；主节点应是唯一的 ACME 签发方）",
