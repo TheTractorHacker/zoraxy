@@ -33,7 +33,8 @@ func runCompactDatabase(dbPath string, backend string, out, errOut io.Writer) in
 	if err != nil {
 		var locked *dbinc.LockedError
 		if errors.As(err, &locked) {
-			fmt.Fprintln(errOut, "Cannot compact: "+err.Error())
+			fmt.Fprintln(errOut, "Cannot compact: "+locked.Describe())
+			fmt.Fprintln(errOut, "Stop that process (for a service: sudo systemctl stop zoraxy), then run this compact command again.")
 		} else {
 			fmt.Fprintln(errOut, "Compaction failed: "+err.Error())
 		}

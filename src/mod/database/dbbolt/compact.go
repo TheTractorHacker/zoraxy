@@ -44,6 +44,11 @@ func CompactFile(path string, opt CompactOptions) (res *CompactResult, err error
 	if opt.Now == nil {
 		opt.Now = time.Now
 	}
+	//A symlinked database: work on the real file, so the link stays a link and the
+	//temp file, backup and free-space check use the target's directory/filesystem.
+	if real, rerr := filepath.EvalSymlinks(path); rerr == nil {
+		path = real
+	}
 	fi, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read the database file: %w", err)

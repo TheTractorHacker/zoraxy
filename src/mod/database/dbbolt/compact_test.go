@@ -337,3 +337,44 @@ func TestUsage(t *testing.T) {
 		t.Fatalf("all tables are still listed and the result is flagged truncated: %+v", u2)
 	}
 }
+
+// A symlinked sys.db: the link must stay a link and the real file be the one compacted.
+func TestCompactFollowsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	realDir := filepath.Join(dir, "real")
+	os.MkdirAll(realDir, 0755)
+	target := filepath.Join(realDir, "sys.db")
+	seed(t, target, 3, 200)
+	link := filepath.Join(dir, "link.db")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skip("symlinks unavailable: ", err)
+	}
+	before, _ := os.Stat(target)
+	res, err := dbbolt.CompactFile(link, dbbolt.CompactOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Lstat(link); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("the symlink must still be a symlink: %v %v", fi, err)
+	}
+	if filepath.Dir(res.BackupPath) != realDir {
+		t.Errorf("backup should sit next to the real file, got %s", res.BackupPath)
+	}
+	after, _ := os.Stat(target)
+	if os.SameFile(before, after) {
+		t.Error("the real file was not replaced by the compacted one")
+	}
+	d, err := dbbolt.NewBoltDatabase(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.Close()
+}
+
+// The compact path must not tell the operator to "start Zoraxy again" as the next step.
+func TestLockedErrorDescribeHasNoStartAdvice(t *testing.T) {
+	e := &dbinc.LockedError{Path: "/x/sys.db", Backend: "BoltDB"}
+	if strings.Contains(e.Describe(), "start Zoraxy") || !strings.Contains(e.Error(), "start Zoraxy again") {
+		t.Errorf("Describe=%q Error=%q", e.Describe(), e.Error())
+	}
+}

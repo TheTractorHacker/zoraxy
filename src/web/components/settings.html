@@ -238,10 +238,14 @@
             // the exact commands for this server (the absolute path as the running instance sees it)
             document.getElementById("dbCompactCmd").textContent =
                 "sudo systemctl stop zoraxy\n" +
-                "./zoraxy -compact-db -dbpath " + d.path + "\n" +
+                "./zoraxy -compact-db -dbpath " + shQuote(d.path) + "\n" +
                 "sudo systemctl start zoraxy";
             if (u.fileBytes >= d.largeBytes) { document.getElementById("dbCompactHelp").open = true; }
             show("main");
+        }
+        // POSIX shell quoting, only when the path needs it
+        function shQuote(p) {
+            return /^[A-Za-z0-9_\/.:@%+=,-]+$/.test(p) ? p : "'" + p.replace(/'/g, "'\\''") + "'";
         }
         function load() {
             show("loading");

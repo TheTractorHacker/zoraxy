@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"imuslab.com/zoraxy/mod/auth"
 	db "imuslab.com/zoraxy/mod/database"
@@ -42,7 +43,9 @@ func TestDatabaseUsageEndpoint(t *testing.T) {
 	old := auth.ProfileAdmin
 	auth.ProfileAdmin = auth.PasswordProfile{MemoryKiB: 64, Time: 1, Threads: 1}
 	defer func() { auth.ProfileAdmin = old }()
-	authAgent = auth.NewAuthenticationAgent("t", []byte("0123456789abcdef0123456789abcdef"), d, false, lg, func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/login.html", http.StatusTemporaryRedirect) })
+	authAgent = auth.NewAuthenticationAgent("t", []byte("0123456789abcdef0123456789abcdef"), d, false, lg, func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/login.html", http.StatusTemporaryRedirect)
+	})
 	authAgent.CreateUserAccount("root", "password-1", "")
 	authAgent.CreateUser("view", "password-2", auth.RoleViewer)
 	mux := http.NewServeMux()
@@ -162,5 +165,45 @@ func TestRunCompactDatabase(t *testing.T) {
 	}
 	if code := runCompactDatabase(file, "leveldb", &out, &errOut); code == 0 {
 		t.Error("leveldb must be refused")
+	}
+}
+
+// repeated calls inside the TTL reuse one walk (no new read transaction), and a different
+// database never gets another one's cached answer
+func TestDatabaseUsageIsCached(t *testing.T) {
+	oldDB := sysdb
+	t.Cleanup(func() { sysdb = oldDB; dbUsageCache.Lock(); dbUsageCache.owner = nil; dbUsageCache.Unlock() })
+	open := func() *db.Database {
+		d, err := db.NewDatabase(filepath.Join(t.TempDir(), "sys.db"), dbinc.BackendBoltDB)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { d.Close() })
+		return d
+	}
+	a, b := open(), open()
+	a.Write("one", "k", "v")
+	sysdb = a
+	u1, err := cachedDatabaseUsage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.Write("two", "k", "v") //a new table after the first walk
+	u2, _ := cachedDatabaseUsage()
+	if u1 != u2 {
+		t.Error("the second call inside the TTL must return the cached result")
+	}
+	sysdb = b
+	u3, _ := cachedDatabaseUsage()
+	if u3 == u1 {
+		t.Error("another database must not get the cached result")
+	}
+	sysdb = a
+	dbUsageCache.Lock()
+	dbUsageCache.at = time.Now().Add(-2 * dbUsageCacheTTL)
+	dbUsageCache.owner = a
+	dbUsageCache.Unlock()
+	if u4, _ := cachedDatabaseUsage(); u4 == u1 {
+		t.Error("an expired entry must be refreshed")
 	}
 }

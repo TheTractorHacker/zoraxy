@@ -5,9 +5,11 @@ import (
 	"errors"
 	"net/http"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"imuslab.com/zoraxy/mod/auth"
+	"imuslab.com/zoraxy/mod/database"
 	"imuslab.com/zoraxy/mod/database/dbinc"
 )
 
@@ -26,6 +28,29 @@ const dbUsageBudget = 5 * time.Second
 
 // dbUsageLargeBytes is the size above which the UI shows the compaction hint
 const dbUsageLargeBytes = 200 << 20
+
+var dbUsageCache struct {
+	sync.Mutex //held while walking: concurrent callers wait and share the result (single flight)
+	at         time.Time
+	owner      *database.Database //the database the cached result belongs to
+	u          *dbinc.Usage
+	err        error
+}
+
+// dbUsageCacheTTL: the walk holds a read transaction (it blocks file growth), so repeated calls reuse one result
+const dbUsageCacheTTL = 30 * time.Second
+
+func cachedDatabaseUsage() (*dbinc.Usage, error) {
+	c := &dbUsageCache
+	c.Lock()
+	defer c.Unlock()
+	if c.owner == sysdb && !c.at.IsZero() && time.Since(c.at) < dbUsageCacheTTL {
+		return c.u, c.err
+	}
+	c.u, c.err = sysdb.Usage(dbUsageBudget)
+	c.at, c.owner = time.Now(), sysdb
+	return c.u, c.err
+}
 
 // RegisterDatabaseUsageAPIs registers the admin only database usage endpoint
 func RegisterDatabaseUsageAPIs(authRouter *auth.RouterDef) {
@@ -62,7 +87,7 @@ func HandleDatabaseUsage(w http.ResponseWriter, r *http.Request) {
 		resp.Error = "database not ready"
 	} else {
 		resp.Backend = sysdb.BackendType.String()
-		u, err := sysdb.Usage(dbUsageBudget)
+		u, err := cachedDatabaseUsage()
 		switch {
 		case errors.Is(err, dbinc.ErrUsageUnsupported):
 			//other backends: nothing to list
