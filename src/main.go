@@ -48,6 +48,7 @@ import (
 	"imuslab.com/zoraxy/mod/auth"
 	"imuslab.com/zoraxy/mod/cluster"
 	"imuslab.com/zoraxy/mod/geodb"
+	"imuslab.com/zoraxy/mod/instance"
 	"imuslab.com/zoraxy/mod/update"
 	"imuslab.com/zoraxy/mod/updater"
 	"imuslab.com/zoraxy/mod/utils"
@@ -60,6 +61,7 @@ func SetupCloseHandler() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
 		<-c
+		instance.NotifyStopping() //so systemd shows a slow stop as stopping, not as a hang
 		if clusterMgr != nil {
 			clusterMgr.MarkHealthy() //a deliberate stop is not a failed start
 		}
@@ -71,6 +73,10 @@ func SetupCloseHandler() {
 func main() {
 	//Parse startup flags
 	flag.Parse()
+	if *doctorMode {
+		os.Exit(runDoctor()) //read-only report, see doctor.go. Never opens the database or binds a port
+	}
+	instance.NotifyStatus("Starting") //no-op unless started by systemd with Type=notify
 	offline.Set(*offlineMode) //-offline: no start-up / background outbound calls (mod/offline)
 
 	//Initialize path variables from flags
@@ -288,6 +294,7 @@ func main() {
 		//rolled back after 90 seconds.
 		updateManager.MarkHealthy()
 		SystemWideLogger.Println("Plain HTTP requests on this port are redirected to HTTPS. Plugins use loopback " + webUILoopbackListener.Addr().String())
+		announceReady(ln.Addr().String())
 		err = http.Serve(webuitls.NewSniffListener(ln, webuitls.ServerTLSConfig(webUICert)), adminHandler)
 		if err != nil {
 			log.Fatal(err)
@@ -310,6 +317,7 @@ func main() {
 	//start is healthy, so confirm a pending in-app update.
 	updateManager.MarkHealthy()
 
+	announceReady(listener.Addr().String())
 	err = http.Serve(listener, entryMux)
 
 	if err != nil {

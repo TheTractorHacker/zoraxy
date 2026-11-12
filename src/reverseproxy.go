@@ -218,6 +218,7 @@ func HandleCaptchaPreview(w http.ResponseWriter, r *http.Request) {
 
 // Add user customizable reverse proxy
 func ReverseProxyInit() {
+	defer signalProxyStartSettled() //the first start attempt (bound, failed or disabled) has finished: systemd readiness waits for it
 	loadCaptchaDefaultBranding()
 	loadCaptchaCentral()
 	/*

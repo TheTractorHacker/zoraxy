@@ -265,10 +265,17 @@ func (router *Router) StartProxyService() error {
 		//Start the TLS server
 		router.Option.Logger.PrintAndLog("dprouter", "Reverse proxy service started in the background (TLS mode)", nil)
 		// Fixed #1206: passing the router.server into go routine to prevent nil pointer exception
+		// The socket is bound here, not inside the goroutine, so ListenError() is final when
+		// StartProxyService returns (systemd readiness depends on it, see mod/instance).
+		ln, lnErr := net.Listen("tcp", router.server.Addr)
+		if lnErr != nil {
+			router.setListenError(lnErr)
+			router.Option.Logger.PrintAndLog("dprouter", "Could not start proxy server (listen failed)", lnErr)
+		} else {
+			router.setListenError(nil)
+		}
 		go func(srv *http.Server) {
-			ln, err := net.Listen("tcp", srv.Addr)
-			if err != nil {
-				router.Option.Logger.PrintAndLog("dprouter", "Could not start proxy server (listen failed)", err)
+			if lnErr != nil {
 				return
 			}
 
@@ -317,8 +324,15 @@ func (router *Router) StartProxyService() error {
 		router.syncAllHealthChecks()
 		router.Option.Logger.PrintAndLog("dprouter", "Reverse proxy service started in the background (Plain HTTP mode)", nil)
 
+		//Bind first (see the TLS branch), then serve in the background
+		plainLn, plainErr := net.Listen("tcp", router.server.Addr)
+		router.setListenError(plainErr)
 		go func(srv *http.Server) {
-			srv.ListenAndServe()
+			if plainErr != nil {
+				router.Option.Logger.PrintAndLog("dprouter", "Could not start proxy server (listen failed)", plainErr)
+				return
+			}
+			srv.Serve(plainLn)
 		}(router.server) // Fixed #1206
 	}
 
@@ -982,4 +996,22 @@ func (router *Router) captchaCentralMissing(w http.ResponseWriter, r *http.Reque
 	captcha.RenderBlocked(w, r, cc, domain)
 	router.Option.Metrics.Event(metrics.EventCaptchaChallenge, sep.RootOrMatchingDomain, "central-provider-missing")
 	return true
+}
+
+// setListenError records the outcome of binding the main proxy listener (nil = bound).
+func (router *Router) setListenError(err error) {
+	if err == nil {
+		router.listenErr.Store(nil)
+		return
+	}
+	msg := err.Error()
+	router.listenErr.Store(&msg)
+}
+
+// ListenError returns why the main proxy listener could not be bound by the last StartProxyService, or "".
+func (router *Router) ListenError() string {
+	if p := router.listenErr.Load(); p != nil {
+		return *p
+	}
+	return ""
 }

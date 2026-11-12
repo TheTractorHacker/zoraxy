@@ -1,0 +1,67 @@
+# Reference systemd unit for Zoraxy.
+# Copy to /etc/systemd/system/zoraxy.service, adjust the three paths marked CHANGE, then:
+#   sudo systemctl daemon-reload && sudo systemctl enable --now zoraxy
+# See docs/deploy/README.md for switching an existing unit and for what each line is for.
+
+[Unit]
+Description=Zoraxy reverse proxy
+Documentation=https://github.com/tobychui/zoraxy
+# The network must be up before Zoraxy binds addresses and talks to ACME / upstreams.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Zoraxy tells systemd when it is really listening (admin port and proxy ports bound).
+# Until then "systemctl status" shows "activating (start)" instead of a misleading "active".
+Type=notify
+# Needed so only Zoraxy itself (not its plugin children) may send readiness messages. This is the
+# default for Type=notify, spelled out so nobody changes it by accident.
+NotifyAccess=main
+
+# CHANGE: the folder that holds the zoraxy binary, ./conf, ./sys.db, ./plugins ...
+WorkingDirectory=/opt/zoraxy
+# CHANGE: the binary and your usual flags (see ./zoraxy -h). Keep -port as you have it today.
+ExecStart=/opt/zoraxy/zoraxy -port=:8000
+
+# A start that has not reported READY within 2 minutes (for example blocked on a locked database)
+# is killed and shown as "failed", instead of sitting "active" and silent forever.
+TimeoutStartSec=120
+# Time Zoraxy gets to shut down cleanly after SIGTERM (it saves statistics and logs) before SIGKILL.
+TimeoutStopSec=30
+
+# Restart after a crash or a failed start, but not after a deliberate "systemctl stop".
+Restart=on-failure
+RestartSec=5
+# Do not give up restarting after a few quick failures (a held port or database often clears on its own).
+StartLimitIntervalSec=0
+
+# Stop the whole control group: Zoraxy AND every plugin process it started. Without this a plugin
+# could outlive Zoraxy and keep a port or file busy.
+KillMode=control-group
+
+# A proxy holds one file descriptor per connection (plus certificates, logs, plugins).
+LimitNOFILE=1048576
+
+# --- Hardening. Deliberately conservative: nothing here blocks plugins, ACME, ports 80/443 or
+# --- running as root (needed for ports below 1024 and for -plugin_user).
+# Gives the service its own /tmp, invisible to other programs.
+PrivateTmp=yes
+# /usr, /boot and /etc become read-only for the service. Zoraxy writes only below WorkingDirectory.
+# Remove this line if WorkingDirectory is below /etc or /usr.
+ProtectSystem=full
+# Zoraxy needs no access to the kernel module loader, kernel logs or to change cgroups.
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+# Blocks creating setuid/setgid files. Plugins started with -plugin_user still work.
+RestrictSUIDSGID=yes
+# Blocks changing the execution domain (personality). Nothing legitimate here needs it.
+LockPersonality=yes
+# Not set on purpose, they break common setups:
+#   ProtectHome=yes            (breaks an install under /home)
+#   NoNewPrivileges=yes        (breaks plugins that rely on sudo or setuid helpers)
+#   MemoryDenyWriteExecute=yes (breaks some plugin runtimes)
+#   ProtectSystem=strict       (needs a ReadWritePaths= list for conf, plugins, logs, certs)
+
+[Install]
+WantedBy=multi-user.target
