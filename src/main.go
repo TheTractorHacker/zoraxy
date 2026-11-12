@@ -149,6 +149,9 @@ func main() {
 		geodb.DownloadGeoDBUpdate(CONF_GEODB_PATH)
 		os.Exit(0)
 	}
+	if *compactDatabase {
+		os.Exit(runCompactDatabase(*path_database, *databaseBackend, os.Stdout, os.Stderr))
+	}
 	if *reset_account {
 		//Reset admin account by removing all users from the system
 		auth.ResetAccount(databaseBackend, path_database)

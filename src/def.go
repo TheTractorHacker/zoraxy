@@ -128,6 +128,7 @@ var (
 	updateRepo        = flag.String("update_repo", updater.DefaultRepo, "GitHub repository (owner/name) the Update page fetches releases from")
 	updaterWatchdog   = flag.String("updater_watchdog", "", "Internal: run the post-update rollback watchdog for the given pending-update marker and exit")
 	reset_account     = flag.Bool("reset_ac", false, "Reset admin account username and password to default and exit")
+	compactDatabase   = flag.Bool("compact-db", false, "Compact the BoltDB database file given by -dbpath offline (stop Zoraxy first), keep a timestamped backup next to it and exit")
 )
 
 /* Global Variables and Handlers */
