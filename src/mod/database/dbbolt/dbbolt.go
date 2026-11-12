@@ -9,6 +9,7 @@ import (
 
 	bolt "go.etcd.io/bbolt"
 	"imuslab.com/zoraxy/mod/database/dbinc"
+	"imuslab.com/zoraxy/mod/instance"
 )
 
 /*
@@ -51,7 +52,9 @@ func openBolt(dbfile string, opt OpenOptions) (*bolt.DB, error) {
 	}
 	o := *bolt.DefaultOptions //same as passing nil, except for the timeout
 	o.Timeout = opt.Timeout
+	stopWatch := instance.WatchLockWait(dbfile) //STATUS= for systemd while waiting (no-op without NOTIFY_SOCKET)
 	db, err := bolt.Open(dbfile, 0600, &o)
+	stopWatch()
 	if err != nil {
 		if errors.Is(err, bolt.ErrTimeout) {
 			return nil, &dbinc.LockedError{Path: absPath(dbfile), Backend: "BoltDB", Waited: opt.Timeout, Err: err}

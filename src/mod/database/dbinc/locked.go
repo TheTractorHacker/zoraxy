@@ -3,7 +3,13 @@ package dbinc
 import (
 	"strings"
 	"time"
+
+	"imuslab.com/zoraxy/mod/instance"
 )
+
+// HolderSummary names the process holding the lock on a path ("" when unknown). A var so tests can
+// replace it; the default reads /proc on Linux and says nothing elsewhere (see mod/instance).
+var HolderSummary = instance.LockHolderSummary
 
 /*
 LockedError is returned by a backend when the database could not be opened
@@ -31,6 +37,9 @@ func (e *LockedError) Describe() string {
 		b.WriteString(", waited " + e.Waited.Round(time.Second).String())
 	}
 	b.WriteString(")\n")
+	if h := HolderSummary(e.Path); h != "" {
+		b.WriteString("The lock is " + h + "\n")
+	}
 	b.WriteString("Another Zoraxy process (or another program) most likely has it open. Only one process can use the database at a time.\n")
 	b.WriteString("Find the process holding it:\n")
 	b.WriteString("    sudo lsof " + e.Path + "\n")
