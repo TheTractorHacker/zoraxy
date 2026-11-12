@@ -202,6 +202,7 @@
 
     function renderCheck(res){
         state.check = res;
+        if (window.parent && window.parent.ZxTopbar) { window.parent.ZxTopbar.setUpdate(res); } else if (window.ZxTopbar) { window.ZxTopbar.setUpdate(res); }
         let l = res.latest;
         $("#upLatest").text(l ? l.tag : "none");
         $("#upLatestDetail").text(l ? ("Published " + fmtTime(l.published) + ((l.early_access || l.prerelease) ? " (early access / pre-release)" : "") +

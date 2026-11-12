@@ -88,6 +88,12 @@
     #visitorDrawer .vdList li span:first-child{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #visitorDrawer .vdActions{ display: flex; flex-wrap: wrap; gap: 0.4em; margin: 0.8em 0; }
     #visitorDrawer .vdActions .ui.button{ margin: 0; }
+    #visitorDrawer .vdStatus{ display: none; margin: 0 0 0.8em; padding: 0.55em 0.8em; border-radius: 0.3em; font-size: 0.92em; border: 1px solid; }
+    #visitorDrawer .vdStatus.show{ display: block; }
+    #visitorDrawer .vdStatus.ok{ background: rgba(33,186,69,0.12); border-color: rgba(33,186,69,0.5); }
+    #visitorDrawer .vdStatus.err{ background: rgba(219,40,40,0.12); border-color: rgba(219,40,40,0.5); }
+    #visitorDrawer .vdStatus a{ cursor: pointer; margin-left: 0.6em; font-weight: 700; }
+    #visitorDrawer .vdActions .ui.button.vdDone{ opacity: 0.75; }
     #visitorDrawerShade{ position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 1099; display: none; }
     #visitorDrawerShade.open{ display: block; }
 </style>
@@ -408,6 +414,7 @@
                 '<button class="ui small basic button" data-act="exclude"><i class="eye slash icon"></i> Exclude from stats</button>' +
                 '<button class="ui small basic button" data-act="whois"><i class="search icon"></i> Whois / lookup</button>' +
                 '<button class="ui small basic button" data-act="delete"><i class="trash icon"></i> Delete record</button></div>' +
+                '<div id="vdStatus" class="vdStatus" role="status" aria-live="polite"></div>' +
                 '<div class="vdKV">' +
                 "<div>Country</div><div>" + country(v.country) + "</div>" +
                 "<div>Route</div><div>" + viaChip(v.via, v.viaHeader) + (v.viaHeader ? " <small>(" + esc(v.viaHeader) + ")</small>" : "") + "</div>" +
@@ -431,19 +438,50 @@
         $("#visitorDrawer").removeClass("open").attr("aria-hidden", "true");
         $("#visitorDrawerShade").removeClass("open");
     }
+    /* inline feedback inside the drawer: the page toast can be far away or behind it */
+    function vdStatus(msg, ok, undo){
+        var $s = $("#vdStatus").removeClass("ok err").addClass("show " + (ok ? "ok" : "err")).empty();
+        $s.append($("<i>").addClass(ok ? "check circle icon" : "exclamation triangle icon")).append(document.createTextNode(" " + msg));
+        if (ok && undo) $s.append($("<a>").attr({role: "button", tabindex: 0}).text("Undo").on("click keydown", function(e){
+            if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") return;
+            e.preventDefault(); undo();
+        }));
+    }
+    /* run a list/ban action with a busy state on its button, a done state afterwards and an Undo */
+    function listAction(act, url, data, label, doneLabel, undoUrl, undoData){
+        var ip = V.drawerIP, $b = $('#vdBody [data-act="' + act + '"]'), html = $b.html();
+        if ($b.prop("disabled")) return;
+        $b.prop("disabled", true).html('<i class="spinner loading icon"></i> ' + label);
+        function restore(){ $b.prop("disabled", false).removeClass("vdDone").html(html); }
+        $.cjax({url: url, method: "POST", data: data, success: function(d){
+            if (d && d.error){ restore(); vdStatus(d.error, false); msgbox(d.error, false); return; }
+            if (V.drawerIP !== ip) { msgbox(ip + ": " + doneLabel); return; }
+            $b.prop("disabled", false).addClass("vdDone").html('<i class="check icon"></i> ' + doneLabel);
+            var m = ip + ": " + doneLabel;
+            vdStatus(m, true, function(){
+                $.cjax({url: undoUrl, method: "POST", data: undoData, success: function(r){
+                    if (r && r.error){ vdStatus(r.error, false); return; }
+                    restore(); vdStatus("Undone: " + ip + " is no longer " + doneLabel.toLowerCase(), true);
+                    msgbox("Undone", true);
+                }, error: function(x){ vdStatus("Undo failed (HTTP " + x.status + ")", false); }});
+            });
+            msgbox(m);
+        }, error: function(x){ restore(); var m = "Request failed (HTTP " + x.status + ")"; vdStatus(m, false); msgbox(m, false); }});
+    }
     function drawerAction(act){
         var ip = V.drawerIP;
         if (!ip) return;
-        if (act === "blacklist") post("./api/blacklist/ip/add", {ip: ip, comment: "from Visitors"}, function(){ msgbox(ip + " added to the blacklist"); });
-        else if (act === "whitelist") post("./api/whitelist/ip/add", {ip: ip, comment: "from Visitors"}, function(){ msgbox(ip + " added to the whitelist"); });
-        else if (act === "ban") post("./api/abuse/ban", {ip: ip, seconds: 86400, reason: "banned from Visitors"}, function(){ msgbox(ip + " banned for 24 hours"); });
+        if (act === "blacklist") listAction(act, "./api/blacklist/ip/add", {ip: ip, comment: "from Visitors"}, "Adding...", "Blacklisted", "./api/blacklist/ip/remove", {ip: ip});
+        else if (act === "whitelist") listAction(act, "./api/whitelist/ip/add", {ip: ip, comment: "from Visitors"}, "Adding...", "Whitelisted", "./api/whitelist/ip/remove", {ip: ip});
+        else if (act === "ban") listAction(act, "./api/abuse/ban", {ip: ip, seconds: 86400, reason: "banned from Visitors"}, "Banning...", "Banned for 24 hours", "./api/abuse/unban", {ip: ip});
         else if (act === "exclude"){
             api("./api/stats/settings", function(d){
                 var s = d.Settings, list = (s.ExcludeNetworks || []).slice();
                 if (list.indexOf(ip) < 0 && list.indexOf(ip + (ip.indexOf(":") > -1 ? "/128" : "/32")) < 0) list.push(ip + (ip.indexOf(":") > -1 ? "/128" : "/32"));
                 s.ExcludeNetworks = list;
                 $.cjax({url: "./api/stats/settings", method: "POST", contentType: "application/json", data: JSON.stringify(s), success: function(r){
-                    if (r && r.error){ msgbox(r.error, false); return; }
+                    if (r && r.error){ vdStatus(r.error, false); msgbox(r.error, false); return; }
+                    vdStatus(ip + " is excluded from statistics and the visitor list from now on", true);
                     msgbox(ip + " is excluded from statistics and the visitor list from now on");
                 }});
             });

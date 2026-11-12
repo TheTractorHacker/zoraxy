@@ -157,7 +157,7 @@ def overview_ui(pg, ctx):
     if bad:
         fail("trafficmap", f"nodes clipped or covered: {bad[:5]}")
     pg.screenshot(path=out("overview-status-1366.png"), full_page=True)
-    # phone width: the Start / Stop buttons must not sit on the title, the language picker must show its longest name
+    # phone width: the Start / Stop buttons must not sit on the title, the language names in the top bar More menu must not be clipped
     current["page"] = "overview/status-390"
     pg.set_viewport_size({"width": 390, "height": 800})
     pg.wait_for_timeout(600)
@@ -166,10 +166,10 @@ def overview_ui(pg, ctx):
     overlap = ov["btnBottom"] > ov["titleTop"] + 1 and ov["btnTop"] < ov["titleBottom"] - 1 and ov["btnLeft"] < ov["titleRight"] and ov["btnRight"] > ov["titleLeft"]
     if overlap:
         fail("status", f"Start / Stop buttons overlap the title at 390px: {ov}")
-    clipped = pg.evaluate("""() => { const s = document.querySelector('.menubar select.i18n-picker'), cs = getComputedStyle(s), c = document.createElement('canvas').getContext('2d');
-        c.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
-        const room = s.getBoundingClientRect().width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 18;
-        const bad = []; [...s.options].forEach(o => { if (c.measureText(o.textContent).width > room) bad.push(o.textContent) }); return bad; }""")
+    pg.click("#zxMoreBtn")
+    pg.wait_for_selector(".zx-menu [data-lang]")
+    clipped = pg.evaluate("""() => [...document.querySelectorAll('.zx-menu [data-lang] .zx-mi__t')].filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.textContent)""")
+    pg.keyboard.press("Escape")
     if clipped:
         fail("status", f"the language picker clips these names at 390px: {clipped}")
     check_horizontal(pg, "status 390px")
