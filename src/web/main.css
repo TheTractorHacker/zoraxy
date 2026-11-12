@@ -114,7 +114,7 @@ body.darkTheme .menubar{
     right: 1em;
     display:none;
     max-width: 300px;
-    z-index: 1000;
+    z-index: 1300; /* above the 1100 drawers and 1200 dialogs, so feedback is never hidden behind them */
 }
 
 /* Confirm Box */
@@ -1166,7 +1166,7 @@ a:focus-visible,
 #messageBox {
     overflow-wrap: anywhere;
     max-width: min(300px, calc(100vw - 2em));
-    z-index: 1001;
+    z-index: 1300;
 }
 /* While a Save bar is showing, the toast sits above it instead of covering its buttons */
 /* Scroll cue on tab bars that are cut off (class set by script/uxkit.js) */
