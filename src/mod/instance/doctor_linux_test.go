@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -242,5 +243,31 @@ func TestParseSystemctlShow(t *testing.T) {
 	}
 	if u := ParseSystemctlShow("LoadState=not-found\nActiveState=inactive\n"); u.Exists {
 		t.Fatal("not-found is not an existing unit")
+	}
+}
+
+// holdersFromFdinfo against the real /proc: this test process takes a flock and must be found
+// without going through /proc/locks.
+func TestHoldersFromFdinfoRealProc(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "lock")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		t.Skip("flock unavailable: ", err)
+	}
+	fi, _ := f.Stat()
+	st := fi.Sys().(*syscall.Stat_t)
+	m := holdersFromFdinfo("/proc", st, []int{os.Getpid(), 1})
+	if len(m.Pids) != 1 || m.Pids[0] != os.Getpid() || !m.ViaFdinfo {
+		t.Fatalf("%+v", m)
+	}
+	// a file nobody locked
+	g, _ := os.CreateTemp(t.TempDir(), "free")
+	defer g.Close()
+	gi, _ := g.Stat()
+	if m := holdersFromFdinfo("/proc", gi.Sys().(*syscall.Stat_t), []int{os.Getpid()}); len(m.Pids) != 0 {
+		t.Fatalf("unlocked file reported held: %+v", m)
 	}
 }

@@ -129,6 +129,9 @@ func RunDoctor(o DoctorOptions, pr Probe) Report {
 			}
 			r.addf("  held by %s", known[pid].Describe())
 		}
+		if m.ViaFdinfo {
+			r.addf("  (/proc/locks could not be read, so this was found through /proc/<pid>/fdinfo; only processes visible to this user are covered)")
+		}
 		if holderApprox {
 			r.addf("  (matched by inode only, device numbers differ: treat as likely, not certain)")
 		}

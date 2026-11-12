@@ -25,9 +25,28 @@ var procRoot = "/proc"
 // ErrNoHolder means nobody holds a lock on the file (or it could not be determined).
 var ErrNoHolder = errors.New("no process holds a lock on this file")
 
+// readTimeout bounds one /proc read. A damaged kernel lock list can make /proc/locks block forever
+// (seen on a host with a stuck task), and a diagnostic tool must not hang on the thing it diagnoses.
+var readTimeout = 3 * time.Second
+
+var errReadTimeout = errors.New("timed out reading from /proc (the kernel did not answer)")
+
 func readProc(root, rel string) (string, error) {
-	b, err := os.ReadFile(filepath.Join(root, rel))
-	return string(b), err
+	type res struct {
+		s   string
+		err error
+	}
+	ch := make(chan res, 1) //buffered: a read that never returns leaks only its goroutine
+	go func() {
+		b, err := os.ReadFile(filepath.Join(root, rel))
+		ch <- res{string(b), err}
+	}()
+	select {
+	case r := <-ch:
+		return r.s, r.err
+	case <-time.After(readTimeout):
+		return "", errReadTimeout
+	}
 }
 
 // FindLockHolders returns every pid holding a flock/POSIX lock on path (matched by device and inode
@@ -54,6 +73,10 @@ func findLockHolders(root, path string) (LockMatch, error) {
 	}
 	text, err := readProc(root, "locks")
 	if err != nil {
+		//Fallback: ask each Zoraxy process's own fdinfo ("lock:" lines), which does not depend on /proc/locks
+		if m := holdersFromFdinfo(root, st, zoraxyPids(root)); len(m.Pids) > 0 {
+			return m, nil
+		}
 		return LockMatch{}, fmt.Errorf("cannot read /proc/locks: %w", err)
 	}
 	maj, min := DevMajorMinor(uint64(st.Dev))
@@ -62,6 +85,50 @@ func findLockHolders(root, path string) (LockMatch, error) {
 		return m, ErrNoHolder
 	}
 	return m, nil
+}
+
+// holdersFromFdinfo finds lock holders without /proc/locks: for every Zoraxy-looking process whose
+// readable file descriptors include the file, /proc/<pid>/fdinfo/<fd> carries "lock:" lines when that
+// descriptor holds a lock. Other users' processes are not readable without root.
+func holdersFromFdinfo(root string, want *syscall.Stat_t, pids []int) LockMatch {
+	m := LockMatch{ViaFdinfo: true}
+	for _, pid := range pids {
+		p := ProcInfo{Pid: pid}
+		fdDir := filepath.Join(root, strconv.Itoa(p.Pid), "fd")
+		fds, err := os.ReadDir(fdDir)
+		if err != nil {
+			continue
+		}
+		for _, fd := range fds {
+			fi, err := os.Stat(filepath.Join(fdDir, fd.Name()))
+			if err != nil {
+				continue
+			}
+			st, ok := fi.Sys().(*syscall.Stat_t)
+			if !ok || st.Ino != want.Ino || st.Dev != want.Dev {
+				continue
+			}
+			info, err := readProc(root, filepath.Join(strconv.Itoa(p.Pid), "fdinfo", fd.Name()))
+			if err != nil {
+				continue
+			}
+			for _, line := range strings.Split(info, "\n") {
+				if strings.HasPrefix(line, "lock:") {
+					m.Pids = appendUnique(m.Pids, p.Pid)
+				}
+			}
+		}
+	}
+	return m
+}
+
+func zoraxyPids(root string) []int {
+	procs, _ := listZoraxy(root, -1, time.Now())
+	var out []int
+	for _, p := range procs {
+		out = append(out, p.Pid)
+	}
+	return out
 }
 
 // FindLockHolder returns the first known holder pid of the lock on path. approximate is true when

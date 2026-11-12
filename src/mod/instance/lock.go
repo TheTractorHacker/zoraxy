@@ -61,6 +61,7 @@ func DevMajorMinor(dev uint64) (uint32, uint32) {
 // LockMatch is the result of looking a file up in /proc/locks.
 type LockMatch struct {
 	Pids        []int // distinct holder pids, may contain 0 / -1 when the kernel could not translate the pid
+	ViaFdinfo   bool  // /proc/locks was unreadable; found through /proc/<pid>/fdinfo (own or root-visible processes only)
 	Approximate bool  // matched on inode only (device numbers differ, seen on btrfs subvolumes and some overlays)
 }
 
