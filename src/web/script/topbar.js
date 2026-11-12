@@ -104,7 +104,7 @@
             out.push({ id: "blocked", state: "neutral", icon: "ban", n: b.toLocaleString(), text: tr(N_("blocked today")), more: tr(N_("See why")),
                 label: trf(N_("Blocked today: {0}. See why, in Statistics > Blocked."), b), tag: "stats", kind: "blocked" });
         }
-        if (!out.length && S.failed) {
+        if (S.failed) {
             out.push({ id: "unknown", state: "neutral", dot: true, text: tr(N_("Status unavailable")), label: tr(N_("The status could not be read. It is retried every 45 seconds.")), tag: "status" });
         }
         return out;
