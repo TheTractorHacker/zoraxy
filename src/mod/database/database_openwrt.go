@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"imuslab.com/zoraxy/mod/database/dbinc"
 )
@@ -193,4 +194,12 @@ func fileExists(name string) bool {
 		return false
 	}
 	return false
+}
+
+func (d *Database) usage(budget time.Duration) (*dbinc.Usage, error) {
+	return nil, dbinc.ErrUsageUnsupported
+}
+
+func compactFile(path string, opt dbinc.CompactOptions) (*dbinc.CompactResult, error) {
+	return nil, errors.New("database compaction is not available on this platform")
 }
