@@ -40,6 +40,7 @@ ap.add_argument("--visitors-drawer-only", action="store_true", help="run only th
 ap.add_argument("--blocked-only", action="store_true", help="run only the Statistics > Blocked scenario (Reference ID search, row drawer, fix + Undo, palette, Status tile)")
 ap.add_argument("--topnav-only", action="store_true", help="run only the top bar scenario (topnav_smoke.py: sizes, overflow, pills, language / theme / account menus, keyboard, phone More menu)")
 ap.add_argument("--topnav-auth-url", default="", help="with --topnav-only: URL of a second throw-away instance WITH authentication; adds the account menu / Log out checks (see topnav_run.sh)")
+ap.add_argument("--ech-fallback-only", action="store_true", help="run only the fallback-certificate diagnostics scenario (ech_fallback_smoke.py; real handshakes, needs a fresh instance)")
 ap.add_argument("--newrule-cert-only", action="store_true", help="run only the New proxy rule certificate choice scenario (newrule_cert_smoke.py)")
 ap.add_argument("--zrok-fake", default=os.environ.get("SMOKE_ZROK_FAKE", ""), help="path of a fake zrok script; enables the zrok flow (the instance needs -allow_external_tools)")
 ap.add_argument("--allow", action="append", default=[], help="regex of messages whose failure is tolerated")
@@ -2828,6 +2829,7 @@ exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "bloc
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "visitors_drawer_smoke.py")).read(), "visitors_drawer_smoke.py", "exec"))  # defines visitors_drawer_ui
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "newrule_cert_smoke.py")).read(), "newrule_cert_smoke.py", "exec"))  # defines newrule_cert_ui
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "topnav_smoke.py")).read(), "topnav_smoke.py", "exec"))  # defines topnav_ui, topnav_auth_ui
+exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "ech_fallback_smoke.py")).read(), "ech_fallback_smoke.py", "exec"))  # defines ech_fallback_ui
 
 
 def main():
@@ -2860,6 +2862,10 @@ def main():
             return
         if args.visitors_drawer_only:
             visitors_drawer_ui(pg, ctx)
+            b.close()
+            return
+        if args.ech_fallback_only:
+            ech_fallback_ui(pg, ctx)
             b.close()
             return
         if args.blocked_only:

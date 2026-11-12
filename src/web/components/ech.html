@@ -53,6 +53,13 @@
     #echPanel .ui.button.echConfirm { margin: 0; }
     #echPanel ul.echHelp { margin: .3em 0 0; padding-left: 1.2em; line-height: 1.55; }
     #echPanel ul.echHelp li { margin-bottom: .4em; }
+    #echPanel .echFbList { margin-top: .5em; }
+    #echPanel .echFbItem { border-top: 1px solid var(--divider_color); padding: .6em 0; min-width: 0; }
+    #echPanel .echFbItem:first-child { border-top: 0; }
+    #echPanel .echFbHead { display: flex; flex-wrap: wrap; align-items: center; gap: .3em .7em; min-width: 0; }
+    #echPanel .echFbName { font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
+    #echPanel .echFbMeta { color: var(--text_color_secondary); font-size: .9em; }
+    #echPanel .echFbStep { margin-top: .25em; line-height: 1.5; overflow-wrap: anywhere; }
     @media (max-width: 600px) { #echPanel .echCard { padding: .8em .8em 1em; } #echPanel .echPill { white-space: normal; } }
 </style>
 <div id="echPanel" class="standardContainer">
@@ -180,6 +187,14 @@
                 <li><b>Router DNS:</b> most home routers cannot serve or filter type 65. Use one of the resolvers above, or change the DNS server handed out by DHCP to one that can.</li>
             </ul>
         </details>
+    </div>
+
+    <!-- fallback diagnostics -->
+    <div class="echCard" id="echFbCard">
+        <h4><i class="shield alternate icon"></i> Fallback certificate served for these names</h4>
+        <div class="echMuted">Names that reached this proxy, match no proxy rule or alias, and were answered with the fallback certificate. Diagnostics only: nothing here changes which certificate is served. Counted since the last restart.</div>
+        <div id="echFbEmpty" class="echInline echMuted" style="display:none">Nothing has reached the fallback certificate</div>
+        <div id="echFbList" class="echFbList"></div>
     </div>
 
     <!-- step 4 -->
@@ -374,7 +389,35 @@
         return tr;
     }
 
+    // ---- names answered with the fallback certificate (diagnostics) ----
+    var FB = {
+        "foreign-ech": {t: "ECH outer name of another provider", c: "bad", s: "Browsers use an ECH config from DNS that this proxy did not publish and cannot decrypt, so no certificate can be valid. Fix the DNS: run \"Check DNS for all hosts\" in step 3, then override or block the HTTPS record in your local resolver, or turn ECH off at the DNS provider."},
+        "own-ech": {t: "Zoraxy's own ECH public name", c: "warn", s: "Clients whose ECH was rejected (or a direct visit) land here. Make sure the public name has a valid certificate (see above)."},
+        "no-sni": {t: "No SNI", c: "unk", s: "The client sent no server name: access by IP address or a very old client. Use the host name instead of the IP address."},
+        "unknown": {t: "Unknown host / scanner / IP access", c: "unk", s: "No proxy rule uses this name. Add a rule if it is yours, otherwise ignore it."}
+    };
+    function loadFallbacks(){
+        $.ajax({url: "/api/ech/fallbacks", dataType: "json", cache: false}).done(function(d){
+            var box = $id("echFbList").empty(), list = (d && d.Entries) || [];
+            $id("echFbEmpty").text("Nothing has reached the fallback certificate").toggle(!list.length);
+            list.forEach(function(e){
+                var c = FB[e.Class] || {t: e.Class, c: "unk", s: ""};
+                var head = $("<div class='echFbHead'>");
+                head.append($("<span class='echFbName'>").text(e.Name || "(no name)"));
+                head.append($("<span class='echChip'>").addClass(c.c).append($("<i class='icon'>").addClass(c.c == "bad" ? "times circle" : (c.c == "warn" ? "exclamation triangle" : "minus circle"))).append(document.createTextNode(c.t)));
+                head.append($("<span class='echFbMeta'>").text(e.Count + (e.Count == 1 ? " handshake" : " handshakes") + ", last seen " + age(new Date(e.LastSeen * 1000).toISOString()) + " ago"));
+                box.append($("<div class='echFbItem'>").append(head).append($("<div class='echFbStep'>").text(c.s)));
+            });
+            if (d && d.Dropped) { box.append($("<div class='echMuted'>").text("Older names were dropped to keep this list small (" + d.Dropped + ").")); }
+        }).fail(function(x){
+            $id("echFbList").empty();
+            $id("echFbEmpty").show().text(x && x.status === 403 ? "Only administrators can see this list." : "The list could not be loaded.");
+        });
+    }
+    // the page stays loaded between visits: refresh the list whenever the page is opened again
+    if (typeof tabSwitchEventBind !== "undefined") { tabSwitchEventBind["ech"] = loadFallbacks; }
     function load(){
+        loadFallbacks();
         $.ajax({url: "/api/ech/status", dataType: "json", cache: false}).done(function(d){
             if (d && d.error != undefined) { showUnavailable(errText(d)); return; }
             render(d);
@@ -480,7 +523,18 @@
                 var names = Object.keys(foreignNames);
                 var h = $id("echForeignHelpText").empty();
                 h.append($("<b>").text(names.length ? "A DNS record advertises another provider's ECH config" + " (" + names.join(", ") + ")" : "A DNS record advertises an ECH config Zoraxy cannot use"));
-                h.append(document.createTextNode("Zoraxy cannot decrypt it, so a browser that uses it gets its ECH rejected and then shows ERR_ECH_FALLBACK_CERTIFICATE_INVALID. This is common with split-horizon DNS: the LAN resolver returns the address of this proxy, while the browser fetches the HTTPS record from a public resolver. Remedies: turn ECH off at the DNS provider of the zone (Cloudflare: SSL/TLS > Edge Certificates > Encrypted Client Hello); or publish Zoraxy's own record (step 2) in the resolver the browser really uses; or make the LAN resolver answer the HTTPS record itself or empty. Browsers cache HTTPS records, so restart the browser afterwards. See \"LAN / split-horizon DNS\" above."));
+                if (names.length) {
+                    h.append(document.createTextNode("If a host listed above resolves to this proxy, this is the likely cause of ERR_ECH_FALLBACK_CERTIFICATE_INVALID: the browser uses an ECH config Zoraxy did not publish and cannot decrypt, so it reaches Zoraxy under the other provider's outer name, where no certificate you choose here can apply. Pick one:"));
+                    var ul = $("<ul class='echHelp'>");
+                    ul.append($("<li>").append($("<b>").text("Local DNS: ")).append(document.createTextNode("override or block the HTTPS (type 65) record for that name in your local resolver (Pi-hole / dnsmasq, AdGuard Home, Unbound: see the hints under \"LAN / split-horizon DNS\" below).")));
+                    ul.append($("<li>").append($("<b>").text("DNS provider: ")).append(document.createTextNode("turn ECH off there (Cloudflare: SSL/TLS > Edge Certificates > Encrypted Client Hello).")));
+                    ul.append($("<li>").append($("<b>").text("DNS-only hosts: ")).append(document.createTextNode("publish Zoraxy's own ECH record from step 2 instead.")));
+                    ul.append($("<li>").append($("<b>").text("Quick browser test: ")).append(document.createTextNode("set chrome://flags/#encrypted-client-hello to Disabled, restart Chrome and retry. If the error goes away, the DNS record is the cause.")));
+                    h.append(ul);
+                    h.append($("<div class='echMuted'>").text("Browsers cache HTTPS records, so restart the browser after changing DNS."));
+                } else {
+                    h.append(document.createTextNode("Browsers that use it get their ECH rejected. Publish Zoraxy's current record (step 2) for the host and restart the browser."));
+                }
                 $id("echForeignHelp").show();
                 $id("echLan").attr("open", "open");
             }

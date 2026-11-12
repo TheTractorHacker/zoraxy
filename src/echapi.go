@@ -15,6 +15,7 @@ package main
 	POST /api/ech/import                 pem: add a key in ECH PEM format (decrypt only)
 	GET  /api/ech/dnscheck               host, resolver (optional IP): compare the HTTPS record with the active config
 	GET  /api/ech/domains                host (optional): per proxied host, classify the ECH config in the system and public resolver's HTTPS record
+	GET  /api/ech/fallbacks              names answered with the fallback certificate that match no proxy rule (admin only, diagnostics)
 	GET  /api/ech/selfcheck              host (optional): a real local ECH handshake against the HTTPS listener (server side acceptance only)
 */
 
@@ -37,10 +38,16 @@ import (
 var echMgr *ech.Manager
 var echStop chan bool
 
+// echFallbacks remembers names that reached the fallback certificate (diagnostics only, bounded)
+var echFallbacks = ech.NewFallbackTable()
+
 // initEch opens the ECH key store. It never fails startup: without it ECH is simply unavailable.
 func initEch() {
 	if echMgr != nil {
 		return
+	}
+	if tlsCertManager != nil {
+		tlsCertManager.OnFallbackServed = echFallbackHook
 	}
 	m, err := ech.Open(filepath.Join(CONF_FOLDER, "ech"))
 	if err != nil {
@@ -83,6 +90,7 @@ func RegisterEchAPIs(authRouter *auth.RouterDef) {
 	authRouter.HandleFunc("/api/ech/import", HandleEchImport)
 	authRouter.HandleFunc("/api/ech/dnscheck", HandleEchDNSCheck)
 	authRouter.HandleFunc("/api/ech/selfcheck", HandleEchSelfCheck)
+	authRouter.HandleFunc("/api/ech/fallbacks", HandleEchFallbacks)
 	authRouter.HandleFunc("/api/ech/domains", HandleEchDomains)
 }
 
@@ -168,6 +176,43 @@ func echServeHook(sni string, cert *tls.Certificate, fallback bool) {
 		SystemWideLogger.PrintAndLog("ech", "A handshake arrived for the ECH public name "+s.PublicName+" but the certificate served is not valid for it ("+chk.Reason+
 			") Clients whose ECH was rejected will show ERR_ECH_FALLBACK_CERTIFICATE_INVALID. Install a valid certificate for the public name or change the public name.", nil)
 	}
+}
+
+// echFallbackHook is called when a handshake was answered with the fallback certificate. Names that match a proxy
+// rule (wildcards and aliases included) are not interesting: the rule has its own certificate choice. It records
+// the rest and never changes which certificate is served.
+func echFallbackHook(sni string) {
+	if sni != "" && dynamicProxyRouter != nil && dynamicProxyRouter.GetProxyEndpointFromHostname(sni) != nil {
+		return
+	}
+	own := ""
+	if echMgr != nil {
+		if s := echMgr.Settings(); s.Enabled {
+			own = s.PublicName
+		}
+	}
+	if logNow, class, name := echFallbacks.Note(sni, own); logNow && class == ech.FallbackForeignECH && SystemWideLogger != nil {
+		SystemWideLogger.PrintAndLog("ech", ech.ForeignECHMessage(name), nil)
+	}
+}
+
+// HandleEchFallbacks lists the names that were answered with the fallback certificate and match no proxy rule
+func HandleEchFallbacks(w http.ResponseWriter, r *http.Request) {
+	list, dropped := echFallbacks.Snapshot()
+	w.Header().Set("Cache-Control", "no-store")
+	js, _ := json.Marshal(map[string]interface{}{
+		"Entries": list,
+		"Dropped": dropped,
+		"HasForeignECH": func() bool {
+			for _, e := range list {
+				if e.Class == ech.FallbackForeignECH {
+					return true
+				}
+			}
+			return false
+		}(),
+	})
+	utils.SendJSONResponse(w, string(js))
 }
 
 // HandleEchDomains compares the HTTPS records the system resolver and a public resolver return for every proxied host with Zoraxy's keys

@@ -46,6 +46,11 @@ type Manager struct {
 	//localhost certificate). It must be cheap and must not block.
 	OnServe func(serverName string, cert *tls.Certificate, fallback bool) `json:"-"`
 
+	//OnFallbackServed is called (diagnostics only, same rules as OnServe) when the certificate served is the built-in
+	//localhost certificate or the configured fallback certificate AND is not valid for the server name, i.e. nothing
+	//matched the name. serverName is "" when the client sent no SNI.
+	OnFallbackServed func(serverName string) `json:"-"`
+
 	/* External handlers */
 	hostSpecificTlsBehavior func(serverName string) (*HostSpecificTlsBehavior, error) // Function to get host specific TLS behavior, if nil, use global TLS options
 }
@@ -282,8 +287,34 @@ func (m *Manager) GetCert(helloInfo *tls.ClientHelloInfo) (*tls.Certificate, err
 	if m.OnServe != nil {
 		m.OnServe(helloInfo.ServerName, &cer, pubKey == filepath.Join(m.tmpFolder(), "localhost.pem"))
 	}
+	if m.OnFallbackServed != nil && m.isFallbackFile(pubKey) && !certCoversName(&cer, helloInfo.ServerName) {
+		m.OnFallbackServed(helloInfo.ServerName)
+	}
 
 	return &cer, nil
+}
+
+// isFallbackFile reports whether a certificate path is the built-in localhost certificate or the configured fallback
+func (m *Manager) isFallbackFile(pubKey string) bool {
+	if pubKey == filepath.Join(m.tmpFolder(), "localhost.pem") {
+		return true
+	}
+	return m.FallbackCert != "" && pubKey == filepath.Join(m.CertStore, m.FallbackCert+".pem")
+}
+
+// certCoversName reports whether the leaf certificate is valid for the name (an empty name is never covered)
+func certCoversName(cert *tls.Certificate, name string) bool {
+	if name == "" || cert == nil || len(cert.Certificate) == 0 {
+		return false
+	}
+	leaf := cert.Leaf
+	if leaf == nil {
+		var err error
+		if leaf, err = x509.ParseCertificate(cert.Certificate[0]); err != nil {
+			return false
+		}
+	}
+	return leaf.VerifyHostname(name) == nil
 }
 
 // preferredCertificateFor finds the preferred certificate of a hostname. An exact key wins. Otherwise a key

@@ -1012,6 +1012,7 @@
                                     <!-- Rows will be dynamically populated -->
                                 </tbody>
                             </table></div>
+                            <p class="hrp-echnote" style="display:none; margin:.6em 0 .9em; font-size:.92em; line-height:1.5; color:var(--text_color_secondary)" role="note"><i class="info circle icon"></i>Browsers that use an ECH config published by another provider reach this proxy with a name you cannot choose a certificate for: see <a href="#ech" data-nav-open="ech">Tools &gt; Encrypted Client Hello</a>.</p>
 <div data-hrp-save="tlsopts">
                             <div class="ui checkbox" style="margin-top: 0.4em;">
                                 <input type="checkbox" class="Tls_EnableSNI">
@@ -1245,6 +1246,11 @@
 
     function updateTlsResolveList(uuid){
         let editor = $("#httprpEditModalWrapper");
+        //Info line: shown only when handshakes reached the fallback certificate under another provider's ECH outer name
+        let echNote = editor.find(".hrp-echnote").hide();
+        $.ajax({url: "/api/ech/fallbacks", dataType: "json", cache: false}).done(function(d){
+            if (d && d.HasForeignECH) { echNote.show(); }
+        });
         editor.find(".certificateDropdown .ui.dropdown").off("change");
         editor.find(".certificateDropdown .ui.dropdown").remove();
 
