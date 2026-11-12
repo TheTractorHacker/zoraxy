@@ -11,6 +11,7 @@ package database
 import (
 	"log"
 	"runtime"
+	"time"
 
 	"imuslab.com/zoraxy/mod/database/dbinc"
 )
@@ -143,4 +144,21 @@ Close the database connection
 */
 func (d *Database) Close() {
 	d.close()
+}
+
+/*
+Usage reports what the database file holds (size on disk, per table key counts and
+payload sizes). Only the BoltDB backend supports it, others return ErrUsageUnsupported.
+budget caps the time of the walk (0 = default).
+*/
+func (d *Database) Usage(budget time.Duration) (*dbinc.Usage, error) {
+	return d.usage(budget)
+}
+
+/*
+CompactFile compacts the BoltDB file at path offline (see dbbolt.CompactFile). The
+database must not be open anywhere: a locked database is refused with *dbinc.LockedError.
+*/
+func CompactFile(path string, opt dbinc.CompactOptions) (*dbinc.CompactResult, error) {
+	return compactFile(path, opt)
 }

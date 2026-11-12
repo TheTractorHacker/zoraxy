@@ -6,10 +6,67 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
+	"imuslab.com/zoraxy/mod/auth"
+	"imuslab.com/zoraxy/mod/dynamicproxy"
 	"imuslab.com/zoraxy/mod/ech"
 )
+
+func TestEchFallbackHookAndAPI(t *testing.T) {
+	withEchMgr(t, true) // own public name ech.example.test
+	oldTab, oldR := echFallbacks, dynamicProxyRouter
+	echFallbacks = ech.NewFallbackTable()
+	dynamicProxyRouter = &dynamicproxy.Router{ProxyEndpoints: &sync.Map{}}
+	dynamicProxyRouter.ProxyEndpoints.Store("app.example.com", &dynamicproxy.ProxyEndpoint{RootOrMatchingDomain: "app.example.com", MatchingDomainAlias: []string{"alias.example.com"}})
+	dynamicProxyRouter.ProxyEndpoints.Store("*.wild.example.com", &dynamicproxy.ProxyEndpoint{RootOrMatchingDomain: "*.wild.example.com"})
+	t.Cleanup(func() { echFallbacks, dynamicProxyRouter = oldTab, oldR })
+
+	for _, n := range []string{"app.example.com", "alias.example.com", "x.wild.example.com"} {
+		echFallbackHook(n) // rules, aliases and wildcards are not fallback misses
+	}
+	for _, n := range []string{"cloudflare-ech.com", "ech.example.test", "", "scan.example.net"} {
+		echFallbackHook(n)
+	}
+	rec := httptest.NewRecorder()
+	HandleEchFallbacks(rec, httptest.NewRequest(http.MethodGet, "/api/ech/fallbacks", nil))
+	var out struct {
+		Entries []struct {
+			Name, Class string
+			Count       int
+		}
+		HasForeignECH bool
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatal(err, rec.Body.String())
+	}
+	got := map[string]string{}
+	for _, e := range out.Entries {
+		got[e.Name] = e.Class
+	}
+	want := map[string]string{"cloudflare-ech.com": ech.FallbackForeignECH, "ech.example.test": ech.FallbackOwnECH, "": ech.FallbackNoSNI, "scan.example.net": ech.FallbackUnknown}
+	if len(got) != len(want) {
+		t.Fatalf("entries %v", got)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%q: %q want %q", k, got[k], v)
+		}
+	}
+	if !out.HasForeignECH || out.Entries[0].Name != "cloudflare-ech.com" {
+		t.Errorf("foreign ECH must be flagged and listed first: %+v", out)
+	}
+}
+
+func TestEchFallbacksAdminOnly(t *testing.T) {
+	if auth.ViewerAllowed(http.MethodGet, "/api/ech/fallbacks") {
+		t.Fatal("viewers must not read the fallback table")
+	}
+	if !auth.ViewerAllowed(http.MethodGet, "/api/ech/status") {
+		t.Fatal("status stays readable for viewers")
+	}
+}
 
 func withEchMgr(t *testing.T, enable bool) {
 	t.Helper()

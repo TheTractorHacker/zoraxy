@@ -523,6 +523,7 @@ func initAPIs(targetMux *http.ServeMux) {
 	authRouter.HandleFunc("/api/log/sources", LogViewer.HandleSources)
 	authRouter.HandleFunc("/api/log/rotate/trigger", SystemWideLogger.HandleDebugTriggerLogRotation)
 	authRouter.HandleFunc("/api/logger/config", handleLoggerConfig)
+	RegisterDatabaseUsageAPIs(authRouter) //admin only: what sys.db holds (System > Settings > Database)
 
 	//Debug
 	authRouter.HandleFunc("/api/info/pprof", pprof.Index)

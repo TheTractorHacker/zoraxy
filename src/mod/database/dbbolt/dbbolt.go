@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
+	"time"
 
 	bolt "go.etcd.io/bbolt"
+	"imuslab.com/zoraxy/mod/database/dbinc"
 )
 
 /*
@@ -31,8 +34,48 @@ type Database struct {
 	Db interface{} //This is the bolt database object
 }
 
+// DefaultOpenTimeout is how long opening the database waits for the file lock
+// held by another process before giving up. Without it bolt waits forever.
+const DefaultOpenTimeout = 10 * time.Second
+
+// OpenOptions are the tunables of opening a database. The zero value is the default.
+type OpenOptions struct {
+	Timeout time.Duration //how long to wait for the file lock, 0 = DefaultOpenTimeout
+}
+
+// openBolt opens a bbolt file with the stock options plus a lock timeout. A lock
+// that is still held when the timeout passes is reported as *dbinc.LockedError.
+func openBolt(dbfile string, opt OpenOptions) (*bolt.DB, error) {
+	if opt.Timeout <= 0 {
+		opt.Timeout = DefaultOpenTimeout
+	}
+	o := *bolt.DefaultOptions //same as passing nil, except for the timeout
+	o.Timeout = opt.Timeout
+	db, err := bolt.Open(dbfile, 0600, &o)
+	if err != nil {
+		if errors.Is(err, bolt.ErrTimeout) {
+			return nil, &dbinc.LockedError{Path: absPath(dbfile), Backend: "BoltDB", Waited: opt.Timeout, Err: err}
+		}
+		return nil, err
+	}
+	return db, nil
+}
+
+// absPath makes the path in the error message usable from any folder (lsof, ls)
+func absPath(p string) string {
+	if a, err := filepath.Abs(p); err == nil {
+		return a
+	}
+	return p
+}
+
 func NewBoltDatabase(dbfile string) (*Database, error) {
-	db, err := bolt.Open(dbfile, 0600, nil)
+	return NewBoltDatabaseWithOptions(dbfile, OpenOptions{})
+}
+
+// NewBoltDatabaseWithOptions is NewBoltDatabase with an injectable lock timeout (used by tests)
+func NewBoltDatabaseWithOptions(dbfile string, opt OpenOptions) (*Database, error) {
+	db, err := openBolt(dbfile, opt)
 	if err != nil {
 		return nil, err
 	}

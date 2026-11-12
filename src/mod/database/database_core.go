@@ -5,6 +5,7 @@ package database
 
 import (
 	"errors"
+	"time"
 
 	"imuslab.com/zoraxy/mod/database/dbbolt"
 	"imuslab.com/zoraxy/mod/database/dbinc"
@@ -67,4 +68,15 @@ func (d *Database) listTable(tableName string) ([][][]byte, error) {
 
 func (d *Database) close() {
 	d.Backend.Close()
+}
+
+func (d *Database) usage(budget time.Duration) (*dbinc.Usage, error) {
+	if b, ok := d.Backend.(*dbbolt.Database); ok && b != nil {
+		return b.Usage(budget)
+	}
+	return nil, dbinc.ErrUsageUnsupported
+}
+
+func compactFile(path string, opt dbinc.CompactOptions) (*dbinc.CompactResult, error) {
+	return dbbolt.CompactFile(path, opt)
 }

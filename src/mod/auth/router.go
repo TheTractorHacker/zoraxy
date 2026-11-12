@@ -37,16 +37,18 @@ is refused for viewers until it is added here on purpose.
 var viewerReadOnlyPOST = map[string]bool{}
 
 var viewerDeniedPrefixes = []string{
-	"/api/conf/export",   //full configuration including secrets
-	"/api/info/pprof",    //heap / goroutine dumps
-	"/api/users/",        //account management
-	"/api/history/",      //configuration history (diffs, restore)
-	"/api/abuse/config",  //auto-ban settings
-	"/api/ech/export",    //ECH private key
-	"/api/zrok/logs",     //zrok tunnel output (share tokens, URLs)
-	"/api/proxy/script/", //Lua script source (may hold secrets); editing is admin only
-	"/web.ssh/",          //terminal
-	"/plugin.ui/",        //plugin UIs can mutate
+	"/api/conf/export",    //full configuration including secrets
+	"/api/info/pprof",     //heap / goroutine dumps
+	"/api/system/dbusage", //database file path and table sizes
+	"/api/users/",         //account management
+	"/api/history/",       //configuration history (diffs, restore)
+	"/api/abuse/config",   //auto-ban settings
+	"/api/ech/export",     //ECH private key
+	"/api/ech/fallbacks",  //names probed by clients and scanners
+	"/api/zrok/logs",      //zrok tunnel output (share tokens, URLs)
+	"/api/proxy/script/",  //Lua script source (may hold secrets); editing is admin only
+	"/web.ssh/",           //terminal
+	"/plugin.ui/",         //plugin UIs can mutate
 }
 
 func isMutatingMethod(m string) bool {

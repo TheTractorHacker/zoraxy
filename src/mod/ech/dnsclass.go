@@ -191,7 +191,7 @@ func domainAdvice(v DomainView) string {
 	case ClassOursPurged:
 		return "This resolver advertises an ECH config with Zoraxy's public name that no stored key matches. Browsers will have ECH rejected: publish the current record."
 	case ClassForeign:
-		return "This resolver advertises an ECH config from another party (public name " + name + "). Zoraxy cannot decrypt it, so a browser that uses it gets ECH rejected and a certificate error."
+		return "This resolver advertises an ECH config from another party (public name " + name + "). Zoraxy cannot decrypt it, so a browser that uses it gets ECH rejected and, when this host resolves to this proxy, the certificate error ERR_ECH_FALLBACK_CERTIFICATE_INVALID."
 	case ClassUnparsable:
 		return "The ech= parameter could not be parsed."
 	}

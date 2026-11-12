@@ -4,16 +4,6 @@
 
 /* Theme color palletes are defined in darktheme.css */
 
-/* Theme Toggle CSS */
-#themeColorButton{
-    background-color: black;
-    color: var(--text_color_inverted);
-}
-
-body.darkTheme #themeColorButton{
-    background-color: white;
-}
-
 body{
     background-color:var(--theme_bg);
 }
@@ -31,32 +21,17 @@ body{
     border-radius: 1em !important;
 }
 
+/* Top bar: layout, controls and menus live in ui/topbar.css */
 .menubar{
     width: 100%;
-    padding: 0.4em;
-    padding-left: 1.2em;
-    padding-right: 1.2em;
-    background-color: var(--theme_bg_secondary);
     margin-bottom: 1em;
-    border-bottom: 1px solid var(--theme_highlight);
     position: fixed;
     top: 0;
-    width: 100%;
     z-index: 10;
-}
-
-body.darkTheme .menubar{
-    background: rgb(18,19,23);
-    background: linear-gradient(48deg, rgba(18,19,23,1) 21%, rgba(50,59,66,1) 79%); 
 }
 
 .menubar .logo{
     height: 36px;
-}
-
-.menubar .item{
-    display: inline-block;
-    vertical-align: middle;
 }
 
 .wrapper{
@@ -95,10 +70,6 @@ body.darkTheme .menubar{
     flex-shrink: 0;
 }
 
-.menutoggle{
-    display: none !important;
-}
-
 .rulesInstructions, .rulesInstructions span{
     color: white !important;
 }
@@ -114,7 +85,7 @@ body.darkTheme .menubar{
     right: 1em;
     display:none;
     max-width: 300px;
-    z-index: 1000;
+    z-index: 1300; /* above the 1100 drawers and 1200 dialogs, so feedback is never hidden behind them */
 }
 
 /* Confirm Box */
@@ -276,10 +247,6 @@ body.darkTheme .menubar{
 
     .toolbar .navFilter {
         padding-top: 1em;
-    }
-
-    .menutoggle{
-        display: inline-block !important;
     }
 
     #mainmenu{
@@ -1166,7 +1133,7 @@ a:focus-visible,
 #messageBox {
     overflow-wrap: anywhere;
     max-width: min(300px, calc(100vw - 2em));
-    z-index: 1001;
+    z-index: 1300;
 }
 /* While a Save bar is showing, the toast sits above it instead of covering its buttons */
 /* Scroll cue on tab bars that are cut off (class set by script/uxkit.js) */
@@ -1236,9 +1203,6 @@ body.darkTheme select.i18n-picker{
     color: #e8e8e8;
     background: #1c1e22;
     border-color: rgba(255,255,255,0.18);
-}
-@media (max-width: 750px){
-    .menubar select.i18n-picker{ max-width: 8.2em; padding: 0 0.25em 0 0.4em; } /* longer names (Español, 繁體中文) stay readable */
 }
 
 /* Longer translated strings (German, Russian, CJK): let flex/grid children shrink and long words wrap */

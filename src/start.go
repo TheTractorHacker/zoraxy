@@ -119,7 +119,7 @@ func startupSequence() {
 	l.PrintAndLog("database", "Using "+backendType.String()+" as the database backend", nil)
 	db, err := database.NewDatabase(*path_database, backendType)
 	if err != nil {
-		log.Fatal(err)
+		reportDatabaseOpenError(l, err)
 	}
 	sysdb = db
 	//Create tables for the database

@@ -130,6 +130,20 @@ Ctrl+K / Cmd+K, or the Search button in the header (the `/` menu filter still wo
 
 To add a setting: one line in `SETTINGS`, `{label: N_("..."), page: "tag", pre: "selector to click first (tab/accordion)", at: "#anchor", kw: "synonyms"}`. `tools/ui-smoke/smoke.py` checks that every entry resolves.
 
+### 3.4 Top bar
+
+`<div class="menubar zx-topbar">` in `index.html`, logic in `script/topbar.js` (`window.ZxTopbar`), styles in `ui/topbar.css`. Left to right: logo (links to Status), **status pills**, then the controls: **Search** (Ctrl+K, primary-coloured border so it stays the most prominent), **Theme**, **Language**, **Account** (only with authentication), and on phones **More** and the hamburger of the page menu. Every control is a `.zx-topbtn`: 36px high (40px at 748px and below), 8px radius, `--zx-border-strong` border, `--zx-focus` 2px focus ring. Colours only from `--zx-*` tokens; the bar is `--zx-surface` in both themes.
+
+* **Theme menu**: Light / Dark / System (the button shows the current mode as icon + word). System = no stored choice, the OS preference decides and follows changes. Light and Dark store `localStorage.theme` as before, `toggleTheme()` (palette action "Toggle dark mode") still works and `darktheme.js` fires `zoraxy:theme` so the button follows.
+* **Language menu**: globe + current code (`EN`, `DE`, `ZH-CN` ...), all languages of `i18n.languages` by their native names, the current one checked. Scrolls inside the menu when the list is long. The native `select.i18n-picker` stays on the Settings page.
+* **Account menu** (hidden when `GET /api/auth/authEnabled` is false): user name and role (`/api/auth/username`, `/api/auth/role`), Change password (opens Utilities), Log out.
+* **Status pills** (one light poll, `ZxTopbar.refresh()` forces it): health ("Online", or a danger "Proxy stopped"; the tooltip names the listening port), "N sites down" (Uptime Monitor, only when something is down), "N certificates expiring" (Certificates, only within the 30 day warning window of the Status page, danger at 7 days or less), "Update vX" (Update page), "N blocked today - See why" (opens Statistics > Blocked). Each pill is a real `<a href="#page">` with a tooltip and `aria-label`; when no data can be read one neutral "Status unavailable" pill is shown (never a spinner).
+  * Data reused, nothing new on the server: `GET /api/stats/glance` (blocked today, upstreams down, certificates; what the Status tiles use) and `GET /api/proxy/status` (Running, port; what the Status banner uses), both every 45 s, only while the tab is visible (plus one refresh when it becomes visible after 30 s or more).
+  * **The update badge makes no request of its own.** Zoraxy never contacts GitHub by itself (the Update page says "Not checked yet"), so the badge shows the result of the last check made on the Update page in this browser (`ZxTopbar.setUpdate(result)`, `localStorage.zoraxy.topbar.update`, kept 14 days, dropped when the running version changes).
+* **Widths**: above 1180px full text; 749-1180px pills shrink to icon + number, Search to an icon, theme / language / account to icon (the full text stays in `aria-label` and tooltip); 748px and below: pills, theme, language and account fold into one **More** menu (a dot marks it when something needs attention) next to Search and the hamburger. Pills that do not fit are clipped in priority order (health first, blocked counter last), never wrapped over the content.
+* **Keyboard**: Tab order is logo, pills, Search, Theme, Language, Account (phone: Search, More, hamburger). Enter / Space / ArrowDown open a menu with focus on the current choice; Up/Down/Home/End move; Enter chooses and returns focus to the button; Esc closes and returns focus; Tab and an outside click close. Menus are `role=menu` with `menuitemradio` (`aria-checked`) / `menuitem`; buttons carry `aria-haspopup="menu"` and `aria-expanded`.
+* Adding a pill = one entry in `pills()` of `topbar.js` (state `ok|warn|danger|info|neutral`, icon, `tag` of an existing page). Do not add a pill that has no page to open.
+
 ## 4. Do and don't
 
 * Do build new pages from the kit classes and tokens; do not add page-local colours, shadows or radii.
@@ -154,7 +168,7 @@ To add a setting: one line in `SETTINGS`, `{label: N_("..."), page: "tag", pre: 
 
 ## 6. What was verified, and what was not
 
-Verified by the browser smoke test (`tools/ui-smoke`): palette (Ctrl+K, page/host/setting, Enter), breadcrumbs, every legacy `tag`, every palette settings anchor, kit page load, save bar on Listeners and Settings, screenshots in light, dark and 390px. **Not verified:** real screen readers (NVDA, VoiceOver, TalkBack), real touch devices, Safari/Firefox rendering (Chromium only), forced-colors mode.
+Verified by the browser smoke test (`tools/ui-smoke`): the top bar (`--topnav-only` via `topnav_run.sh`: sizes, overflow, collisions, contrast, pills, menus, keyboard, phone More menu, Log out), palette (Ctrl+K, page/host/setting, Enter), breadcrumbs, every legacy `tag`, every palette settings anchor, kit page load, save bar on Listeners and Settings, screenshots in light, dark and 390px. **Not verified:** real screen readers (NVDA, VoiceOver, TalkBack), real touch devices, Safari/Firefox rendering (Chromium only), forced-colors mode.
 
 ## 7. Page patterns of the consistency pass
 
