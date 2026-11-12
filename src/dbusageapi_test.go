@@ -151,6 +151,9 @@ func TestRunCompactDatabase(t *testing.T) {
 	if !strings.Contains(errOut.String(), "sudo lsof "+file) || !strings.Contains(errOut.String(), "was not changed") {
 		t.Fatalf("stderr: %s", errOut.String())
 	}
+	if strings.Contains(errOut.String(), "start Zoraxy again") || !strings.Contains(errOut.String(), "run this compact command again") {
+		t.Fatalf("compact must not advise starting Zoraxy: %s", errOut.String())
+	}
 	d.Close()
 
 	out.Reset()
