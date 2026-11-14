@@ -1163,6 +1163,31 @@
     var httpProxyList = []; //Proxy list of the current node
 
     // Host names, aliases, upstream addresses, paths and ports are user data: always escape them
+    /* A card that embeds an editor page (aliases, tags, header rules, access rule) sizes its frame to the page, so the editor
+       has no second scrollbar of its own inside the scrolling window. Same origin, so the frame document is readable. */
+    function hrpFitFrame(f){
+        if (!f || f.getAttribute("data-fit")) return;
+        f.setAttribute("data-fit", "1");
+        function fit(){
+            try {
+                var d = f.contentDocument, b = d && d.body;
+                if (!b) return;
+                var cs = d.defaultView.getComputedStyle(b);
+                var h = Math.ceil(b.scrollHeight + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0));
+                h = Math.min(Math.max(h, 80), 4000);
+                if (Math.abs(f.offsetHeight - h) > 2) f.style.height = h + "px";
+            } catch (e) { /* not readable: keep the fixed height */ }
+        }
+        f.addEventListener("load", function(){
+            fit();
+            try {
+                var d = f.contentDocument;
+                if (window.ResizeObserver) new ResizeObserver(fit).observe(d.body);
+                new MutationObserver(fit).observe(d.body, {subtree: true, childList: true, attributes: true, characterData: true});
+            } catch (e) { }
+            setTimeout(fit, 400); setTimeout(fit, 1500); //rows are added after the page's own requests return
+        });
+    }
     function hrpEsc(t){ return String(t == null ? "" : t).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]; }); }
 
     $('#httprpEditModal .tabular.menu .item').tab();
@@ -2255,6 +2280,8 @@
             //Temporary restore scroll
             $("body").css("overflow", "auto");
         });
+
+        editor.find("[data-hrp-card] .zx-card__body > .wrapper_frame").each(function(){ hrpFitFrame(this); });
 
         /* ------------ Alias ------------ */ 
         (() => {

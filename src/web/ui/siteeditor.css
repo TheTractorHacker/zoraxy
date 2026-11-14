@@ -7,8 +7,14 @@
 #httprpEditDarkenLayer { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); z-index: 7; backdrop-filter: blur(3px); }
 
 #httprpEditModal {
-    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    width: min(1040px, 94vw); height: min(88vh, 880px);
+    /* centred in the space BELOW the top bar (--zx-topbar-h), never closer than 16px to the bar or the bottom edge */
+    position: fixed; left: 50%;
+    top: calc(var(--zx-topbar-h, 52px) + (100vh - var(--zx-topbar-h, 52px)) / 2);
+    top: calc(var(--zx-topbar-h, 52px) + (100dvh - var(--zx-topbar-h, 52px)) / 2);
+    transform: translate(-50%, -50%);
+    width: min(1040px, 94vw);
+    height: min(calc(100vh - var(--zx-topbar-h, 52px) - 32px), 880px);
+    height: min(calc(100dvh - var(--zx-topbar-h, 52px) - 32px), 880px);
     display: flex; flex-direction: column; overflow: hidden; padding: 0;
     background: var(--zx-bg); color: var(--zx-text);
     border: 1px solid var(--zx-border); border-radius: var(--zx-radius-lg); box-shadow: var(--zx-shadow-3);

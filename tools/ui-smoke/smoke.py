@@ -37,6 +37,7 @@ ap.add_argument("--netsys-only", action="store_true", help="run only the Network
 ap.add_argument("--central-captcha-only", action="store_true", help="run only the central CAPTCHA provider scenario (central_captcha_smoke.py)")
 ap.add_argument("--overview-only", action="store_true", help="run only the Status / Security overview / History / palette / navigation fix scenario")
 ap.add_argument("--visitors-drawer-only", action="store_true", help="run only the Visitors drawer feedback scenario (visitors_drawer_smoke.py)")
+ap.add_argument("--editor-layout-only", action="store_true", help="run only the Edit site window layout scenario (editor_layout_smoke.py)")
 ap.add_argument("--blocked-only", action="store_true", help="run only the Statistics > Blocked scenario (Reference ID search, row drawer, fix + Undo, palette, Status tile)")
 ap.add_argument("--topnav-only", action="store_true", help="run only the top bar scenario (topnav_smoke.py: sizes, overflow, pills, language / theme / account menus, keyboard, phone More menu)")
 ap.add_argument("--topnav-auth-url", default="", help="with --topnav-only: URL of a second throw-away instance WITH authentication; adds the account menu / Log out checks (see topnav_run.sh)")
@@ -2834,6 +2835,7 @@ def _network_system_body(pg, ctx, args, after, shot, dialogs, api, toast_text, w
         fail("dialog", f"native dialogs used on the Network / System pages: {dialogs}")
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "overview_smoke.py")).read(), "overview_smoke.py", "exec"))  # defines overview_ui
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "blocked_smoke.py")).read(), "blocked_smoke.py", "exec"))  # defines blocked_ui
+exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "editor_layout_smoke.py")).read(), "editor_layout_smoke.py", "exec"))  # defines editor_layout_ui
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "visitors_drawer_smoke.py")).read(), "visitors_drawer_smoke.py", "exec"))  # defines visitors_drawer_ui
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "newrule_cert_smoke.py")).read(), "newrule_cert_smoke.py", "exec"))  # defines newrule_cert_ui
 exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "dbusage_smoke.py")).read(), "dbusage_smoke.py", "exec"))  # defines dbusage_ui
@@ -2871,6 +2873,10 @@ def main():
             return
         if args.newrule_cert_only:
             newrule_cert_ui(pg, ctx)
+            b.close()
+            return
+        if args.editor_layout_only:
+            editor_layout_ui(pg, ctx)
             b.close()
             return
         if args.visitors_drawer_only:
