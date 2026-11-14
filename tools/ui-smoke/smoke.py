@@ -96,6 +96,13 @@ def editor_section(pg, name):
     pg.click(f"#httprpEditModal .hrpedit_menu_item[cfgpage={sec}]")
 
 
+def pick_language(pg, code):
+    """Switch language through the top bar's language menu (the native select that used to sit in the bar was replaced by the
+    top bar rework: a button #zxLangBtn that opens a menu of [data-lang] items, wide screens only)."""
+    pg.click("#zxLangBtn")
+    pg.click(".zx-menu [data-lang=%s]" % code)
+
+
 def settle(pg, ms=700):
     pg.wait_for_timeout(ms)
     try:
@@ -763,8 +770,8 @@ def nav_palette(pg, ctx):
     pg.click("#settings [data-zx-save]")
     pg.wait_for_function("i18n.lang === 'de'", timeout=6000)
     pg.wait_for_timeout(600)
-    if pg.input_value(".menubar select.i18n-picker") != "de":
-        fail("settings", "the picker in the top bar did not follow")
+    if "DE" not in pg.inner_text("#zxLangBtn").upper():
+        fail("settings", "the language button in the top bar did not follow")
     saved = pg.evaluate("fetch('/api/i18n/language').then(r => r.json())")
     if saved.get("language") != "de":
         fail("settings", f"language not stored on the server: {saved}")
@@ -807,7 +814,7 @@ def i18n_checks(pg, ctx):
 
         # switch through the picker in the top bar
         t0 = pg.evaluate("performance.now()")
-        pg.select_option(".menubar select.i18n-picker", "zh-CN")
+        pick_language(pg, "zh-CN")
         pg.wait_for_function("i18n.lang === 'zh-CN' && i18n.stats().observing", timeout=5000)
         total = pg.evaluate("performance.now()") - t0
         st = pg.evaluate("i18n.stats()")
@@ -865,14 +872,14 @@ def i18n_checks(pg, ctx):
         pg.screenshot(path=os.path.join(args.out, "i18n-zh-CN-seccenter.png"))
 
         # back to English: originals restored, observer gone
-        pg.select_option(".menubar select.i18n-picker", "en")
+        pick_language(pg, "en")
         pg.wait_for_function("i18n.lang === 'en' && !i18n.stats().observing", timeout=5000)
         pg.evaluate("openTabById('httprp')")
         settle(pg, 700)
         if pg.inner_text("#mainmenu a.item[tag=status]").strip() != en_nav:
             fail("i18n", "English text not restored after switching back")
         # German layout check
-        pg.select_option(".menubar select.i18n-picker", "de")
+        pick_language(pg, "de")
         pg.wait_for_function("i18n.lang === 'de'", timeout=5000)
         settle(pg, 900)
         pg.screenshot(path=os.path.join(args.out, "i18n-de-httprp.png"))

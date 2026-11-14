@@ -52,18 +52,31 @@ func Notify(state string) error {
 
 var notifyTimeout = 2 * time.Second
 
-// notifyAddr converts $NOTIFY_SOCKET into a unix socket name: a path, or an abstract socket ("@name" ->
-// NUL + name). ok is false for empty or unknown forms (ignored, never an error).
+// notifyAddr converts $NOTIFY_SOCKET into a unix socket path. ok is false for empty or unsupported forms
+// (ignored, never an error). Abstract sockets ("@name") are deliberately NOT supported: on the 7.0.0-42
+// kernel a send to an abstract unixgram socket never completed and left an unkillable process, systemd
+// itself uses a path socket (/run/systemd/notify), and a notification is never worth a stuck process.
 func notifyAddr(v string) (string, bool) {
-	switch {
-	case v == "":
-		return "", false
-	case v[0] == '@':
-		return "\x00" + v[1:], true
-	case v[0] == '/':
+	if v != "" && v[0] == '/' {
 		return v, true
 	}
 	return "", false
+}
+
+// NotifyIgnoredReason explains why a configured NOTIFY_SOCKET is not used ("" when it is unset or usable),
+// so the caller can log one line instead of leaving the admin wondering why systemd shows no readiness.
+func NotifyIgnoredReason() string {
+	v := notifySocketEnv()
+	if v == "" {
+		return ""
+	}
+	if _, ok := notifyAddr(v); ok {
+		return ""
+	}
+	if v[0] == '@' {
+		return "NOTIFY_SOCKET is an abstract socket (" + v + "); Zoraxy only reports readiness to a path socket such as /run/systemd/notify, so systemd readiness is off"
+	}
+	return "NOTIFY_SOCKET has an unsupported form, so systemd readiness is off"
 }
 
 // NotifyStatus publishes a free text status line shown by "systemctl status". Other packages may call it,
@@ -89,5 +102,5 @@ func NotifyStopping() {
 	_ = Notify("STOPPING=1\nSTATUS=Shutting down")
 }
 
-// NotifyEnabled reports whether a notify socket is configured.
-func NotifyEnabled() bool { return notifySocketEnv() != "" }
+// NotifyEnabled reports whether a usable notify socket is configured.
+func NotifyEnabled() bool { _, ok := notifyAddr(notifySocketEnv()); return ok }

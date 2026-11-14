@@ -76,33 +76,33 @@ func TestNotifyPathSocket(t *testing.T) {
 }
 
 func TestNotifyAddr(t *testing.T) {
-	for in, want := range map[string]string{"/run/systemd/notify": "/run/systemd/notify", "@abc": "\x00abc"} {
+	for in, want := range map[string]string{"/run/systemd/notify": "/run/systemd/notify"} {
 		if got, ok := notifyAddr(in); !ok || got != want {
 			t.Errorf("%q -> %q %v", in, got, ok)
 		}
 	}
-	for _, in := range []string{"", "vsock:1:2", "relative"} {
+	for _, in := range []string{"", "vsock:1:2", "relative", "@abc", "@/org/freedesktop/systemd1/notify"} {
 		if _, ok := notifyAddr(in); ok {
 			t.Errorf("%q must be ignored", in)
 		}
 	}
 }
 
-// Delivery to an abstract socket is skipped by default: on the 7.0.0-42 kernel of the build host a send
-// to an abstract unixgram socket never completed (it left an unkillable process). Set
-// ZORAXY_TEST_ABSTRACT=1 to run it on a healthy kernel.
-func TestNotifyAbstractSocket(t *testing.T) {
-	if os.Getenv("ZORAXY_TEST_ABSTRACT") == "" {
-		t.Skip("set ZORAXY_TEST_ABSTRACT=1 to deliver to a real abstract socket")
+func TestNotifyAbstractSocketIsIgnored(t *testing.T) {
+	// abstract sockets are never used (a kernel hazard, see notifyAddr): no send, no error, readiness reported as off
+	withSocket(t, "@zoraxy-test-abstract")
+	if NotifyEnabled() {
+		t.Fatal("an abstract NOTIFY_SOCKET must not count as enabled")
 	}
-	name := "@zoraxy-test-" + time.Now().Format("150405.000000")
-	c := listenDgram(t, "\x00"+name[1:])
-	withSocket(t, name)
 	if err := Notify("READY=1"); err != nil {
-		t.Fatal(err)
+		t.Fatalf("must be a silent no-op, got %v", err)
 	}
-	if got := recv(t, c); got != "READY=1" {
-		t.Fatalf("%q", got)
+	if NotifyIgnoredReason() == "" {
+		t.Fatal("the reason must be explained so it can be logged")
+	}
+	withSocket(t, "/run/systemd/notify")
+	if NotifyIgnoredReason() != "" {
+		t.Fatal("a path socket is usable")
 	}
 }
 

@@ -60,6 +60,9 @@ func signalProxyStartSettled() {
 // A no-op when NOTIFY_SOCKET is unset.
 func announceReady(adminAddr string) {
 	if !instance.NotifyEnabled() {
+		if reason := instance.NotifyIgnoredReason(); reason != "" {
+			SystemWideLogger.PrintAndLog("instance", reason, nil)
+		}
 		return
 	}
 	go func() {
