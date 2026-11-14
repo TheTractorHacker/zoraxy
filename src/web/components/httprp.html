@@ -376,7 +376,7 @@
                             </button>
 </div>
 </section>
-<section class="zx-card hrp-card" data-hrp-card="headers" rpcfg="headers" data-hrp-nd="headers" aria-labelledby="hrpc-headers">
+<section class="zx-card hrp-card" data-hrp-card="headers" rpcfg="headers" data-easy data-hrp-nd="headers" aria-labelledby="hrpc-headers">
 <div class="zx-card__head"><h3 class="zx-card__title" id="hrpc-headers">Header rewrite rules</h3></div>
 <p class="zx-card__desc">Add, change or remove request and response headers. This editor saves by itself.</p>
 <div class="zx-card__body">
@@ -1182,6 +1182,17 @@
             fit();
             try {
                 var d = f.contentDocument;
+                // Esc inside the frame never reaches the Edit site window (the frame has its own document): hand it over, unless
+                // the frame is using Esc itself to close one of its own dropdowns or dialogs
+                if (d && !d.__hrpEscBound) {
+                    d.__hrpEscBound = true;
+                    d.addEventListener("keydown", function(e){
+                        if (e.key === "Escape" && !e.defaultPrevented && !d.querySelector(".ui.dropdown.active, .ui.modal.visible, .ui.modal.active")) {
+                            e.preventDefault();
+                            document.dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", bubbles: true, cancelable: true}));
+                        }
+                    }, true);
+                }
                 if (window.ResizeObserver) new ResizeObserver(fit).observe(d.body);
                 new MutationObserver(fit).observe(d.body, {subtree: true, childList: true, attributes: true, characterData: true});
             } catch (e) { }

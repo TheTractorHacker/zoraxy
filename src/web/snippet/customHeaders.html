@@ -61,6 +61,41 @@
                 min-width: 0;
             }
 
+
+            /* ---- layout: full width, comfortable spacing (this page is shown inside the Edit site window) ---- */
+            .hdPage{ padding: 0 0.25em 0.5em; max-width: 100%; }
+            .hdPage > .ui.tab.segment{ padding-left: 0; padding-right: 0; }
+            .hdPage h4{ margin: 0.2em 0 0.3em; }
+            .hdPage p{ margin: 0 0 0.9em; opacity: 0.85; }
+            #customHeaderTable{ margin-bottom: 0.6em; }
+            #customHeaderTable th, #customHeaderTable td{ padding: 0.6em 0.8em !important; }
+
+            /* segmented choice buttons: direction and action */
+            .hdForm .hdChoices{ display: flex; flex-wrap: wrap; gap: 0.7em 1.2em; margin-bottom: 1em; }
+            .hdSeg{ display: inline-flex; border: 1px solid var(--divider_color, #c9c9ca); border-radius: 0.4em; overflow: hidden; max-width: 100%; }
+            .hdSeg button{
+                appearance: none; border: 0; margin: 0; padding: 0.6em 1em; background: transparent; color: var(--text_color, inherit);
+                font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap; line-height: 1.2; min-height: 2.5em;
+            }
+            .hdSeg button + button{ border-left: 1px solid var(--divider_color, #c9c9ca); }
+            .hdSeg button:hover{ background: rgba(127,127,127,0.12); }
+            .hdSeg button.active{ background: #2185d0; color: #fff; }
+            .hdSeg button.active i.icon{ color: #fff !important; }
+            .hdSeg button:focus-visible{ outline: 2px solid #2185d0; outline-offset: -2px; }
+            .hdSeg i.icon{ margin: 0 0.35em !important; }
+
+            /* key and value side by side on wide screens, stacked on narrow ones */
+            .hdForm .hdFields{ display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 0.9em 1.2em; margin-bottom: 1em; }
+            .hdForm .hdFields .field{ margin: 0; }
+            .hdForm .hdFields .field small{ display: block; margin-top: 0.35em; opacity: 0.75; }
+            .hdForm .hdAdd{ margin: 0; }
+            @media (max-width: 640px){
+                .hdForm .hdFields{ grid-template-columns: minmax(0, 1fr); }
+                .hdForm .hdAdd{ width: 100%; }
+                .hdSeg{ width: 100%; }
+                .hdSeg button{ flex: 1 1 0; padding: 0.6em 0.5em; white-space: normal; }
+            }
+
             .advanceoptions{
                background: var(--theme_advance) !important;
                border-radius: 0.4em !important;
@@ -71,7 +106,7 @@
         <link rel="stylesheet" href="../darktheme.css">
         <script src="../script/darktheme.js"></script>
         <br>
-        <div class="ui container">
+        <div class="hdPage">
             <div class="ui small pointing secondary menu">
                 <a class="item active narrowpadding" data-tab="customheaders">Custom Headers</a>
                 <a class="item narrowpadding" data-tab="security">Security Headers</a>
@@ -99,16 +134,18 @@
                 <div class="ui divider"></div>
                 <h4>Edit Custom Header</h4>
                 <p>Add or remove custom header(s) over this proxy target</p>
-                <div class="scrolling content ui form">
-                    <div class="five small fields credentialEntry">
-                        <div class="field" align="center">
-                            <button id="toOriginButton" style="margin-top: 0.6em;" title="Downstream to Upstream" class="ui circular basic active button">Zoraxy <i class="angle double right blue icon" style="margin-right: 0.4em;"></i> Origin</button>
-                            <button id="toClientButton" style="margin-top: 0.6em;" title="Upstream to Downstream" class="ui circular basic button">Client <i class="angle double left orange icon" style="margin-left: 0.4em;"></i> Zoraxy</button>
+                <div class="ui form hdForm">
+                    <div class="hdChoices">
+                        <div class="hdSeg" role="group" aria-label="Direction">
+                            <button type="button" id="toOriginButton" title="Downstream to Upstream" class="active">Zoraxy <i class="angle double right blue icon"></i> Origin</button>
+                            <button type="button" id="toClientButton" title="Upstream to Downstream">Client <i class="angle double left orange icon"></i> Zoraxy</button>
                         </div>
-                        <div class="field" align="center">
-                            <button id="headerModeAdd" style="margin-top: 0.6em;" class="ui circular basic active button"><i class="ui green circle add icon"></i> Add Header</button>
-                            <button id="headerModeRemove" style="margin-top: 0.6em;" class="ui circular basic button"><i class="ui red circle times icon"></i> Remove Header</button>
+                        <div class="hdSeg" role="group" aria-label="Action">
+                            <button type="button" id="headerModeAdd" class="active"><i class="add icon"></i> Add Header</button>
+                            <button type="button" id="headerModeRemove"><i class="times icon"></i> Remove Header</button>
                         </div>
+                    </div>
+                    <div class="hdFields">
                         <div class="field">
                             <label>Header Key</label>
                             <input id="headerName" type="text" placeholder="X-Custom-Header" autocomplete="off">
@@ -118,11 +155,8 @@
                             <label>Header Value</label>
                             <input id="headerValue" type="text" placeholder="value1,value2,value3" autocomplete="off">
                         </div>
-                        <div class="field" >
-                            <button class="ui basic button" onclick="addCustomHeader();"><i class="green add icon"></i> Add Header Rewrite Rule</button>
-                        </div>
-                        <div class="ui divider"></div>
                     </div>
+                    <button type="button" class="ui primary button hdAdd" onclick="addCustomHeader();"><i class="add icon"></i> Add Header Rewrite Rule</button>
                 </div>
                 <div class="ui divider"></div>
                 <div class="ui basic segment advanceoptions">
@@ -133,7 +167,7 @@
                         </div>
                         <div class="content">
                             <br>
-                            <div class="ui container">
+                            <div>
                                 <h4>Overwrite Host Header</h4>
                                 <p>Manual override the automatic "Host" header rewrite logic. Leave empty for automatic.<br>
                                 For HTTPS upstreams, this hostname is also used as the TLS SNI and the name the upstream certificate is verified against. Set this if your upstream is addressed by a name its certificate does not cover, such as a Docker service name.</p>
@@ -384,7 +418,7 @@
 
                             if (data.length == 0){
                                 $("#headerTable").html(`<tr>
-                                    <td colspan="3"><i class="ui green circle check icon"></i> No Additonal Header</td>
+                                    <td colspan="3"><i class="ui green circle check icon"></i> No Additional Header</td>
                                 </tr>`);
                             }
                         }

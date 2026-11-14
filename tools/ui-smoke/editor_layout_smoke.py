@@ -50,6 +50,7 @@ def editor_layout_ui(pg, ctx):
                 # 2. embedded editors: no scrollbar of their own. Every section / tab is visited, in Easy and Advanced mode, and every
                 # embedded editor that is visible in it is measured (content height against the frame's height).
                 seen = set()
+                seen_easy = set()
                 modes = ["Easy", "Advanced"] if layout == "sections" else [None]
                 for mode in modes:
                     if mode:
@@ -67,6 +68,8 @@ def editor_layout_ui(pg, ctx):
                             if not f["vis"] or f["doc"] < 0:
                                 continue
                             seen.add(f["card"])
+                            if mode == "Easy":
+                                seen_easy.add(f["card"])
                             print("editor-layout %s %s tab%d: %s content %dpx in a %dpx frame" % (tag, mode or "", i, f["card"], f["doc"], f["shown"]))
                             if f["doc"] > f["shown"] + 4:
                                 fail("editor-layout", "%s %s: the %s editor has its own scrollbar (content %dpx in a %dpx frame)" % (tag, mode or "", f["card"], f["doc"], f["shown"]))
@@ -74,6 +77,8 @@ def editor_layout_ui(pg, ctx):
                             js("""() => { const c = document.querySelector("#httprpEditModal [data-hrp-card='headers']"); if (c) c.scrollIntoView({block: 'start'}); }""")
                             pg.wait_for_timeout(600)
                             shot("editor-layout-headers-1366x600.png")
+                if layout == "sections" and "headers" not in seen_easy:
+                    fail("editor-layout", "%s: the Header rewrite rules card must be available in Easy mode for every rule (a rule with no custom header, HSTS or permission policy looked as if the section was missing)" % tag)
                 if "headers" not in seen:
                     fail("editor-layout", "%s: the Headers editor was never visible, so it could not be measured" % tag)
                 js("""() => { const b = document.querySelector('#httprpEditModal .hrp-head button:last-child'); if (b) b.click(); }""")
@@ -82,6 +87,31 @@ def editor_layout_ui(pg, ctx):
                 except Exception:
                     js("() => { if (typeof hideHttpProxyRuleEditorModal === 'function') hideHttpProxyRuleEditorModal(); }")
                     pg.wait_for_timeout(500)
+        # the Header rewrite rules editor itself, light and dark, desktop and phone width (Easy mode: it is always there)
+        js("localStorage.setItem('zoraxy_site_editor_layout', 'sections'); localStorage.setItem('zoraxy_site_editor_mode', 'easy')")
+        for theme in ("light", "dark"):
+            for (w, h) in ((1366, 720), (390, 780)):
+                js("setDarkTheme(%s)" % ("true" if theme == "dark" else "false"))
+                pg.set_viewport_size({"width": w, "height": h})
+                js("openTabById('httprp')")
+                pg.wait_for_timeout(700)
+                js("""x => fetch('/api/proxy/list?type=host').then(r => r.json()).then(l => { initHttpProxyRuleEditorModal(l.filter(e => e.RootOrMatchingDomain === x)[0]); })""", EL_HOST)
+                pg.wait_for_selector("#httprpEditModalWrapper .hrp-main", state="visible", timeout=10000)
+                pg.wait_for_timeout(1800)
+                # the mode lives in memory once changed in this page, so switch it the way a user does
+                js("() => { const b = [...document.querySelectorAll('#httprpEditModal button')].find(e => e.textContent.trim() === 'Easy'); if (b) b.click(); }")
+                pg.wait_for_timeout(900)
+                js("""() => { const c = document.querySelector("#httprpEditModal [data-hrp-card='headers']"); if (c) c.scrollIntoView({block: 'start'}); }""")
+                pg.wait_for_timeout(700)
+                shot("headers-editor-%s-%d.png" % (theme, w))
+                bad = js("""() => { const f = document.querySelector("#httprpEditModal [data-hrp-card='headers'] .wrapper_frame"); if (!f) return 'no frame';
+                    if (f.offsetParent === null || f.clientWidth < 100) return 'the Headers card is not on screen in Easy mode';
+                    const d = f.contentDocument; const o = d.documentElement; return o.scrollWidth > o.clientWidth + 1 ? 'the editor page scrolls sideways (' + o.scrollWidth + ' > ' + o.clientWidth + ')' : ''; }""")
+                if bad:
+                    fail("editor-layout", "headers editor %s %dpx: %s" % (theme, w, bad))
+                js("() => { if (typeof hideHttpProxyRuleEditorModal === 'function') hideHttpProxyRuleEditorModal(); }")
+                pg.wait_for_timeout(500)
     finally:
+        js("localStorage.removeItem('theme'); localStorage.removeItem('zoraxy_site_editor_mode')")
         js("localStorage.removeItem('zoraxy_site_editor_layout')")
         post("/api/proxy/del", {"ep": EL_HOST})

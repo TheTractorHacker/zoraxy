@@ -76,7 +76,7 @@ of the WAF block (`.wafSourceSaveBtn`, `.wafChallengeSaveBtn`, `.wafSaveBtn`) ar
 The switch is at the top of the dialog (`#hrpMode`, a kit segmented control) and is remembered per browser
 (`localStorage` key `zoraxy_site_editor_mode`; default Easy).
 
-* **Easy** shows one column with the cards that carry `data-easy`: hostname, destinations, WebSocket on/off, **Protection**,
+* **Easy** shows one column with the cards that carry `data-easy`: hostname, destinations, WebSocket on/off, **Header rewrite rules** (always shown: adding a header is a common task, and a rule without any custom header used to look as if the section was missing), **Protection**,
   **Access rule** (a plain picker), **HTTPS certificate** (status), and a "Show advanced settings" link. The section navigation is hidden.
 * **Protection** is one select: Off / Detect only / Block (plus "Follow the global policy"), with a one-line explanation. It is
   the WAF source of the rule and uses the existing API (`POST /api/waf/endpoint/set`). It mirrors the source select of the WAF

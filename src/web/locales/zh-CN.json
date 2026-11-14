@@ -3,8 +3,8 @@
   "language": "Simplified Chinese",
   "reviewed": false,
   "author": "machine-assisted (Claude)",
-  "coverage": 73.2,
-  "coreCoverage": 72.9
+  "coverage": 71.8,
+  "coreCoverage": 70.2
  },
  "strings": {
   "\"Add Redirection Rule\"": "“添加重定向规则”",
@@ -2244,7 +2244,6 @@
   "No active upstream": "没有可用的上游",
   "No Active Upstream Origin": "没有活动的上游源站",
   "No Additional Header": "无附加头",
-  "No Additonal Header": "无附加头",
   "No alerts were sent.": "未发送任何告警。",
   "No Alias Hostname": "无别名主机名",
   "No alternative listening ports configured": "未配置备用监听端口",

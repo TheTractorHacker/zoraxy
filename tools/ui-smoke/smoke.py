@@ -1981,10 +1981,10 @@ def site_editor_ui(pg, ctx):
         if pg.evaluate("document.querySelector('#httprpEditModal').dataset.mode") != "easy":
             fail("site-editor", "the editor must open in Easy mode by default")
         shown = pg.evaluate("[...document.querySelectorAll('#httprpEditModal .hrp-card')].filter(c => c.offsetParent !== null).map(c => c.dataset.hrpCard)")
-        for need in ("host", "upstream", "websocket", "protection", "accesseasy", "certeasy"):
+        for need in ("host", "upstream", "websocket", "headers", "protection", "accesseasy", "certeasy"):  # headers: always in Easy (a rule without custom headers looked as if the section was missing)
             if need not in shown:
                 fail("site-editor", f"Easy mode lacks the {need} card (shows {shown})")
-        for hidden_ in ("compat", "forwarding", "headers", "ratelimit", "captcha", "waf", "certs"):
+        for hidden_ in ("compat", "forwarding", "ratelimit", "captcha", "waf", "certs"):
             if hidden_ in shown:
                 fail("site-editor", f"Easy mode must not show the {hidden_} card of a rule with default settings")
         if pg.is_visible("#hrpAdvNote"):
