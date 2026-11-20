@@ -35,3 +35,25 @@ func (c *Collector) HandleTodayStatLoad(w http.ResponseWriter, r *http.Request) 
 	}
 
 }
+
+// Handle read / write of the "exclude blocked requests" setting
+// GET: return the current value as a JSON boolean
+// POST: set the value with the "exclude" parameter (true / false)
+func (c *Collector) HandleExcludeBlockedSetting(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		exclude, err := utils.PostBool(r, "exclude")
+		if err != nil {
+			utils.SendErrorResponse(w, "invalid exclude value")
+			return
+		}
+		if err := c.SetExcludeBlocked(exclude); err != nil {
+			utils.SendErrorResponse(w, err.Error())
+			return
+		}
+		utils.SendOK(w)
+		return
+	}
+
+	js, _ := json.Marshal(c.GetExcludeBlocked())
+	utils.SendJSONResponse(w, string(js))
+}

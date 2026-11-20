@@ -21,6 +21,13 @@
                 </div>
             </div>
             <div class="ui divider"></div>
+            <h3>Collection Settings</h3>
+            <div class="ui toggle checkbox" id="excludeBlockedCheckbox">
+                <input type="checkbox" id="excludeBlocked" onchange="handleExcludeBlockedChange(this.checked);">
+                <label>Exclude blocked requests from statistics</label>
+            </div>
+            <p style="margin-top: 0.6em;"><small>When enabled, requests denied by Zoraxy (blacklist / whitelist / GeoIP access rules, exploit detection, rate limit and CAPTCHA challenges) are not counted in the statistics and traffic maps. This only affects statistics, blocking is not changed. Upstream errors are still counted. Applies to new requests only.</small></p>
+            <div class="ui divider"></div>
             <h3>Export Data</h3>
             <p>You can export the statistics collected by Zoraxy in the selected range for further analysis</p>
             <button class="ui basic teal button" onclick="handleExportAsCSV();"><i class="download icon"></i> Export CSV</button>
@@ -64,6 +71,28 @@
                     })
                 }
             }
+
+            function handleExcludeBlockedChange(checked){
+                $.cjax({
+                    url: "/api/stats/excludeBlocked",
+                    method: "POST",
+                    data: {exclude: checked},
+                    success: function(data){
+                        if (data.error != undefined){
+                            parent.msgbox(data.error, false, 5000);
+                        }else{
+                            parent.msgbox("Setting updated");
+                        }
+                    }
+                });
+            }
+
+            function initExcludeBlockedSetting(){
+                $.get("/api/stats/excludeBlocked", function(data){
+                    $("#excludeBlocked").prop("checked", data === true);
+                });
+            }
+            initExcludeBlockedSetting();
 
             /*
                 Data Loading

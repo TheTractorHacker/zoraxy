@@ -388,6 +388,16 @@ func (h *ProxyHandler) vdirRequest(w http.ResponseWriter, r *http.Request, targe
 
 // This logger collect data for the statistical analysis. For log to file logger, check the Logger and LogHTTPRequest handler
 func (router *Router) logRequest(r *http.Request, succ bool, statusCode int, forwardType string, originalHostname string, upstreamHostname string, endpoint *ProxyEndpoint) {
+	router.logRequestWithBlockedFlag(r, succ, false, statusCode, forwardType, originalHostname, upstreamHostname, endpoint)
+}
+
+// Same as logRequest, but for requests denied by a Zoraxy rule (access list, exploit
+// detection, rate limit, captcha). These can be excluded from the statistics by setting.
+func (router *Router) logBlockedRequest(r *http.Request, statusCode int, forwardType string, originalHostname string, upstreamHostname string, endpoint *ProxyEndpoint) {
+	router.logRequestWithBlockedFlag(r, false, true, statusCode, forwardType, originalHostname, upstreamHostname, endpoint)
+}
+
+func (router *Router) logRequestWithBlockedFlag(r *http.Request, succ bool, blocked bool, statusCode int, forwardType string, originalHostname string, upstreamHostname string, endpoint *ProxyEndpoint) {
 	// Resolve the client IP once via the trusted-proxy aware resolver so that
 	// untrusted proxy headers (X-Forwarded-For, X-Real-IP, etc.) cannot be used
 	// to spoof the IP recorded in the log file or the statistics collector.
@@ -418,6 +428,7 @@ func (router *Router) logRequest(r *http.Request, succ bool, statusCode int, for
 			requestInfo := statistic.RequestInfo{
 				IpAddr:                        clientIP,
 				RequestOriginalCountryISOCode: countryISOCode,
+				Blocked:                       blocked,
 				Succ:                          succ,
 				StatusCode:                    statusCode,
 				ForwardType:                   forwardType,

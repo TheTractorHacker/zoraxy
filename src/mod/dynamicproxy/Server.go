@@ -83,7 +83,7 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				if sep.detector != nil {
 					statusCode = sep.detector.GetResponseStatusCode()
 				}
-				h.Parent.logRequest(r, false, statusCode, "exploit-blocked", domainOnly, "blocked", sep)
+				h.Parent.logBlockedRequest(r, statusCode, "exploit-blocked", domainOnly, "blocked", sep)
 				return
 			}
 		}
@@ -103,7 +103,7 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// CAPTCHA Gating
 		if handled, challenged := h.Parent.handleCaptchaGating(w, r, sep); handled {
 			if challenged {
-				h.Parent.logRequest(r, false, 403, "captcha-required", domainOnly, "captcha", sep)
+				h.Parent.logBlockedRequest(r, 403, "captcha-required", domainOnly, "captcha", sep)
 			}
 			return
 		}

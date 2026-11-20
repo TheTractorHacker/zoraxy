@@ -213,3 +213,74 @@ func BenchmarkRecordRequest(b *testing.B) {
 	//testSummary := collector.GetCurrentDailySummary()
 	//statistic.PrintDailySummary(testSummary)
 }
+
+func newBlockedTestRequest(blocked bool) statistic.RequestInfo {
+	return statistic.RequestInfo{
+		IpAddr:                        "10.0.0.1",
+		RequestOriginalCountryISOCode: "US",
+		Blocked:                       blocked,
+		Succ:                          false,
+		StatusCode:                    403,
+		ForwardType:                   "blacklist",
+		RequestURL:                    "/blocked",
+		Target:                        "target1",
+	}
+}
+
+func TestExcludeBlockedDefaultOff(t *testing.T) {
+	db := getNewDatabase()
+	defer clearDatabase(db)
+	collector, _ := statistic.NewStatisticCollector(statistic.CollectorOption{Database: db})
+	if collector.GetExcludeBlocked() {
+		t.Fatalf("Expected exclude blocked to be off by default")
+	}
+	//Blocked requests are counted when the setting is off
+	collector.RecordRequest(newBlockedTestRequest(true))
+	time.Sleep(1 * time.Second)
+	if collector.DailySummary.TotalRequest != 1 || collector.DailySummary.ErrorRequest != 1 {
+		t.Fatalf("Expected blocked request to be counted when setting is off, got total %v error %v",
+			collector.DailySummary.TotalRequest, collector.DailySummary.ErrorRequest)
+	}
+}
+
+func TestExcludeBlockedOn(t *testing.T) {
+	db := getNewDatabase()
+	defer clearDatabase(db)
+	collector, _ := statistic.NewStatisticCollector(statistic.CollectorOption{Database: db})
+	if err := collector.SetExcludeBlocked(true); err != nil {
+		t.Fatalf("Unable to set exclude blocked: %v", err)
+	}
+	collector.RecordRequest(newBlockedTestRequest(true))
+	//A non-blocked failure (e.g. upstream error) must still be counted
+	failed := newBlockedTestRequest(false)
+	failed.StatusCode = 502
+	failed.IpAddr = "10.0.0.2"
+	collector.RecordRequest(failed)
+	time.Sleep(1 * time.Second)
+	if collector.DailySummary.TotalRequest != 1 || collector.DailySummary.ErrorRequest != 1 {
+		t.Fatalf("Expected only the non-blocked request to be counted, got total %v error %v",
+			collector.DailySummary.TotalRequest, collector.DailySummary.ErrorRequest)
+	}
+	if _, ok := collector.DailySummary.RequestClientIp.Load("10.0.0.1"); ok {
+		t.Fatalf("Blocked client IP should not be recorded")
+	}
+	if _, ok := collector.DailySummary.RequestClientIp.Load("10.0.0.2"); !ok {
+		t.Fatalf("Non-blocked client IP should be recorded")
+	}
+}
+
+func TestExcludeBlockedPersists(t *testing.T) {
+	db := getNewDatabase()
+	defer clearDatabase(db)
+	collector, _ := statistic.NewStatisticCollector(statistic.CollectorOption{Database: db})
+	collector.SetExcludeBlocked(true)
+	reloaded, _ := statistic.NewStatisticCollector(statistic.CollectorOption{Database: db})
+	if !reloaded.GetExcludeBlocked() {
+		t.Fatalf("Expected exclude blocked setting to persist")
+	}
+	reloaded.SetExcludeBlocked(false)
+	again, _ := statistic.NewStatisticCollector(statistic.CollectorOption{Database: db})
+	if again.GetExcludeBlocked() {
+		t.Fatalf("Expected exclude blocked setting to persist as off")
+	}
+}
